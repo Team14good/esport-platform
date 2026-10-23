@@ -3,11 +3,88 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * FLOW 主題（T1 深空霓虹）。所有值取自 DESIGN.md frontmatter：
+ * 無後綴的 token 寫在 :root（淺色），-dark 後綴寫在 .dark（深色，預設）。
+ * 別名槽位依 DESIGN.md〈Colors〉別名表以 var() 指向來源，不重複寫 hex。
+ */
+
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* 字型：不載入 webfont，使用系統 CJK 安全字體堆疊 */
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI", "Microsoft JhengHei UI",
+    "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+  --font-mono:
+    "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, SFMono-Regular,
+    Menlo, monospace;
+
+  /* 字級（DESIGN.md typography） */
+  --text-display: 30px;
+  --text-display--line-height: 1.3;
+  --text-display--font-weight: 700;
+  --text-display--letter-spacing: 0.01em;
+  --text-heading-lg: 24px;
+  --text-heading-lg--line-height: 1.35;
+  --text-heading-lg--font-weight: 700;
+  --text-heading-md: 18px;
+  --text-heading-md--line-height: 1.4;
+  --text-heading-md--font-weight: 600;
+  --text-body: 14px;
+  --text-body--line-height: 1.6;
+  --text-body--font-weight: 400;
+  --text-body-lg: 16px;
+  --text-body-lg--line-height: 1.6;
+  --text-body-lg--font-weight: 400;
+  --text-label: 12.5px;
+  --text-label--line-height: 1.3;
+  --text-label--font-weight: 600;
+  --text-caption: 12px;
+  --text-caption--line-height: 1.4;
+  --text-caption--font-weight: 400;
+  --text-overline: 11px;
+  --text-overline--line-height: 1.3;
+  --text-overline--font-weight: 600;
+  --text-overline--letter-spacing: 0.08em;
+  --text-score: 20px;
+  --text-score--line-height: 1.2;
+  --text-score--font-weight: 800;
+  --text-score--letter-spacing: 0.04em;
+  --text-countdown: 16px;
+  --text-countdown--line-height: 1.2;
+  --text-countdown--font-weight: 700;
+  --text-countdown--letter-spacing: 0.06em;
+  --text-bracket-row: 12.5px;
+  --text-bracket-row--line-height: 1.2;
+  --text-bracket-row--font-weight: 400;
+
+  /* 圓角（DESIGN.md rounded；xs 為 FLOW 追加） */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* 具名間距（DESIGN.md spacing；4px 階梯沿用 Tailwind 預設） */
+  --spacing-gutter-mobile: 16px;
+  --spacing-gutter-desktop: 28px;
+  --spacing-content-max: 1280px;
+  --spacing-sidebar-width: 240px;
+  --spacing-touch-target: 40px;
+  --spacing-bracket-row-height: 32px;
+  --spacing-bracket-match-gap: 18px;
+  --spacing-bracket-connector-width: 28px;
+  --spacing-bracket-column-min: 200px;
+  --spacing-match-aside-width: 400px;
+  --spacing-match-column-gap: 20px;
+  --spacing-backdrop-grid: 28px;
+  --spacing-screenshot-viewer-max: 960px;
+
+  /* 主要按鈕深色光暈（DESIGN.md button-primary.glow-dark） */
+  --shadow-primary-glow:
+    0 0 0 1px color-mix(in oklab, var(--primary) 60%, transparent),
+    0 4px 18px -6px var(--primary);
+
+  /* shadcn 語意色 */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -23,14 +100,10 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -39,83 +112,134 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* FLOW 專屬色 */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-status-live: var(--status-live);
+  --color-status-appeal: var(--status-appeal);
+  --color-status-confirmed: var(--status-confirmed);
+  --color-status-eliminated: var(--status-eliminated);
+  --color-status-waitlist: var(--status-waitlist);
+  --color-search-highlight: var(--search-highlight);
 }
 
+/* 淺色（無後綴的值） */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.5982 0.10687 182.4689);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.5982 0.10687 182.4689);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #f4f6fd;
+  --card: #ffffff;
+  --foreground: #0b1020;
+  --muted-foreground: #5b6482;
+  --border: #dce2f2;
+  --primary: #0891b2;
+  --primary-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --muted: #e9edf8;
+  --brand: #7c3aed;
+  --brand-foreground: #ffffff;
+  --status-live: #0891b2;
+  --status-appeal: #b45309;
+  --status-confirmed: #047857;
+  --status-eliminated: #9aa3b8;
+  --status-waitlist: #7c3aed;
+  --search-highlight: #7c3aed;
+  color-scheme: light;
 }
 
+/* 深色（-dark 後綴的值，預設模式） */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.65 0.10687 182.4689);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.65 0.10687 182.4689);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #070a14;
+  --card: #0e1426;
+  --foreground: #e6ecff;
+  --muted-foreground: #8a94b8;
+  --border: #1f2945;
+  --primary: #22d3ee;
+  --primary-foreground: #04121a;
+  --destructive: #f43f5e;
+  --destructive-foreground: #ffffff;
+  --muted: #141b31;
+  --brand: #8b5cf6;
+  --brand-foreground: #ffffff;
+  --status-live: #22d3ee;
+  --status-appeal: #fbbf24;
+  --status-confirmed: #34d399;
+  --status-eliminated: #4b5370;
+  --status-waitlist: #a78bfa;
+  --search-highlight: #8b5cf6;
+  color-scheme: dark;
+}
+
+/* 別名槽位（DESIGN.md〈Colors〉別名表）；在 :root 與 .dark 都宣告，確保在套用 .dark 的元素上重新解析 */
+:root,
+.dark {
+  --accent: var(--muted);
+  --secondary: var(--muted);
+  --sidebar-accent: var(--muted);
+  --accent-foreground: var(--foreground);
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --secondary-foreground: var(--foreground);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent-foreground: var(--foreground);
+  --popover: var(--card);
+  --sidebar: var(--card);
+  --input: var(--border);
+  --sidebar-border: var(--border);
+  --ring: var(--primary);
+  --sidebar-primary: var(--primary);
+  --sidebar-ring: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    font-family: var(--font-sans);
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground text-body;
+    min-height: 100svh;
+  }
+  /* 頁面背景（DESIGN.md app-backdrop-light／app-backdrop-dark）：固定在視窗，只鋪在頁面背景、不鋪在卡片內 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(
+      520px 220px at 90% -8%,
+      color-mix(in oklab, var(--primary) 8%, transparent),
+      transparent
+    );
+  }
+  .dark body::before {
+    background:
+      radial-gradient(
+        520px 220px at 90% -8%,
+        color-mix(in oklab, var(--primary) 16%, transparent),
+        transparent
+      ),
+      radial-gradient(
+        420px 200px at -10% 105%,
+        color-mix(in oklab, var(--brand) 12%, transparent),
+        transparent
+      ),
+      linear-gradient(
+        color-mix(in oklab, var(--border) 45%, transparent) 1px,
+        transparent 1px
+      )
+      0 0 / 100% var(--spacing-backdrop-grid),
+      linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--border) 45%, transparent) 1px,
+        transparent 1px
+      )
+      0 0 / var(--spacing-backdrop-grid) 100%;
   }
   button,
   [role="button"] {

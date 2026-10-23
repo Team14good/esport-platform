@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 
 import { UtilsService } from "@/client"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -15,19 +16,23 @@ function Home() {
     retry: false,
   })
 
-  let backendStatus = "無法連線"
-  if (healthCheck.isPending) {
-    backendStatus = "檢查中"
-  } else if (healthCheck.data === true) {
-    backendStatus = "正常"
-  }
-
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-6">
-      <h1 className="text-4xl font-bold tracking-widest">FLOW</h1>
-      <p className="text-muted-foreground" role="status">
-        後端狀態：{backendStatus}
-      </p>
-    </main>
+    <section className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
+      <h1 className="text-display">FLOW</h1>
+      {healthCheck.isPending ? (
+        // 首次載入：形狀與下方狀態文字相符
+        <div role="status" aria-busy="true">
+          <Skeleton
+            data-testid="health-check-skeleton"
+            className="h-[22px] w-32"
+          />
+          <span className="sr-only">載入中</span>
+        </div>
+      ) : (
+        <p className="text-muted-foreground" role="status">
+          後端狀態：{healthCheck.data === true ? "正常" : "無法連線"}
+        </p>
+      )}
+    </section>
   )
 }

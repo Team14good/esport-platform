@@ -9,6 +9,8 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173'
  */
 export default defineConfig({
   testDir: './tests',
+  // tests/unit/ 是 Vitest 單元測試（bun run test:unit），不由 Playwright 執行
+  testIgnore: /[\\/]tests[\\/]unit[\\/]/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

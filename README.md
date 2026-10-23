@@ -63,6 +63,9 @@ docker compose exec frontend bun run --filter frontend build
 
 # 前端 lint／格式檢查
 docker compose exec frontend bunx biome check
+
+# 前端單元測試（Vitest＋jsdom，tests/unit/）
+docker compose exec frontend bun run test:unit
 ```
 
 測試不會寫入開發用資料庫：每個測試包在一個外層交易裡並在結束時回滾；`<POSTGRES_DB>_test` 在每次測試開始時刪除重建並跑完遷移。

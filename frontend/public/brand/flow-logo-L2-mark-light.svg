@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1 66 66" width="66" height="66" role="img" aria-label="FLOW 匯流賽道標誌">
+  <!-- FLOW · L2 匯流賽道 mark（淺底用）。由 flow-logo-L2-mark.svg 衍生，漸層改用淺色 lockup 的 primary #0891B2 -> brand #7C3AED。 -->
+  <defs>
+    <linearGradient id="flow-l2-grad" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="56" y2="0">
+      <stop offset="0" stop-color="#0891B2"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2">
+    <g stroke="url(#flow-l2-grad)" opacity="0.7">
+      <path d="M5 10 C16 10 18 17 27 17"/>
+      <path d="M5 24 C16 24 18 17 27 17"/>
+      <path d="M5 40 C16 40 18 47 27 47"/>
+      <path d="M5 54 C16 54 18 47 27 47"/>
+    </g>
+    <g stroke="url(#flow-l2-grad)" opacity="1">
+      <path d="M27 17 C38 17 40 32 50 32"/>
+      <path d="M27 47 C38 47 40 32 50 32"/>
+    </g>
+  </g>
+  <circle cx="55" cy="32" r="9" fill="none" stroke="#7C3AED" stroke-width="1.5" opacity=".35"/>
+  <circle cx="55" cy="32" r="5.2" fill="#7C3AED"/>
+</svg>

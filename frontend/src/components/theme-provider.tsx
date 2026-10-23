@@ -6,100 +6,69 @@ import {
   useState,
 } from "react"
 
-export type Theme = "dark" | "light" | "system"
+// 主題只有深色與淺色；深色為預設，不跟隨作業系統。
+// index.html 有一段內聯 script 用同一個 key 在繪製前套用主題，兩邊要一起改。
+export type Theme = "dark" | "light"
+
+export const THEME_STORAGE_KEY = "flow-theme"
+export const DEFAULT_THEME: Theme = "dark"
+
+export function readStoredTheme(): Theme {
+  try {
+    return window.localStorage.getItem(THEME_STORAGE_KEY) === "light"
+      ? "light"
+      : "dark"
+  } catch {
+    return DEFAULT_THEME
+  }
+}
+
+function writeStoredTheme(theme: Theme) {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+  } catch {
+    // 無法存取 localStorage 時仍可切換，只是不保存
+  }
+}
+
+function applyTheme(theme: Theme) {
+  const root = window.document.documentElement
+  root.classList.remove("light", "dark")
+  root.classList.add(theme)
+}
 
 type ThemeProviderProps = {
   children: React.ReactNode
-  defaultTheme?: Theme
-  storageKey?: string
 }
 
 type ThemeProviderState = {
   theme: Theme
-  resolvedTheme: "dark" | "light"
   setTheme: (theme: Theme) => void
+  toggleTheme: () => void
 }
 
-const initialState: ThemeProviderState = {
-  theme: "system",
-  resolvedTheme: "light",
-  setTheme: () => null,
-}
+const ThemeProviderContext = createContext<ThemeProviderState | undefined>(
+  undefined,
+)
 
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
-
-export function ThemeProvider({
-  children,
-  defaultTheme = "system",
-  storageKey = "vite-ui-theme",
-  ...props
-}: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
-  )
-
-  const getResolvedTheme = useCallback((theme: Theme): "dark" | "light" => {
-    if (theme === "system") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light"
-    }
-    return theme
-  }, [])
-
-  const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">(() =>
-    getResolvedTheme(theme),
-  )
-
-  const updateTheme = useCallback((newTheme: Theme) => {
-    const root = window.document.documentElement
-
-    root.classList.remove("light", "dark")
-
-    if (newTheme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light"
-
-      root.classList.add(systemTheme)
-      return
-    }
-
-    root.classList.add(newTheme)
-  }, [])
+export function ThemeProvider({ children }: ThemeProviderProps) {
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme)
 
   useEffect(() => {
-    updateTheme(theme)
-    setResolvedTheme(getResolvedTheme(theme))
+    applyTheme(theme)
+  }, [theme])
 
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+  const setTheme = useCallback((next: Theme) => {
+    writeStoredTheme(next)
+    setThemeState(next)
+  }, [])
 
-    const handleChange = () => {
-      if (theme === "system") {
-        updateTheme("system")
-        setResolvedTheme(getResolvedTheme("system"))
-      }
-    }
-
-    mediaQuery.addEventListener("change", handleChange)
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange)
-    }
-  }, [theme, updateTheme, getResolvedTheme])
-
-  const value = {
-    theme,
-    resolvedTheme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme)
-      setTheme(theme)
-    },
-  }
+  const toggleTheme = useCallback(() => {
+    setTheme(theme === "dark" ? "light" : "dark")
+  }, [theme, setTheme])
 
   return (
-    <ThemeProviderContext.Provider {...props} value={value}>
+    <ThemeProviderContext.Provider value={{ theme, setTheme, toggleTheme }}>
       {children}
     </ThemeProviderContext.Provider>
   )

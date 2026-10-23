@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FLOW</title>
+    <!-- 繪製前套用已存的主題：深色為預設，只有存了 light 才換成淺色；讀取失敗就維持深色，避免閃爍。 -->
+    <script>
+      try {
+        if (window.localStorage.getItem("flow-theme") === "light") {
+          document.documentElement.classList.replace("dark", "light")
+        }
+      } catch (_) {}
+    </script>
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   </head>
   <body>
     <div id="root"></div>
