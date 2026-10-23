@@ -1,0 +1,27 @@
+system: 2.0 賽事建立與遊戲設定
+actor admin left 1: 平台管理員
+actor org left 3.8: 主辦方
+actor viewer right 6: 觀眾
+actor timer right 4.4: 時間
+uc u1 1 1: 維護遊戲設定與學校清單
+uc u2 1 2: 建立賽事
+uc u3 2 1.6: 帶入遊戲預設值
+uc u4 2 2.7: 選擇賽事模式
+uc u5 1 3: 分輪設定 BO 數
+uc u6 1 4: 修改賽事
+uc u7 1 5: 取消賽事
+uc u8 1 6: 查閱操作紀錄
+uc u10 2 4: 重設賽事報名連結
+uc u9 2 6: 瀏覽賽事列表與賽事頁
+uc u11 2 5: 報名開始時開放報名
+admin -- u1
+org -- u2
+org -- u5
+org -- u6
+org -- u7
+org -- u8
+viewer -- u9
+timer -- u11
+u2 ..> u3 : include
+u2 ..> u4 : include
+u10 ..> u6 : extend

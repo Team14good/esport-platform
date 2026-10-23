@@ -1,0 +1,20 @@
+system: 6.0 申訴與檢舉
+actor cap left 1.5: 隊長
+actor org right 4: 主辦方
+actor timer right 7: 時間
+uc u1 1 1: 提出申訴
+uc u2 1 2: 提出檢舉
+uc u3 2 3: 處理申訴
+uc u4 1 4: 更正結果或重新比賽
+uc u5 2 5: 查證檢舉
+uc u6 1 6: 取消資格
+uc u7 1 7: 對戰表頂替（4.4）
+uc u8 2 7: 申訴逾期提醒
+cap -- u1
+cap -- u2
+org -- u3
+org -- u5
+timer -- u8
+u4 ..> u3 : extend
+u6 ..> u5 : extend
+u6 ..> u7 : include

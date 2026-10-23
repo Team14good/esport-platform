@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="zh-Hant-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FLOW Logo 與色彩主題</title>
+<style>
+
+*{box-sizing:border-box}
+:root{--page:#E8E8E4;--paper:#F8F8F6;--ink:#17181C;--sub:#5F6168;--line:#D6D6D0}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);
+ font-family:"Segoe UI Variable Text","Segoe UI","Microsoft JhengHei UI","Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif;
+ font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+code,.mono{font-family:"Cascadia Mono","Cascadia Code",Consolas,ui-monospace,monospace}
+.wrap{max-width:1280px;margin:0 auto;padding:40px 28px 80px}
+.hero{display:flex;gap:28px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px}
+.hero h1{font-size:30px;margin:0 0 6px;letter-spacing:.01em}
+.hero p{margin:0;color:var(--sub);max-width:720px}
+.pick{background:var(--ink);color:#F3F3EF;border-radius:12px;padding:14px 18px;font-size:13px;max-width:420px}
+.pick b{color:#fff}.pick code{background:#2A2C33;padding:1px 6px;border-radius:4px;color:#9EE8F5}
+h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--sub);margin:44px 0 6px;font-weight:700}
+h2 + .lead{margin:0 0 18px;color:var(--sub)}
+.tag{display:inline-grid;place-items:center;min-width:34px;height:24px;padding:0 8px;border-radius:6px;background:var(--ink);color:#fff;font-weight:700;font-size:12px;letter-spacing:.04em}
+article header{display:flex;align-items:center;gap:10px}
+article h3{margin:0;font-size:18px}
+article h3 small{font-weight:500;color:var(--sub);font-size:13px;margin-left:4px}
+.desc{margin:8px 0 14px;color:#33353B}
+.note{margin:10px 0 0;font-size:12px;color:var(--sub)}
+
+/* ---- logos ---- */
+.lgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.lcard,.tcard{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:20px}
+.stage{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stage2{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:10px;align-items:stretch}
+.pane{position:relative;border-radius:12px;min-height:132px;display:grid;place-items:center;padding:24px 14px 30px}
+.pane.dk{background:#0A0C12;color:#F1F3F8;background-image:radial-gradient(400px 160px at 80% 0%,#1A2140 0%,transparent 70%)}
+.pane.lt{background:#FFFFFF;color:#121419;border:1px solid var(--line)}
+.pane.wide{min-height:96px;padding:16px 14px 26px}
+.pane .cap{position:absolute;left:12px;bottom:8px;font-size:11px;opacity:.55}
+.lock{display:flex;align-items:center;gap:14px}
+.lock svg{display:block;overflow:visible}
+.favs{display:flex;gap:12px;align-items:flex-end;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.fav{display:flex;flex-direction:column;align-items:center;gap:6px}
+.fav em{font-style:normal;font-size:10.5px;color:var(--sub);white-space:nowrap}
+.tile{display:grid;place-items:center;border-radius:8px}
+.tile.s32{width:32px;height:32px}.tile.s16{width:16px;height:16px;border-radius:4px}
+.tile.d{background:#0A0C12;color:#F1F3F8}.tile.l{background:#fff;color:#121419;box-shadow:inset 0 0 0 1px #D6D6D0}
+.tile svg{display:block}
+
+/* ---- themes ---- */
+.tcard{margin-bottom:22px}
+.tcard header{flex-wrap:wrap}
+.sw3{display:flex;margin-left:auto}
+.sw3 span{width:22px;height:22px;border-radius:50%;border:2px solid var(--paper);margin-left:-6px}
+.hexline{margin:-6px 0 14px;font-size:12px;color:var(--sub)}
+.hexline code{background:#ECECE8;padding:1px 6px;border-radius:4px;color:var(--ink)}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.th{--r:10px;background:var(--bg);color:var(--fg);border-radius:14px;padding:16px;position:relative;overflow:hidden;
+ border:1px solid var(--border)}
+.th.dark{background:
+  radial-gradient(520px 220px at 90% -8%,color-mix(in srgb,var(--primary) 16%,transparent),transparent 70%),
+  radial-gradient(420px 200px at -10% 105%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 70%),
+  linear-gradient(color-mix(in srgb,var(--border) 45%,transparent) 1px,transparent 1px) 0 0/100% 28px,
+  linear-gradient(90deg,color-mix(in srgb,var(--border) 45%,transparent) 1px,transparent 1px) 0 0/28px 100%,
+  var(--bg)}
+.th.light{background:radial-gradient(520px 220px at 90% -8%,color-mix(in srgb,var(--primary) 8%,transparent),transparent 70%),var(--bg)}
+.th .mode{position:absolute;top:0;right:0;font-size:10.5px;letter-spacing:.08em;padding:3px 10px;border-bottom-left-radius:10px;
+ background:color-mix(in srgb,var(--fg) 8%,transparent);color:var(--muted)}
+.topbar{display:flex;align-items:center;gap:14px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);
+ background:color-mix(in srgb,var(--surface) 85%,transparent);margin:10px 0 14px}
+.brand{font-weight:800;letter-spacing:.18em;font-size:13px;display:flex;align-items:center;gap:6px}
+.brand i{width:7px;height:7px;border-radius:50%;background:var(--primary);box-shadow:0 0 10px var(--primary)}
+.topbar nav{display:flex;gap:12px;font-size:12.5px;color:var(--muted);flex:1}
+.topbar nav .on{color:var(--fg);box-shadow:0 2px 0 var(--primary)}
+.btn{font:inherit;font-size:12.5px;font-weight:600;border-radius:8px;padding:7px 12px;cursor:pointer;border:1px solid transparent;line-height:1.2;white-space:nowrap}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn.pri{background:var(--primary);color:var(--pfg)}
+.th.dark .btn.pri{box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 60%,transparent),0 4px 18px -6px var(--primary)}
+.btn.out{background:transparent;color:var(--fg);border-color:var(--border)}
+.btn.ghost-d{background:transparent;color:var(--destructive);padding:4px 6px}
+.chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.chips.st{margin-top:6px;grid-template-columns:repeat(5,minmax(0,1fr))}
+.chip{display:flex;gap:7px;align-items:center;padding:5px 6px;border-radius:8px;background:color-mix(in srgb,var(--surface) 80%,transparent);
+ border:1px solid var(--border);min-width:0}
+.sw{width:22px;height:22px;border-radius:6px;flex:none;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--fg) 18%,transparent)}
+.cl{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.cl b{font-size:10.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl code{font-size:10.5px;color:var(--muted)}
+.chips.st .chip{flex-direction:column;align-items:flex-start;gap:4px}
+.chips.st .sw{width:100%;height:8px;border-radius:4px}
+.snip{margin-top:14px;padding:12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border)}
+.search{display:flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;
+ background:var(--bg);color:var(--muted);font-size:12.5px;margin-bottom:12px}
+.search .q{color:var(--fg)}
+.search .caret{width:1px;height:14px;background:var(--primary);margin-left:-5px}
+.search .hit{margin-left:auto;font-size:11px;color:var(--hl)}
+.br{display:grid;grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);row-gap:6px}
+.rl{font-size:11px;color:var(--muted);letter-spacing:.08em}
+.col{display:flex;flex-direction:column;gap:18px;padding-top:16px}
+.col.qf{padding-top:57.5px}
+.cn{display:block;margin-top:16px;height:148px;width:28px}
+.m{border:1px solid var(--border);border-radius:8px;background:var(--bg);position:relative}
+.m .mh{position:absolute;top:-16px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--muted);height:14px}
+.m.live{border-color:color-mix(in srgb,var(--live) 55%,var(--border));box-shadow:0 0 0 3px color-mix(in srgb,var(--live) 12%,transparent)}
+.row{display:flex;align-items:center;gap:8px;height:31px;padding:0 9px;font-size:12.5px}
+.row + .row{border-top:1px solid var(--border)}
+.seed{width:16px;font-size:10px;color:var(--muted);text-align:right;flex:none}
+.tn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc{font-family:"Cascadia Mono",Consolas,monospace;font-weight:700;min-width:12px;text-align:right}
+.row.win .tn{font-weight:700}.row.win .sc{color:var(--primary)}
+.th.light.t4 .row.win .sc{color:var(--fg)}
+.row.out{color:var(--elim)}.row.out .tn{text-decoration:line-through;text-decoration-thickness:1px}
+.row.out .seed{color:var(--elim)}
+.et{font-size:10px;border:1px solid currentColor;border-radius:4px;padding:0 4px;line-height:15px}
+.row.hit{background:color-mix(in srgb,var(--hl) 14%,transparent);box-shadow:inset 3px 0 0 var(--hl),0 0 0 1.5px var(--hl);
+ border-radius:0 0 7px 7px;position:relative}
+.row.hit .tn{font-weight:700}
+.row.tbd{color:var(--muted);outline:1.5px dashed var(--hl);outline-offset:-3px;border-radius:0 0 7px 7px}
+.badge{--c:var(--muted);display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;
+ color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent);border:1px solid color-mix(in srgb,var(--c) 38%,transparent);white-space:nowrap;line-height:1.35}
+.badge.sm{font-size:10px;padding:0 6px;line-height:14px}
+.badge.live{--c:var(--live)}.badge.appeal{--c:var(--appeal)}.badge.confirmed{--c:var(--confirmed)}.badge.wait{--c:var(--wait)}
+.badge i{width:6px;height:6px;border-radius:50%;background:var(--c);box-shadow:0 0 0 0 var(--c);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c) 70%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.cards{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-top:10px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.ch{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--muted);margin-bottom:10px;gap:6px}
+.vs{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;font-size:13px}
+.vs .t.w{font-weight:700;text-align:right}.vs .t.l{color:var(--elim)}
+.score{font-family:"Cascadia Mono",Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:.04em}
+.score em{font-style:normal;color:var(--muted);margin:0 3px}
+.cd{display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--appeal)}
+.cd span{color:var(--muted)}
+.cd b{font-family:"Cascadia Mono",Consolas,monospace;font-size:16px;margin-left:auto;letter-spacing:.06em}
+.bar{height:4px;border-radius:4px;background:color-mix(in srgb,var(--appeal) 16%,transparent);margin:6px 0 12px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--appeal)}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+.others{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+.rr{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.rr b{display:block;font-size:13px}.rr small{color:var(--muted);font-size:11px}
+.rf{display:flex;justify-content:flex-end;padding-top:6px}
+.foot{margin-top:36px;color:var(--sub);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px}
+@media (max-width:1100px){.lgrid{grid-template-columns:1fr}}
+@media (max-width:980px){.duo{grid-template-columns:1fr}}
+@media (max-width:560px){.stage,.stage2,.cards{grid-template-columns:1fr}.chips{grid-template-columns:repeat(2,minmax(0,1fr))}.chips.st{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* ================= THEME TOKENS (hex documented per variation) ================= */
+/* T1 Deep Space Neon — DARK
+   background           #070A14
+   surface / card       #0E1426
+   foreground           #E6ECFF
+   muted-foreground     #8A94B8
+   border               #1F2945
+   primary              #22D3EE
+   primary-foreground   #04121A
+   accent               #8B5CF6
+   destructive          #F43F5E
+   live                 #22D3EE
+   appeal               #FBBF24
+   confirmed            #34D399
+   eliminated           #4B5370
+   waitlist             #A78BFA
+   search-highlight     #8B5CF6
+*/
+.th.t1.dark{--bg:#070A14;--surface:#0E1426;--fg:#E6ECFF;--muted:#8A94B8;--border:#1F2945;--primary:#22D3EE;--pfg:#04121A;--accent:#8B5CF6;--destructive:#F43F5E;--live:#22D3EE;--appeal:#FBBF24;--confirmed:#34D399;--elim:#4B5370;--wait:#A78BFA;--hl:#8B5CF6;}
+/* T1 Deep Space Neon — LIGHT
+   background           #F4F6FD
+   surface / card       #FFFFFF
+   foreground           #0B1020
+   muted-foreground     #5B6482
+   border               #DCE2F2
+   primary              #0891B2
+   primary-foreground   #FFFFFF
+   accent               #7C3AED
+   destructive          #DC2626
+   live                 #0891B2
+   appeal               #B45309
+   confirmed            #047857
+   eliminated           #9AA3B8
+   waitlist             #7C3AED
+   search-highlight     #7C3AED
+*/
+.th.t1.light{--bg:#F4F6FD;--surface:#FFFFFF;--fg:#0B1020;--muted:#5B6482;--border:#DCE2F2;--primary:#0891B2;--pfg:#FFFFFF;--accent:#7C3AED;--destructive:#DC2626;--live:#0891B2;--appeal:#B45309;--confirmed:#047857;--elim:#9AA3B8;--wait:#7C3AED;--hl:#7C3AED;}
+/* T2 Aurora — DARK
+   background           #06110F
+   surface / card       #0D1F1B
+   foreground           #E2F4EE
+   muted-foreground     #86A69D
+   border               #1A3830
+   primary              #34E8B0
+   primary-foreground   #022019
+   accent               #B9A6FF
+   destructive          #FF6B6B
+   live                 #34E8B0
+   appeal               #FFC861
+   confirmed            #7EE787
+   eliminated           #4A5F59
+   waitlist             #8FB8FF
+   search-highlight     #B9A6FF
+*/
+.th.t2.dark{--bg:#06110F;--surface:#0D1F1B;--fg:#E2F4EE;--muted:#86A69D;--border:#1A3830;--primary:#34E8B0;--pfg:#022019;--accent:#B9A6FF;--destructive:#FF6B6B;--live:#34E8B0;--appeal:#FFC861;--confirmed:#7EE787;--elim:#4A5F59;--wait:#8FB8FF;--hl:#B9A6FF;}
+/* T2 Aurora — LIGHT
+   background           #F1F9F6
+   surface / card       #FFFFFF
+   foreground           #0A1F1A
+   muted-foreground     #557069
+   border               #D3E8E1
+   primary              #0E9F74
+   primary-foreground   #FFFFFF
+   accent               #6D5BD0
+   destructive          #D93F3F
+   live                 #0E8A65
+   appeal               #A86A12
+   confirmed            #2F8A3E
+   eliminated           #A3B3AE
+   waitlist             #3B6FD8
+   search-highlight     #6D5BD0
+*/
+.th.t2.light{--bg:#F1F9F6;--surface:#FFFFFF;--fg:#0A1F1A;--muted:#557069;--border:#D3E8E1;--primary:#0E9F74;--pfg:#FFFFFF;--accent:#6D5BD0;--destructive:#D93F3F;--live:#0E8A65;--appeal:#A86A12;--confirmed:#2F8A3E;--elim:#A3B3AE;--wait:#3B6FD8;--hl:#6D5BD0;}
+/* T3 Plasma — DARK
+   background           #0E0710
+   surface / card       #1A0F1D
+   foreground           #FBEAF3
+   muted-foreground     #A98CA0
+   border               #35213B
+   primary              #FF2E88
+   primary-foreground   #FFFFFF
+   accent               #FF8A1F
+   destructive          #FF4D4D
+   live                 #FF8A1F
+   appeal               #FFD23F
+   confirmed            #3DDC97
+   eliminated           #5C4B58
+   waitlist             #B794F6
+   search-highlight     #FF8A1F
+*/
+.th.t3.dark{--bg:#0E0710;--surface:#1A0F1D;--fg:#FBEAF3;--muted:#A98CA0;--border:#35213B;--primary:#FF2E88;--pfg:#FFFFFF;--accent:#FF8A1F;--destructive:#FF4D4D;--live:#FF8A1F;--appeal:#FFD23F;--confirmed:#3DDC97;--elim:#5C4B58;--wait:#B794F6;--hl:#FF8A1F;}
+/* T3 Plasma — LIGHT
+   background           #FFF5F9
+   surface / card       #FFFFFF
+   foreground           #1F0A17
+   muted-foreground     #7A5A6E
+   border               #F0D9E5
+   primary              #D61F6F
+   primary-foreground   #FFFFFF
+   accent               #D9620A
+   destructive          #C81E1E
+   live                 #C2570A
+   appeal               #9A6B00
+   confirmed            #16825A
+   eliminated           #B5A3AE
+   waitlist             #7C4DDB
+   search-highlight     #D9620A
+*/
+.th.t3.light{--bg:#FFF5F9;--surface:#FFFFFF;--fg:#1F0A17;--muted:#7A5A6E;--border:#F0D9E5;--primary:#D61F6F;--pfg:#FFFFFF;--accent:#D9620A;--destructive:#C81E1E;--live:#C2570A;--appeal:#9A6B00;--confirmed:#16825A;--elim:#B5A3AE;--wait:#7C4DDB;--hl:#D9620A;}
+/* T4 Cool Steel + Volt — DARK
+   background           #0B0D10
+   surface / card       #15181D
+   foreground           #E8EAED
+   muted-foreground     #8B929C
+   border               #262B32
+   primary              #D7FF3A
+   primary-foreground   #0B0D10
+   accent               #7A8CA3
+   destructive          #FF5A4E
+   live                 #D7FF3A
+   appeal               #FFB020
+   confirmed            #4ADE80
+   eliminated           #4A5059
+   waitlist             #8FA6C4
+   search-highlight     #D7FF3A
+*/
+.th.t4.dark{--bg:#0B0D10;--surface:#15181D;--fg:#E8EAED;--muted:#8B929C;--border:#262B32;--primary:#D7FF3A;--pfg:#0B0D10;--accent:#7A8CA3;--destructive:#FF5A4E;--live:#D7FF3A;--appeal:#FFB020;--confirmed:#4ADE80;--elim:#4A5059;--wait:#8FA6C4;--hl:#D7FF3A;}
+/* T4 Cool Steel + Volt — LIGHT
+   background           #F3F4F6
+   surface / card       #FFFFFF
+   foreground           #111418
+   muted-foreground     #5E6670
+   border               #DCE0E5
+   primary              #111418
+   primary-foreground   #E4FF5C
+   accent               #5C6B7E
+   destructive          #D2362B
+   live                 #5A7A00
+   appeal               #A86200
+   confirmed            #1E8A4C
+   eliminated           #9AA1AA
+   waitlist             #4D6A8F
+   search-highlight     #7FA300
+*/
+.th.t4.light{--bg:#F3F4F6;--surface:#FFFFFF;--fg:#111418;--muted:#5E6670;--border:#DCE0E5;--primary:#111418;--pfg:#E4FF5C;--accent:#5C6B7E;--destructive:#D2362B;--live:#5A7A00;--appeal:#A86200;--confirmed:#1E8A4C;--elim:#9AA1AA;--wait:#4D6A8F;--hl:#7FA300;}
+</style></head><body><div class="wrap">
+<section class="hero">
+  <div><h1>FLOW · Logo 與色彩主題提案</h1>
+  <p>電競賽事管理平台的品牌方向：科幻 × 流動感。以下 4 個 logo 概念與 4 組色彩主題可以自由搭配；每組主題都同時提供深色與淺色模式，並套用到真實介面片段（對戰樹、場次卡、報名狀態）上比較。</p></div>
+  <div class="pick"><b>怎麼選：</b>回覆一個 logo + 一個主題 + 預設模式，例如 <code>L2 + T1，預設深色、也要淺色</code>。也可以說「L3 的環 + L2 的字」這類混搭。</div>
+</section>
+
+<h2>Part A · Logo 概念</h2>
+<p class="lead">先看單色（不受配色影響）：深底、淺底、favicon 32px／16px。漸層列只是示意，最終顏色跟著 Part B 選的主題走。</p>
+<div class="lgrid">
+<article class="lcard" id="L1">
+  <header><span class="tag">L1</span><h3>一筆成流 <small>One-Line Loop</small></h3></header>
+  <p class="desc">一條不斷的線畫出一個迴圈再向右上揚起：賽事從報名、抽籤、對戰到冠軍是同一條不中斷的流程；字標用細單線，輕盈、乾淨。</p>
+  <div class="stage">
+    <div class="pane dk"><div class="lock"><svg class="mk" width="46" height="46" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g6" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="58" y2="0"><stop offset="0" style="stop-color:currentColor;stop-opacity:0.22"/><stop offset="0.5" style="stop-color:currentColor;stop-opacity:0.75"/><stop offset="1" style="stop-color:currentColor;stop-opacity:1"/></linearGradient></defs><path d="M4 53 C16 53 22 47 27 38 L34 25 C38 17 36 8 29 8 C22 8 20 17 24 25 L31 38 C37 48 49 51 60 38" fill="none" stroke="url(#g6)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="wm" width="93" height="24" viewBox="0 0 124 32" aria-label="FLOW"><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2 V30 M2 2 H19 M2 15.5 H15"/><path d="M31 2 V30 H46"/><circle cx="70" cy="16" r="14"/><path d="M96 2 L102.5 30 L109 9 L115.5 30 L122 2"/></g></svg></div><span class="cap">單色 · 深底</span></div>
+    <div class="pane lt"><div class="lock"><svg class="mk" width="46" height="46" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g7" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="58" y2="0"><stop offset="0" style="stop-color:currentColor;stop-opacity:0.22"/><stop offset="0.5" style="stop-color:currentColor;stop-opacity:0.75"/><stop offset="1" style="stop-color:currentColor;stop-opacity:1"/></linearGradient></defs><path d="M4 53 C16 53 22 47 27 38 L34 25 C38 17 36 8 29 8 C22 8 20 17 24 25 L31 38 C37 48 49 51 60 38" fill="none" stroke="url(#g7)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="wm" width="93" height="24" viewBox="0 0 124 32" aria-label="FLOW"><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2 V30 M2 2 H19 M2 15.5 H15"/><path d="M31 2 V30 H46"/><circle cx="70" cy="16" r="14"/><path d="M96 2 L102.5 30 L109 9 L115.5 30 L122 2"/></g></svg></div><span class="cap">單色 · 淺底</span></div>
+  </div>
+  <div class="stage2">
+    <div class="pane dk wide"><div class="lock"><svg class="mk" width="37" height="37" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g8" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="58" y2="0"><stop offset="0" style="stop-color:#22D3EE;stop-opacity:0.35"/><stop offset="1" style="stop-color:#8B5CF6;stop-opacity:1"/></linearGradient></defs><path d="M4 53 C16 53 22 47 27 38 L34 25 C38 17 36 8 29 8 C22 8 20 17 24 25 L31 38 C37 48 49 51 60 38" fill="none" stroke="url(#g8)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="wm" width="74" height="19" viewBox="0 0 124 32" aria-label="FLOW"><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2 V30 M2 2 H19 M2 15.5 H15"/><path d="M31 2 V30 H46"/><circle cx="70" cy="16" r="14"/><path d="M96 2 L102.5 30 L109 9 L115.5 30 L122 2"/></g></svg></div><span class="cap">漸層示意（可選）</span></div>
+    <div class="favs"><div class="fav"><span class="tile d s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g1" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="58" y2="0"><stop offset="0" style="stop-color:currentColor;stop-opacity:0.22"/><stop offset="0.5" style="stop-color:currentColor;stop-opacity:0.75"/><stop offset="1" style="stop-color:currentColor;stop-opacity:1"/></linearGradient></defs><path d="M4 53 C16 53 22 47 27 38 L34 25 C38 17 36 8 29 8 C22 8 20 17 24 25 L31 38 C37 48 49 51 60 38" fill="none" stroke="url(#g1)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><em>32 · 深</em></div><div class="fav"><span class="tile l s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g2" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="58" y2="0"><stop offset="0" style="stop-color:currentColor;stop-opacity:0.22"/><stop offset="0.5" style="stop-color:currentColor;stop-opacity:0.75"/><stop offset="1" style="stop-color:currentColor;stop-opacity:1"/></linearGradient></defs><path d="M4 53 C16 53 22 47 27 38 L34 25 C38 17 36 8 29 8 C22 8 20 17 24 25 L31 38 C37 48 49 51 60 38" fill="none" stroke="url(#g2)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><em>32 · 淺</em></div><div class="fav"><span class="tile d s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g3" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="58" y2="0"><stop offset="0" style="stop-color:#22D3EE;stop-opacity:0.35"/><stop offset="1" style="stop-color:#8B5CF6;stop-opacity:1"/></linearGradient></defs><path d="M4 53 C16 53 22 47 27 38 L34 25 C38 17 36 8 29 8 C22 8 20 17 24 25 L31 38 C37 48 49 51 60 38" fill="none" stroke="url(#g3)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><em>32 · 漸層</em></div><div class="fav"><span class="tile d s16"><svg class="mk" width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g4" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="58" y2="0"><stop offset="0" style="stop-color:currentColor;stop-opacity:0.22"/><stop offset="0.5" style="stop-color:currentColor;stop-opacity:0.75"/><stop offset="1" style="stop-color:currentColor;stop-opacity:1"/></linearGradient></defs><path d="M4 53 C16 53 22 47 27 38 L34 25 C38 17 36 8 29 8 C22 8 20 17 24 25 L31 38 C37 48 49 51 60 38" fill="none" stroke="url(#g4)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><em>16</em></div><div class="fav"><span class="tile l s16"><svg class="mk" width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g5" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="58" y2="0"><stop offset="0" style="stop-color:currentColor;stop-opacity:0.22"/><stop offset="0.5" style="stop-color:currentColor;stop-opacity:0.75"/><stop offset="1" style="stop-color:currentColor;stop-opacity:1"/></linearGradient></defs><path d="M4 53 C16 53 22 47 27 38 L34 25 C38 17 36 8 29 8 C22 8 20 17 24 25 L31 38 C37 48 49 51 60 38" fill="none" stroke="url(#g5)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><em>16</em></div></div>
+  </div>
+  <p class="note">細線字標在 16px 以下要改用只有記號的版本。</p>
+</article>
+<article class="lcard" id="L2">
+  <header><span class="tag">L2</span><h3>匯流賽道 <small>Converging Bracket</small></h3></header>
+  <p class="desc">四條流線兩兩匯合、再匯成一點：同時是「流動」和「對戰樹收斂到冠軍」，最直接說出產品在做什麼；O 做成跑道形。</p>
+  <div class="stage">
+    <div class="pane dk"><div class="lock"><svg class="mk" width="46" height="46" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2"><g stroke="currentColor" opacity="0.45"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g><g stroke="currentColor" opacity="0.78"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g><circle cx="55" cy="32" r="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="currentColor"/></svg><svg class="wm" width="96" height="24" viewBox="0 0 128 32" aria-label="FLOW"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3 V29 M3 3 H20 M3 15.5 H16"/><path d="M32 3 V29 H47"/><rect x="58.5" y="3" width="32" height="26" rx="13"/><path d="M98.5 3 L104.5 29 L111.5 11 L118.5 29 L124.5 3"/></g></svg></div><span class="cap">單色 · 深底</span></div>
+    <div class="pane lt"><div class="lock"><svg class="mk" width="46" height="46" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2"><g stroke="currentColor" opacity="0.45"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g><g stroke="currentColor" opacity="0.78"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g><circle cx="55" cy="32" r="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="currentColor"/></svg><svg class="wm" width="96" height="24" viewBox="0 0 128 32" aria-label="FLOW"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3 V29 M3 3 H20 M3 15.5 H16"/><path d="M32 3 V29 H47"/><rect x="58.5" y="3" width="32" height="26" rx="13"/><path d="M98.5 3 L104.5 29 L111.5 11 L118.5 29 L124.5 3"/></g></svg></div><span class="cap">單色 · 淺底</span></div>
+  </div>
+  <div class="stage2">
+    <div class="pane dk wide"><div class="lock"><svg class="mk" width="37" height="37" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g16" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="56" y2="0"><stop offset="0" style="stop-color:#22D3EE;stop-opacity:1.0"/><stop offset="1" style="stop-color:#8B5CF6;stop-opacity:1.0"/></linearGradient></defs><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2"><g stroke="url(#g16)" opacity="0.7"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g><g stroke="url(#g16)" opacity="1"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g><circle cx="55" cy="32" r="9" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="#8B5CF6"/></svg><svg class="wm" width="76" height="19" viewBox="0 0 128 32" aria-label="FLOW"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3 V29 M3 3 H20 M3 15.5 H16"/><path d="M32 3 V29 H47"/><rect x="58.5" y="3" width="32" height="26" rx="13"/><path d="M98.5 3 L104.5 29 L111.5 11 L118.5 29 L124.5 3"/></g></svg></div><span class="cap">漸層示意（可選）</span></div>
+    <div class="favs"><div class="fav"><span class="tile d s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2"><g stroke="currentColor" opacity="0.45"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g><g stroke="currentColor" opacity="0.78"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g><circle cx="55" cy="32" r="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="currentColor"/></svg></span><em>32 · 深</em></div><div class="fav"><span class="tile l s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2"><g stroke="currentColor" opacity="0.45"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g><g stroke="currentColor" opacity="0.78"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g><circle cx="55" cy="32" r="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="currentColor"/></svg></span><em>32 · 淺</em></div><div class="fav"><span class="tile d s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g11" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="56" y2="0"><stop offset="0" style="stop-color:#22D3EE;stop-opacity:1.0"/><stop offset="1" style="stop-color:#8B5CF6;stop-opacity:1.0"/></linearGradient></defs><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2"><g stroke="url(#g11)" opacity="0.7"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g><g stroke="url(#g11)" opacity="1"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g><circle cx="55" cy="32" r="9" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="#8B5CF6"/></svg></span><em>32 · 漸層</em></div><div class="fav"><span class="tile d s16"><svg class="mk" width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2"><g stroke="currentColor" opacity="0.45"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g><g stroke="currentColor" opacity="0.78"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g><circle cx="55" cy="32" r="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="currentColor"/></svg></span><em>16</em></div><div class="fav"><span class="tile l s16"><svg class="mk" width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2"><g stroke="currentColor" opacity="0.45"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g><g stroke="currentColor" opacity="0.78"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g><circle cx="55" cy="32" r="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="currentColor"/></svg></span><em>16</em></div></div>
+  </div>
+  <p class="note">越往冠軍越亮（透明度遞增），單色也能看出方向。</p>
+</article>
+<article class="lcard" id="L3">
+  <header><span class="tag">L3</span><h3>能量環 O <small>Plasma Ring</small></h3></header>
+  <p class="desc">字標裡的 O 換成一個帶彗尾的能量環，中間一道電漿波：字標本身就是 logo，環單獨拿出來就是 favicon 與載入動畫。</p>
+  <div class="stage">
+    <div class="pane dk"><div class="lock"><svg class="wm" width="125" height="38" viewBox="0 0 132 40" aria-label="FLOW"><defs><clipPath id="c17"><rect x="80" y="4" width="52" height="32"/></clipPath></defs><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="butt"><path d="M7.5 4 V36 M4 7.5 H24 M4 19.5 H20"/><path d="M34.5 4 V36 M31 32.5 H48"/><path clip-path="url(#c17)" stroke-linejoin="miter" stroke-miterlimit="10" d="M93.5 -2 L101.5 34 L110.5 12 L119.5 34 L127.5 -2"/></g><circle cx="69.5" cy="20" r="12.5" fill="none" stroke="currentColor" stroke-width="7" opacity=".13"/><g fill="none" stroke-width="7" stroke-linecap="butt"><path d="M57.0 20 A12.5 12.5 0 0 1 69.5 7.5" stroke="currentColor" opacity="0.3"/><path d="M69.5 7.5 A12.5 12.5 0 0 1 82.0 20" stroke="currentColor" opacity="0.62"/><path d="M82.0 20 A12.5 12.5 0 0 1 69.5 32.5" stroke="currentColor" opacity="1"/></g><circle cx="69.5" cy="32.5" r="3.5" fill="currentColor"/><circle cx="69.5" cy="32.5" r="6.65" fill="currentColor" opacity=".22"/><path d="M62.95 21.19 C65.33 17.02 67.71 17.02 69.50 20.00 S73.67 22.98 76.05 18.81" fill="none" stroke="currentColor" stroke-width="2.20" stroke-linecap="round"/></svg></div><span class="cap">單色 · 深底</span></div>
+    <div class="pane lt"><div class="lock"><svg class="wm" width="125" height="38" viewBox="0 0 132 40" aria-label="FLOW"><defs><clipPath id="c18"><rect x="80" y="4" width="52" height="32"/></clipPath></defs><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="butt"><path d="M7.5 4 V36 M4 7.5 H24 M4 19.5 H20"/><path d="M34.5 4 V36 M31 32.5 H48"/><path clip-path="url(#c18)" stroke-linejoin="miter" stroke-miterlimit="10" d="M93.5 -2 L101.5 34 L110.5 12 L119.5 34 L127.5 -2"/></g><circle cx="69.5" cy="20" r="12.5" fill="none" stroke="currentColor" stroke-width="7" opacity=".13"/><g fill="none" stroke-width="7" stroke-linecap="butt"><path d="M57.0 20 A12.5 12.5 0 0 1 69.5 7.5" stroke="currentColor" opacity="0.3"/><path d="M69.5 7.5 A12.5 12.5 0 0 1 82.0 20" stroke="currentColor" opacity="0.62"/><path d="M82.0 20 A12.5 12.5 0 0 1 69.5 32.5" stroke="currentColor" opacity="1"/></g><circle cx="69.5" cy="32.5" r="3.5" fill="currentColor"/><circle cx="69.5" cy="32.5" r="6.65" fill="currentColor" opacity=".22"/><path d="M62.95 21.19 C65.33 17.02 67.71 17.02 69.50 20.00 S73.67 22.98 76.05 18.81" fill="none" stroke="currentColor" stroke-width="2.20" stroke-linecap="round"/></svg></div><span class="cap">單色 · 淺底</span></div>
+  </div>
+  <div class="stage2">
+    <div class="pane dk wide"><div class="lock"><svg class="wm" width="102" height="31" viewBox="0 0 132 40" aria-label="FLOW"><defs><clipPath id="c19"><rect x="80" y="4" width="52" height="32"/></clipPath></defs><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="butt"><path d="M7.5 4 V36 M4 7.5 H24 M4 19.5 H20"/><path d="M34.5 4 V36 M31 32.5 H48"/><path clip-path="url(#c19)" stroke-linejoin="miter" stroke-miterlimit="10" d="M93.5 -2 L101.5 34 L110.5 12 L119.5 34 L127.5 -2"/></g><circle cx="69.5" cy="20" r="12.5" fill="none" stroke="#22D3EE" stroke-width="7" opacity=".13"/><g fill="none" stroke-width="7" stroke-linecap="butt"><path d="M57.0 20 A12.5 12.5 0 0 1 69.5 7.5" stroke="#22D3EE" opacity="0.45"/><path d="M69.5 7.5 A12.5 12.5 0 0 1 82.0 20" stroke="#22D3EE" opacity="0.9"/><path d="M82.0 20 A12.5 12.5 0 0 1 69.5 32.5" stroke="#8B5CF6" opacity="1"/></g><circle cx="69.5" cy="32.5" r="3.5" fill="#8B5CF6"/><circle cx="69.5" cy="32.5" r="6.65" fill="#8B5CF6" opacity=".22"/><path d="M62.95 21.19 C65.33 17.02 67.71 17.02 69.50 20.00 S73.67 22.98 76.05 18.81" fill="none" stroke="#22D3EE" stroke-width="2.20" stroke-linecap="round"/></svg></div><span class="cap">漸層示意（可選）</span></div>
+    <div class="favs"><div class="fav"><span class="tile d s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="21" fill="none" stroke="currentColor" stroke-width="7" opacity=".13"/><g fill="none" stroke-width="7" stroke-linecap="butt"><path d="M11 32 A21 21 0 0 1 32 11" stroke="currentColor" opacity="0.3"/><path d="M32 11 A21 21 0 0 1 53 32" stroke="currentColor" opacity="0.62"/><path d="M53 32 A21 21 0 0 1 32 53" stroke="currentColor" opacity="1"/></g><circle cx="32" cy="53" r="3.5" fill="currentColor"/><circle cx="32" cy="53" r="6.65" fill="currentColor" opacity=".22"/><path d="M21.00 34.00 C25.00 27.00 29.00 27.00 32.00 32.00 S39.00 37.00 43.00 30.00" fill="none" stroke="currentColor" stroke-width="3.60" stroke-linecap="round"/></svg></span><em>32 · 深</em></div><div class="fav"><span class="tile l s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="21" fill="none" stroke="currentColor" stroke-width="7" opacity=".13"/><g fill="none" stroke-width="7" stroke-linecap="butt"><path d="M11 32 A21 21 0 0 1 32 11" stroke="currentColor" opacity="0.3"/><path d="M32 11 A21 21 0 0 1 53 32" stroke="currentColor" opacity="0.62"/><path d="M53 32 A21 21 0 0 1 32 53" stroke="currentColor" opacity="1"/></g><circle cx="32" cy="53" r="3.5" fill="currentColor"/><circle cx="32" cy="53" r="6.65" fill="currentColor" opacity=".22"/><path d="M21.00 34.00 C25.00 27.00 29.00 27.00 32.00 32.00 S39.00 37.00 43.00 30.00" fill="none" stroke="currentColor" stroke-width="3.60" stroke-linecap="round"/></svg></span><em>32 · 淺</em></div><div class="fav"><span class="tile d s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="21" fill="none" stroke="#22D3EE" stroke-width="7" opacity=".13"/><g fill="none" stroke-width="7" stroke-linecap="butt"><path d="M11 32 A21 21 0 0 1 32 11" stroke="#22D3EE" opacity="0.45"/><path d="M32 11 A21 21 0 0 1 53 32" stroke="#22D3EE" opacity="0.9"/><path d="M53 32 A21 21 0 0 1 32 53" stroke="#8B5CF6" opacity="1"/></g><circle cx="32" cy="53" r="3.5" fill="#8B5CF6"/><circle cx="32" cy="53" r="6.65" fill="#8B5CF6" opacity=".22"/><path d="M21.00 34.00 C25.00 27.00 29.00 27.00 32.00 32.00 S39.00 37.00 43.00 30.00" fill="none" stroke="#22D3EE" stroke-width="3.60" stroke-linecap="round"/></svg></span><em>32 · 漸層</em></div><div class="fav"><span class="tile d s16"><svg class="mk" width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="21" fill="none" stroke="currentColor" stroke-width="7" opacity=".13"/><g fill="none" stroke-width="7" stroke-linecap="butt"><path d="M11 32 A21 21 0 0 1 32 11" stroke="currentColor" opacity="0.3"/><path d="M32 11 A21 21 0 0 1 53 32" stroke="currentColor" opacity="0.62"/><path d="M53 32 A21 21 0 0 1 32 53" stroke="currentColor" opacity="1"/></g><circle cx="32" cy="53" r="3.5" fill="currentColor"/><circle cx="32" cy="53" r="6.65" fill="currentColor" opacity=".22"/><path d="M21.00 34.00 C25.00 27.00 29.00 27.00 32.00 32.00 S39.00 37.00 43.00 30.00" fill="none" stroke="currentColor" stroke-width="3.60" stroke-linecap="round"/></svg></span><em>16</em></div><div class="fav"><span class="tile l s16"><svg class="mk" width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="21" fill="none" stroke="currentColor" stroke-width="7" opacity=".13"/><g fill="none" stroke-width="7" stroke-linecap="butt"><path d="M11 32 A21 21 0 0 1 32 11" stroke="currentColor" opacity="0.3"/><path d="M32 11 A21 21 0 0 1 53 32" stroke="currentColor" opacity="0.62"/><path d="M53 32 A21 21 0 0 1 32 53" stroke="currentColor" opacity="1"/></g><circle cx="32" cy="53" r="3.5" fill="currentColor"/><circle cx="32" cy="53" r="6.65" fill="currentColor" opacity=".22"/><path d="M21.00 34.00 C25.00 27.00 29.00 27.00 32.00 32.00 S39.00 37.00 43.00 30.00" fill="none" stroke="currentColor" stroke-width="3.60" stroke-linecap="round"/></svg></span><em>16</em></div></div>
+  </div>
+  <p class="note">環可直接做成「進行中」的旋轉載入指示。</p>
+</article>
+<article class="lcard" id="L4">
+  <header><span class="tag">L4</span><h3>HUD 速度字 <small>HUD Velocity</small></h3></header>
+  <p class="desc">斜體、切角、方正的科幻 HUD 字標，左側速度線、中段一道掃描縫：最「電競」，像遊戲介面上的抬頭顯示。</p>
+  <div class="stage">
+    <div class="pane dk"><div class="lock"><svg class="mk" width="46" height="46" viewBox="0 0 64 64" aria-hidden="true"><polygon points="18,6 58,6 58,44 46,58 6,58 6,18" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter"/><g fill="currentColor" transform="translate(9 0) skewX(-14)"><rect x="26" y="17" width="8" height="30"/><rect x="26" y="17" width="24" height="7"/><rect x="26" y="29" width="17" height="6.5"/></g><g stroke="currentColor" stroke-width="2.6" opacity=".7"><path d="M13 20.5 H25"/><path d="M11 32.2 H21"/><path d="M14 43 H19"/></g></svg><svg class="wm" width="93" height="24" viewBox="0 0 140 36" aria-label="FLOW"><defs><mask id="m26" maskUnits="userSpaceOnUse" x="-20" y="0" width="200" height="36"><rect x="-20" y="0" width="200" height="36" fill="#fff"/><rect x="-20" y="17.4" width="200" height="1.9" fill="#000"/></mask></defs><g fill="currentColor" transform="translate(10 0) skewX(-14)" mask="url(#m26)"><rect x="10" y="4" width="7" height="28"/><rect x="10" y="4" width="20" height="6.5"/><rect x="10" y="15.5" width="15" height="6"/><rect x="36" y="4" width="7" height="28"/><rect x="36" y="25.5" width="19" height="6.5"/><path fill-rule="evenodd" d="M64 4 H84 L90 10 V26 L84 32 H64 L58 26 V10 Z M66.5 10.5 L64.5 12.5 V23.5 L66.5 25.5 H81.5 L83.5 23.5 V12.5 L81.5 10.5 Z"/><rect x="97" y="4" width="7" height="28"/><rect x="108.5" y="12" width="6.5" height="20"/><rect x="119.5" y="4" width="7" height="28"/><rect x="97" y="25.5" width="29.5" height="6.5"/></g><g stroke="currentColor" stroke-width="1.6" opacity=".55"><path d="M0 8 H11"/><path d="M3 13.5 H10"/><path d="M0 27 H7"/></g></svg></div><span class="cap">單色 · 深底</span></div>
+    <div class="pane lt"><div class="lock"><svg class="mk" width="46" height="46" viewBox="0 0 64 64" aria-hidden="true"><polygon points="18,6 58,6 58,44 46,58 6,58 6,18" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter"/><g fill="currentColor" transform="translate(9 0) skewX(-14)"><rect x="26" y="17" width="8" height="30"/><rect x="26" y="17" width="24" height="7"/><rect x="26" y="29" width="17" height="6.5"/></g><g stroke="currentColor" stroke-width="2.6" opacity=".7"><path d="M13 20.5 H25"/><path d="M11 32.2 H21"/><path d="M14 43 H19"/></g></svg><svg class="wm" width="93" height="24" viewBox="0 0 140 36" aria-label="FLOW"><defs><mask id="m28" maskUnits="userSpaceOnUse" x="-20" y="0" width="200" height="36"><rect x="-20" y="0" width="200" height="36" fill="#fff"/><rect x="-20" y="17.4" width="200" height="1.9" fill="#000"/></mask></defs><g fill="currentColor" transform="translate(10 0) skewX(-14)" mask="url(#m28)"><rect x="10" y="4" width="7" height="28"/><rect x="10" y="4" width="20" height="6.5"/><rect x="10" y="15.5" width="15" height="6"/><rect x="36" y="4" width="7" height="28"/><rect x="36" y="25.5" width="19" height="6.5"/><path fill-rule="evenodd" d="M64 4 H84 L90 10 V26 L84 32 H64 L58 26 V10 Z M66.5 10.5 L64.5 12.5 V23.5 L66.5 25.5 H81.5 L83.5 23.5 V12.5 L81.5 10.5 Z"/><rect x="97" y="4" width="7" height="28"/><rect x="108.5" y="12" width="6.5" height="20"/><rect x="119.5" y="4" width="7" height="28"/><rect x="97" y="25.5" width="29.5" height="6.5"/></g><g stroke="currentColor" stroke-width="1.6" opacity=".55"><path d="M0 8 H11"/><path d="M3 13.5 H10"/><path d="M0 27 H7"/></g></svg></div><span class="cap">單色 · 淺底</span></div>
+  </div>
+  <div class="stage2">
+    <div class="pane dk wide"><div class="lock"><svg class="mk" width="37" height="37" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g29" gradientUnits="userSpaceOnUse" x1="22" y1="46" x2="56" y2="16"><stop offset="0" style="stop-color:#22D3EE;stop-opacity:1.0"/><stop offset="1" style="stop-color:#8B5CF6;stop-opacity:1.0"/></linearGradient></defs><polygon points="18,6 58,6 58,44 46,58 6,58 6,18" fill="none" stroke="#22D3EE" stroke-width="3" stroke-linejoin="miter"/><g fill="url(#g29)" transform="translate(9 0) skewX(-14)"><rect x="26" y="17" width="8" height="30"/><rect x="26" y="17" width="24" height="7"/><rect x="26" y="29" width="17" height="6.5"/></g><g stroke="#22D3EE" stroke-width="2.6" opacity=".7"><path d="M13 20.5 H25"/><path d="M11 32.2 H21"/><path d="M14 43 H19"/></g></svg><svg class="wm" width="74" height="19" viewBox="0 0 140 36" aria-label="FLOW"><defs><mask id="m30" maskUnits="userSpaceOnUse" x="-20" y="0" width="200" height="36"><rect x="-20" y="0" width="200" height="36" fill="#fff"/><rect x="-20" y="17.4" width="200" height="1.9" fill="#000"/></mask></defs><g fill="currentColor" transform="translate(10 0) skewX(-14)" mask="url(#m30)"><rect x="10" y="4" width="7" height="28"/><rect x="10" y="4" width="20" height="6.5"/><rect x="10" y="15.5" width="15" height="6"/><rect x="36" y="4" width="7" height="28"/><rect x="36" y="25.5" width="19" height="6.5"/><path fill-rule="evenodd" d="M64 4 H84 L90 10 V26 L84 32 H64 L58 26 V10 Z M66.5 10.5 L64.5 12.5 V23.5 L66.5 25.5 H81.5 L83.5 23.5 V12.5 L81.5 10.5 Z"/><rect x="97" y="4" width="7" height="28"/><rect x="108.5" y="12" width="6.5" height="20"/><rect x="119.5" y="4" width="7" height="28"/><rect x="97" y="25.5" width="29.5" height="6.5"/></g><g stroke="currentColor" stroke-width="1.6" opacity=".55"><path d="M0 8 H11"/><path d="M3 13.5 H10"/><path d="M0 27 H7"/></g></svg></div><span class="cap">漸層示意（可選）</span></div>
+    <div class="favs"><div class="fav"><span class="tile d s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><polygon points="18,6 58,6 58,44 46,58 6,58 6,18" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter"/><g fill="currentColor" transform="translate(9 0) skewX(-14)"><rect x="26" y="17" width="8" height="30"/><rect x="26" y="17" width="24" height="7"/><rect x="26" y="29" width="17" height="6.5"/></g><g stroke="currentColor" stroke-width="2.6" opacity=".7"><path d="M13 20.5 H25"/><path d="M11 32.2 H21"/><path d="M14 43 H19"/></g></svg></span><em>32 · 深</em></div><div class="fav"><span class="tile l s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><polygon points="18,6 58,6 58,44 46,58 6,58 6,18" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter"/><g fill="currentColor" transform="translate(9 0) skewX(-14)"><rect x="26" y="17" width="8" height="30"/><rect x="26" y="17" width="24" height="7"/><rect x="26" y="29" width="17" height="6.5"/></g><g stroke="currentColor" stroke-width="2.6" opacity=".7"><path d="M13 20.5 H25"/><path d="M11 32.2 H21"/><path d="M14 43 H19"/></g></svg></span><em>32 · 淺</em></div><div class="fav"><span class="tile d s32"><svg class="mk" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g22" gradientUnits="userSpaceOnUse" x1="22" y1="46" x2="56" y2="16"><stop offset="0" style="stop-color:#22D3EE;stop-opacity:1.0"/><stop offset="1" style="stop-color:#8B5CF6;stop-opacity:1.0"/></linearGradient></defs><polygon points="18,6 58,6 58,44 46,58 6,58 6,18" fill="none" stroke="#22D3EE" stroke-width="3" stroke-linejoin="miter"/><g fill="url(#g22)" transform="translate(9 0) skewX(-14)"><rect x="26" y="17" width="8" height="30"/><rect x="26" y="17" width="24" height="7"/><rect x="26" y="29" width="17" height="6.5"/></g><g stroke="#22D3EE" stroke-width="2.6" opacity=".7"><path d="M13 20.5 H25"/><path d="M11 32.2 H21"/><path d="M14 43 H19"/></g></svg></span><em>32 · 漸層</em></div><div class="fav"><span class="tile d s16"><svg class="mk" width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><polygon points="18,6 58,6 58,44 46,58 6,58 6,18" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter"/><g fill="currentColor" transform="translate(9 0) skewX(-14)"><rect x="26" y="17" width="8" height="30"/><rect x="26" y="17" width="24" height="7"/><rect x="26" y="29" width="17" height="6.5"/></g><g stroke="currentColor" stroke-width="2.6" opacity=".7"><path d="M13 20.5 H25"/><path d="M11 32.2 H21"/><path d="M14 43 H19"/></g></svg></span><em>16</em></div><div class="fav"><span class="tile l s16"><svg class="mk" width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><polygon points="18,6 58,6 58,44 46,58 6,58 6,18" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter"/><g fill="currentColor" transform="translate(9 0) skewX(-14)"><rect x="26" y="17" width="8" height="30"/><rect x="26" y="17" width="24" height="7"/><rect x="26" y="29" width="17" height="6.5"/></g><g stroke="currentColor" stroke-width="2.6" opacity=".7"><path d="M13 20.5 H25"/><path d="M11 32.2 H21"/><path d="M14 43 H19"/></g></svg></span><em>16</em></div></div>
+  </div>
+  <p class="note">切角框可延伸成卡片與徽章的造型語言。</p>
+</article></div>
+
+<h2>Part B · 色彩主題</h2>
+<p class="lead">每組主題左深右淺。色票依 shadcn/ui 語意命名（background、card、primary…）再加上賽事狀態色。片段中：「清大」為搜尋結果並標示晉級路徑、師大 Phoenix 已淘汰、M4 進行中。</p>
+
+<article class="tcard" id="T1">
+  <header><span class="tag">T1</span><h3>深空霓虹 <small>Deep Space Neon</small></h3>
+    <div class="sw3"><span style="background:#070A14"></span><span style="background:#22D3EE"></span><span style="background:#8B5CF6"></span><span style="background:#F4F6FD"></span></div></header>
+  <p class="desc">夜空裡的青色霓虹與紫色光暈——最典型的「科幻電競」，興奮、有速度感、像比賽轉播的片頭。</p>
+  <p class="hexline">primary <code>#22D3EE</code> / <code>#0891B2</code> · accent <code>#8B5CF6</code> / <code>#7C3AED</code> <span>（深 / 淺）</span></p>
+  <div class="duo">
+  <div class="th t1 dark">
+    <div class="mode">深色 Dark</div>
+    <div class="topbar"><span class="brand">FLOW<i></i></span><nav><span class="on">賽事</span><span>我的隊伍</span><span>通知</span></nav>
+      <button class="btn pri sm">建立賽事</button></div>
+    <div class="chips"><div class="chip"><span class="sw" style="background:var(--bg)"></span><span class="cl"><b>background</b><code>#070A14</code></span></div><div class="chip"><span class="sw" style="background:var(--surface)"></span><span class="cl"><b>surface / card</b><code>#0E1426</code></span></div><div class="chip"><span class="sw" style="background:var(--fg)"></span><span class="cl"><b>foreground</b><code>#E6ECFF</code></span></div><div class="chip"><span class="sw" style="background:var(--muted)"></span><span class="cl"><b>muted-foreground</b><code>#8A94B8</code></span></div><div class="chip"><span class="sw" style="background:var(--border)"></span><span class="cl"><b>border</b><code>#1F2945</code></span></div><div class="chip"><span class="sw" style="background:var(--primary)"></span><span class="cl"><b>primary</b><code>#22D3EE</code></span></div><div class="chip"><span class="sw" style="background:var(--pfg)"></span><span class="cl"><b>primary-foreground</b><code>#04121A</code></span></div><div class="chip"><span class="sw" style="background:var(--accent)"></span><span class="cl"><b>accent</b><code>#8B5CF6</code></span></div><div class="chip"><span class="sw" style="background:var(--destructive)"></span><span class="cl"><b>destructive</b><code>#F43F5E</code></span></div></div><div class="chips st"><div class="chip"><span class="sw" style="background:var(--live)"></span><span class="cl"><b>進行中 live</b><code>#22D3EE</code></span></div><div class="chip"><span class="sw" style="background:var(--appeal)"></span><span class="cl"><b>申訴中 appeal</b><code>#FBBF24</code></span></div><div class="chip"><span class="sw" style="background:var(--confirmed)"></span><span class="cl"><b>已確認 confirmed</b><code>#34D399</code></span></div><div class="chip"><span class="sw" style="background:var(--elim)"></span><span class="cl"><b>淘汰 eliminated</b><code>#4B5370</code></span></div><div class="chip"><span class="sw" style="background:var(--wait)"></span><span class="cl"><b>候補 waitlist</b><code>#A78BFA</code></span></div></div>
+    <div class="snip">
+<div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/></svg><span class="q">清大</span><span class="caret"></span>
+  <span class="hit">找到 1 隊 · 已標示晉級路徑</span></div>
+<div class="br">
+  <div class="rl">16 強</div><div></div><div class="rl">8 強</div>
+  <div class="col">
+    <div class="m"><div class="mh">M3<span class="badge confirmed sm">已確認</span></div>
+      <div class="row win"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">2</span></div>
+      <div class="row out"><span class="seed">16</span><span class="tn">師大 Phoenix</span><span class="et">淘汰</span><span class="sc">0</span></div>
+    </div>
+    <div class="m live"><div class="mh">M4<span class="badge live sm"><i></i>進行中</span></div>
+      <div class="row"><span class="seed">8</span><span class="tn">政大 Nova</span><span class="sc">1</span></div>
+      <div class="row hit"><span class="seed">9</span><span class="tn">清大 Hydra</span><span class="sc">1</span></div>
+    </div>
+  </div>
+  <svg class="cn" width="28" height="148" viewBox="0 0 28 148">
+    <path d="M0 32.5 H14 V74 H28 M14 74 V115.5 H0" fill="none" style="stroke:color-mix(in srgb,var(--muted) 55%,transparent)" stroke-width="1.5"/>
+    <path d="M0 131.5 H14 V90 H28" fill="none" stroke="var(--hl)" stroke-width="2" stroke-dasharray="4 3"/>
+  </svg>
+  <div class="col qf">
+    <div class="m"><div class="mh">M7 · 10/18 19:00</div>
+      <div class="row"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">–</span></div>
+      <div class="row tbd"><span class="seed"></span><span class="tn">M4 勝者（政大／清大）</span><span class="sc">–</span></div>
+    </div>
+  </div>
+</div></div>
+    
+<div class="cards">
+  <div class="card mc">
+    <div class="ch"><span>16 強 · M3 · 特戰英豪 BO3</span><span class="badge appeal sm">申訴期</span></div>
+    <div class="vs"><span class="t w">台大電競社</span><span class="score">2<em>:</em>0</span><span class="t l">師大 Phoenix</span></div>
+    <div class="cd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span>申訴期剩餘</span><b>08:42</b></div>
+    <div class="bar"><span style="width:58%"></span></div>
+    <div class="acts"><button class="btn pri">查看比分證據</button><button class="btn out">提出申訴</button></div>
+    <div class="others"><span>同輪其他場次</span><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴中</span></span></div>
+  </div>
+  <div class="card rg">
+    <div class="ch"><span>我的報名</span></div>
+    <div class="rr"><div><b>台大電競社</b><small>2026 秋季校際盃 · 特戰英豪</small></div><span class="badge confirmed">正取</span></div>
+    <div class="rr"><div><b>中央 Vortex</b><small>北區社群盃 · 英雄聯盟</small></div><span class="badge wait">候補第 3 位</span></div>
+    <div class="rf"><button class="btn ghost-d">取消報名</button></div>
+  </div>
+</div>
+  </div>
+  <div class="th t1 light">
+    <div class="mode">淺色 Light</div>
+    <div class="topbar"><span class="brand">FLOW<i></i></span><nav><span class="on">賽事</span><span>我的隊伍</span><span>通知</span></nav>
+      <button class="btn pri sm">建立賽事</button></div>
+    <div class="chips"><div class="chip"><span class="sw" style="background:var(--bg)"></span><span class="cl"><b>background</b><code>#F4F6FD</code></span></div><div class="chip"><span class="sw" style="background:var(--surface)"></span><span class="cl"><b>surface / card</b><code>#FFFFFF</code></span></div><div class="chip"><span class="sw" style="background:var(--fg)"></span><span class="cl"><b>foreground</b><code>#0B1020</code></span></div><div class="chip"><span class="sw" style="background:var(--muted)"></span><span class="cl"><b>muted-foreground</b><code>#5B6482</code></span></div><div class="chip"><span class="sw" style="background:var(--border)"></span><span class="cl"><b>border</b><code>#DCE2F2</code></span></div><div class="chip"><span class="sw" style="background:var(--primary)"></span><span class="cl"><b>primary</b><code>#0891B2</code></span></div><div class="chip"><span class="sw" style="background:var(--pfg)"></span><span class="cl"><b>primary-foreground</b><code>#FFFFFF</code></span></div><div class="chip"><span class="sw" style="background:var(--accent)"></span><span class="cl"><b>accent</b><code>#7C3AED</code></span></div><div class="chip"><span class="sw" style="background:var(--destructive)"></span><span class="cl"><b>destructive</b><code>#DC2626</code></span></div></div><div class="chips st"><div class="chip"><span class="sw" style="background:var(--live)"></span><span class="cl"><b>進行中 live</b><code>#0891B2</code></span></div><div class="chip"><span class="sw" style="background:var(--appeal)"></span><span class="cl"><b>申訴中 appeal</b><code>#B45309</code></span></div><div class="chip"><span class="sw" style="background:var(--confirmed)"></span><span class="cl"><b>已確認 confirmed</b><code>#047857</code></span></div><div class="chip"><span class="sw" style="background:var(--elim)"></span><span class="cl"><b>淘汰 eliminated</b><code>#9AA3B8</code></span></div><div class="chip"><span class="sw" style="background:var(--wait)"></span><span class="cl"><b>候補 waitlist</b><code>#7C3AED</code></span></div></div>
+    <div class="snip">
+<div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/></svg><span class="q">清大</span><span class="caret"></span>
+  <span class="hit">找到 1 隊 · 已標示晉級路徑</span></div>
+<div class="br">
+  <div class="rl">16 強</div><div></div><div class="rl">8 強</div>
+  <div class="col">
+    <div class="m"><div class="mh">M3<span class="badge confirmed sm">已確認</span></div>
+      <div class="row win"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">2</span></div>
+      <div class="row out"><span class="seed">16</span><span class="tn">師大 Phoenix</span><span class="et">淘汰</span><span class="sc">0</span></div>
+    </div>
+    <div class="m live"><div class="mh">M4<span class="badge live sm"><i></i>進行中</span></div>
+      <div class="row"><span class="seed">8</span><span class="tn">政大 Nova</span><span class="sc">1</span></div>
+      <div class="row hit"><span class="seed">9</span><span class="tn">清大 Hydra</span><span class="sc">1</span></div>
+    </div>
+  </div>
+  <svg class="cn" width="28" height="148" viewBox="0 0 28 148">
+    <path d="M0 32.5 H14 V74 H28 M14 74 V115.5 H0" fill="none" style="stroke:color-mix(in srgb,var(--muted) 55%,transparent)" stroke-width="1.5"/>
+    <path d="M0 131.5 H14 V90 H28" fill="none" stroke="var(--hl)" stroke-width="2" stroke-dasharray="4 3"/>
+  </svg>
+  <div class="col qf">
+    <div class="m"><div class="mh">M7 · 10/18 19:00</div>
+      <div class="row"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">–</span></div>
+      <div class="row tbd"><span class="seed"></span><span class="tn">M4 勝者（政大／清大）</span><span class="sc">–</span></div>
+    </div>
+  </div>
+</div></div>
+    
+<div class="cards">
+  <div class="card mc">
+    <div class="ch"><span>16 強 · M3 · 特戰英豪 BO3</span><span class="badge appeal sm">申訴期</span></div>
+    <div class="vs"><span class="t w">台大電競社</span><span class="score">2<em>:</em>0</span><span class="t l">師大 Phoenix</span></div>
+    <div class="cd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span>申訴期剩餘</span><b>08:42</b></div>
+    <div class="bar"><span style="width:58%"></span></div>
+    <div class="acts"><button class="btn pri">查看比分證據</button><button class="btn out">提出申訴</button></div>
+    <div class="others"><span>同輪其他場次</span><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴中</span></span></div>
+  </div>
+  <div class="card rg">
+    <div class="ch"><span>我的報名</span></div>
+    <div class="rr"><div><b>台大電競社</b><small>2026 秋季校際盃 · 特戰英豪</small></div><span class="badge confirmed">正取</span></div>
+    <div class="rr"><div><b>中央 Vortex</b><small>北區社群盃 · 英雄聯盟</small></div><span class="badge wait">候補第 3 位</span></div>
+    <div class="rf"><button class="btn ghost-d">取消報名</button></div>
+  </div>
+</div>
+  </div></div>
+</article>
+<article class="tcard" id="T2">
+  <header><span class="tag">T2</span><h3>極光 <small>Aurora</small></h3>
+    <div class="sw3"><span style="background:#06110F"></span><span style="background:#34E8B0"></span><span style="background:#B9A6FF"></span><span style="background:#F1F9F6"></span></div></header>
+  <p class="desc">深綠夜空裡流動的極光，青綠為主、淡紫點綴——冷靜、有呼吸感，「流動」比「刺激」多一點，長時間看不累。</p>
+  <p class="hexline">primary <code>#34E8B0</code> / <code>#0E9F74</code> · accent <code>#B9A6FF</code> / <code>#6D5BD0</code> <span>（深 / 淺）</span></p>
+  <div class="duo">
+  <div class="th t2 dark">
+    <div class="mode">深色 Dark</div>
+    <div class="topbar"><span class="brand">FLOW<i></i></span><nav><span class="on">賽事</span><span>我的隊伍</span><span>通知</span></nav>
+      <button class="btn pri sm">建立賽事</button></div>
+    <div class="chips"><div class="chip"><span class="sw" style="background:var(--bg)"></span><span class="cl"><b>background</b><code>#06110F</code></span></div><div class="chip"><span class="sw" style="background:var(--surface)"></span><span class="cl"><b>surface / card</b><code>#0D1F1B</code></span></div><div class="chip"><span class="sw" style="background:var(--fg)"></span><span class="cl"><b>foreground</b><code>#E2F4EE</code></span></div><div class="chip"><span class="sw" style="background:var(--muted)"></span><span class="cl"><b>muted-foreground</b><code>#86A69D</code></span></div><div class="chip"><span class="sw" style="background:var(--border)"></span><span class="cl"><b>border</b><code>#1A3830</code></span></div><div class="chip"><span class="sw" style="background:var(--primary)"></span><span class="cl"><b>primary</b><code>#34E8B0</code></span></div><div class="chip"><span class="sw" style="background:var(--pfg)"></span><span class="cl"><b>primary-foreground</b><code>#022019</code></span></div><div class="chip"><span class="sw" style="background:var(--accent)"></span><span class="cl"><b>accent</b><code>#B9A6FF</code></span></div><div class="chip"><span class="sw" style="background:var(--destructive)"></span><span class="cl"><b>destructive</b><code>#FF6B6B</code></span></div></div><div class="chips st"><div class="chip"><span class="sw" style="background:var(--live)"></span><span class="cl"><b>進行中 live</b><code>#34E8B0</code></span></div><div class="chip"><span class="sw" style="background:var(--appeal)"></span><span class="cl"><b>申訴中 appeal</b><code>#FFC861</code></span></div><div class="chip"><span class="sw" style="background:var(--confirmed)"></span><span class="cl"><b>已確認 confirmed</b><code>#7EE787</code></span></div><div class="chip"><span class="sw" style="background:var(--elim)"></span><span class="cl"><b>淘汰 eliminated</b><code>#4A5F59</code></span></div><div class="chip"><span class="sw" style="background:var(--wait)"></span><span class="cl"><b>候補 waitlist</b><code>#8FB8FF</code></span></div></div>
+    <div class="snip">
+<div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/></svg><span class="q">清大</span><span class="caret"></span>
+  <span class="hit">找到 1 隊 · 已標示晉級路徑</span></div>
+<div class="br">
+  <div class="rl">16 強</div><div></div><div class="rl">8 強</div>
+  <div class="col">
+    <div class="m"><div class="mh">M3<span class="badge confirmed sm">已確認</span></div>
+      <div class="row win"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">2</span></div>
+      <div class="row out"><span class="seed">16</span><span class="tn">師大 Phoenix</span><span class="et">淘汰</span><span class="sc">0</span></div>
+    </div>
+    <div class="m live"><div class="mh">M4<span class="badge live sm"><i></i>進行中</span></div>
+      <div class="row"><span class="seed">8</span><span class="tn">政大 Nova</span><span class="sc">1</span></div>
+      <div class="row hit"><span class="seed">9</span><span class="tn">清大 Hydra</span><span class="sc">1</span></div>
+    </div>
+  </div>
+  <svg class="cn" width="28" height="148" viewBox="0 0 28 148">
+    <path d="M0 32.5 H14 V74 H28 M14 74 V115.5 H0" fill="none" style="stroke:color-mix(in srgb,var(--muted) 55%,transparent)" stroke-width="1.5"/>
+    <path d="M0 131.5 H14 V90 H28" fill="none" stroke="var(--hl)" stroke-width="2" stroke-dasharray="4 3"/>
+  </svg>
+  <div class="col qf">
+    <div class="m"><div class="mh">M7 · 10/18 19:00</div>
+      <div class="row"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">–</span></div>
+      <div class="row tbd"><span class="seed"></span><span class="tn">M4 勝者（政大／清大）</span><span class="sc">–</span></div>
+    </div>
+  </div>
+</div></div>
+    
+<div class="cards">
+  <div class="card mc">
+    <div class="ch"><span>16 強 · M3 · 特戰英豪 BO3</span><span class="badge appeal sm">申訴期</span></div>
+    <div class="vs"><span class="t w">台大電競社</span><span class="score">2<em>:</em>0</span><span class="t l">師大 Phoenix</span></div>
+    <div class="cd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span>申訴期剩餘</span><b>08:42</b></div>
+    <div class="bar"><span style="width:58%"></span></div>
+    <div class="acts"><button class="btn pri">查看比分證據</button><button class="btn out">提出申訴</button></div>
+    <div class="others"><span>同輪其他場次</span><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴中</span></span></div>
+  </div>
+  <div class="card rg">
+    <div class="ch"><span>我的報名</span></div>
+    <div class="rr"><div><b>台大電競社</b><small>2026 秋季校際盃 · 特戰英豪</small></div><span class="badge confirmed">正取</span></div>
+    <div class="rr"><div><b>中央 Vortex</b><small>北區社群盃 · 英雄聯盟</small></div><span class="badge wait">候補第 3 位</span></div>
+    <div class="rf"><button class="btn ghost-d">取消報名</button></div>
+  </div>
+</div>
+  </div>
+  <div class="th t2 light">
+    <div class="mode">淺色 Light</div>
+    <div class="topbar"><span class="brand">FLOW<i></i></span><nav><span class="on">賽事</span><span>我的隊伍</span><span>通知</span></nav>
+      <button class="btn pri sm">建立賽事</button></div>
+    <div class="chips"><div class="chip"><span class="sw" style="background:var(--bg)"></span><span class="cl"><b>background</b><code>#F1F9F6</code></span></div><div class="chip"><span class="sw" style="background:var(--surface)"></span><span class="cl"><b>surface / card</b><code>#FFFFFF</code></span></div><div class="chip"><span class="sw" style="background:var(--fg)"></span><span class="cl"><b>foreground</b><code>#0A1F1A</code></span></div><div class="chip"><span class="sw" style="background:var(--muted)"></span><span class="cl"><b>muted-foreground</b><code>#557069</code></span></div><div class="chip"><span class="sw" style="background:var(--border)"></span><span class="cl"><b>border</b><code>#D3E8E1</code></span></div><div class="chip"><span class="sw" style="background:var(--primary)"></span><span class="cl"><b>primary</b><code>#0E9F74</code></span></div><div class="chip"><span class="sw" style="background:var(--pfg)"></span><span class="cl"><b>primary-foreground</b><code>#FFFFFF</code></span></div><div class="chip"><span class="sw" style="background:var(--accent)"></span><span class="cl"><b>accent</b><code>#6D5BD0</code></span></div><div class="chip"><span class="sw" style="background:var(--destructive)"></span><span class="cl"><b>destructive</b><code>#D93F3F</code></span></div></div><div class="chips st"><div class="chip"><span class="sw" style="background:var(--live)"></span><span class="cl"><b>進行中 live</b><code>#0E8A65</code></span></div><div class="chip"><span class="sw" style="background:var(--appeal)"></span><span class="cl"><b>申訴中 appeal</b><code>#A86A12</code></span></div><div class="chip"><span class="sw" style="background:var(--confirmed)"></span><span class="cl"><b>已確認 confirmed</b><code>#2F8A3E</code></span></div><div class="chip"><span class="sw" style="background:var(--elim)"></span><span class="cl"><b>淘汰 eliminated</b><code>#A3B3AE</code></span></div><div class="chip"><span class="sw" style="background:var(--wait)"></span><span class="cl"><b>候補 waitlist</b><code>#3B6FD8</code></span></div></div>
+    <div class="snip">
+<div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/></svg><span class="q">清大</span><span class="caret"></span>
+  <span class="hit">找到 1 隊 · 已標示晉級路徑</span></div>
+<div class="br">
+  <div class="rl">16 強</div><div></div><div class="rl">8 強</div>
+  <div class="col">
+    <div class="m"><div class="mh">M3<span class="badge confirmed sm">已確認</span></div>
+      <div class="row win"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">2</span></div>
+      <div class="row out"><span class="seed">16</span><span class="tn">師大 Phoenix</span><span class="et">淘汰</span><span class="sc">0</span></div>
+    </div>
+    <div class="m live"><div class="mh">M4<span class="badge live sm"><i></i>進行中</span></div>
+      <div class="row"><span class="seed">8</span><span class="tn">政大 Nova</span><span class="sc">1</span></div>
+      <div class="row hit"><span class="seed">9</span><span class="tn">清大 Hydra</span><span class="sc">1</span></div>
+    </div>
+  </div>
+  <svg class="cn" width="28" height="148" viewBox="0 0 28 148">
+    <path d="M0 32.5 H14 V74 H28 M14 74 V115.5 H0" fill="none" style="stroke:color-mix(in srgb,var(--muted) 55%,transparent)" stroke-width="1.5"/>
+    <path d="M0 131.5 H14 V90 H28" fill="none" stroke="var(--hl)" stroke-width="2" stroke-dasharray="4 3"/>
+  </svg>
+  <div class="col qf">
+    <div class="m"><div class="mh">M7 · 10/18 19:00</div>
+      <div class="row"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">–</span></div>
+      <div class="row tbd"><span class="seed"></span><span class="tn">M4 勝者（政大／清大）</span><span class="sc">–</span></div>
+    </div>
+  </div>
+</div></div>
+    
+<div class="cards">
+  <div class="card mc">
+    <div class="ch"><span>16 強 · M3 · 特戰英豪 BO3</span><span class="badge appeal sm">申訴期</span></div>
+    <div class="vs"><span class="t w">台大電競社</span><span class="score">2<em>:</em>0</span><span class="t l">師大 Phoenix</span></div>
+    <div class="cd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span>申訴期剩餘</span><b>08:42</b></div>
+    <div class="bar"><span style="width:58%"></span></div>
+    <div class="acts"><button class="btn pri">查看比分證據</button><button class="btn out">提出申訴</button></div>
+    <div class="others"><span>同輪其他場次</span><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴中</span></span></div>
+  </div>
+  <div class="card rg">
+    <div class="ch"><span>我的報名</span></div>
+    <div class="rr"><div><b>台大電競社</b><small>2026 秋季校際盃 · 特戰英豪</small></div><span class="badge confirmed">正取</span></div>
+    <div class="rr"><div><b>中央 Vortex</b><small>北區社群盃 · 英雄聯盟</small></div><span class="badge wait">候補第 3 位</span></div>
+    <div class="rf"><button class="btn ghost-d">取消報名</button></div>
+  </div>
+</div>
+  </div></div>
+</article>
+<article class="tcard" id="T3">
+  <header><span class="tag">T3</span><h3>電漿 <small>Plasma</small></h3>
+    <div class="sw3"><span style="background:#0E0710"></span><span style="background:#FF2E88"></span><span style="background:#FF8A1F"></span><span style="background:#FFF5F9"></span></div></header>
+  <p class="desc">洋紅與橘色的高溫電漿——最熱血、最有舞台燈光感，像決賽夜；存在感強，適合想讓人一眼記住的品牌。</p>
+  <p class="hexline">primary <code>#FF2E88</code> / <code>#D61F6F</code> · accent <code>#FF8A1F</code> / <code>#D9620A</code> <span>（深 / 淺）</span></p>
+  <div class="duo">
+  <div class="th t3 dark">
+    <div class="mode">深色 Dark</div>
+    <div class="topbar"><span class="brand">FLOW<i></i></span><nav><span class="on">賽事</span><span>我的隊伍</span><span>通知</span></nav>
+      <button class="btn pri sm">建立賽事</button></div>
+    <div class="chips"><div class="chip"><span class="sw" style="background:var(--bg)"></span><span class="cl"><b>background</b><code>#0E0710</code></span></div><div class="chip"><span class="sw" style="background:var(--surface)"></span><span class="cl"><b>surface / card</b><code>#1A0F1D</code></span></div><div class="chip"><span class="sw" style="background:var(--fg)"></span><span class="cl"><b>foreground</b><code>#FBEAF3</code></span></div><div class="chip"><span class="sw" style="background:var(--muted)"></span><span class="cl"><b>muted-foreground</b><code>#A98CA0</code></span></div><div class="chip"><span class="sw" style="background:var(--border)"></span><span class="cl"><b>border</b><code>#35213B</code></span></div><div class="chip"><span class="sw" style="background:var(--primary)"></span><span class="cl"><b>primary</b><code>#FF2E88</code></span></div><div class="chip"><span class="sw" style="background:var(--pfg)"></span><span class="cl"><b>primary-foreground</b><code>#FFFFFF</code></span></div><div class="chip"><span class="sw" style="background:var(--accent)"></span><span class="cl"><b>accent</b><code>#FF8A1F</code></span></div><div class="chip"><span class="sw" style="background:var(--destructive)"></span><span class="cl"><b>destructive</b><code>#FF4D4D</code></span></div></div><div class="chips st"><div class="chip"><span class="sw" style="background:var(--live)"></span><span class="cl"><b>進行中 live</b><code>#FF8A1F</code></span></div><div class="chip"><span class="sw" style="background:var(--appeal)"></span><span class="cl"><b>申訴中 appeal</b><code>#FFD23F</code></span></div><div class="chip"><span class="sw" style="background:var(--confirmed)"></span><span class="cl"><b>已確認 confirmed</b><code>#3DDC97</code></span></div><div class="chip"><span class="sw" style="background:var(--elim)"></span><span class="cl"><b>淘汰 eliminated</b><code>#5C4B58</code></span></div><div class="chip"><span class="sw" style="background:var(--wait)"></span><span class="cl"><b>候補 waitlist</b><code>#B794F6</code></span></div></div>
+    <div class="snip">
+<div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/></svg><span class="q">清大</span><span class="caret"></span>
+  <span class="hit">找到 1 隊 · 已標示晉級路徑</span></div>
+<div class="br">
+  <div class="rl">16 強</div><div></div><div class="rl">8 強</div>
+  <div class="col">
+    <div class="m"><div class="mh">M3<span class="badge confirmed sm">已確認</span></div>
+      <div class="row win"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">2</span></div>
+      <div class="row out"><span class="seed">16</span><span class="tn">師大 Phoenix</span><span class="et">淘汰</span><span class="sc">0</span></div>
+    </div>
+    <div class="m live"><div class="mh">M4<span class="badge live sm"><i></i>進行中</span></div>
+      <div class="row"><span class="seed">8</span><span class="tn">政大 Nova</span><span class="sc">1</span></div>
+      <div class="row hit"><span class="seed">9</span><span class="tn">清大 Hydra</span><span class="sc">1</span></div>
+    </div>
+  </div>
+  <svg class="cn" width="28" height="148" viewBox="0 0 28 148">
+    <path d="M0 32.5 H14 V74 H28 M14 74 V115.5 H0" fill="none" style="stroke:color-mix(in srgb,var(--muted) 55%,transparent)" stroke-width="1.5"/>
+    <path d="M0 131.5 H14 V90 H28" fill="none" stroke="var(--hl)" stroke-width="2" stroke-dasharray="4 3"/>
+  </svg>
+  <div class="col qf">
+    <div class="m"><div class="mh">M7 · 10/18 19:00</div>
+      <div class="row"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">–</span></div>
+      <div class="row tbd"><span class="seed"></span><span class="tn">M4 勝者（政大／清大）</span><span class="sc">–</span></div>
+    </div>
+  </div>
+</div></div>
+    
+<div class="cards">
+  <div class="card mc">
+    <div class="ch"><span>16 強 · M3 · 特戰英豪 BO3</span><span class="badge appeal sm">申訴期</span></div>
+    <div class="vs"><span class="t w">台大電競社</span><span class="score">2<em>:</em>0</span><span class="t l">師大 Phoenix</span></div>
+    <div class="cd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span>申訴期剩餘</span><b>08:42</b></div>
+    <div class="bar"><span style="width:58%"></span></div>
+    <div class="acts"><button class="btn pri">查看比分證據</button><button class="btn out">提出申訴</button></div>
+    <div class="others"><span>同輪其他場次</span><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴中</span></span></div>
+  </div>
+  <div class="card rg">
+    <div class="ch"><span>我的報名</span></div>
+    <div class="rr"><div><b>台大電競社</b><small>2026 秋季校際盃 · 特戰英豪</small></div><span class="badge confirmed">正取</span></div>
+    <div class="rr"><div><b>中央 Vortex</b><small>北區社群盃 · 英雄聯盟</small></div><span class="badge wait">候補第 3 位</span></div>
+    <div class="rf"><button class="btn ghost-d">取消報名</button></div>
+  </div>
+</div>
+  </div>
+  <div class="th t3 light">
+    <div class="mode">淺色 Light</div>
+    <div class="topbar"><span class="brand">FLOW<i></i></span><nav><span class="on">賽事</span><span>我的隊伍</span><span>通知</span></nav>
+      <button class="btn pri sm">建立賽事</button></div>
+    <div class="chips"><div class="chip"><span class="sw" style="background:var(--bg)"></span><span class="cl"><b>background</b><code>#FFF5F9</code></span></div><div class="chip"><span class="sw" style="background:var(--surface)"></span><span class="cl"><b>surface / card</b><code>#FFFFFF</code></span></div><div class="chip"><span class="sw" style="background:var(--fg)"></span><span class="cl"><b>foreground</b><code>#1F0A17</code></span></div><div class="chip"><span class="sw" style="background:var(--muted)"></span><span class="cl"><b>muted-foreground</b><code>#7A5A6E</code></span></div><div class="chip"><span class="sw" style="background:var(--border)"></span><span class="cl"><b>border</b><code>#F0D9E5</code></span></div><div class="chip"><span class="sw" style="background:var(--primary)"></span><span class="cl"><b>primary</b><code>#D61F6F</code></span></div><div class="chip"><span class="sw" style="background:var(--pfg)"></span><span class="cl"><b>primary-foreground</b><code>#FFFFFF</code></span></div><div class="chip"><span class="sw" style="background:var(--accent)"></span><span class="cl"><b>accent</b><code>#D9620A</code></span></div><div class="chip"><span class="sw" style="background:var(--destructive)"></span><span class="cl"><b>destructive</b><code>#C81E1E</code></span></div></div><div class="chips st"><div class="chip"><span class="sw" style="background:var(--live)"></span><span class="cl"><b>進行中 live</b><code>#C2570A</code></span></div><div class="chip"><span class="sw" style="background:var(--appeal)"></span><span class="cl"><b>申訴中 appeal</b><code>#9A6B00</code></span></div><div class="chip"><span class="sw" style="background:var(--confirmed)"></span><span class="cl"><b>已確認 confirmed</b><code>#16825A</code></span></div><div class="chip"><span class="sw" style="background:var(--elim)"></span><span class="cl"><b>淘汰 eliminated</b><code>#B5A3AE</code></span></div><div class="chip"><span class="sw" style="background:var(--wait)"></span><span class="cl"><b>候補 waitlist</b><code>#7C4DDB</code></span></div></div>
+    <div class="snip">
+<div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/></svg><span class="q">清大</span><span class="caret"></span>
+  <span class="hit">找到 1 隊 · 已標示晉級路徑</span></div>
+<div class="br">
+  <div class="rl">16 強</div><div></div><div class="rl">8 強</div>
+  <div class="col">
+    <div class="m"><div class="mh">M3<span class="badge confirmed sm">已確認</span></div>
+      <div class="row win"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">2</span></div>
+      <div class="row out"><span class="seed">16</span><span class="tn">師大 Phoenix</span><span class="et">淘汰</span><span class="sc">0</span></div>
+    </div>
+    <div class="m live"><div class="mh">M4<span class="badge live sm"><i></i>進行中</span></div>
+      <div class="row"><span class="seed">8</span><span class="tn">政大 Nova</span><span class="sc">1</span></div>
+      <div class="row hit"><span class="seed">9</span><span class="tn">清大 Hydra</span><span class="sc">1</span></div>
+    </div>
+  </div>
+  <svg class="cn" width="28" height="148" viewBox="0 0 28 148">
+    <path d="M0 32.5 H14 V74 H28 M14 74 V115.5 H0" fill="none" style="stroke:color-mix(in srgb,var(--muted) 55%,transparent)" stroke-width="1.5"/>
+    <path d="M0 131.5 H14 V90 H28" fill="none" stroke="var(--hl)" stroke-width="2" stroke-dasharray="4 3"/>
+  </svg>
+  <div class="col qf">
+    <div class="m"><div class="mh">M7 · 10/18 19:00</div>
+      <div class="row"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">–</span></div>
+      <div class="row tbd"><span class="seed"></span><span class="tn">M4 勝者（政大／清大）</span><span class="sc">–</span></div>
+    </div>
+  </div>
+</div></div>
+    
+<div class="cards">
+  <div class="card mc">
+    <div class="ch"><span>16 強 · M3 · 特戰英豪 BO3</span><span class="badge appeal sm">申訴期</span></div>
+    <div class="vs"><span class="t w">台大電競社</span><span class="score">2<em>:</em>0</span><span class="t l">師大 Phoenix</span></div>
+    <div class="cd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span>申訴期剩餘</span><b>08:42</b></div>
+    <div class="bar"><span style="width:58%"></span></div>
+    <div class="acts"><button class="btn pri">查看比分證據</button><button class="btn out">提出申訴</button></div>
+    <div class="others"><span>同輪其他場次</span><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴中</span></span></div>
+  </div>
+  <div class="card rg">
+    <div class="ch"><span>我的報名</span></div>
+    <div class="rr"><div><b>台大電競社</b><small>2026 秋季校際盃 · 特戰英豪</small></div><span class="badge confirmed">正取</span></div>
+    <div class="rr"><div><b>中央 Vortex</b><small>北區社群盃 · 英雄聯盟</small></div><span class="badge wait">候補第 3 位</span></div>
+    <div class="rf"><button class="btn ghost-d">取消報名</button></div>
+  </div>
+</div>
+  </div></div>
+</article>
+<article class="tcard" id="T4">
+  <header><span class="tag">T4</span><h3>冷鋼電光 <small>Cool Steel + Volt</small></h3>
+    <div class="sw3"><span style="background:#0B0D10"></span><span style="background:#D7FF3A"></span><span style="background:#7A8CA3"></span><span style="background:#F3F4F6"></span></div></header>
+  <p class="desc">冷灰鋼材為底，只有一種電光黃綠當重點——克制、專業、像賽事數據台；科幻感來自留白與那一點電光。</p>
+  <p class="hexline">primary <code>#D7FF3A</code> / <code>#111418</code> · accent <code>#7A8CA3</code> / <code>#5C6B7E</code> <span>（深 / 淺）</span></p>
+  <div class="duo">
+  <div class="th t4 dark">
+    <div class="mode">深色 Dark</div>
+    <div class="topbar"><span class="brand">FLOW<i></i></span><nav><span class="on">賽事</span><span>我的隊伍</span><span>通知</span></nav>
+      <button class="btn pri sm">建立賽事</button></div>
+    <div class="chips"><div class="chip"><span class="sw" style="background:var(--bg)"></span><span class="cl"><b>background</b><code>#0B0D10</code></span></div><div class="chip"><span class="sw" style="background:var(--surface)"></span><span class="cl"><b>surface / card</b><code>#15181D</code></span></div><div class="chip"><span class="sw" style="background:var(--fg)"></span><span class="cl"><b>foreground</b><code>#E8EAED</code></span></div><div class="chip"><span class="sw" style="background:var(--muted)"></span><span class="cl"><b>muted-foreground</b><code>#8B929C</code></span></div><div class="chip"><span class="sw" style="background:var(--border)"></span><span class="cl"><b>border</b><code>#262B32</code></span></div><div class="chip"><span class="sw" style="background:var(--primary)"></span><span class="cl"><b>primary</b><code>#D7FF3A</code></span></div><div class="chip"><span class="sw" style="background:var(--pfg)"></span><span class="cl"><b>primary-foreground</b><code>#0B0D10</code></span></div><div class="chip"><span class="sw" style="background:var(--accent)"></span><span class="cl"><b>accent</b><code>#7A8CA3</code></span></div><div class="chip"><span class="sw" style="background:var(--destructive)"></span><span class="cl"><b>destructive</b><code>#FF5A4E</code></span></div></div><div class="chips st"><div class="chip"><span class="sw" style="background:var(--live)"></span><span class="cl"><b>進行中 live</b><code>#D7FF3A</code></span></div><div class="chip"><span class="sw" style="background:var(--appeal)"></span><span class="cl"><b>申訴中 appeal</b><code>#FFB020</code></span></div><div class="chip"><span class="sw" style="background:var(--confirmed)"></span><span class="cl"><b>已確認 confirmed</b><code>#4ADE80</code></span></div><div class="chip"><span class="sw" style="background:var(--elim)"></span><span class="cl"><b>淘汰 eliminated</b><code>#4A5059</code></span></div><div class="chip"><span class="sw" style="background:var(--wait)"></span><span class="cl"><b>候補 waitlist</b><code>#8FA6C4</code></span></div></div>
+    <div class="snip">
+<div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/></svg><span class="q">清大</span><span class="caret"></span>
+  <span class="hit">找到 1 隊 · 已標示晉級路徑</span></div>
+<div class="br">
+  <div class="rl">16 強</div><div></div><div class="rl">8 強</div>
+  <div class="col">
+    <div class="m"><div class="mh">M3<span class="badge confirmed sm">已確認</span></div>
+      <div class="row win"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">2</span></div>
+      <div class="row out"><span class="seed">16</span><span class="tn">師大 Phoenix</span><span class="et">淘汰</span><span class="sc">0</span></div>
+    </div>
+    <div class="m live"><div class="mh">M4<span class="badge live sm"><i></i>進行中</span></div>
+      <div class="row"><span class="seed">8</span><span class="tn">政大 Nova</span><span class="sc">1</span></div>
+      <div class="row hit"><span class="seed">9</span><span class="tn">清大 Hydra</span><span class="sc">1</span></div>
+    </div>
+  </div>
+  <svg class="cn" width="28" height="148" viewBox="0 0 28 148">
+    <path d="M0 32.5 H14 V74 H28 M14 74 V115.5 H0" fill="none" style="stroke:color-mix(in srgb,var(--muted) 55%,transparent)" stroke-width="1.5"/>
+    <path d="M0 131.5 H14 V90 H28" fill="none" stroke="var(--hl)" stroke-width="2" stroke-dasharray="4 3"/>
+  </svg>
+  <div class="col qf">
+    <div class="m"><div class="mh">M7 · 10/18 19:00</div>
+      <div class="row"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">–</span></div>
+      <div class="row tbd"><span class="seed"></span><span class="tn">M4 勝者（政大／清大）</span><span class="sc">–</span></div>
+    </div>
+  </div>
+</div></div>
+    
+<div class="cards">
+  <div class="card mc">
+    <div class="ch"><span>16 強 · M3 · 特戰英豪 BO3</span><span class="badge appeal sm">申訴期</span></div>
+    <div class="vs"><span class="t w">台大電競社</span><span class="score">2<em>:</em>0</span><span class="t l">師大 Phoenix</span></div>
+    <div class="cd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span>申訴期剩餘</span><b>08:42</b></div>
+    <div class="bar"><span style="width:58%"></span></div>
+    <div class="acts"><button class="btn pri">查看比分證據</button><button class="btn out">提出申訴</button></div>
+    <div class="others"><span>同輪其他場次</span><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴中</span></span></div>
+  </div>
+  <div class="card rg">
+    <div class="ch"><span>我的報名</span></div>
+    <div class="rr"><div><b>台大電競社</b><small>2026 秋季校際盃 · 特戰英豪</small></div><span class="badge confirmed">正取</span></div>
+    <div class="rr"><div><b>中央 Vortex</b><small>北區社群盃 · 英雄聯盟</small></div><span class="badge wait">候補第 3 位</span></div>
+    <div class="rf"><button class="btn ghost-d">取消報名</button></div>
+  </div>
+</div>
+  </div>
+  <div class="th t4 light">
+    <div class="mode">淺色 Light</div>
+    <div class="topbar"><span class="brand">FLOW<i></i></span><nav><span class="on">賽事</span><span>我的隊伍</span><span>通知</span></nav>
+      <button class="btn pri sm">建立賽事</button></div>
+    <div class="chips"><div class="chip"><span class="sw" style="background:var(--bg)"></span><span class="cl"><b>background</b><code>#F3F4F6</code></span></div><div class="chip"><span class="sw" style="background:var(--surface)"></span><span class="cl"><b>surface / card</b><code>#FFFFFF</code></span></div><div class="chip"><span class="sw" style="background:var(--fg)"></span><span class="cl"><b>foreground</b><code>#111418</code></span></div><div class="chip"><span class="sw" style="background:var(--muted)"></span><span class="cl"><b>muted-foreground</b><code>#5E6670</code></span></div><div class="chip"><span class="sw" style="background:var(--border)"></span><span class="cl"><b>border</b><code>#DCE0E5</code></span></div><div class="chip"><span class="sw" style="background:var(--primary)"></span><span class="cl"><b>primary</b><code>#111418</code></span></div><div class="chip"><span class="sw" style="background:var(--pfg)"></span><span class="cl"><b>primary-foreground</b><code>#E4FF5C</code></span></div><div class="chip"><span class="sw" style="background:var(--accent)"></span><span class="cl"><b>accent</b><code>#5C6B7E</code></span></div><div class="chip"><span class="sw" style="background:var(--destructive)"></span><span class="cl"><b>destructive</b><code>#D2362B</code></span></div></div><div class="chips st"><div class="chip"><span class="sw" style="background:var(--live)"></span><span class="cl"><b>進行中 live</b><code>#5A7A00</code></span></div><div class="chip"><span class="sw" style="background:var(--appeal)"></span><span class="cl"><b>申訴中 appeal</b><code>#A86200</code></span></div><div class="chip"><span class="sw" style="background:var(--confirmed)"></span><span class="cl"><b>已確認 confirmed</b><code>#1E8A4C</code></span></div><div class="chip"><span class="sw" style="background:var(--elim)"></span><span class="cl"><b>淘汰 eliminated</b><code>#9AA1AA</code></span></div><div class="chip"><span class="sw" style="background:var(--wait)"></span><span class="cl"><b>候補 waitlist</b><code>#4D6A8F</code></span></div></div>
+    <div class="snip">
+<div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/></svg><span class="q">清大</span><span class="caret"></span>
+  <span class="hit">找到 1 隊 · 已標示晉級路徑</span></div>
+<div class="br">
+  <div class="rl">16 強</div><div></div><div class="rl">8 強</div>
+  <div class="col">
+    <div class="m"><div class="mh">M3<span class="badge confirmed sm">已確認</span></div>
+      <div class="row win"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">2</span></div>
+      <div class="row out"><span class="seed">16</span><span class="tn">師大 Phoenix</span><span class="et">淘汰</span><span class="sc">0</span></div>
+    </div>
+    <div class="m live"><div class="mh">M4<span class="badge live sm"><i></i>進行中</span></div>
+      <div class="row"><span class="seed">8</span><span class="tn">政大 Nova</span><span class="sc">1</span></div>
+      <div class="row hit"><span class="seed">9</span><span class="tn">清大 Hydra</span><span class="sc">1</span></div>
+    </div>
+  </div>
+  <svg class="cn" width="28" height="148" viewBox="0 0 28 148">
+    <path d="M0 32.5 H14 V74 H28 M14 74 V115.5 H0" fill="none" style="stroke:color-mix(in srgb,var(--muted) 55%,transparent)" stroke-width="1.5"/>
+    <path d="M0 131.5 H14 V90 H28" fill="none" stroke="var(--hl)" stroke-width="2" stroke-dasharray="4 3"/>
+  </svg>
+  <div class="col qf">
+    <div class="m"><div class="mh">M7 · 10/18 19:00</div>
+      <div class="row"><span class="seed">1</span><span class="tn">台大電競社</span><span class="sc">–</span></div>
+      <div class="row tbd"><span class="seed"></span><span class="tn">M4 勝者（政大／清大）</span><span class="sc">–</span></div>
+    </div>
+  </div>
+</div></div>
+    
+<div class="cards">
+  <div class="card mc">
+    <div class="ch"><span>16 強 · M3 · 特戰英豪 BO3</span><span class="badge appeal sm">申訴期</span></div>
+    <div class="vs"><span class="t w">台大電競社</span><span class="score">2<em>:</em>0</span><span class="t l">師大 Phoenix</span></div>
+    <div class="cd"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span>申訴期剩餘</span><b>08:42</b></div>
+    <div class="bar"><span style="width:58%"></span></div>
+    <div class="acts"><button class="btn pri">查看比分證據</button><button class="btn out">提出申訴</button></div>
+    <div class="others"><span>同輪其他場次</span><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴中</span></span></div>
+  </div>
+  <div class="card rg">
+    <div class="ch"><span>我的報名</span></div>
+    <div class="rr"><div><b>台大電競社</b><small>2026 秋季校際盃 · 特戰英豪</small></div><span class="badge confirmed">正取</span></div>
+    <div class="rr"><div><b>中央 Vortex</b><small>北區社群盃 · 英雄聯盟</small></div><span class="badge wait">候補第 3 位</span></div>
+    <div class="rf"><button class="btn ghost-d">取消報名</button></div>
+  </div>
+</div>
+  </div></div>
+</article>
+
+<p class="foot">FLOW · UX 討論用草稿，非最終規格。字體使用系統字（Segoe UI／微軟正黑體），不載入任何網路資源。</p>
+</div></body></html>

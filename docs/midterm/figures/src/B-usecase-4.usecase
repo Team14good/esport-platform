@@ -1,0 +1,19 @@
+system: 4.0 抽籤與對戰表
+actor org left 2.5: 主辦方
+actor cap left 5: 隊長
+actor timer right 1: 時間
+uc u1 1 1: 抽籤
+uc u2 2 2: 產生單淘汰對戰表
+uc u3 2 3: 排定場次時間
+uc u4 1 3: 修改場次時間
+uc u5 1 4: 指派、改派或收回裁判（1.5）
+uc u6 1 5: 抽籤後退賽
+uc u7 2 5: 候補遞補對戰表位置
+org -- u1
+org -- u4
+org -- u5
+timer -- u1
+cap -- u6
+u1 ..> u2 : include
+u1 ..> u3 : include
+u6 ..> u7 : include

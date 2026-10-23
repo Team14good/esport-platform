@@ -1,0 +1,30 @@
+# 環境設定（只提交 .env.example）
+.env
+
+# 依賴與建置產物
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+
+# 測試與覆蓋率
+.coverage
+htmlcov/
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# 由 scripts/generate-client.sh 產生的暫存檔
+frontend/openapi.json
+
+# 編輯器
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store

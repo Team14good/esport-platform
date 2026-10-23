@@ -1,0 +1,29 @@
+system: 3.0 隊伍與報名
+actor cap left 2.5: 隊長
+actor player left 6.5: 選手
+actor org right 6: 主辦方
+actor timer right 7.6: 時間
+uc u1 1 1: 建立隊伍並取得邀請連結
+uc u2 1 2: 隊員異動與解散隊伍
+uc u3 1 3: 送出報名並鎖定名單
+uc u4 1 4: 抽籤前撤回報名
+uc u5 2 3: 判定正取或候補
+uc u6 2 4: 候補遞補
+uc u7 1 6: 加入隊伍
+uc u8 1 7: 填寫參賽資料
+uc u12 1 8: 退出隊伍
+uc u9 2 6: 檢視段位截圖並退回報名
+uc u10 2 7: 優先期結束分配名額
+uc u11 2 8: 報名截止補位
+cap -- u1
+cap -- u2
+cap -- u3
+cap -- u4
+player -- u7
+player -- u8
+player -- u12
+org -- u9
+timer -- u10
+timer -- u11
+u3 ..> u5 : include
+u4 ..> u6 : include

@@ -1,0 +1,23 @@
+system: 1.0 帳號與身分
+actor visitor left 1.5: 訪客
+actor account left 4.5: 帳號
+actor admin right 2: 平台管理員
+actor org right 4: 主辦方
+uc u1 1 1: 註冊並驗證 Email
+uc u2 2 1: 重寄驗證信
+uc u3 1 2: 忘記與重設密碼
+uc u4 1 3: 登入／登出
+uc u5 1 4: 維護帳號資料
+uc u6 1 5: 申請成為主辦方
+uc u7 1 6: 接受裁判邀請
+uc u8 2 2.5: 審核主辦方申請
+uc u9 2 4: 邀請裁判
+visitor -- u1
+visitor -- u3
+account -- u4
+account -- u5
+account -- u6
+account -- u7
+admin -- u8
+org -- u9
+u2 ..> u1 : extend

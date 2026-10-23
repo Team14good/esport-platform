@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-Hant-TW" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FLOW — S4 場次頁</title>
+<style>
+/*
+  FLOW key screen — S4 場次頁 + S24 比分登錄（Score entry panel）. Mock illustrates; the spine is the contract.
+  Governing spine sections:
+    DESIGN.md   — Colors (status-live / status-appeal / status-eliminated / status-confirmed), Typography (score, countdown,
+                  heading-lg, label, caption), Elevation (button-primary glow-dark; app-backdrop-dark), Components: Score display,
+                  Score entry panel, Countdown (appeal variant — the only countdown with a 4px progress bar), Check-in panel,
+                  Status badge, Button (primary / outline), Card, Top nav, Identity switcher.
+    EXPERIENCE.md — IA rows S4/S24 (and S21 提出申訴 entry); Component Patterns (Score display, Score entry panel, Check-in panel,
+                  Countdown, Button (primary)); State Patterns (場次狀態: 進行中, 待開打・可開始, 申訴期); 動作停用條件 (提出申訴);
+                  倒數與時間 (申訴期 row, display format, absolute time next to countdown); Responsive & Platform (≥ lg two columns);
+                  Key Flows UJ-3 steps 4–5 (+ exception: 阿哲 提出申訴); UJ-4 step 3 (public view of the match).
+*/
+
+/* ---- DESIGN.md frontmatter colors, resolved to the -dark values (dark is the default mode; html.dark) ---- */
+:root{
+  --background:#070A14; --card:#0E1426; --foreground:#E6ECFF; --muted-foreground:#8A94B8; --border:#1F2945;
+  --primary:#22D3EE; --primary-foreground:#04121A; --destructive:#F43F5E; --brand:#8B5CF6;
+  --muted:#141B31; --input:#1F2945; --ring:#22D3EE; --accent:#141B31;
+  --status-live:#22D3EE; --status-appeal:#FBBF24; --status-confirmed:#34D399; --status-eliminated:#4B5370;
+  --status-waitlist:#A78BFA; --search-highlight:#8B5CF6;
+  --font-sans:"Segoe UI Variable Text", "Segoe UI", "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+  --font-mono:"Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+/* presentation page (not product UI) */
+body{background:#16181E;color:#C9CEDB;font-family:var(--font-sans);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.sheet{padding:32px 24px 64px;max-width:1800px;margin:0 auto}
+.sheet h1{font-size:20px;margin:0 0 4px;color:#F1F3F8}
+.sheet .lead{margin:0 0 24px;color:#8F95A6;font-size:13px;max-width:980px}
+.frames{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+.fig{min-width:0;max-width:100%}
+.fig > .cap{font-size:12.5px;color:#9BA1B2;margin:0 0 10px;max-width:640px}
+.fig > .cap b{color:#E6E8EE}
+.scrollx{overflow-x:auto;max-width:100%}
+.section-title{font-size:15px;color:#F1F3F8;margin:44px 0 6px}
+/* device frames */
+.phone{width:395px;padding:10px;border-radius:46px;background:#000;box-shadow:0 0 0 1px #2B2F3A,0 20px 50px -20px #000}
+.phone .screen{width:375px;height:812px;overflow:hidden;border-radius:36px;position:relative}
+.phone.crop .screen{height:auto}
+.browser{width:1282px;border:1px solid #2B2F3A;border-radius:12px;overflow:hidden;background:#0B0D13}
+.chrome{height:38px;display:flex;align-items:center;gap:8px;padding:0 14px;background:#1C1F27;border-bottom:1px solid #2B2F3A}
+.chrome i{width:11px;height:11px;border-radius:50%;background:#3A3F4C;display:block}
+.chrome .url{margin-left:18px;flex:1;max-width:560px;height:24px;border-radius:6px;background:#11141A;color:#8F95A6;font-size:12px;display:flex;align-items:center;padding:0 10px;font-family:var(--font-mono)}
+.browser .viewport{width:1280px;position:relative}
+
+/* ---- app-backdrop-dark (DESIGN.md Elevation: page background only, never inside cards) ---- */
+.app{position:relative;color:var(--foreground);font-family:var(--font-sans);font-size:14px;line-height:1.6;
+  background:
+    radial-gradient(520px 220px at 90% -8%, color-mix(in oklab, var(--primary) 16%, transparent), transparent),
+    radial-gradient(420px 200px at -10% 105%, color-mix(in oklab, var(--brand) 12%, transparent), transparent),
+    linear-gradient(color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px) 0 0/100% 28px,
+    linear-gradient(90deg, color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px) 0 0/28px 100%,
+    var(--background);}
+.phone .app{min-height:100%}
+
+/* ---- Top bar (DESIGN Components: Logo lockup, Top nav, Notification bell, Theme toggle, Identity switcher) ---- */
+.topbar{height:56px;display:flex;align-items:center;gap:20px;padding:0 28px;background:var(--card);border-bottom:1px solid var(--border)}
+.topbar .lockup{height:28px;display:block}
+.topbar nav{display:flex;align-self:stretch;gap:20px;flex:1}
+.topbar nav a{display:flex;align-items:center;color:var(--muted-foreground);font-size:12.5px;font-weight:600;text-decoration:none}
+.topbar nav a.on{color:var(--foreground);box-shadow:inset 0 -2px 0 var(--primary)}
+.tb-right{display:flex;align-items:center;gap:6px;margin-left:auto}
+.icon-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:8px;color:var(--muted-foreground);position:relative}
+.icon-btn svg{display:block}
+.bell-count{position:absolute;top:3px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:9999px;background:var(--primary);color:var(--primary-foreground);font-size:10px;font-weight:700;line-height:16px;text-align:center}
+.switcher{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;margin-left:6px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:12.5px;font-weight:600;color:var(--foreground)}
+.switcher svg{color:var(--muted-foreground)}
+.phone .topbar{height:52px;padding:0 16px;gap:12px}
+.ghost-btn{height:36px;display:inline-flex;align-items:center;padding:0 12px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--foreground)}
+
+/* ---- Status badge (DESIGN status-badge) ---- */
+.badge{--c:var(--muted-foreground);display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;line-height:1.3;padding:2px 10px;border-radius:9999px;
+  color:var(--c);background:color-mix(in oklab, var(--c) 15%, transparent);border:1px solid color-mix(in oklab, var(--c) 38%, transparent);white-space:nowrap}
+.badge.sm{font-size:11px;padding:0 7px;line-height:14px;gap:5px}
+.badge.live{--c:var(--status-live)} .badge.appeal{--c:var(--status-appeal)} .badge.confirmed{--c:var(--status-confirmed)}
+.badge.brand{--c:var(--brand)}
+.badge .dot{width:6px;height:6px;border-radius:50%;background:var(--c);animation:pulse 1.6s infinite}
+.badge.sm .dot{width:5px;height:5px}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in oklab, var(--c) 70%, transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* ---- Card / Tabs / Input / Button (shadcn inherited + DESIGN brand layer) ---- */
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+.tabs{display:inline-flex;gap:2px;padding:3px;background:var(--muted);border-radius:10px}
+.tabs span{padding:5px 14px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--muted-foreground);border:1px solid transparent;line-height:1.5}
+.tabs span.on{color:var(--foreground);background:color-mix(in oklab, var(--input) 30%, transparent);border-color:var(--input)}
+.input{height:36px;display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--input);border-radius:8px;background:var(--background);font-size:14px;color:var(--foreground)}
+.input .ph{color:var(--muted-foreground)}
+.input .caret{width:1px;height:16px;background:var(--primary);margin-left:-6px}
+.input.focus{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent)}
+.btn{height:36px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 16px;border-radius:8px;font:600 12.5px/1.3 var(--font-sans);border:1px solid transparent;white-space:nowrap;color:var(--foreground);background:transparent}
+.btn.sm{height:32px;padding:0 12px}
+.btn.primary{background:var(--primary);color:var(--primary-foreground);
+  box-shadow:0 0 0 1px color-mix(in oklab, var(--primary) 60%, transparent), 0 4px 18px -6px var(--primary)}
+.btn.outline{border-color:var(--input);background:color-mix(in oklab, var(--input) 30%, transparent)}
+.btn.disabled{opacity:.5;box-shadow:none}
+.btn.block{width:100%;height:40px}
+.caption{font-size:12px;line-height:1.4;color:var(--muted-foreground)}
+.overline{font-size:11px;font-weight:600;line-height:1.3;letter-spacing:.08em;color:var(--muted-foreground)}
+.h-display{font-size:30px;font-weight:700;line-height:1.3;letter-spacing:.01em;margin:0}
+.h-lg{font-size:24px;font-weight:700;line-height:1.35;margin:0}
+.h-md{font-size:18px;font-weight:600;line-height:1.4;margin:0}
+.mono{font-family:var(--font-mono)}
+
+.desk main{max-width:1280px;margin:0 auto;padding:24px 28px 40px}
+.crumb{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted-foreground);margin-bottom:6px}
+.mhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mhead + .caption{margin:4px 0 20px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:16px}
+/* Score display */
+.vs{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px;padding:8px 0}
+.vs .t{font-size:16px;line-height:1.4}
+.vs .t.a{text-align:right}
+.vs .t.w{font-weight:700;color:var(--foreground)}
+.vs .t.l{color:var(--status-eliminated)}
+.score{font-family:var(--font-mono);font-size:20px;font-weight:800;line-height:1.2;letter-spacing:.04em;white-space:nowrap}
+.score em{font-style:normal;color:var(--muted-foreground);margin:0 6px}
+.score .l{color:var(--status-eliminated)}
+/* Score entry panel */
+.panel-h{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.se{display:grid;grid-template-columns:72px 96px 16px 96px 1fr;align-items:center;column-gap:10px;row-gap:10px}
+.se .hd{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--muted-foreground)}
+.se .hd.c{text-align:center}
+.se .gl{font-size:14px}
+.se .colon{text-align:center;color:var(--muted-foreground);font-family:var(--font-mono)}
+.num{height:36px;border:1px solid var(--input);border-radius:6px;background:var(--background);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:16px;font-weight:700}
+.num.focus{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent)}
+.num.ro{opacity:.5}
+.se .end{display:flex;justify-content:flex-end}
+.saved{font-size:12px;color:var(--muted-foreground)}
+.se-add{margin-top:12px}
+.se-foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.se-foot .lbl{font-size:12px;color:var(--muted-foreground)}
+.pv{display:inline-flex;align-items:center;gap:12px}.pv .nm{font-size:14px}.pv .nm.w{font-weight:700}.pv .nm.l{color:var(--status-eliminated)}
+.se-foot .btn{margin-left:auto}
+/* Countdown (appeal) */
+.cd{display:flex;align-items:center;gap:8px}
+.cd .lbl{color:var(--muted-foreground);font-size:14px}
+.cd .val{margin-left:auto;font-family:var(--font-mono);font-size:16px;font-weight:700;letter-spacing:.06em;line-height:1.2;color:var(--status-appeal)}
+.cd svg{color:var(--status-appeal)}
+.bar{height:4px;border-radius:4px;background:color-mix(in oklab, var(--status-appeal) 16%, transparent);margin:8px 0 6px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--status-appeal)}
+.cd-abs{font-size:12px;color:var(--muted-foreground)}
+.acts{margin-top:14px}
+/* Check-in panel (collapsed after 待開打: only check-in times) */
+.ci{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ci .tn{font-size:14px;font-weight:600}
+.ci .st{font-size:12px;color:var(--status-confirmed)}
+.card-t{font-size:12.5px;font-weight:600;color:var(--muted-foreground);margin:0 0 10px}
+/* same-round matches (pattern from flow-logo-and-themes.html T1 .others) */
+.others{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:var(--muted-foreground)}
+.others > span{display:inline-flex;align-items:center;gap:6px}
+/* per-game results (public) */
+.games{display:grid;grid-template-columns:auto 1fr auto 1fr;align-items:center;column-gap:10px;row-gap:0}
+.games > div{padding:10px 0;border-top:1px solid var(--border)}
+.games .hd{border-top:0;padding-top:0;font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--muted-foreground)}
+.games .r{text-align:right}
+.games .g{font-size:14px;color:var(--muted-foreground)}
+.games .n{font-family:var(--font-mono);font-weight:700;font-size:16px}
+.games .n.w{color:var(--foreground)} .games .n.l{color:var(--status-eliminated)}
+.games .c{color:var(--muted-foreground);font-family:var(--font-mono);text-align:center}
+.phone main{padding:12px 16px 24px}
+.phone .stack{gap:12px}
+.phone .card{padding:14px}
+.phone .vs .t{font-size:14px}
+.phone .mhead + .caption{margin:2px 0 14px}
+.phone .h-lg{font-size:24px}
+.colcap{font-size:11.5px;color:#9BA1B2;margin:0 0 8px}
+
+</style>
+</head><body><div class="sheet">
+<h1>S4 場次頁 ＋ S24 比分登錄 · 深色（預設）</h1>
+<p class="lead">2026 秋季校際盃 32 強 M3：成大 Kraken vs 北科 Ember（阿哲隊），特戰英豪 BO3，比分型態 rounds。裁判小芸（UJ-3 第 4–5 步）。≥ lg 兩欄：左＝比分與各局，右＝倒數、動作、同輪其他場次。</p>
+<h2 class="section-title">(a) 桌機 1280 · 裁判小芸 · 系列進行中</h2>
+<p class="lead">兩隊已報到 →「可開始」。第 1 局 13 : 11 已登錄（存檔即對所有人可見）；第 2 局正在輸入，按該列「登錄」才送出。系列結果預覽只算已存的局（1 : 0）。未達勝局門檻，「新增一局」仍在、「確認系列結果」停用。</p>
+<div class="scrollx"><div class="browser"><div class="chrome"><i></i><i></i><i></i><span class="url">/tournaments/12/matches/3</span></div>
+<div class="viewport desk"><div class="app"><header class="topbar"><svg class="lockup" viewBox="-2 -2 162 50" height="28" role="img" aria-label="FLOW"><defs><linearGradient id="l2g4" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="56" y2="0"><stop offset="0" stop-color="#22D3EE"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs>
+  <svg x="0" y="0" width="46" height="46" viewBox="0 0 64 64" overflow="visible"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2">
+      <g stroke="url(#l2g4)" opacity="0.7"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g>
+      <g stroke="url(#l2g4)"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g>
+    <circle cx="55" cy="32" r="9" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="#8B5CF6"/></svg>
+  <svg x="60" y="11" width="96" height="24" viewBox="0 0 128 32" overflow="visible"><g fill="none" stroke="#E6ECFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 3 V29 M3 3 H20 M3 15.5 H16"/><path d="M32 3 V29 H47"/><rect x="58.5" y="3" width="32" height="26" rx="13"/><path d="M98.5 3 L104.5 29 L111.5 11 L118.5 29 L124.5 3"/></g></svg></svg>
+  <nav><a class="on">賽事</a></nav>
+  <div class="tb-right">
+    <span class="icon-btn" title="主題切換"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5 A8 8 0 1 1 9.5 4 a6.5 6.5 0 0 0 10.5 10.5 Z"/></svg></span>
+    <span class="icon-btn" title="通知"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16 V11 a6 6 0 0 1 12 0 V16 l1.5 2 H4.5 Z"/><path d="M10 20.5 a2 2 0 0 0 4 0"/></svg><span class="bell-count">1</span></span>
+    <span class="switcher"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21 V4"/><path d="M5 4 H17 L14.5 8 L17 12 H5"/></svg>裁判<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></span>
+  </div></header>
+<main><div class="crumb"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6 L9 12 L15 18"/></svg>2026 秋季校際盃</div>
+  <div class="mhead"><h1 class="h-lg">32 強 · M3</h1><span class="badge live"><span class=dot></span>進行中</span></div>
+  <p class="caption">特戰英豪 · BO3 · 10/17（六）10:00</p>
+  <div class="cols">
+    <div class="stack">
+      <section class="card"><div class="vs"><span class="t a">成大 Kraken</span><span class="score">1<em>:</em>0</span><span class="t">北科 Ember</span></div></section>
+      <section class="card">
+  <div class="panel-h"><h2 class="h-md">比分登錄</h2><span class="badge live">可開始</span></div>
+  <div class="se">
+    <span class="hd">局</span><span class="hd c">成大 Kraken</span><span></span><span class="hd c">北科 Ember</span><span></span>
+    <span class="gl">第 1 局</span><span class="num">13</span><span class="colon">:</span><span class="num">11</span><span class="end"><span class="saved">已登錄</span></span>
+    <span class="gl">第 2 局</span><span class="num">9</span><span class="colon">:</span><span class="num focus">13<span class="caret" style="width:1px;height:16px;background:var(--primary);margin-left:2px;display:inline-block"></span></span><span class="end"><span class="btn outline sm">登錄</span></span>
+  </div>
+  <div class="se-add"><span class="btn outline sm">新增一局</span></div>
+  <div class="se-foot"><span class="lbl">系列結果預覽</span><span class="pv"><span class="nm">成大 Kraken</span><span class="score">1<em>:</em>0</span><span class="nm">北科 Ember</span></span>
+    <span class="btn primary disabled">確認系列結果</span></div>
+</section>
+    </div>
+    <div class="stack">
+      <section class="card"><p class="card-t">報到</p><div class="ci">
+  <div><div class="tn">成大 Kraken</div><div class="st">已報到 09:38</div></div>
+  <div><div class="tn">北科 Ember</div><div class="st">已報到 09:41</div></div></div></section>
+      <section class="card"><p class="card-t">同輪其他場次</p><div class="others"><span>M1 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M2 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M4 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M6 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M7 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M8 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M9 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M10 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M11 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M12 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M13 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M14 <span class="badge confirmed sm">已確認</span></span><span>M15 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M16 <span class="badge live sm"><span class=dot></span>進行中</span></span></div></section>
+    </div>
+  </div>
+</main></div></div></div></div>
+<h2 class="section-title">(b) 桌機 1280 · 確認系列結果之後 · 申訴期</h2>
+<p class="lead">AlertDialog 確認後面板唯讀；右欄申訴期倒數（appeal 變體，唯一帶進度條的倒數）＋絕對截止時間。勝隊不出現在下一輪（不顯示晉級）。</p>
+<div class="frames">
+  <div class="scrollx"><div class="browser"><div class="chrome"><i></i><i></i><i></i><span class="url">/tournaments/12/matches/3</span></div>
+<div class="viewport desk"><div class="app"><header class="topbar"><svg class="lockup" viewBox="-2 -2 162 50" height="28" role="img" aria-label="FLOW"><defs><linearGradient id="l2g5" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="56" y2="0"><stop offset="0" stop-color="#22D3EE"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs>
+  <svg x="0" y="0" width="46" height="46" viewBox="0 0 64 64" overflow="visible"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2">
+      <g stroke="url(#l2g5)" opacity="0.7"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g>
+      <g stroke="url(#l2g5)"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g>
+    <circle cx="55" cy="32" r="9" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="#8B5CF6"/></svg>
+  <svg x="60" y="11" width="96" height="24" viewBox="0 0 128 32" overflow="visible"><g fill="none" stroke="#E6ECFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 3 V29 M3 3 H20 M3 15.5 H16"/><path d="M32 3 V29 H47"/><rect x="58.5" y="3" width="32" height="26" rx="13"/><path d="M98.5 3 L104.5 29 L111.5 11 L118.5 29 L124.5 3"/></g></svg></svg>
+  <nav><a class="on">賽事</a></nav>
+  <div class="tb-right">
+    <span class="icon-btn" title="主題切換"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5 A8 8 0 1 1 9.5 4 a6.5 6.5 0 0 0 10.5 10.5 Z"/></svg></span>
+    <span class="icon-btn" title="通知"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16 V11 a6 6 0 0 1 12 0 V16 l1.5 2 H4.5 Z"/><path d="M10 20.5 a2 2 0 0 0 4 0"/></svg><span class="bell-count">1</span></span>
+    <span class="switcher"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21 V4"/><path d="M5 4 H17 L14.5 8 L17 12 H5"/></svg>裁判<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></span>
+  </div></header>
+<main><div class="crumb"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6 L9 12 L15 18"/></svg>2026 秋季校際盃</div>
+  <div class="mhead"><h1 class="h-lg">32 強 · M3</h1><span class="badge appeal">申訴期</span></div>
+  <p class="caption">特戰英豪 · BO3 · 10/17（六）10:00</p>
+  <div class="cols">
+    <div class="stack"><section class="card"><div class="vs"><span class="t a w">成大 Kraken</span><span class="score">2<em>:</em><span class="l">1</span></span><span class="t l">北科 Ember</span></div></section><section class="card">
+  <div class="panel-h"><h2 class="h-md">比分登錄</h2></div>
+  <div class="se">
+    <span class="hd">局</span><span class="hd c">成大 Kraken</span><span></span><span class="hd c">北科 Ember</span><span></span>
+    <span class="gl">第 1 局</span><span class="num ro">13</span><span class="colon">:</span><span class="num ro">11</span><span></span>
+    <span class="gl">第 2 局</span><span class="num ro">9</span><span class="colon">:</span><span class="num ro">13</span><span></span>
+    <span class="gl">第 3 局</span><span class="num ro">13</span><span class="colon">:</span><span class="num ro">10</span><span></span>
+  </div>
+  <div class="se-foot"><span class="lbl">系列結果</span><span class="pv"><span class="nm w">成大 Kraken</span><span class="score">2<em>:</em><span class="l">1</span></span><span class="nm l">北科 Ember</span></span></div>
+</section></div>
+    <div class="stack">
+      <section class="card">
+  <div class="cd"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span class="lbl">申訴期剩</span><span class="val">18:24</span></div>
+  <div class="bar"><span style="width:61%"></span></div>
+  <div class="cd-abs">10/17（六）12:22 截止</div></section>
+      <section class="card"><p class="card-t">報到</p><div class="ci">
+  <div><div class="tn">成大 Kraken</div><div class="st">已報到 09:38</div></div>
+  <div><div class="tn">北科 Ember</div><div class="st">已報到 09:41</div></div></div></section>
+      <section class="card"><p class="card-t">同輪其他場次</p><div class="others"><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴期</span></span><span>M4 <span class="badge confirmed sm">已確認</span></span><span>M6 <span class="badge appeal sm">申訴期</span></span><span>M7 <span class="badge confirmed sm">已確認</span></span><span>M8 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M9 <span class="badge appeal sm">申訴期</span></span><span>M10 <span class="badge confirmed sm">已確認</span></span><span>M11 <span class="badge confirmed sm">已確認</span></span><span>M12 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M13 <span class="badge appeal sm">申訴期</span></span><span>M14 <span class="badge confirmed sm">已確認</span></span><span>M15 <span class="badge confirmed sm">已確認</span></span><span>M16 <span class="badge confirmed sm">已確認</span></span></div></section>
+    </div>
+  </div>
+</main></div></div></div></div>
+  <figure class="fig" style="margin:0"><p class="colcap"><b style="color:#E6E8EE">(b′) 同一時間，北科 Ember 隊長阿哲看到的右欄</b>：申訴期內「提出申訴」可用（→ S21 Dialog）。裁判與觀眾沒有這個按鈕。</p><div class="app" style="width:440px;padding:20px;border:1px solid #2B2F3A;border-radius:12px"><div class="stack">
+  <section class="card">
+  <div class="cd"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span class="lbl">申訴期剩</span><span class="val">18:24</span></div>
+  <div class="bar"><span style="width:61%"></span></div>
+  <div class="cd-abs">10/17（六）12:22 截止</div><div class="acts"><span class="btn outline block">提出申訴</span></div></section>
+  <section class="card"><p class="card-t">報到</p><div class="ci">
+  <div><div class="tn">成大 Kraken</div><div class="st">已報到 09:38</div></div>
+  <div><div class="tn">北科 Ember</div><div class="st">已報到 09:41</div></div></div></section>
+</div></div></figure>
+</div>
+<h2 class="section-title">(c) 手機 375 × 812 · 觀眾（未登入）· 同一場、申訴期</h2>
+<p class="lead">單欄依序堆疊（左欄內容在前、右欄在後）。觀眾看到每局比分、系列比分與申訴期倒數，沒有任何動作；不顯示晉級。</p>
+<div class="frames"><figure class="fig" style="margin:0"><div class="phone"><div class="screen"><div class="app"><header class="topbar"><svg class="lockup" viewBox="0 -1 66 66" width="28" height="28" role="img" aria-label="FLOW"><defs><linearGradient id="l2g6" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="56" y2="0"><stop offset="0" stop-color="#22D3EE"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2">
+      <g stroke="url(#l2g6)" opacity="0.7"><path d="M5 10 C16 10 18 17 27 17"/><path d="M5 24 C16 24 18 17 27 17"/><path d="M5 40 C16 40 18 47 27 47"/><path d="M5 54 C16 54 18 47 27 47"/></g>
+      <g stroke="url(#l2g6)"><path d="M27 17 C38 17 40 32 50 32"/><path d="M27 47 C38 47 40 32 50 32"/></g></g>
+    <circle cx="55" cy="32" r="9" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity=".35"/><circle cx="55" cy="32" r="5.2" fill="#8B5CF6"/></svg>
+  <div class="tb-right"><span class="ghost-btn">登入</span><span class="icon-btn" title="選單"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7 H20 M4 12 H20 M4 17 H20"/></svg></span></div></header>
+<main><div class="crumb"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6 L9 12 L15 18"/></svg>2026 秋季校際盃</div>
+  <div class="mhead"><h1 class="h-lg">32 強 · M3</h1><span class="badge appeal">申訴期</span></div>
+  <p class="caption">特戰英豪 · BO3 · 10/17（六）10:00</p>
+  <div class="stack">
+    <section class="card"><div class="vs"><span class="t a w">成大 Kraken</span><span class="score">2<em>:</em><span class="l">1</span></span><span class="t l">北科 Ember</span></div></section>
+    <section class="card"><div class="games">
+  <div class="hd">局</div><div class="hd r">成大 Kraken</div><div class="hd"></div><div class="hd">北科 Ember</div>
+  <div class="g">第 1 局</div><div class="n w r">13</div><div class="c">:</div><div class="n l">11</div>
+  <div class="g">第 2 局</div><div class="n l r">9</div><div class="c">:</div><div class="n w">13</div>
+  <div class="g">第 3 局</div><div class="n w r">13</div><div class="c">:</div><div class="n l">10</div>
+</div></section>
+    <section class="card">
+  <div class="cd"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg><span class="lbl">申訴期剩</span><span class="val">18:24</span></div>
+  <div class="bar"><span style="width:61%"></span></div>
+  <div class="cd-abs">10/17（六）12:22 截止</div></section>
+    <section class="card"><p class="card-t">報到</p><div class="ci">
+  <div><div class="tn">成大 Kraken</div><div class="st">已報到 09:38</div></div>
+  <div><div class="tn">北科 Ember</div><div class="st">已報到 09:41</div></div></div></section>
+    <section class="card"><p class="card-t">同輪其他場次</p><div class="others"><span>M1 <span class="badge confirmed sm">已確認</span></span><span>M2 <span class="badge appeal sm">申訴期</span></span><span>M4 <span class="badge confirmed sm">已確認</span></span><span>M6 <span class="badge appeal sm">申訴期</span></span><span>M7 <span class="badge confirmed sm">已確認</span></span><span>M8 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M9 <span class="badge appeal sm">申訴期</span></span><span>M10 <span class="badge confirmed sm">已確認</span></span><span>M11 <span class="badge confirmed sm">已確認</span></span><span>M12 <span class="badge live sm"><span class=dot></span>進行中</span></span><span>M13 <span class="badge appeal sm">申訴期</span></span><span>M14 <span class="badge confirmed sm">已確認</span></span><span>M15 <span class="badge confirmed sm">已確認</span></span><span>M16 <span class="badge confirmed sm">已確認</span></span></div></section>
+  </div>
+</main></div></div></div></figure></div>
+</div></body></html>

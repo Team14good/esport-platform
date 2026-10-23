@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>UX Design Validation: FLOW (se-final-project)</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --text: #1c1917;
+    --muted: #78716c;
+
+    --verdict-strong: #16a34a;
+    --verdict-adequate: #65a30d;
+    --verdict-thin: #d97706;
+    --verdict-broken: #dc2626;
+
+    --sev-low: #64748b;
+    --sev-medium: #ca8a04;
+    --sev-high: #ea580c;
+    --sev-critical: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  header.report-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .title h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .title .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  .synthesis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    font-size: 15.5px;
+  }
+  .synthesis p { margin: 0 0 10px; }
+  .synthesis p:last-child { margin-bottom: 0; }
+
+  .dimension-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .dim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .dim-card .dim-name { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .dim-card .dim-verdict { font-size: 14px; font-weight: 600; }
+
+  section.dimension, section.reviewer-section { margin-bottom: 14px; }
+  section.dimension details, section.reviewer-section details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  section summary {
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  section summary::-webkit-details-marker { display: none; }
+  section summary::before {
+    content: "▸";
+    display: inline-block;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  section details[open] summary::before { transform: rotate(90deg); }
+  section summary h2 {
+    display: inline;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    flex: 1;
+  }
+  .verdict-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: white;
+  }
+  .verdict-strong { background: var(--verdict-strong); }
+  .verdict-adequate { background: var(--verdict-adequate); }
+  .verdict-thin { background: var(--verdict-thin); }
+  .verdict-broken { background: var(--verdict-broken); }
+
+  .dim-body { padding: 4px 20px 18px; }
+  .dim-judgment { color: var(--text); font-size: 14.5px; }
+  .dim-judgment p { margin: 0 0 10px; }
+
+  .findings-list { padding: 0 20px 4px; }
+  article.finding {
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+  }
+  article.finding:first-child { border-top: none; }
+  article.finding header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .badge {
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+  .badge-sev-low { background: rgba(100, 116, 139, 0.12); color: var(--sev-low); }
+  .badge-sev-medium { background: rgba(202, 138, 4, 0.14); color: var(--sev-medium); }
+  .badge-sev-high { background: rgba(234, 88, 12, 0.14); color: var(--sev-high); }
+  .badge-sev-critical { background: rgba(220, 38, 38, 0.14); color: var(--sev-critical); }
+  .finding-title { margin: 0; font-size: 15px; font-weight: 500; flex: 1; min-width: 200px; }
+  .finding-location { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--muted); }
+  .finding-note, .finding-fix { margin-top: 6px; font-size: 14px; }
+  .finding-fix strong { color: var(--muted); font-weight: 500; }
+
+  .reviewer-source {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  .mechanical {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 24px;
+    font-size: 14px;
+  }
+  .mechanical h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .mechanical ul { margin: 0; padding-left: 20px; }
+  .mechanical li { margin-bottom: 4px; color: var(--text); }
+
+  footer.report-footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  footer .meta { display: flex; gap: 24px; flex-wrap: wrap; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em; background: rgba(0,0,0,0.05); padding: 0 3px; border-radius: 3px; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header class="report-header">
+      <div class="title">
+        <h1>FLOW (se-final-project) — UX Design Validation Report</h1>
+        <div class="subtitle">C:\Users\hw453\Desktop\se-final-project\_bmad-output\planning-artifacts\ux-designs\ux-se-final-project-2026-10-14\DESIGN.md + EXPERIENCE.md</div>
+      </div>
+    </header>
+    <div class="synthesis">
+      <p>這組 spine 可以直接交給下游當契約：四條 UJ 都有具名主角、編號步驟、高潮與例外；所有色彩 token 都有淺／深 hex 成對值，且與 <code>.working/flow-logo-and-themes-1.html</code> 的 T1 註解完全一致；38 個 surface 都對到 FR，DESIGN.md 章節順序合乎規格。主要風險集中在「實作時會撞牆」的三處：品牌 <code>accent</code> 與 shadcn 語意 <code>--accent</code> 同名卻宣稱一一對應、shadcn 必要槽位沒補齊（<code>card-foreground</code>、<code>popover-foreground</code>、<code>secondary*</code>、<code>sidebar-*</code>），以及 UX 追加功能（忘記／重設密碼、重寄驗證信、移除隊員、轉讓隊長）在架構沒有對應方法、也沒列入「待回補上游」。沒有 critical；其餘多為 reconcile 已提出但尚未落地的按鈕停用條件與對戰樹邊界狀態。</p>
+      <p>本次只跑 rubric walker（使用者於 Reviewer Gate 選擇，見 memlog）。不列為問題的使用者決定：無障礙延後、不設 WCAG 等級、未驗證對比；範圍收斂；身分切換器取代統一儀表板；後台側欄；深色預設。mockups／wireframes 與 <code>.working/</code> 資產提升留待 Finalize，視覺參考類別未加重判。工作區內四份 <code>reconcile-*.md</code> 為輸入對照報告，不是審查 lens；其必修項已依 memlog 回寫，未處理的 b 項已併入下方 State 與 Inheritance 類別。</p>
+    </div>
+    <div class="dimension-summary">
+      <div class="dim-card">
+        <div class="dim-name">Flow coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Token completeness</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Component coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">State coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Visual reference coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Bloat &amp; overspecification</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Inheritance discipline</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Shape fit</div>
+        <div class="dim-verdict" style="color: var(--verdict-strong)">strong</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Findings</div>
+        <div class="dim-verdict">critical 0 · high 3 · medium 10 · low 9</div>
+      </div>
+    </div>
+    <section class="dimension" id="flow">
+      <details>
+        <summary>
+          <h2>Flow coverage</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>檢查 PRD §2.3 的 UJ-1～UJ-4（名稱逐字一致）與 FR-1～FR-38 在 Key Flows／IA 的落點。四條 UJ 都有主角、編號步驟、高潮、失敗／例外；FR-22、FR-13、FR-3 已依 reconcile 修正。未落入旅程的需求已在 Open Questions 1～8 自承。</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">主辦方不可逆的事後變更（FR-10 取消賽事、FR-23 改場次時間、FR-9 延長報名）沒有旅程或例外段</h3>
+              <span class="finding-location">EXPERIENCE〈Key Flows〉UJ-1 失敗段；Open Questions #4</span>
+            </header>
+            <div class="finding-note">UJ-1 例外只用一句帶過「延長報名（S28）或取消賽事」；這些動作會通知所有隊伍或裁判，FR-23 還有「已報到後不可改」的限制。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 在 UJ-1 例外補 2～3 行：S27「取消賽事」→ AlertDialog（寫後果）→ S2 橫幅；S30 改時間 → 已報到場次停用並說明。</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension" id="token">
+      <details open>
+        <summary>
+          <h2>Token completeness</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>抽出 frontmatter 全部 token（colors 44、typography 11、rounded 6、spacing 10、components 20）與所有 <code>{path.to.token}</code> 引用。每個色彩 token 都有 hex 且淺／深成對；EXPERIENCE 的 token 引用全部可解析。對比目標依使用者決定不設，不列問題。</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">品牌 <code>accent</code> 與 shadcn 語意 <code>--accent</code> 同名，卻宣稱 token 與 shadcn CSS 變數一一對應</h3>
+              <span class="finding-location">DESIGN〈Colors〉「與 shadcn accent 的衝突」；frontmatter <code>accent</code>／<code>accent-dark</code></span>
+            </header>
+            <div class="finding-note">照字面鏡像會讓 DropdownMenu、Command、Select 與 ghost／outline Button 的 hover 全部變成品牌紫——正是同節 [ASSUMPTION] 規則禁止的結果；要守規則就得逐一改寫 shadcn 元件 class，每次 <code>shadcn add</code> 都會回退。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 品牌紫改名為 <code>brand</code>（<code>--brand</code>／<code>brand-dark</code>），shadcn <code>accent</code>／<code>accent-foreground</code> 改填 <code>muted</code>／<code>foreground</code> 的值；同步更新所有 <code>{colors.accent}</code> 引用（logo-lockup、賽程已公布徽章、Identity switcher、EXPERIENCE〈賽事狀態〉）。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">宣稱「補齊 shadcn 必要槽位」，仍缺 <code>card-foreground</code>、<code>popover-foreground</code>、<code>secondary</code>、<code>secondary-foreground</code> 與 <code>sidebar-*</code></h3>
+              <span class="finding-location">DESIGN frontmatter <code>colors</code> 第 41～53 行；〈Colors〉補齊槽位</span>
+            </header>
+            <div class="finding-note">Card、Popover、DropdownMenu 文字與 Button／Badge secondary variant 會用到；若採用 shadcn Sidebar 還缺 8 個 <code>sidebar-*</code>。下游只能沿用 shadcn 中性灰（與 T1 藍調不合）或自行發明。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 每個槽位補淺／深 hex，或在 frontmatter 註明別名（<code>card-foreground</code> = <code>foreground</code>、<code>secondary</code> = <code>muted</code>、<code>sidebar</code> = <code>card</code>、<code>sidebar-accent</code> = <code>muted</code>、<code>sidebar-primary</code> = <code>primary</code>）。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title"><code>fontFamily: 'sans'</code>／<code>'mono'</code> 的實際字體堆疊只寫在 YAML 註解</h3>
+              <span class="finding-location">DESIGN frontmatter 第 55～57 行</span>
+            </header>
+            <div class="finding-note">YAML 解析器會丟掉註解，token 消費端只拿到字串 <code>sans</code>。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 新增 <code>fontFamilies:</code> 區塊（或直接在每組 typography 寫完整堆疊），讓 <code>sans</code>／<code>mono</code> 可解析。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">部分 component token 使用無法解析的速記；淺色背景光暈沒有 token</h3>
+              <span class="finding-location">DESIGN frontmatter <code>status-badge</code>、<code>button-primary.glow-dark</code>、<code>bracket-match-card-live</code>、<code>app-backdrop-dark</code></span>
+            </header>
+            <div class="finding-note"><code>'C 15%'</code>、<code>'0 0 0 1px primary/60%'</code>、<code>'{colors.status-live} 55%'</code> 等無法由 resolver 展平；淺色模式 <code>primary</code> 8% 光暈只寫在 prose。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 改成 <code>color-mix</code> 形式或拆成 <code>{colors.x}</code>＋<code>opacity</code> 兩欄；補 <code>app-backdrop-light</code>。</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension" id="component">
+      <details>
+        <summary>
+          <h2>Component coverage</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>DESIGN〈Components〉19 項與 EXPERIENCE〈Component Patterns〉22 項（多出的 AlertDialog、Toast、Skeleton 屬 shadcn 繼承）逐一對照，名稱與規則大致一致且具體。缺口在流程與狀態中出現、但兩邊都沒有規格的元件。</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">S17 名單完成度清單與 S4 報到區沒有元件列</h3>
+              <span class="finding-location">EXPERIENCE〈報名狀態〉組隊中；〈場次狀態〉待開打・可報到</span>
+            </header>
+            <div class="finding-note">兩者分別是 UJ-2（FR-13 送出門檻「逐項列出缺什麼」）與 UJ-3（雙方報到狀態、報到鈕、倒數）的核心操作。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 兩份 spine 各加 <code>Roster list</code>（名稱、遊戲 ID、段位、截圖已上傳、完成勾；隊長端移除／轉讓入口）與 <code>Check-in panel</code>（兩隊狀態、按鈕、倒數）的視覺與行為列。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">頁頂橫幅、段位截圖檢視器、冠亞季標記未規格化</h3>
+              <span class="finding-location">EXPERIENCE〈State Patterns〉對戰表標記；〈對戰樹〉版型；UJ-1 步驟 5</span>
+            </header>
+            <div class="finding-note">「此賽事已取消」「連線中斷，正在重試」「申請成為主辦方」橫幅、S29 段位截圖檢視器、冠軍／亞軍／季軍標記與置頂區都有行為描述但無元件；Bracket mark tag 只定義四種標籤。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 橫幅指定為 shadcn <code>Alert</code>（各用哪個 variant）；段位截圖檢視器＝<code>Dialog</code> 內圖片＋隊員切換；冠亞季的 token 與位置寫進 Bracket 元件。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Countdown 變體在兩份文件不一致</h3>
+              <span class="finding-location">DESIGN〈Components〉Countdown、frontmatter <code>countdown</code>；EXPERIENCE〈倒數與時間〉表</span>
+            </header>
+            <div class="finding-note">DESIGN 寫數字預設 <code>status-appeal</code>、固定有進度條；EXPERIENCE 另有報名截止 24 小時切色、申訴處理期限 <code>{colors.destructive}</code>，且只有申訴期寫「＋進度條」。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 在 DESIGN Countdown 列出 tone 變體（muted／live／appeal／destructive）並決定進度條是否只在申訴期出現；EXPERIENCE 表只引用變體名。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">更新閃光是第四種發光，與「同視窗發光 ≤ 3 種」衝突</h3>
+              <span class="finding-location">EXPERIENCE〈通用狀態〉輪詢重抓；DESIGN〈Elevation &amp; Depth〉</span>
+            </header>
+            <div class="finding-note">輪詢有變動的場次卡以 <code>{colors.primary}</code> 光環閃一次。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 列為明確例外，或改用非發光的底色淡入。</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension" id="state">
+      <details>
+        <summary>
+          <h2>State coverage</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>逐一走 S1～S38，檢查載入、空、錯誤、權限、失效連結、到期、離線。通用狀態表、四組狀態機與到期行為完整；離線明確宣告不支援。以下多數已由 reconcile 提出但未回寫。</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">對戰樹邊界狀態缺漏：雙方棄權、無季軍賽</h3>
+              <span class="finding-location">EXPERIENCE〈對戰樹〉版型、〈場次狀態〉；reconcile-prd b1、b2</span>
+            </header>
+            <div class="finding-note">FR-25 雙方皆未報到（兩隊淘汰、下一輪輪空；準決賽時另一場勝隊直接成冠軍、季軍賽取消）；FR-20 正取少於 4 隊不產生季軍賽，但〈對戰樹〉假設季軍賽固定在決賽下方。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 場次卡加「雙方棄權」呈現（兩列淘汰灰＋棄權標籤、下一輪顯示輪空）；寫明無季軍賽時不顯示該卡、置頂區只列冠亞軍。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">隊伍搜尋沒有零結果與「隊伍不在對戰表上」狀態</h3>
+              <span class="finding-location">EXPERIENCE〈對戰樹〉隊伍搜尋</span>
+            </header>
+            <div class="finding-note">搜尋是 UJ-2、UJ-4 的高潮；候補、撤回或尚未抽籤時的搜尋結果未定義。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 補零結果文案（例：「對戰表上沒有符合的隊伍。」）與尚未抽籤時搜尋框停用或隱藏。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">FR 規定的按鈕停用條件未落到介面</h3>
+              <span class="finding-location">S4、S2、S30、S28、S23；reconcile-prd b3～b5、reconcile-architecture b1</span>
+            </header>
+            <div class="finding-note">FR-30 每隊每場只能申訴一次；FR-32 不能檢舉自己的隊伍；FR-23 已報到後不可改時間；FR-9 抽籤後 S28 只剩唯讀；<code>RefereeInvitation.expires_at</code> 使 S23 缺「已過期」原因。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 在對應 surface 的 State Patterns 各加一列：停用＋一句原因。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Score entry panel 存檔模型不明</h3>
+              <span class="finding-location">EXPERIENCE〈Component Patterns〉Score entry panel；UJ-3 步驟 4</span>
+            </header>
+            <div class="finding-note">「每局即時出現在 S4（輪詢）」意味每局即存伺服器，「確認前可改任何一局、預覽即時重算」又像本機草稿；兩種解讀導出不同 API 與 NFR-1 併發處理。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 明寫「每局送出即存伺服器；修改某局＝更新該局；確認系列結果才鎖定」或相反。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">缺少數個空狀態與失效狀態</h3>
+              <span class="finding-location">EXPERIENCE〈通用狀態〉</span>
+            </header>
+            <div class="finding-note">S25 尚無賽事、S31 尚無已接受裁判、S35 無待審核申請、S2「正取隊伍」分頁在分配前、S9 重設連結過期或無效。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 在〈通用狀態〉表補五列，沿用「一句事實＋一個下一步」。</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension" id="visual">
+      <details>
+        <summary>
+          <h2>Visual reference coverage</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p><code>mockups/</code>、<code>wireframes/</code> 尚不存在，<code>imports/</code> 為空；<code>.working/</code> 的 3 個 logo SVG 與 1 份比較稿全部在 DESIGN〈Brand &amp; Style〉逐一連結並寫明用途，無孤兒、無籠統引用；「spine 為準」兩份文件都有寫。關鍵畫面稿與資產提升留待 Finalize，不重判。</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">四個視覺連結都指向 <code>.working/</code>，Finalize 提升資產後會失效</h3>
+              <span class="finding-location">DESIGN〈Brand &amp; Style〉logo 表與第 224 行</span>
+            </header>
+            <div class="finding-note">比較稿也含已否決的 L1／L3／L4 與 T2～T4。</div>
+            <div class="finding-fix"><strong>Fix:</strong> Finalize 時把三個 SVG 移到正式資產資料夾並改寫連結；比較稿另存只含 L2＋T1 的版本，或在連結旁註明僅 L2、T1 區塊有效。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">EXPERIENCE 沒有任何構圖參考</h3>
+              <span class="finding-location">EXPERIENCE〈對戰樹〉、〈Responsive &amp; Platform〉</span>
+            </header>
+            <div class="finding-note">S3 對戰樹（連接線、搜尋路徑、橫向捲動）、S4 兩欄、S17 報名頁幾何最複雜。</div>
+            <div class="finding-fix"><strong>Fix:</strong> Finalize 關鍵畫面優先做 S3（桌機＋375 px＋搜尋命中）、S4、S17，並在對應段落加「→ Composition reference」行。</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension" id="bloat">
+      <details>
+        <summary>
+          <h2>Bloat &amp; overspecification</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>DESIGN prose 帶編輯語氣但都連到決策；EXPERIENCE 以表格為主，IA／需求覆蓋表對下游有用。只有幾處重述有漂移風險。</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">FR-22 頂替規則在 EXPERIENCE 重述三次</h3>
+              <span class="finding-location">〈對戰樹〉場次卡、UJ-1 例外、UJ-2 例外</span>
+            </header>
+            <div class="finding-note">與文件開頭「需求內容不在此重述」相違；上一輪 reconcile 的實質衝突正是這段重述漂移所致。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 只在〈對戰樹〉保留一次（寫畫面呈現），旅程改為「依 FR-22 調整（見〈對戰樹〉）」。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">DESIGN〈Colors〉表格重列所有 hex</h3>
+              <span class="finding-location">DESIGN〈Colors〉</span>
+            </header>
+            <div class="finding-note">與 frontmatter 重複，改色要改兩處。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 表格保留用途／不用於，hex 欄改為只引用 token 名，或註明以 frontmatter 為準。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">IA「旅程」欄的缺口標記與 Open Questions 1～8 重複</h3>
+              <span class="finding-location">EXPERIENCE〈Information Architecture〉</span>
+            </header>
+            <div class="finding-note">同一份清單寫兩處。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 擇一保留。</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension" id="inherit">
+      <details open>
+        <summary>
+          <h2>Inheritance discipline</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p><code>sources</code> 六個路徑全部存在；UJ 名稱逐字一致；PRD §3 名詞一致使用；架構欄位名（<code>scheduled_at</code>、<code>forfeit_deadline</code>、<code>appeal_deadline</code>、<code>registration_end</code>、<code>win_loss</code>、<code>rounds</code>、<code>detail.message</code>、<code>register(email, password, school)</code>）與 AD 編號均可對上。</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">UX 追加功能在架構無方法、也未列入「待回補上游」</h3>
+              <span class="finding-location">EXPERIENCE Open Questions #9、需求覆蓋表；reconcile-architecture C3、reconcile-prd C3</span>
+            </header>
+            <div class="finding-note">忘記／重設密碼（S8、S9）、重寄驗證信（S7）、移除隊員與轉讓隊長（S17，牽涉 <code>MemberRole</code> 與 AD-10 <code>ensure_captain</code>）在 D-1 <code>IdentityService</code>、D-3 <code>RegistrationService</code> 都沒有方法，PRD 也無對應 FR；「已決定、待回補上游」只列直播連結。照 spine 寫故事會做出沒有後端的畫面。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 把四項加入「已決定、待回補上游」，逐項寫明回補文件與位置（PRD 新 FR 或 §7 註記、D-1／D-3 方法、Epic），可依範圍收斂原則標優先序。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Status badge「文字＝PRD 狀態名原字」與介面標籤矛盾</h3>
+              <span class="finding-location">EXPERIENCE〈Component Patterns〉Status badge；DESIGN frontmatter <code>status-badge</code></span>
+            </header>
+            <div class="finding-note">State Patterns 使用組隊中、已送出・待分配、待開打・可報到、候補第 N 位；DESIGN 的 C 清單也沒有賽程已公布用的 <code>{colors.accent}</code>。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 改為「PRD 狀態名，或 State Patterns 表中標示的介面標籤」，並把 <code>accent</code>（或改名後的 <code>brand</code>）加入 C 清單。</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">輪詢超出 AD-14 範圍；相對時間依賴架構沒有的 <code>created_at</code></h3>
+              <span class="finding-location">EXPERIENCE〈通知〉、〈倒數與時間〉；reconcile-architecture C4、C6</span>
+            </header>
+            <div class="finding-note">未讀數每 30 秒、倒數到期後任意頁每 5 秒重抓最多 2 分鐘；<code>Notification</code> 無 <code>created_at</code>。</div>
+            <div class="finding-fix"><strong>Fix:</strong> 列入待回補上游或 Open Questions，並提醒 NFR-2 壓測納入這些輪詢。</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension" id="shape">
+      <details>
+        <summary>
+          <h2>Shape fit</h2>
+          <span class="verdict-pill verdict-strong">strong</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>DESIGN 八節依規格順序。EXPERIENCE 必要預設節全數存在；Accessibility Floor 依使用者決定只記錄繼承行為。Inspiration、Responsive 兩個條件節都在。自創的〈對戰樹〉〈身分切換器〉〈通知〉〈倒數與時間〉被 Component Patterns 反覆引用，〈Open Questions〉承接缺口，皆有存在理由。無問題。</p>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <div class="mechanical">
+      <h3>Mechanical notes</h3>
+      <ul>
+        <li>元件名稱漂移：DESIGN「Top nav / Sidebar nav item（active）」vs EXPERIENCE「Top nav / Sidebar nav」；「Button（primary）」全形括號 vs「Button (primary)」半形；frontmatter key <code>identity-switcher-trigger</code>、<code>nav-item-active</code> 與 prose 名稱不同步。</li>
+        <li>Open Questions #7（UJ-3 沒寫小芸如何找到被指派場次）已過時：UJ-3 步驟 2 已寫「收到通知 → S13，該場在列」。</li>
+        <li>Open Questions #2 可註明只缺 S7「重寄驗證信」分支（S7 本身已在 UJ-1、UJ-2 落地）。</li>
+        <li>DESIGN frontmatter 無 <code>sources</code>（規格不要求）；兩份文件 <code>status: draft</code>、<code>updated: 2026-10-15</code> 一致。</li>
+        <li>兩份 spine 無 Mermaid 圖，無語法問題。</li>
+        <li><code>.working/</code> 三個 SVG 的 hex 與比較稿 T1 註解的 15 組淺／深值，與 DESIGN frontmatter 完全一致。</li>
+        <li><code>reconcile-*.md</code> 四份為輸入對照報告（非審查 lens）；其必修項已依 memlog 回寫，未處理的 b 項已併入第 4、7 類。</li>
+      </ul>
+    </div>
+
+    <footer class="report-footer">
+      <div class="meta">
+        <span>Rubric: C:\Users\hw453\Desktop\se-final-project\_bmad-output\planning-artifacts\ux-designs\ux-se-final-project-2026-10-14\review-rubric.md</span>
+        <span>DESIGN.md: C:\Users\hw453\Desktop\se-final-project\_bmad-output\planning-artifacts\ux-designs\ux-se-final-project-2026-10-14\DESIGN.md</span>
+        <span>EXPERIENCE.md: C:\Users\hw453\Desktop\se-final-project\_bmad-output\planning-artifacts\ux-designs\ux-se-final-project-2026-10-14\EXPERIENCE.md</span>
+        <span>Generated: 2026-10-15T11:36:03+08:00</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

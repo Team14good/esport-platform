@@ -1,0 +1,133 @@
+# 本機開發用的唯一 compose 檔（AD-17）：db、backend、worker、frontend、mailpit 五個服務。
+# 設定一律從根目錄 .env 讀取（由 .env.example 複製）。
+services:
+
+  db:
+    image: postgres:18
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-app}"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    volumes:
+      - app-db-data:/var/lib/postgresql
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Variable not set}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports:
+      # 只綁本機，避免預設密碼的資料庫暴露在區網
+      - "127.0.0.1:5432:5432"
+
+  backend:
+    image: flow-backend:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+    environment: &backend-env
+      FASTAPI_ENV: ${FASTAPI_ENV:-development}
+      PROJECT_NAME: ${PROJECT_NAME:?Variable not set}
+      SECRET_KEY: ${SECRET_KEY:?Variable not set}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-11520}
+      FRONTEND_HOST: ${FRONTEND_HOST:-http://localhost:5173}
+      FIRST_ADMIN_EMAIL: ${FIRST_ADMIN_EMAIL:?Variable not set}
+      FIRST_ADMIN_PASSWORD: ${FIRST_ADMIN_PASSWORD:?Variable not set}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-20}
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_TLS: "false"
+      SMTP_SSL: "false"
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAILS_FROM_EMAIL: ${EMAILS_FROM_EMAIL:?Variable not set}
+      EMAILS_FROM_NAME: ${EMAILS_FROM_NAME:-FLOW}
+      # 容器內一律連 db 服務；.env 的 DATABASE_URL 只給在主機上執行的工具使用。
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Variable not set}@db:5432/${POSTGRES_DB:-app}
+    # 先跑遷移並建立首位平台管理員，再啟動開發伺服器。
+    command: ["bash", "-c", "bash scripts/prestart.sh && exec fastapi dev --host 0.0.0.0 --port 8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    develop:
+      watch:
+        - path: ./backend
+          action: sync
+          target: /app/backend
+          ignore:
+            - .venv
+            - htmlcov
+        - path: ./backend/pyproject.toml
+          action: rebuild
+        - path: ./uv.lock
+          action: rebuild
+
+  worker:
+    # 與 backend 共用同一個 image，只換進入點（build 設定相同，watch 才能 rebuild）。
+    image: flow-backend:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment: *backend-env
+    command: ["python", "-m", "app.worker"]
+    develop:
+      watch:
+        - path: ./backend
+          action: sync+restart
+          target: /app/backend
+          ignore:
+            - .venv
+            - htmlcov
+        - path: ./backend/pyproject.toml
+          action: rebuild
+        - path: ./uv.lock
+          action: rebuild
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    develop:
+      watch:
+        - path: ./frontend
+          action: sync
+          target: /app/frontend
+          ignore:
+            - node_modules
+            - dist
+            - test-results
+            - playwright-report
+            - blob-report
+        - path: ./frontend/package.json
+          action: rebuild
+        - path: ./package.json
+          action: rebuild
+        - path: ./bun.lock
+          action: rebuild
+
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    ports:
+      - "127.0.0.1:8025:8025"
+
+volumes:
+  app-db-data:
+  uploads:

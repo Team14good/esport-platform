@@ -1,0 +1,22 @@
+system: 5.0 場次進行
+actor cap left 1.5: 隊長
+actor ref left 3.5: 裁判
+actor org right 3: 主辦方
+actor timer right 6.5: 時間
+uc u1 1 1: 報到
+uc u2 1 2: 上傳結算截圖
+uc u3 1 3: 登錄每局比分
+uc u4 1 4: 送出系列結果
+uc u8 2 5: 賽事開始（轉為進行中）
+uc u5 2 6: 逾時判棄權
+uc u6 2 7: 申訴期滿自動確認
+uc u7 1 7: 晉級推進（4.3）
+cap -- u1
+cap -- u2
+ref -- u3
+ref -- u4
+org -- u3 : 代登
+timer -- u8
+timer -- u5
+timer -- u6
+u6 ..> u7 : include

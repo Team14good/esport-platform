@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1 66 66" width="66" height="66" role="img" aria-label="FLOW 匯流賽道標誌">
+  <!-- FLOW · L2 匯流賽道 (Converging Bracket) mark. T1 深空霓虹 brand gradient: primary-dark #22D3EE -> accent-dark #8B5CF6.
+       Four streamlines merge pairwise, then into one glowing point (the champion). Opacity rises toward the point. -->
+  <defs>
+    <linearGradient id="flow-l2-grad" gradientUnits="userSpaceOnUse" x1="5" y1="0" x2="56" y2="0">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.2">
+    <g stroke="url(#flow-l2-grad)" opacity="0.7">
+      <path d="M5 10 C16 10 18 17 27 17"/>
+      <path d="M5 24 C16 24 18 17 27 17"/>
+      <path d="M5 40 C16 40 18 47 27 47"/>
+      <path d="M5 54 C16 54 18 47 27 47"/>
+    </g>
+    <g stroke="url(#flow-l2-grad)" opacity="1">
+      <path d="M27 17 C38 17 40 32 50 32"/>
+      <path d="M27 47 C38 47 40 32 50 32"/>
+    </g>
+  </g>
+  <circle cx="55" cy="32" r="9" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity=".35"/>
+  <circle cx="55" cy="32" r="5.2" fill="#8B5CF6"/>
+</svg>
