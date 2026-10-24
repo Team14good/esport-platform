@@ -34,13 +34,15 @@ function asBusinessDetail(
 
 function asValidationFields(detail: unknown): Record<string, string> | null {
   if (!Array.isArray(detail)) return null
-  const fields: Record<string, string> = {}
+  // 沒有原型的物件：`constructor`、`toString` 這類欄位名不會被當成已存在；
+  // 不用 Object.hasOwn（target 是 ES2020，Safari 15.4／Chrome 93 以前沒有它）
+  const fields: Record<string, string> = Object.create(null)
   for (const item of detail) {
     if (!isRecord(item) || typeof item.msg !== "string") continue
     const loc = Array.isArray(item.loc) ? item.loc : []
     const key = loc.length > 0 ? String(loc[loc.length - 1]) : ""
     // 同一欄位有多個錯誤時只顯示第一個
-    if (!Object.hasOwn(fields, key)) fields[key] = item.msg
+    if (!(key in fields)) fields[key] = item.msg
   }
   // 一個欄位錯誤都沒有收集到時不算欄位錯誤，改走依狀態碼的訊息
   return Object.keys(fields).length > 0 ? fields : null

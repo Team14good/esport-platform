@@ -1,4 +1,4 @@
-# Logs
+# 日誌
 logs
 *.log
 npm-debug.log*
@@ -13,7 +13,7 @@ dist-ssr
 *.local
 openapi.json
 
-# Editor directories and files
+# 編輯器的目錄與檔案
 .vscode/*
 !.vscode/extensions.json
 .idea

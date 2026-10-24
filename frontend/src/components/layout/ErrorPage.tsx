@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
 import {
+  FORBIDDEN_FALLBACK_MESSAGE,
   getErrorMessage,
   parseApiError,
   UNEXPECTED_ERROR_MESSAGE,
@@ -9,7 +10,8 @@ import {
 
 const ERROR_TEXT = {
   404: "找不到這個頁面。",
-  403: "你沒有權限查看這個頁面。",
+  // 與 api-error 的 403 預設訊息同一個來源，避免兩處文案分歧
+  403: FORBIDDEN_FALLBACK_MESSAGE,
 } as const
 
 type ErrorPageProps =

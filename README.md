@@ -64,8 +64,11 @@ docker compose exec backend bash scripts/test.sh -k audit
 # 後端靜態檢查：mypy、ty、ruff check、ruff format --check
 docker compose exec backend bash scripts/lint.sh
 
-# 前端型別檢查與建置
+# 前端建置（tsc 只檢查 src，加上 vite build）
 docker compose exec frontend bun run --filter frontend build
+
+# 前端型別檢查（包含 tests/ 與設定檔；build 不會檢查測試檔）
+docker compose exec frontend bun run --filter frontend typecheck
 
 # 前端 lint／格式檢查
 docker compose exec frontend bunx biome check

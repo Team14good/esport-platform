@@ -31,15 +31,26 @@ def test_worker_poll_seconds_defaults_to_20(monkeypatch: pytest.MonkeyPatch) -> 
     assert Settings(_env_file=None).WORKER_POLL_SECONDS == 20  # type: ignore[call-arg]
 
 
+@pytest.mark.parametrize(
+    ("overrides", "reported_as"),
+    [
+        ({"SECRET_KEY": "changethis"}, "SECRET_KEY"),
+        ({"FIRST_ADMIN_PASSWORD": "changethis"}, "FIRST_ADMIN_PASSWORD"),
+        (
+            {"DATABASE_URL": "postgresql://postgres:changethis@db:5432/app"},
+            "DATABASE_URL password",
+        ),
+    ],
+)
 def test_default_secret_is_rejected_outside_development(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, overrides: dict[str, str], reported_as: str
 ) -> None:
     monkeypatch.delenv("FASTAPI_ENV", raising=False)
 
-    with pytest.raises(ValidationError, match="SECRET_KEY"):
+    with pytest.raises(ValidationError, match=reported_as):
         Settings(  # type: ignore[call-arg]
             _env_file=None,
-            **{**_REQUIRED, "FASTAPI_ENV": None, "SECRET_KEY": "changethis"},
+            **{**_REQUIRED, "FASTAPI_ENV": None, **overrides},
         )
 
 

@@ -2,17 +2,17 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "ES2022.Object", "DOM", "DOM.Iterable"],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-    /* Bundler mode */
+    /* 打包工具模式 */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    /* Linting */
+    /* 嚴格檢查 */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

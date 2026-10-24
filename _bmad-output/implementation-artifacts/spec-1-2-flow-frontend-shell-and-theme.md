@@ -23,6 +23,9 @@ context:
 - 「登入」連到 `/login`、「註冊」連到 `/signup`；頁面在 Story 1.4、1.3 做好之前，點了會看到 S38 404，不做暫時頁面。
 - spec 超過 1,600 tokens，使用者選擇保留完整 spec、不拆分。
 
+**Decisions（2026-10-24 使用者決定，Code Review 後追加）：**
+- 路由 loader 收到 API 404（資源不存在）時，維持顯示 S38 404 的固定文案「找不到這個頁面。」，不顯示伺服器的 `detail.message`。這是 Always「錯誤訊息照實顯示伺服器的 `detail.message`」唯一的例外，依據是 EXPERIENCE.md「不存在的資源顯示 S38 404」；非表單的 Toast 與表單 Alert 仍照實顯示伺服器訊息。
+
 ## Boundaries & Constraints
 
 **Always:**
@@ -100,6 +103,15 @@ context:
 - 別名槽位在 `:root, .dark` 都宣告，讓套用 `.dark` 的元素重新解析 `var()`。
 - 額外：`card.tsx` 圓角改為 `rounded-lg`（依 DESIGN.md card）；`sheet.tsx`、`sonner.tsx` 的英文 aria label 改成繁中；`playwright.config.ts` 忽略 `tests/unit/`；router 設 `defaultErrorComponent`，子路由出錯時頂欄仍保留。
 - 主程式 chunk 約 501 kB，vite 會出現大小警告，不影響建置。
+- Code Review 後續修正（2026-10-24，以 bmad-code-review 對 commit 0a85417 做四層審查後，使用者要求修正「需要立即修正」的項目）：
+  - 路由 loader 收到 API 404 時維持 S38 404（第 1 輪 Review P9 的行為），決定已補記到凍結區塊的 Decisions。
+  - `api-error.ts` 的 422 欄位改用沒有原型的物件（`Object.create(null)`）加 `in` 判斷，不再用 `Object.hasOwn`；`tsconfig.json` 移除 `ES2022.Object`：target 是 ES2020，Safari 15.4／Chrome 93 以前沒有 `Object.hasOwn`（`hasOwnProperty.call` 會被 Biome 的 noPrototypeBuiltins 擋下）。
+  - `vitest.config.ts` 改以 `mergeConfig` 合併 `vite.config.ts`，別名與外掛（含 TanStack Router 產生路由樹）只維護一份。
+  - 首頁的 `role="status"` 改為同一個元素從載入到結果都在，只換內容，螢幕閱讀器才會唸出結果。
+  - 選單 Sheet 的關閉鈕放大到 40px 觸控範圍（`sheet.tsx`）。
+  - 新增 `typecheck` 指令（`tsc -p tsconfig.json --noEmit`，涵蓋 tests/）；README 一併說明。
+  - S38 的 403 文案改為引用 `FORBIDDEN_FALLBACK_MESSAGE`，只有一個來源。
+  - 補測試：`RouteErrorPage` 的一般錯誤（409、500）分支、手機選單內主題切換的點擊、403 字串 detail、首頁 live region 在載入前後是同一個元素。
 
 ## Spec Change Log
 

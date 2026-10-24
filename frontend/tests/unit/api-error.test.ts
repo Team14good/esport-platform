@@ -61,6 +61,10 @@ describe("parseApiError", () => {
       kind: "forbidden",
       message: FORBIDDEN_FALLBACK_MESSAGE,
     })
+    // FastAPI 預設的 403 detail 是字串：照實保留，不換成泛用文字
+    expect(
+      parseApiError(httpError(403, { detail: "Not enough privileges" })),
+    ).toEqual({ kind: "forbidden", message: "Not enough privileges" })
   })
 
   it("連不到伺服器：沒有回應時顯示「無法連線到伺服器」", () => {

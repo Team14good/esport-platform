@@ -5,7 +5,7 @@ import 'dotenv/config'
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173'
 
 /**
- * See https://playwright.dev/docs/test-configuration.
+ * 設定說明：https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
   testDir: './tests',

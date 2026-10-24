@@ -1,5 +1,7 @@
-# 環境設定（只提交 .env.example）
+# 環境設定（只提交 .env.example；與 .dockerignore 一致，.env.local 這類也一律忽略）
 .env
+.env.*
+!.env.example
 
 # 依賴與建置產物
 node_modules/

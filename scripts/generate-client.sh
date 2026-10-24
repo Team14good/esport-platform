@@ -16,8 +16,11 @@ tmp="$(mktemp -d)"
 trap 'rm -rf -- "${tmp:?}"' EXIT
 
 echo "==> Exporting OpenAPI schema from backend" >&2
+# 先清掉 image 裡舊的 backend/app 再解開：tar 只會覆蓋與新增，主機上已刪除或改名的檔案
+# 若留在 image 裡，舊的路由會被匯出到 OpenAPI，混進產生的 client
 tar -cf - backend/app \
   | docker compose run --rm --no-deps -T backend bash -c '
+      rm -rf /app/backend/app &&
       tar -xf - -C /app &&
       python -c "import json, app.main; print(json.dumps(app.main.app.openapi()))"
     ' > "$tmp/openapi.json"

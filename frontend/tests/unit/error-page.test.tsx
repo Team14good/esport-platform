@@ -106,6 +106,29 @@ describe("S38 錯誤頁", () => {
     expectBackHomeAndTopBar()
   })
 
+  it("路由載入時其他業務錯誤（409）：外框內照實顯示伺服器訊息", async () => {
+    renderLoaderError(
+      httpError(409, {
+        detail: { code: "REGISTRATION_CLOSED", message: "報名已截止。" },
+      }),
+    )
+
+    expect(
+      await screen.findByRole("heading", { name: "報名已截止。" }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("找不到這個頁面。")).toBeNull()
+    expectBackHomeAndTopBar()
+  })
+
+  it("路由載入時伺服器 500：外框內顯示狀態碼訊息", async () => {
+    renderLoaderError(httpError(500, "Internal Server Error"))
+
+    expect(
+      await screen.findByRole("heading", { name: "伺服器發生錯誤（500）" }),
+    ).toBeInTheDocument()
+    expectBackHomeAndTopBar()
+  })
+
   it("訊息為空時顯示「發生未預期的錯誤」，不會是空白標題", async () => {
     const rootRoute = createRootRoute({
       component: () => <ErrorPage message="" />,

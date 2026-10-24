@@ -102,15 +102,27 @@ def test_same_time_records_keep_insertion_order(session: Session) -> None:
     assert len({log.at for log in logs}) == 1
 
 
-def test_none_is_stored_as_sql_null(session: Session) -> None:
+@pytest.mark.parametrize("column", ["before", "after"])
+def test_none_is_stored_as_sql_null(session: Session, column: str) -> None:
+    # before／after 為 None 時都要存成 SQL NULL，而不是 JSON 的 null：
+    # 經 ORM 讀回時兩者都是 None，只有原生 SQL 的 IS NULL 分得出來
     tournament_id = uuid.uuid4()
-    _record(session, tournament_id, "with_null_before")
+    audit.record(
+        session,
+        actor_id=None,
+        tournament_id=tournament_id,
+        action=f"with_null_{column}",
+        entity_type="Sample",
+        entity_id=uuid.uuid4(),
+        before=None if column == "before" else {"status": "open"},
+        after=None if column == "after" else {"status": "open"},
+    )
     session.flush()
 
     matched = session.execute(
         text(
             "SELECT count(*) FROM audit_log"
-            " WHERE tournament_id = :tid AND before IS NULL"
+            f" WHERE tournament_id = :tid AND {column} IS NULL"
         ),
         {"tid": tournament_id},
     ).scalar_one()

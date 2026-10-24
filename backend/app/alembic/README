@@ -1,1 +1,1 @@
-Generic single-database configuration.
+Alembic 遷移環境：單一資料庫。每個 Story 的 schema 變更各自新增一支遷移檔到 versions/。

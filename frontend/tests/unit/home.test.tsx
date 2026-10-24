@@ -52,6 +52,26 @@ describe("首頁健康檢查", () => {
     expect(screen.queryByTestId("health-check-skeleton")).toBeNull()
   })
 
+  it("載入前後是同一個 role=status 元素，螢幕閱讀器才會唸出結果", async () => {
+    let resolveHealth: (value: HealthCheckResult) => void = () => {}
+    vi.spyOn(UtilsService, "healthCheck").mockReturnValue(
+      new Promise<HealthCheckResult>((resolve) => {
+        resolveHealth = resolve
+      }) as ReturnType<typeof UtilsService.healthCheck>,
+    )
+    renderHome()
+
+    const loading = await screen.findByRole("status")
+    expect(loading).toHaveAttribute("aria-busy", "true")
+
+    resolveHealth({ data: true } as HealthCheckResult)
+
+    await screen.findByText("後端狀態：正常")
+    const done = screen.getByRole("status")
+    expect(done).toBe(loading)
+    expect(done).toHaveAttribute("aria-busy", "false")
+  })
+
   it("後端沒有回應：顯示「後端狀態：無法連線」", async () => {
     vi.spyOn(UtilsService, "healthCheck").mockRejectedValue(
       new Error("Network Error"),

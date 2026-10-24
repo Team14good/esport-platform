@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str
-    # 60 minutes * 24 hours * 8 days = 8 days
+    # 60 分鐘 × 24 小時 × 8 天 = 8 天
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
     FRONTEND_HOST: str = "http://localhost:5173"
     FASTAPI_ENV: Literal["development"] | None = None

@@ -2,26 +2,26 @@ FROM python:3.14
 
 ENV PYTHONUNBUFFERED=1
 
-# Install uv
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
+# 安裝 uv
+# 參考：https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
 COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 
-# Compile bytecode
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#compiling-bytecode
+# 安裝時預先編譯 bytecode
+# 參考：https://docs.astral.sh/uv/guides/integration/docker/#compiling-bytecode
 ENV UV_COMPILE_BYTECODE=1
 
-# uv Cache
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#caching
+# uv 快取：從快取複製而不是建立連結
+# 參考：https://docs.astral.sh/uv/guides/integration/docker/#caching
 ENV UV_LINK_MODE=copy
 
 WORKDIR /app/
 
-# Place executables in the environment at the front of the path
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#using-the-environment
+# 把虛擬環境的執行檔放在 PATH 最前面
+# 參考：https://docs.astral.sh/uv/guides/integration/docker/#using-the-environment
 ENV PATH="/app/.venv/bin:$PATH"
 
 # 安裝依賴（含 dev 群組，容器內才能跑 pytest、mypy、ruff）
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
+# 參考：https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
@@ -35,8 +35,8 @@ COPY ./backend/app /app/backend/app
 
 COPY ./backend/tests /app/backend/tests
 
-# Sync the project
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
+# 安裝專案本身
+# 參考：https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \

@@ -112,6 +112,13 @@ context:
 - 鎖定檔：`uv.lock` 在 `python:3.14` 容器以 uv 0.9.26（與 Dockerfile 同版）產生；`bun.lock` 在 `oven/bun:1.4`（1.4.4）容器產生。Bun 不會更新 lock 裡根 workspace 的名稱，已手動由範本的 `fastapi-cloud` 改為 `flow`，並確認 `bun install --frozen-lockfile` 通過、再次 install 後 lock 不變。
 - 範本在 Windows checkout 後為 CRLF，已全部轉為 LF（Biome 會把 CRLF 判為格式錯誤）。
 - 驗證環境：主機的 5432、8000 被另一個專案（codefest2026）的容器占用，本次以 scratchpad 裡的暫時 override（`ports: !override`，對應 15432、18000，`VITE_API_URL=http://localhost:18000`）驗證；`compose.yml` 仍是規格的 5432、8000。
+- Code Review 後續修正（2026-10-24，以 bmad-code-review 對 commit b20d0dd 做四層審查後，使用者要求修正「需要立即修正」的項目；以目前的程式碼為準，已在 1.2、1.3 修掉的項目不重複處理）：
+  - CORS 的 `allow_origins` 去掉 `FRONTEND_HOST` 結尾的斜線，與 Story 1.3 的驗證連結一致。
+  - `scripts/generate-client.sh` 在 backend 容器裡先清掉舊的 `backend/app` 再解開，避免主機上已刪除的檔案留在 image 裡、被匯出到 OpenAPI。
+  - `.gitignore` 一併忽略 `.env.*`（保留 `.env.example`），與 `.dockerignore` 一致。
+  - `.env.example` 改正說明：compose 是「預設」`FASTAPI_ENV=development`（可被 `.env` 覆寫），且只能設 `development` 或不設。
+  - 沿用範本的英文程式註解改為繁體中文（`backend/Dockerfile`、`alembic/env.py`、`alembic.ini`、`alembic/README`、`script.py.mako`、`config.py`、`pyproject.toml`、`openapi-ts.config.ts`、`vite.config.ts`、`playwright.config.ts`、`tsconfig.json`、`frontend/.gitignore`）；已套用的遷移檔不修改。
+  - 補測試：非開發環境下 `FIRST_ADMIN_PASSWORD`、`DATABASE_URL` 密碼為 `changethis` 時會被拒絕；`audit_log.after` 為 None 時存成 SQL NULL。
 
 ## Spec Change Log
 

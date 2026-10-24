@@ -42,25 +42,25 @@ exclude = ["alembic"]
 
 [tool.ruff.lint]
 select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
+    "E",  # pycodestyle 錯誤
+    "W",  # pycodestyle 警告
     "F",  # pyflakes
-    "I",  # isort
+    "I",  # isort（import 排序）
     "B",  # flake8-bugbear
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
-    "ARG001", # unused arguments in functions
-    "T201",   # print statements are not allowed
+    "ARG001", # 函式中未使用的參數
+    "T201",   # 不允許 print
 ]
 ignore = [
-    "E501",  # line too long, handled by black
-    "B008",  # do not perform function calls in argument defaults
-    "W191",  # indentation contains tabs
-    "B904",  # Allow raising exceptions without from e, for HTTPException
+    "E501",  # 行太長：交給 formatter 處理
+    "B008",  # 參數預設值中呼叫函式（FastAPI 的 Depends 需要）
+    "W191",  # 縮排含 tab
+    "B904",  # 允許拋例外時不加 from e（例如 HTTPException）
 ]
 
 [tool.ruff.lint.pyupgrade]
-# Preserve types, even if a file imports `from __future__ import annotations`.
+# 即使檔案有 `from __future__ import annotations`，也保留執行期型別
 keep-runtime-typing = true
 
 [tool.pytest.ini_options]

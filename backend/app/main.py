@@ -19,7 +19,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_HOST],
+    # 瀏覽器送出的 Origin 不帶結尾斜線；FRONTEND_HOST 寫成 http://host/ 也要能比對成功
+    allow_origins=[settings.FRONTEND_HOST.rstrip("/")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

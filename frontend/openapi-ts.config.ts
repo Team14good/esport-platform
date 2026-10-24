@@ -10,7 +10,7 @@ export default defineConfig({
     {
       name: "@hey-api/sdk",
       operations: {
-        // NOTE: this doesn't allow tree-shaking
+        // 注意：依 tag 分組成靜態類別，打包時無法 tree-shaking
         strategy: "byTags",
         methods: "static",
         containerName: "{{name}}Service",
