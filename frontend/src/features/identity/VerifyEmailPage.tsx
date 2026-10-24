@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
-import { useLocation, useRouter } from "@tanstack/react-router"
+import { useLocation, useNavigate, useRouter } from "@tanstack/react-router"
 import { CircleCheckIcon, MailIcon, TriangleAlertIcon } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect } from "react"
 
 import { IdentityService } from "@/client"
 import { Button } from "@/components/ui/button"
@@ -94,6 +94,19 @@ function VerifyToken({
     refetchOnReconnect: false,
   })
 
+  // 驗證成功後把網址的 token 換成 verified=1：重新整理或從瀏覽紀錄回到這頁時，
+  // 不會再送一次已用過的 token 而被當成「連結已失效」
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (verification.isSuccess) {
+      navigate({
+        to: "/verify-email",
+        search: { redirect, verified: 1 },
+        replace: true,
+      })
+    }
+  }, [verification.isSuccess, navigate, redirect])
+
   if (verification.isPending) {
     return (
       <section
@@ -109,25 +122,15 @@ function VerifyToken({
   }
 
   if (verification.isSuccess) {
-    return (
-      <PageCard
-        icon={
-          <CircleCheckIcon
-            aria-hidden="true"
-            className={`${iconClass} text-primary`}
-          />
-        }
-        title="Email 驗證完成"
-      >
-        {/* 有 redirect 時回原頁，否則回首頁 */}
-        <ContinueLink href={redirect ?? "/"} />
-      </PageCard>
-    )
+    return <Verified redirect={redirect} />
   }
 
   const apiError = parseApiError(verification.error)
+  // 422 代表 token 格式本身不合格（例如被截斷或改壞的連結），重試也不會成功，視同失效
   const invalidLink =
-    apiError.kind === "business" && apiError.code === VERIFICATION_LINK_INVALID
+    (apiError.kind === "business" &&
+      apiError.code === VERIFICATION_LINK_INVALID) ||
+    apiError.kind === "validation"
   const icon = (
     <TriangleAlertIcon
       aria-hidden="true"
@@ -158,6 +161,23 @@ function VerifyToken({
         重寄一封新的驗證信。
       </p>
       <ResendVerificationForm redirect={redirect} />
+    </PageCard>
+  )
+}
+
+/** S7 驗證完成：「Email 驗證完成」＋「繼續」（有 redirect 時回原頁，否則回首頁）。 */
+function Verified({ redirect }: { redirect?: string }) {
+  return (
+    <PageCard
+      icon={
+        <CircleCheckIcon
+          aria-hidden="true"
+          className={`${iconClass} text-primary`}
+        />
+      }
+      title="Email 驗證完成"
+    >
+      <ContinueLink href={redirect ?? "/"} />
     </PageCard>
   )
 }
@@ -193,17 +213,20 @@ function ContinueLink({ href }: { href: string }) {
   )
 }
 
-/** S7 Email 驗證頁：網址有 token 時驗證，否則顯示「請收信驗證」。 */
+/**
+ * S7 Email 驗證頁：網址有 token 時驗證；驗證成功後網址換成 verified=1，顯示驗證完成；
+ * 兩者都沒有時顯示「請收信驗證」。
+ */
 export function VerifyEmailPage({
   token,
   redirect,
+  verified = false,
 }: {
   token?: string
   redirect?: string
+  verified?: boolean
 }) {
-  return token ? (
-    <VerifyToken token={token} redirect={redirect} />
-  ) : (
-    <CheckInbox redirect={redirect} />
-  )
+  if (token) return <VerifyToken token={token} redirect={redirect} />
+  if (verified) return <Verified redirect={redirect} />
+  return <CheckInbox redirect={redirect} />
 }

@@ -109,6 +109,14 @@ context:
 - 事件名稱只檢查「PascalCase、至少兩個字」，不強制過去式（`Drawn` 這類不規則動詞無法用字尾判斷）。
 - `redirect` 只接受站內路徑，前後端都會檢查。
 - 驗證時發現 Windows 的 curl 以命令列參數送中文 JSON 會被轉碼成非 UTF-8 而得到 400；用檔案送出就正常，這是工具的問題，不是程式的問題。
+- Code Review 後續修正（2026-10-24，commit 49f7075 之後另以 bmad-code-review 唯讀審查，使用者要求修正「需要立即修正」的項目）：
+  - S7 驗證成功後以 `replace` 把網址的 token 換成 `?verified=1`（保留 redirect）；`verified=1` 時直接顯示「Email 驗證完成」，重新整理不會再送已用過的 token。使用者選擇前端做法，不改 I/O 矩陣「同一連結第二次開啟回 400」的規則。`verified=1` 只影響顯示，任何人都能手動打開這個網址看到完成畫面，不涉及帳號狀態。
+  - S7 遇到 422（token 格式不合格，例如被截斷或改壞的連結）時視同連結失效，顯示重寄而不是「重試」。
+  - notifications 改用 identity 的 `VerificationEmailRequested.event_type` 與 `model_validate`，移除重複的事件名稱字串與 payload 結構。
+  - 驗證連結組網址前去掉 `FRONTEND_HOST` 結尾的斜線。
+  - redirect 前後端都拒絕 C1 控制字元（U+0080～U+009F），修正 U+0085 前端放行、後端拒絕的不一致。
+  - 補測試：密碼 128／129 字元（前後端）、SMTP 的 TLS／SSL／帳號密碼參數、`verified=1` 的網址替換與重新整理、422 視同失效、C1 控制字元、連結結尾斜線、事件名稱來源。
+  - 兩個既有的前端測試改為先等網址換成 `verified=1` 再找元素：替換時「驗證完成」卡片會重新掛載，舊的元素參照會失效。
 
 ## Spec Change Log
 

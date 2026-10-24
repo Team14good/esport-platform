@@ -260,6 +260,21 @@ describe("S5 註冊頁", () => {
     expect(register).not.toHaveBeenCalled()
   })
 
+  it("密碼超過 128 個字元（以碼位計算）：在密碼欄下方提示，不呼叫 API", async () => {
+    const user = userEvent.setup()
+    const register = vi.spyOn(IdentityService, "register")
+    renderSignup()
+
+    // 129 個 emoji：UTF-16 長度 258，碼位 129
+    await fillForm(user, { password: "😀".repeat(129) })
+    await user.click(screen.getByRole("button", { name: "註冊帳號" }))
+
+    expect(
+      await within(field("密碼")).findByText("密碼最多 128 個字元"),
+    ).toBeInTheDocument()
+    expect(register).not.toHaveBeenCalled()
+  })
+
   it("學校清單載入失敗：選單停用，顯示「無法載入學校清單」，按「重新載入」再抓一次", async () => {
     const user = userEvent.setup()
     const listSchools = vi

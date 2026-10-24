@@ -190,10 +190,15 @@ def test_password_of_exactly_8_any_characters_is_accepted(client: TestClient) ->
     assert _register(client, password="        ").status_code == 201
 
 
+def test_password_of_exactly_128_characters_is_accepted(client: TestClient) -> None:
+    assert _register(client, password="x" * 128).status_code == 201
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
         ("email", "not-an-email", "請輸入有效的 Email"),
+        ("password", "x" * 129, "密碼最多 128 個字元"),
         ("display_name", "   ", "請輸入顯示名稱"),
         ("display_name", "名" * 51, "顯示名稱最多 50 個字"),
         ("redirect", "https://evil.example.com", "返回頁面的網址無效"),
@@ -202,6 +207,8 @@ def test_password_of_exactly_8_any_characters_is_accepted(client: TestClient) ->
         ("redirect", "/\n/evil.com", "返回頁面的網址無效"),
         ("redirect", "/\\evil.com", "返回頁面的網址無效"),
         ("redirect", "/x\x7f", "返回頁面的網址無效"),
+        ("redirect", "/x\x85y", "返回頁面的網址無效"),
+        ("redirect", "/x\x9fy", "返回頁面的網址無效"),
         ("redirect", "/a b", "返回頁面的網址無效"),
     ],
 )

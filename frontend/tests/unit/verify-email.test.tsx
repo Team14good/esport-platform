@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRouter } from "@tanstack/react-router"
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { AxiosError } from "axios"
 import { toast } from "sonner"
@@ -23,6 +23,12 @@ type VerifyResult = Awaited<ReturnType<typeof IdentityService.verifyEmail>>
 type ResendResult = Awaited<
   ReturnType<typeof IdentityService.resendVerificationEmail>
 >
+
+async function waitForVerifiedUrl(router: ReturnType<typeof renderVerify>) {
+  await waitFor(() =>
+    expect(router.state.location.search).toMatchObject({ verified: 1 }),
+  )
+}
 
 function renderVerify(url: string) {
   const router = createRouter({
@@ -53,8 +59,12 @@ describe("S7 Email 驗證頁", () => {
     const verify = vi
       .spyOn(IdentityService, "verifyEmail")
       .mockResolvedValue({ data: undefined } as VerifyResult)
-    renderVerify("/verify-email?token=abc&redirect=%2Ftournaments%2F7")
+    const router = renderVerify(
+      "/verify-email?token=abc&redirect=%2Ftournaments%2F7",
+    )
 
+    // 驗證成功後網址會換成 verified=1，畫面在那之後才穩定
+    await waitForVerifiedUrl(router)
     expect(
       await screen.findByRole("heading", { name: "Email 驗證完成" }),
     ).toBeInTheDocument()
@@ -64,6 +74,66 @@ describe("S7 Email 驗證頁", () => {
     )
     expect(verify).toHaveBeenCalledTimes(1)
     expect(verify).toHaveBeenCalledWith({ body: { token: "abc" } })
+  })
+
+  it("驗證成功後網址的 token 換成 verified=1（保留 redirect），且只送一次驗證", async () => {
+    const verify = vi
+      .spyOn(IdentityService, "verifyEmail")
+      .mockResolvedValue({ data: undefined } as VerifyResult)
+    const router = renderVerify(
+      "/verify-email?token=abc&redirect=%2Ftournaments%2F7",
+    )
+
+    await screen.findByRole("heading", { name: "Email 驗證完成" })
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({
+        redirect: "/tournaments/7",
+        verified: 1,
+      }),
+    )
+    expect(router.state.location.href).not.toContain("token")
+    expect(
+      screen.getByRole("heading", { name: "Email 驗證完成" }),
+    ).toBeInTheDocument()
+    expect(verify).toHaveBeenCalledTimes(1)
+  })
+
+  it("重新整理 verified=1 的頁面：直接顯示「Email 驗證完成」，不再呼叫驗證 API", async () => {
+    const verify = vi.spyOn(IdentityService, "verifyEmail")
+    renderVerify("/verify-email?verified=1&redirect=%2Ftournaments%2F7")
+
+    expect(
+      await screen.findByRole("heading", { name: "Email 驗證完成" }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "繼續" })).toHaveAttribute(
+      "href",
+      "/tournaments/7",
+    )
+    expect(verify).not.toHaveBeenCalled()
+  })
+
+  it("token 格式不合格（422）：視同連結失效，顯示重寄，不顯示「重試」", async () => {
+    vi.spyOn(IdentityService, "verifyEmail").mockRejectedValue(
+      httpError(422, {
+        detail: [
+          {
+            type: "string_too_long",
+            loc: ["body", "token"],
+            msg: "String should have at most 200 characters",
+          },
+        ],
+      }),
+    )
+    renderVerify(`/verify-email?token=${"x".repeat(201)}`)
+
+    expect(
+      await screen.findByRole("heading", { name: "此驗證連結已失效。" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "重寄驗證信" }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "重試" })).toBeNull()
+    expect(screen.queryByText(/String should have/)).toBeNull()
   })
 
   it("驗證成功且沒有 redirect：「繼續」回首頁", async () => {
@@ -193,6 +263,7 @@ describe("S7 Email 驗證頁", () => {
       `/verify-email?token=with-query&redirect=${encodeURIComponent("/join/x?code=abc#top")}`,
     )
 
+    await waitForVerifiedUrl(router)
     const link = await screen.findByRole("link", { name: "繼續" })
     expect(link).toHaveAttribute("href", "/join/x?code=abc#top")
     await user.click(link)

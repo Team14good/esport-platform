@@ -155,7 +155,10 @@ def _validate_redirect(value: str | None) -> str | None:
         or not value.startswith("/")
         or value.startswith("//")
         or "\\" in value
-        or any(ord(ch) < 0x20 or ord(ch) == 0x7F or ch.isspace() for ch in value)
+        # C0、DEL 與 C1（U+0080～U+009F）控制字元，以及任何空白；與前端 safeRedirect 規則一致
+        or any(
+            ord(ch) < 0x20 or 0x7F <= ord(ch) <= 0x9F or ch.isspace() for ch in value
+        )
     ):
         raise PydanticCustomError("redirect_invalid", "返回頁面的網址無效")
     return value

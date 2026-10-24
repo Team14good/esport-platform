@@ -5,24 +5,25 @@ worker 每次取一則未處理事件呼叫 `dispatch_event`，再以 `send_next
 """
 
 import logging
-import uuid
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 from sqlmodel import Session
 
 from app.core import clock, events
 from app.core.config import settings
 from app.core.events import OutboxEvent
 from app.modules.identity import service as identity_service
+from app.modules.identity.models import VerificationEmailRequested
 from app.modules.notifications import repository
 from app.modules.notifications.email import EmailMessage, EmailSender, render_email
 from app.modules.notifications.models import DeliveryStatus, EmailDelivery
 
 logger = logging.getLogger(__name__)
 
-VERIFICATION_EMAIL_REQUESTED = "VerificationEmailRequested"
+# 事件名稱與 payload 結構都以 identity 的事件類別為準，不在這裡另寫一份
+VERIFICATION_EMAIL_REQUESTED = VerificationEmailRequested.event_type
 # 第 5 次寄送失敗後標為 failed，不再重試
 MAX_EMAIL_ATTEMPTS = 5
 # 失敗後的重試間隔：1、2、4、8 分鐘
@@ -30,17 +31,11 @@ EMAIL_RETRY_BASE_DELAY = timedelta(minutes=1)
 LAST_ERROR_MAX_LENGTH = 2000
 
 
-class _VerificationEmailPayload(BaseModel):
-    account_id: uuid.UUID
-    token: str
-    redirect: str | None = None
-
-
 def dispatch_event(session: Session, event: OutboxEvent) -> None:
     """依事件類型建立 EmailDelivery；重複處理同一事件不會多建。"""
     if event.type == VERIFICATION_EMAIL_REQUESTED:
         try:
-            payload = _VerificationEmailPayload.model_validate(event.payload)
+            payload = VerificationEmailRequested.model_validate(event.payload)
         except ValidationError:
             # 內容壞掉的事件重試也不會成功；記錄後略過，免得卡住後面的事件
             logger.exception("Malformed %s event %s; skipped", event.type, event.id)
@@ -58,7 +53,9 @@ def verification_link(token: str, redirect: str | None) -> str:
     params = {"token": token}
     if redirect:
         params["redirect"] = redirect
-    return f"{settings.FRONTEND_HOST}/verify-email?{urlencode(params)}"
+    # FRONTEND_HOST 設成結尾帶斜線時也不能變成 //verify-email
+    host = settings.FRONTEND_HOST.rstrip("/")
+    return f"{host}/verify-email?{urlencode(params)}"
 
 
 class _StaleEmail(Exception):
@@ -73,7 +70,7 @@ def _compose(
     if contact is None:
         raise LookupError("recipient account no longer exists")
     if event.type == VERIFICATION_EMAIL_REQUESTED:
-        payload = _VerificationEmailPayload.model_validate(event.payload)
+        payload = VerificationEmailRequested.model_validate(event.payload)
         if not identity_service.is_verification_token_active(session, payload.token):
             raise _StaleEmail(
                 "skipped as stale: verification token was superseded, used or "

@@ -17,6 +17,8 @@ describe("safeRedirect", () => {
     ["歸位", "/\r/evil.com"],
     ["NUL", "/\u0000/evil.com"],
     ["DEL", "/x\u007f"],
+    ["C1 控制字元 NEL（後端 isspace 視為空白）", "/x\u0085y"],
+    ["C1 控制字元 U+009F", "/x\u009fy"],
     ["空白", "/a b"],
     ["全形空白", "/a　b"],
     ["不是 / 開頭", "evil.com"],

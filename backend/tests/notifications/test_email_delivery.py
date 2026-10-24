@@ -13,8 +13,10 @@ from app.core import events
 from app.core.config import settings
 from app.core.events import OutboxEvent
 from app.modules.identity import service as identity_service
+from app.modules.identity.models import VerificationEmailRequested
 from app.modules.notifications import service
 from app.modules.notifications.email import (
+    EmailMessage,
     EmailSendError,
     SmtpEmailSender,
     render_email,
@@ -117,6 +119,22 @@ def test_link_without_redirect_has_only_token() -> None:
     link = service.verification_link("abc", None)
 
     assert link == f"{settings.FRONTEND_HOST}/verify-email?token=abc"
+
+
+def test_link_ignores_trailing_slash_on_frontend_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "FRONTEND_HOST", "http://localhost:5173/")
+
+    link = service.verification_link("abc", None)
+
+    assert link == "http://localhost:5173/verify-email?token=abc"
+
+
+def test_event_name_comes_from_the_identity_event_class() -> None:
+    # 事件名稱只有一個來源：identity 的事件類別改名時，分派會跟著改，不會靜悄悄失效
+    assert service.VERIFICATION_EMAIL_REQUESTED == VerificationEmailRequested.event_type
+    assert service.VERIFICATION_EMAIL_REQUESTED == "VerificationEmailRequested"
 
 
 def test_verification_email_creates_no_in_app_notification(session: Session) -> None:
@@ -342,3 +360,69 @@ def test_smtp_sender_raises_when_response_is_unsuccessful(
 
     with pytest.raises(EmailSendError, match="550"):
         SmtpEmailSender().send(message)
+
+
+def _record_smtp_options(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    """把 Message.send 換成假的成功回應，記下傳給它的 smtp 連線參數。"""
+
+    class _Response:
+        success = True
+
+    recorded: list[dict[str, object]] = []
+
+    def _fake_send(*_args: object, smtp: dict[str, object], **_kwargs: object) -> _Response:
+        recorded.append(smtp)
+        return _Response()
+
+    monkeypatch.setattr("emails.message.Message.send", _fake_send)
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.com")
+    monkeypatch.setattr(settings, "SMTP_PORT", 587)
+    monkeypatch.setattr(settings, "EMAILS_FROM_EMAIL", "noreply@example.com")
+    return recorded
+
+
+def _any_message() -> EmailMessage:
+    return render_email(
+        to="a@example.com",
+        title="標題",
+        body="內文",
+        button_label="按鈕",
+        button_url="https://example.com",
+    )
+
+
+def test_smtp_sender_passes_tls_and_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded = _record_smtp_options(monkeypatch)
+    monkeypatch.setattr(settings, "SMTP_TLS", True)
+    monkeypatch.setattr(settings, "SMTP_SSL", False)
+    monkeypatch.setattr(settings, "SMTP_USER", "mailer")
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", "secret")
+
+    SmtpEmailSender().send(_any_message())
+
+    assert recorded == [
+        {
+            "host": "smtp.example.com",
+            "port": 587,
+            "timeout": 10,
+            "tls": True,
+            "user": "mailer",
+            "password": "secret",
+        }
+    ]
+
+
+def test_smtp_sender_uses_ssl_when_tls_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded = _record_smtp_options(monkeypatch)
+    monkeypatch.setattr(settings, "SMTP_TLS", False)
+    monkeypatch.setattr(settings, "SMTP_SSL", True)
+    monkeypatch.setattr(settings, "SMTP_USER", None)
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", None)
+
+    SmtpEmailSender().send(_any_message())
+
+    assert recorded == [
+        {"host": "smtp.example.com", "port": 587, "timeout": 10, "ssl": True}
+    ]
