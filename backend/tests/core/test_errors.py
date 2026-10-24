@@ -2,7 +2,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.errors import BusinessError, register_error_handlers
+from app.core.errors import BusinessError, FieldError, register_error_handlers
 
 
 def _client_raising(error: BusinessError) -> TestClient:
@@ -46,3 +46,22 @@ def test_business_error_code_must_be_upper_snake(code: str) -> None:
 def test_business_error_status_must_be_4xx(status_code: int) -> None:
     with pytest.raises(ValueError):
         BusinessError("SAMPLE_CODE", "繁中訊息", status_code=status_code)
+
+
+def test_field_error_uses_fastapi_validation_format() -> None:
+    client = _client_raising(
+        FieldError("SCHOOL_NOT_FOUND", "找不到這間學校", loc=("body", "school_id"))
+    )
+
+    response = client.get("/boom")
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": [
+            {
+                "type": "SCHOOL_NOT_FOUND",
+                "loc": ["body", "school_id"],
+                "msg": "找不到這間學校",
+            }
+        ]
+    }

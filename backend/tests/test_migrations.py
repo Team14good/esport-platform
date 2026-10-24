@@ -6,6 +6,7 @@ from sqlalchemy import Connection
 from sqlmodel import SQLModel
 
 import app.core.audit  # noqa: F401
+import app.core.events  # noqa: F401
 import app.modules  # noqa: F401
 
 

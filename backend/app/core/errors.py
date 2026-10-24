@@ -1,7 +1,9 @@
 """業務錯誤與其 HTTP 回應格式。
 
 回應格式：`{"detail": {"code": "UPPER_SNAKE", "message": "繁中訊息"}}`；
-欄位驗證錯誤沿用 FastAPI 預設的 422。
+欄位驗證錯誤沿用 FastAPI 預設的 422。要查資料庫才知道的欄位錯誤（例如學校
+不存在）拋 `FieldError`：回應與 FastAPI 的 422 同格式，`type` 是錯誤代碼、
+`loc` 指向該欄位，前端因此能把訊息顯示在欄位下方。
 """
 
 import re
@@ -26,12 +28,21 @@ class BusinessError(Exception):
         self.status_code = status_code
 
 
+class FieldError(BusinessError):
+    """某個請求欄位的值違反業務規則：回 422，`loc` 指向該欄位。"""
+
+    def __init__(self, code: str, message: str, *, loc: tuple[str, ...]) -> None:
+        super().__init__(code, message, status_code=422)
+        self.loc = loc
+
+
 async def business_error_handler(_request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, BusinessError)
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": {"code": exc.code, "message": exc.message}},
-    )
+    if isinstance(exc, FieldError):
+        detail: object = [{"type": exc.code, "loc": list(exc.loc), "msg": exc.message}]
+    else:
+        detail = {"code": exc.code, "message": exc.message}
+    return JSONResponse(status_code=exc.status_code, content={"detail": detail})
 
 
 def register_error_handlers(app: FastAPI) -> None:

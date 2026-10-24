@@ -47,6 +47,12 @@ backend 與 frontend 會即時同步程式碼；worker 同步後自動重啟；`
 
 停止：`docker compose down`（加上 `-v` 會一併刪除資料庫與上傳檔案的 volume）。
 
+## 註冊與寄信
+
+在 http://localhost:5173/signup 註冊後，worker 會在下一輪輪詢（`WORKER_POLL_SECONDS`，預設 20 秒）把驗證信寄到 Mailpit，在 http://127.0.0.1:8025 打開信、點「驗證 Email」即可完成驗證。寄信失敗會記錄在 `email_delivery`（`attempts`、`last_error`），之後的輪詢再試，第 5 次仍失敗就標為 `failed`。
+
+學校清單的初始資料來自政府資料開放平臺的教育部「[大專校院名錄](https://data.gov.tw/dataset/6091)」（CSV：`https://stats.moe.gov.tw/files/opendata/u1_new.csv`），於 2026-10-24 下載，取最新的 115 學年度、只取校名，共 139 所，由 Story 1.3 的遷移檔載入。
+
 ## 測試與檢查
 
 ```bash

@@ -3,6 +3,17 @@
 import type { Client, Options as Options2, TDataShape } from "./client"
 import { client } from "./client.gen"
 import type {
+  identityListSchoolsData,
+  identityListSchoolsResponses,
+  identityRegisterData,
+  identityRegisterErrors,
+  identityRegisterResponses,
+  identityResendVerificationEmailData,
+  identityResendVerificationEmailErrors,
+  identityResendVerificationEmailResponses,
+  identityVerifyEmailData,
+  identityVerifyEmailErrors,
+  identityVerifyEmailResponses,
   utilsHealthCheckData,
   utilsHealthCheckResponses,
 } from "./types.gen"
@@ -40,6 +51,95 @@ export class UtilsService {
       responseType: "json",
       url: "/api/v1/utils/health-check",
       ...options,
+    })
+  }
+}
+
+export class IdentityService {
+  /**
+   * List Schools
+   *
+   * 公開的學校清單（依名稱排序）。
+   */
+  public static listSchools<ThrowOnError extends boolean = true>(
+    options?: Options<identityListSchoolsData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      identityListSchoolsResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/schools",
+      ...options,
+    })
+  }
+
+  /**
+   * Register
+   *
+   * 以 Email 註冊；之後要收驗證信完成驗證。不會自動登入。
+   */
+  public static register<ThrowOnError extends boolean = true>(
+    options: Options<identityRegisterData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identityRegisterResponses,
+      identityRegisterErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/accounts",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Verify Email
+   *
+   * 以驗證信連結中的 token 完成 Email 驗證。
+   */
+  public static verifyEmail<ThrowOnError extends boolean = true>(
+    options: Options<identityVerifyEmailData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identityVerifyEmailResponses,
+      identityVerifyEmailErrors,
+      ThrowOnError
+    >({
+      url: "/api/v1/email-verifications",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Resend Verification Email
+   *
+   * 重寄驗證信；不論 Email 是否已註冊或已驗證，回應都相同。
+   */
+  public static resendVerificationEmail<ThrowOnError extends boolean = true>(
+    options: Options<identityResendVerificationEmailData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identityResendVerificationEmailResponses,
+      identityResendVerificationEmailErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/verification-emails",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 }

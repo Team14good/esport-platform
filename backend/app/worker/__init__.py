@@ -1,7 +1,9 @@
 """worker：同一份程式碼的另一個進入點，角色等同 router（AD-5、AD-7）。
 
-每一輪依序執行工作清單；每個工作各用一個 session、一個交易，成功就 commit，
-失敗就 rollback 並記錄日誌，不影響同一輪的其他工作，也不中斷迴圈。
+每一輪依序執行工作清單。工作一次只處理一筆（一則事件、一封信），回傳是否
+處理了一筆；worker 為每一筆開一個 session、一個交易，成功就 commit，再呼叫
+同一個工作處理下一筆，直到工作回傳 False 或達到 `max_items`。某一筆失敗就
+rollback 並記錄日誌，改執行下一個工作；不影響其他工作，也不中斷迴圈。
 收到 SIGTERM／SIGINT 後會跑完目前這一輪再結束。
 """
 
@@ -17,27 +19,48 @@ from app.core.db import engine
 
 logger = logging.getLogger(__name__)
 
-Job = Callable[[Session], None]
+# 處理一筆；True 代表處理了一筆、可能還有下一筆
+Job = Callable[[Session], bool]
 SessionFactory = Callable[[], Session]
+
+# 每個工作每一輪最多處理的筆數，避免單一工作佔住整輪
+DEFAULT_MAX_ITEMS = 100
 
 
 def _default_session_factory() -> Session:
     return Session(engine)
 
 
-def run_once(
-    jobs: Sequence[Job], *, session_factory: SessionFactory = _default_session_factory
-) -> None:
-    """執行一輪：每個工作一個獨立交易。"""
-    for job in jobs:
-        name = getattr(job, "__name__", repr(job))
+def _run_item(job: Job, name: str, session_factory: SessionFactory) -> bool:
+    """以一個獨立交易處理一筆；回傳是否要繼續處理下一筆。"""
+    try:
         with session_factory() as session:
             try:
-                job(session)
+                more = job(session)
                 session.commit()
             except Exception:
-                session.rollback()
                 logger.exception("Worker job %s failed", name)
+                session.rollback()
+                return False
+    except Exception:
+        # rollback 或關閉 session 本身失敗（例如資料庫斷線）：記錄後繼續，不讓 worker 結束
+        logger.exception("Worker job %s could not clean up its session", name)
+        return False
+    return more
+
+
+def run_once(
+    jobs: Sequence[Job],
+    *,
+    session_factory: SessionFactory = _default_session_factory,
+    max_items: int = DEFAULT_MAX_ITEMS,
+) -> None:
+    """執行一輪：每個工作逐筆處理，每筆一個獨立交易。"""
+    for job in jobs:
+        name = getattr(job, "__name__", repr(job))
+        for _ in range(max_items):
+            if not _run_item(job, name, session_factory):
+                break
 
 
 class Worker:

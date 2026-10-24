@@ -24,8 +24,9 @@ from sqlmodel import SQLModel  # noqa
 
 from app.core.config import settings  # noqa
 
-# 匯入 core 與六個模組的 models（app.modules 會載入全部模組），讓所有資料表都註冊到 SQLModel.metadata
+# 匯入 core（操作紀錄、事件）與六個模組的 models（app.modules 會載入全部模組），讓所有資料表都註冊到 SQLModel.metadata
 import app.core.audit  # noqa
+import app.core.events  # noqa
 import app.modules  # noqa
 
 target_metadata = SQLModel.metadata

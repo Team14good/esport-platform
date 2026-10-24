@@ -4,6 +4,134 @@ export type ClientOptions = {
   baseURL: `${string}://${string}` | (string & {})
 }
 
+/**
+ * AccountCreate
+ */
+export type AccountCreate = {
+  /**
+   * Email
+   */
+  email: string
+  /**
+   * Password
+   */
+  password: string
+  /**
+   * Display Name
+   */
+  display_name: string
+  /**
+   * School Id
+   */
+  school_id?: string | null
+  /**
+   * Redirect
+   */
+  redirect?: string | null
+}
+
+/**
+ * EmailVerificationCreate
+ */
+export type EmailVerificationCreate = {
+  /**
+   * Token
+   */
+  token: string
+}
+
+/**
+ * HTTPValidationError
+ */
+export type HTTPValidationError = {
+  /**
+   * Detail
+   */
+  detail?: Array<ValidationError>
+}
+
+/**
+ * PublicSchool
+ */
+export type PublicSchool = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+}
+
+/**
+ * RegisteredAccount
+ */
+export type RegisteredAccount = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Email
+   */
+  email: string
+  /**
+   * Display Name
+   */
+  display_name: string
+  /**
+   * School Id
+   */
+  school_id: string | null
+  /**
+   * Email Verified
+   */
+  email_verified: boolean
+}
+
+/**
+ * ValidationError
+ */
+export type ValidationError = {
+  /**
+   * Location
+   */
+  loc: Array<string | number>
+  /**
+   * Message
+   */
+  msg: string
+  /**
+   * Error Type
+   */
+  type: string
+  /**
+   * Input
+   */
+  input?: unknown
+  /**
+   * Context
+   */
+  ctx?: {
+    [key: string]: unknown
+  }
+}
+
+/**
+ * VerificationEmailCreate
+ */
+export type VerificationEmailCreate = {
+  /**
+   * Email
+   */
+  email: string
+  /**
+   * Redirect
+   */
+  redirect?: string | null
+}
+
 export type utilsHealthCheckData = {
   body?: never
   path?: never
@@ -22,3 +150,100 @@ export type utilsHealthCheckResponses = {
 
 export type utilsHealthCheckResponse =
   utilsHealthCheckResponses[keyof utilsHealthCheckResponses]
+
+export type identityListSchoolsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/schools"
+}
+
+export type identityListSchoolsResponses = {
+  /**
+   * Response Identity-List Schools
+   *
+   * Successful Response
+   */
+  200: Array<PublicSchool>
+}
+
+export type identityListSchoolsResponse =
+  identityListSchoolsResponses[keyof identityListSchoolsResponses]
+
+export type identityRegisterData = {
+  body: AccountCreate
+  path?: never
+  query?: never
+  url: "/api/v1/accounts"
+}
+
+export type identityRegisterErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityRegisterError =
+  identityRegisterErrors[keyof identityRegisterErrors]
+
+export type identityRegisterResponses = {
+  /**
+   * Successful Response
+   */
+  201: RegisteredAccount
+}
+
+export type identityRegisterResponse =
+  identityRegisterResponses[keyof identityRegisterResponses]
+
+export type identityVerifyEmailData = {
+  body: EmailVerificationCreate
+  path?: never
+  query?: never
+  url: "/api/v1/email-verifications"
+}
+
+export type identityVerifyEmailErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityVerifyEmailError =
+  identityVerifyEmailErrors[keyof identityVerifyEmailErrors]
+
+export type identityVerifyEmailResponses = {
+  /**
+   * Successful Response
+   */
+  204: void
+}
+
+export type identityVerifyEmailResponse =
+  identityVerifyEmailResponses[keyof identityVerifyEmailResponses]
+
+export type identityResendVerificationEmailData = {
+  body: VerificationEmailCreate
+  path?: never
+  query?: never
+  url: "/api/v1/verification-emails"
+}
+
+export type identityResendVerificationEmailErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityResendVerificationEmailError =
+  identityResendVerificationEmailErrors[keyof identityResendVerificationEmailErrors]
+
+export type identityResendVerificationEmailResponses = {
+  /**
+   * Successful Response
+   */
+  202: unknown
+}

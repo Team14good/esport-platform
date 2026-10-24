@@ -1,17 +1,23 @@
-"""identity 的資料表、schema 與列舉。"""
+"""identity 的資料表、schema、事件與列舉。"""
 
 import uuid
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 
-from sqlalchemy import DateTime
+from email_validator import EmailNotValidError, validate_email
+from pydantic import AfterValidator, BaseModel, BeforeValidator
+from pydantic import Field as SchemaField
+from pydantic_core import PydanticCustomError
+from sqlalchemy import DateTime, Index, String, text
 from sqlmodel import Field, SQLModel
 
 from app.core import clock
+from app.core.events import Event
 
 
 class TokenPurpose(StrEnum):
-    """一次性帳號 token 的用途（AccountToken 由 Story 1.3 建立）。"""
+    """一次性帳號 token 的用途。"""
 
     VERIFY_EMAIL = "verify_email"
     RESET_PASSWORD = "reset_password"
@@ -25,16 +31,181 @@ class ApplicationStatus(StrEnum):
     REJECTED = "rejected"
 
 
-class Account(SQLModel, table=True):
-    """帳號。平台管理員與主辦方都是帳號上的旗標；`school_id` 由 Story 1.3 加入。"""
+EMAIL_MAX_LENGTH = 255
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 128
+DISPLAY_NAME_MAX_LENGTH = 50
+REDIRECT_MAX_LENGTH = 2000
+
+
+def normalize_email(email: str) -> str:
+    """Email 一律去除前後空白、轉小寫後儲存與比對。"""
+    return email.strip().lower()
+
+
+# ---------------------------------------------------------------- 資料表
+
+
+class School(SQLModel, table=True):
+    """學校清單（初始資料為教育部大專校院名錄，由遷移檔載入）。"""
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    email: str = Field(unique=True, index=True, max_length=255)
+    name: str = Field(unique=True, index=True, max_length=255)
+    created_at: datetime = Field(
+        default_factory=clock.now, sa_type=DateTime(timezone=True)
+    )
+
+
+class Account(SQLModel, table=True):
+    """帳號。平台管理員與主辦方都是帳號上的旗標。"""
+
+    # Email 以 lower(email) 唯一：即使有人繞過 normalize_email 也不會出現只差大小寫的重複帳號
+    __table_args__ = (
+        Index("ix_account_lower_email", text("lower(email)"), unique=True),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    email: str = Field(max_length=EMAIL_MAX_LENGTH)
     hashed_password: str = Field(max_length=255)
     email_verified: bool = False
     display_name: str = Field(max_length=255)
+    school_id: uuid.UUID | None = Field(default=None, foreign_key="school.id")
     is_platform_admin: bool = False
     is_organizer: bool = False
     created_at: datetime = Field(
         default_factory=clock.now, sa_type=DateTime(timezone=True)
     )
+
+
+class AccountToken(SQLModel, table=True):
+    """一次性帳號 token：只存 SHA-256 雜湊；用過（`used_at`）或過期就失效。"""
+
+    __tablename__ = "account_token"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    account_id: uuid.UUID = Field(foreign_key="account.id", index=True)
+    purpose: TokenPurpose = Field(sa_type=String(32))
+    token_hash: str = Field(max_length=64, unique=True, index=True)
+    expires_at: datetime = Field(sa_type=DateTime(timezone=True))
+    used_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    created_at: datetime = Field(
+        default_factory=clock.now, sa_type=DateTime(timezone=True)
+    )
+
+
+# ---------------------------------------------------------------- 事件
+
+
+class VerificationEmailRequested(Event):
+    """需要寄驗證信：帶 token 明文，notifications 只建立 EmailDelivery。"""
+
+    account_id: uuid.UUID
+    token: str
+    redirect: str | None = None
+
+
+# ---------------------------------------------------------------- API schema
+# 欄位驗證錯誤以 PydanticCustomError 拋出，422 的 msg 直接是繁中訊息。
+
+
+def _validate_email(value: str) -> str:
+    email = normalize_email(value)
+    if len(email) > EMAIL_MAX_LENGTH:
+        raise PydanticCustomError("email_too_long", "Email 太長")
+    try:
+        validate_email(email, check_deliverability=False)
+    except EmailNotValidError:
+        raise PydanticCustomError("email_invalid", "請輸入有效的 Email")
+    return email
+
+
+def _validate_password(value: str) -> str:
+    if len(value) < PASSWORD_MIN_LENGTH:
+        raise PydanticCustomError(
+            "password_too_short", f"密碼至少需要 {PASSWORD_MIN_LENGTH} 個字元"
+        )
+    if len(value) > PASSWORD_MAX_LENGTH:
+        raise PydanticCustomError(
+            "password_too_long", f"密碼最多 {PASSWORD_MAX_LENGTH} 個字元"
+        )
+    return value
+
+
+def _validate_display_name(value: str) -> str:
+    name = value.strip()
+    if not name:
+        raise PydanticCustomError("display_name_required", "請輸入顯示名稱")
+    if len(name) > DISPLAY_NAME_MAX_LENGTH:
+        raise PydanticCustomError(
+            "display_name_too_long", f"顯示名稱最多 {DISPLAY_NAME_MAX_LENGTH} 個字"
+        )
+    return name
+
+
+def _validate_redirect(value: str | None) -> str | None:
+    """只接受站內路徑（/ 開頭、不是 // 或 /\\），避免驗證後被導到外部網站。
+
+    控制字元與空白一律拒絕：瀏覽器解析網址時會刪掉 tab、換行，`/\\t/evil.com`
+    就會變成 `//evil.com`。
+    """
+    if value is None or value == "":
+        return None
+    if (
+        len(value) > REDIRECT_MAX_LENGTH
+        or not value.startswith("/")
+        or value.startswith("//")
+        or "\\" in value
+        or any(ord(ch) < 0x20 or ord(ch) == 0x7F or ch.isspace() for ch in value)
+    ):
+        raise PydanticCustomError("redirect_invalid", "返回頁面的網址無效")
+    return value
+
+
+def _require_str(value: object) -> object:
+    # 非字串時給繁中訊息，而不是 pydantic 預設的英文
+    if not isinstance(value, str):
+        raise PydanticCustomError("string_required", "請輸入文字")
+    return value
+
+
+EmailField = Annotated[
+    str, BeforeValidator(_require_str), AfterValidator(_validate_email)
+]
+PasswordField = Annotated[
+    str, BeforeValidator(_require_str), AfterValidator(_validate_password)
+]
+DisplayNameField = Annotated[
+    str, BeforeValidator(_require_str), AfterValidator(_validate_display_name)
+]
+RedirectField = Annotated[str | None, AfterValidator(_validate_redirect)]
+
+
+class PublicSchool(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class AccountCreate(BaseModel):
+    email: EmailField
+    password: PasswordField
+    display_name: DisplayNameField
+    school_id: uuid.UUID | None = None
+    # 驗證成功後「繼續」要回到的站內頁面
+    redirect: RedirectField = None
+
+
+class RegisteredAccount(BaseModel):
+    id: uuid.UUID
+    email: str
+    display_name: str
+    school_id: uuid.UUID | None
+    email_verified: bool
+
+
+class EmailVerificationCreate(BaseModel):
+    token: str = SchemaField(min_length=1, max_length=200)
+
+
+class VerificationEmailCreate(BaseModel):
+    email: EmailField
+    redirect: RedirectField = None

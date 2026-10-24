@@ -43,9 +43,8 @@ export function MobileMenu() {
         </nav>
         <ThemeToggle showLabel />
         <SheetClose asChild>
-          {/* /signup 在 Story 1.3 完成前會顯示 S38 404 */}
           <Button asChild variant="outline" className="mt-2 h-touch-target">
-            <a href="/signup">註冊</a>
+            <Link to="/signup">註冊</Link>
           </Button>
         </SheetClose>
       </SheetContent>

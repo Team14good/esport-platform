@@ -36,6 +36,7 @@ settings.DATABASE_URL = PostgresDsn(_test_url.render_as_string(hide_password=Fal
 from app.core import clock  # noqa: E402
 from app.core.db import engine, get_session  # noqa: E402
 from app.main import app  # noqa: E402
+from app.modules.notifications.email import EmailMessage  # noqa: E402
 
 assert engine.url.database == TEST_DATABASE, (
     "app.core.db was imported before tests/conftest.py switched to the test database"
@@ -129,3 +130,23 @@ def frozen_clock() -> Iterator[FrozenClock]:
         yield frozen
     finally:
         clock.reset()
+
+
+class FakeEmailSender:
+    """替換 SMTP 的假寄信器：記錄寄出的信；`fail_with` 設定時每次都拋出該例外。"""
+
+    def __init__(self) -> None:
+        self.sent: list[EmailMessage] = []
+        self.fail_with: Exception | None = None
+        self.calls = 0
+
+    def send(self, message: EmailMessage) -> None:
+        self.calls += 1
+        if self.fail_with is not None:
+            raise self.fail_with
+        self.sent.append(message)
+
+
+@pytest.fixture
+def fake_email_sender() -> FakeEmailSender:
+    return FakeEmailSender()

@@ -59,3 +59,15 @@ def test_repeated_startup_keeps_a_single_platform_admin(session: Session) -> Non
         select(func.count()).select_from(Account).where(Account.is_platform_admin)
     ).one()
     assert admin_count == 1
+
+
+def test_first_admin_email_is_normalized(session: Session) -> None:
+    raw = " First-Admin@Example.com "
+
+    assert service.ensure_first_admin(session, email=raw, password=ADMIN_PASSWORD)
+    assert (
+        service.ensure_first_admin(session, email=raw, password=ADMIN_PASSWORD) is False
+    )
+
+    admins = list(session.exec(select(Account).where(Account.is_platform_admin)))
+    assert [admin.email for admin in admins] == ["first-admin@example.com"]

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f4f5f8;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f8;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;">
+            <tr>
+              <td style="padding:24px 24px 0;font-size:20px;font-weight:700;letter-spacing:0.08em;color:#0891b2;">FLOW</td>
+            </tr>
+            <tr>
+              <td style="padding:16px 24px 0;font-size:18px;font-weight:700;">{{ title }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 24px 0;font-size:15px;line-height:1.7;">{{ body }}</td>
+            </tr>
+            <tr>
+              <td style="padding:24px;">
+                <a href="{{ button_url }}" style="display:inline-block;padding:10px 20px;background:#0891b2;color:#ffffff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;">{{ button_label }}</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 24px 24px;font-size:12px;line-height:1.6;color:#64748b;">如果按鈕無法點選，請複製以下網址貼到瀏覽器：<br><a href="{{ button_url }}" style="color:#64748b;word-break:break-all;">{{ button_url }}</a></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

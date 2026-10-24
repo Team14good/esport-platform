@@ -36,12 +36,13 @@ def test_failed_job_rolls_back_and_next_job_still_commits(
     failed_email = f"{uuid.uuid4().hex}@example.com"
     ok_email = f"{uuid.uuid4().hex}@example.com"
 
-    def failing_job(job_session: Session) -> None:
+    def failing_job(job_session: Session) -> bool:
         _add_account(job_session, failed_email)
         raise RuntimeError("boom")
 
-    def ok_job(job_session: Session) -> None:
+    def ok_job(job_session: Session) -> bool:
         _add_account(job_session, ok_email)
+        return False
 
     with caplog.at_level(logging.ERROR, logger="app.worker"):
         run_once([failing_job, ok_job], session_factory=session_factory)
@@ -59,12 +60,14 @@ def test_sigterm_finishes_current_round_then_stops(
 ) -> None:
     executed: list[str] = []
 
-    def receives_sigterm(_session: Session) -> None:
+    def receives_sigterm(_session: Session) -> bool:
         executed.append("first")
         signal.raise_signal(signal.SIGTERM)
+        return False
 
-    def runs_after_signal(_session: Session) -> None:
+    def runs_after_signal(_session: Session) -> bool:
         executed.append("second")
+        return False
 
     worker = Worker(
         [receives_sigterm, runs_after_signal],
@@ -89,11 +92,12 @@ def test_loop_keeps_running_after_a_failed_round(
     rounds: list[int] = []
     worker: Worker
 
-    def flaky_job(_session: Session) -> None:
+    def flaky_job(_session: Session) -> bool:
         rounds.append(len(rounds) + 1)
         if len(rounds) == 1:
             raise RuntimeError("first round fails")
         worker.request_stop()
+        return False
 
     worker = Worker([flaky_job], poll_seconds=0, session_factory=session_factory)
     worker.run_forever()

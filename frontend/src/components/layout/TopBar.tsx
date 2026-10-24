@@ -5,8 +5,8 @@ import { Logo } from "./Logo"
 import { MobileMenu } from "./MobileMenu"
 import { ThemeToggle } from "./ThemeToggle"
 
-// 「登入」「註冊」的頁面在 Story 1.4、1.3 才建立，路由還不存在，
-// 所以先用一般連結；在那之前點了會看到 S38 404。
+// 「登入」的頁面在 Story 1.4 才建立，路由還不存在，所以先用一般連結；
+// 在那之前點了會看到 S38 404。
 
 /** 所有頁面共用的頂欄（未登入版）。 */
 export function TopBar() {
@@ -31,7 +31,7 @@ export function TopBar() {
             <a href="/login">登入</a>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <a href="/signup">註冊</a>
+            <Link to="/signup">註冊</Link>
           </Button>
           <MobileMenu />
         </div>
