@@ -7,6 +7,7 @@ import {
   getErrorMessage,
   NETWORK_ERROR_MESSAGE,
   parseApiError,
+  UNAUTHORIZED_FALLBACK_MESSAGE,
   UNEXPECTED_ERROR_MESSAGE,
 } from "@/lib/api-error"
 import { httpError } from "./helpers"
@@ -67,6 +68,41 @@ describe("parseApiError", () => {
     ).toEqual({ kind: "forbidden", message: "Not enough privileges" })
   })
 
+  it("401：歸為 unauthorized，保留業務代碼以分辨未登入與帳密錯誤", () => {
+    expect(
+      parseApiError(
+        httpError(401, {
+          detail: { code: "AUTHENTICATION_REQUIRED", message: "請先登入。" },
+        }),
+      ),
+    ).toEqual({
+      kind: "unauthorized",
+      code: "AUTHENTICATION_REQUIRED",
+      message: "請先登入。",
+    })
+    expect(
+      parseApiError(
+        httpError(401, {
+          detail: {
+            code: "INVALID_CREDENTIALS",
+            message: "Email 或密碼錯誤。",
+          },
+        }),
+      ),
+    ).toEqual({
+      kind: "unauthorized",
+      code: "INVALID_CREDENTIALS",
+      message: "Email 或密碼錯誤。",
+    })
+    expect(
+      parseApiError(httpError(401, { detail: "Not authenticated" })),
+    ).toEqual({ kind: "unauthorized", message: "Not authenticated" })
+    expect(parseApiError(httpError(401, {}))).toEqual({
+      kind: "unauthorized",
+      message: UNAUTHORIZED_FALLBACK_MESSAGE,
+    })
+  })
+
   it("連不到伺服器：沒有回應時顯示「無法連線到伺服器」", () => {
     const error = new AxiosError("Network Error", "ERR_NETWORK")
 
@@ -78,9 +114,10 @@ describe("parseApiError", () => {
   })
 
   it("其他錯誤：detail 是字串時照實顯示，否則顯示狀態碼", () => {
-    expect(
-      parseApiError(httpError(401, { detail: "Not authenticated" })),
-    ).toEqual({ kind: "unknown", message: "Not authenticated" })
+    expect(parseApiError(httpError(400, { detail: "Bad request" }))).toEqual({
+      kind: "unknown",
+      message: "Bad request",
+    })
     expect(parseApiError(httpError(500, "Internal Server Error"))).toEqual({
       kind: "unknown",
       message: "伺服器發生錯誤（500）",

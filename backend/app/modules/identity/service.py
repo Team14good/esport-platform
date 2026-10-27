@@ -4,17 +4,32 @@ import hashlib
 import secrets
 import uuid
 from datetime import timedelta
+from functools import cache
+from typing import Any
 
 from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.core import audit, clock, events
+from app.core.config import settings
 from app.core.errors import BusinessError, FieldError
-from app.core.security import get_password_hash
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    get_password_hash,
+    verify_password,
+)
 from app.modules.identity import repository
 from app.modules.identity.models import (
+    EMAIL_MAX_LENGTH,
+    PASSWORD_MAX_LENGTH,
+    AccessToken,
     Account,
+    AccountRead,
     AccountToken,
+    Identity,
+    IdentityKey,
+    ProfileUpdate,
     PublicSchool,
     RegisteredAccount,
     TokenPurpose,
@@ -76,6 +91,10 @@ def get_account_contact(
     return AccountContact.model_validate(account, from_attributes=True)
 
 
+def _school_not_found() -> FieldError:
+    return FieldError("SCHOOL_NOT_FOUND", "找不到這間學校", loc=("body", "school_id"))
+
+
 def _email_already_registered() -> BusinessError:
     return BusinessError(
         "EMAIL_ALREADY_REGISTERED", "這個 Email 已經註冊過。", status_code=409
@@ -118,9 +137,7 @@ def register(
     """以 Email 註冊：帳號、驗證 token 與事件在同一個交易寫入；不自動登入。"""
     email = normalize_email(email)
     if school_id is not None and repository.get_school(session, school_id) is None:
-        raise FieldError(
-            "SCHOOL_NOT_FOUND", "找不到這間學校", loc=("body", "school_id")
-        )
+        raise _school_not_found()
     if repository.get_account_by_email(session, email) is not None:
         raise _email_already_registered()
 
@@ -214,3 +231,138 @@ def resend_verification(
     if account is None or account.email_verified:
         return
     _issue_verification_token(session, account, redirect=redirect)
+
+
+# ---------------------------------------------------------------- 登入與目前帳號
+
+
+def invalid_credentials() -> BusinessError:
+    return BusinessError("INVALID_CREDENTIALS", "Email 或密碼錯誤。", status_code=401)
+
+
+def authentication_required() -> BusinessError:
+    return BusinessError(
+        "AUTHENTICATION_REQUIRED",
+        "請先登入。",
+        status_code=401,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+@cache
+def _dummy_password_hash() -> str:
+    """帳號不存在時拿來比對的雜湊：讓回應時間不透露帳號是否存在。"""
+    return get_password_hash(secrets.token_urlsafe(16))
+
+
+def authenticate(session: Session, *, email: str, password: str) -> AccessToken:
+    """以 Email 與密碼登入，回傳 access token；未驗證 Email 的帳號也可以登入。
+
+    Email 不存在、密碼錯誤或格式不符都拋同一個 `INVALID_CREDENTIALS`；
+    Email 不存在時也跑一次雜湊比對。登入不寫操作紀錄。
+    """
+    email = normalize_email(email)
+    account = None
+    if len(email) <= EMAIL_MAX_LENGTH:
+        account = repository.get_account_by_email(session, email)
+    # 超過長度上限的密碼不可能是正確的密碼；截斷後再比對，避免拿超長字串做雜湊
+    candidate = password[:PASSWORD_MAX_LENGTH]
+    if account is None:
+        verify_password(candidate, _dummy_password_hash())
+        raise invalid_credentials()
+    verified, updated_hash = verify_password(candidate, account.hashed_password)
+    if not verified or len(password) > PASSWORD_MAX_LENGTH:
+        raise invalid_credentials()
+    if updated_hash is not None:
+        # 雜湊演算法或參數已更新：順手換成新的雜湊（不是業務資料的變更，不寫操作紀錄）
+        account.hashed_password = updated_hash
+        session.add(account)
+        session.flush()
+
+    lifetime = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    return AccessToken(
+        access_token=create_access_token(account.id, lifetime),
+        expires_at=clock.now() + lifetime,
+    )
+
+
+def get_current_account(session: Session, token: str) -> AccountRead:
+    """以 access token 取得目前帳號；token 無效、過期或帳號不存在都拋 401。"""
+    subject = decode_access_token(token)
+    if subject is None:
+        raise authentication_required()
+    try:
+        account_id = uuid.UUID(subject)
+    except ValueError:
+        raise authentication_required() from None
+    account = repository.get_account(session, account_id)
+    if account is None:
+        raise authentication_required()
+    return AccountRead.model_validate(account, from_attributes=True)
+
+
+def list_identities(session: Session, account: AccountRead) -> list[Identity]:  # noqa: ARG001
+    """身分切換器的身分清單，只依帳號資料產生；切換身分不改變權限。
+
+    之後的 Story 在這裡加入「我的隊伍」「裁判」「主辦方後台」（會用到 session 查詢）。
+    """
+    identities = [
+        Identity(key=IdentityKey.BROWSE, label="瀏覽賽事", home_path="/"),
+    ]
+    if account.is_platform_admin:
+        identities.append(
+            Identity(
+                key=IdentityKey.PLATFORM_ADMIN,
+                label="平台管理",
+                home_path="/admin/applications",
+            )
+        )
+    return identities
+
+
+def update_profile(
+    session: Session, *, account_id: uuid.UUID, changes: ProfileUpdate
+) -> AccountRead:
+    """修改顯示名稱與學校（`school_id` 為 None 代表清除）；Email 不能在這裡修改。
+
+    只處理有送出的欄位；有變動時寫操作紀錄 `account.profile_updated`，
+    before／after 只含有變動的欄位。
+    """
+    account = repository.get_account(session, account_id)
+    if account is None:
+        raise authentication_required()
+
+    requested: dict[str, Any] = {}
+    if "display_name" in changes.model_fields_set and changes.display_name is not None:
+        requested["display_name"] = changes.display_name
+    if "school_id" in changes.model_fields_set:
+        if (
+            changes.school_id is not None
+            and repository.get_school(session, changes.school_id) is None
+        ):
+            raise _school_not_found()
+        requested["school_id"] = changes.school_id
+
+    before: dict[str, Any] = {}
+    after: dict[str, Any] = {}
+    for field, value in requested.items():
+        current = getattr(account, field)
+        if current != value:
+            before[field] = current
+            after[field] = value
+            setattr(account, field, value)
+
+    if after:
+        session.add(account)
+        audit.record(
+            session,
+            actor_id=account.id,
+            tournament_id=None,
+            action="account.profile_updated",
+            entity_type="account",
+            entity_id=account.id,
+            before=before,
+            after=after,
+        )
+        session.flush()
+    return AccountRead.model_validate(account, from_attributes=True)

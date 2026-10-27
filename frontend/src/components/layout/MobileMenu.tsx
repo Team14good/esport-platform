@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/sheet"
 import { ThemeToggle } from "./ThemeToggle"
 
-/** < sm 的選單：Sheet 內有「註冊」、「賽事」與主題切換。 */
-export function MobileMenu() {
+/** < sm 的選單：Sheet 內有「賽事」與主題切換；未登入時另有「註冊」。 */
+export function MobileMenu({ signedIn = false }: { signedIn?: boolean }) {
   return (
     <Sheet>
       <SheetTrigger asChild>
@@ -42,11 +42,13 @@ export function MobileMenu() {
           </SheetClose>
         </nav>
         <ThemeToggle showLabel />
-        <SheetClose asChild>
-          <Button asChild variant="outline" className="mt-2 h-touch-target">
-            <Link to="/signup">註冊</Link>
-          </Button>
-        </SheetClose>
+        {!signedIn && (
+          <SheetClose asChild>
+            <Button asChild variant="outline" className="mt-2 h-touch-target">
+              <Link to="/signup">註冊</Link>
+            </Button>
+          </SheetClose>
+        )}
       </SheetContent>
     </Sheet>
   )

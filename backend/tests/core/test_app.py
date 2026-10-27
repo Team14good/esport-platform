@@ -36,3 +36,13 @@ def test_template_features_are_removed(client: TestClient) -> None:
         for path in paths
         if path.startswith(tuple(f"{settings.API_V1_STR}{p}" for p in removed))
     ]
+
+
+def test_auth_endpoints_and_bearer_scheme_are_published(client: TestClient) -> None:
+    schema = client.get(f"{settings.API_V1_STR}/openapi.json").json()
+    paths = schema["paths"]
+
+    assert "post" in paths[f"{settings.API_V1_STR}/access-tokens"]
+    assert {"get", "patch"} <= set(paths[f"{settings.API_V1_STR}/accounts/me"])
+    assert "get" in paths[f"{settings.API_V1_STR}/accounts/me/identities"]
+    assert schema["components"]["securitySchemes"]["HTTPBearer"]["scheme"] == "bearer"

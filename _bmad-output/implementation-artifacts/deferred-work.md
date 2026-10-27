@@ -15,9 +15,13 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-official-template-project-skeleton.md`
   summary: `audit_log` 的「只增不改」只靠資料庫 trigger；應用程式、worker、alembic 都以資料表擁有者（預設 postgres 超級使用者）連線，可以停用或刪除 trigger，AD-9 沒有真正的強制力。
   evidence: 2026-10-24 Story 1.1 Code Review（Blind Hunter）。要強制，需另建非擁有者的應用程式角色，對 `audit_log` 只給 INSERT／SELECT，並撤銷 UPDATE／DELETE／TRUNCATE；遷移仍以擁有者身分執行。牽涉 compose、`.env` 與連線設定，適合在部署或安全強化時一併處理。
-- source_spec: `_bmad-output/implementation-artifacts/spec-1-1-official-template-project-skeleton.md`
-  summary: `core/security.py` 的 `create_access_token` 與 `verify_password` 沒有任何測試，coverage 也沒有設 `fail_under` 門檻。
-  evidence: 2026-10-24 Story 1.1 Code Review（Blind Hunter）。JWT 到 Story 1.4 才會使用；1.4 實作登入時一併補上這兩個函式的測試（`exp` 以 `clock.now()` 計算），並決定是否在 `[tool.coverage.report]` 設門檻。
-- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-flow-frontend-shell-and-theme.md`
-  summary: 頂欄與手機選單的「登入」仍是一般 `<a href="/login">`，每次點擊會整頁重新載入，清掉 React Query 快取與頁面狀態。
-  evidence: 2026-10-24 Story 1.2 Code Review（Blind Hunter）。`/login` 路由要到 Story 1.4 才存在；1.4 建立登入頁後，把 `frontend/src/components/layout/TopBar.tsx` 的「登入」改成 `<Link to="/login">`（「註冊」已在 1.3 改好）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-login-logout-account-identity-switcher.md`
+  summary: access token（JWT）只有 `sub` 與 `exp`，帳號也沒有 token 版本或 `password_changed_at`；重設密碼後，舊 token 仍有效到原本的 7 天期限（未證實是否為需求；若需求要求重設密碼後強制登出，為 medium）。
+  evidence: 2026-10-27 Story 1.4 Code Review（Blind Hunter）。Story 1.4 定案為無狀態 JWT、登出只在前端清除。Story 1.5 開工時要決定：重設密碼是否要讓既有登入全部失效；若要，在 token 加入 `iat`（或版本號），並在 `Account` 記錄 `password_changed_at`，由 `get_current_account` 拒絕較早簽發的 token。
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-login-logout-account-identity-switcher.md`
+  summary: `POST /api/v1/access-tokens` 沒有頻率限制或連續失敗鎖定；每次請求都會跑一次 argon2，可被用來暴力猜密碼或耗用 CPU（規劃文件沒有相關規則，嚴重度未證實；若部署到公開網路，為 medium）。
+  evidence: 2026-10-27 Story 1.4 Code Review（Blind Hunter）。Story 1.4 調查時確認 PRD、架構、epics 都沒有鎖定或頻率限制的規則。要處理時，先由 PM／架構決定規則（例如同一 Email 或 IP 每分鐘上限），再在登入端點實作，並決定是否要以 429 回應。
+
+## Deferred from: code review of spec-1-4-login-logout-account-identity-switcher.md (2026-10-28)
+
+- 正式啟動程式 `frontend/src/main.tsx` 呼叫 `createQueryClient()` 與 `configureApiClient(...)`（接上 Bearer 標頭與 401 攔截器）沒有任何測試；刪掉這行，所有單元測試照樣通過，但正式環境的已登入請求會不帶 token、401 也不會導向 S6。要等第一個 Playwright e2e 規格（登入後開 `/account`）才能涵蓋；`configureApiClient` 本身已有單元測試。

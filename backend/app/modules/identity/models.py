@@ -3,10 +3,10 @@
 import uuid
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 
 from email_validator import EmailNotValidError, validate_email
-from pydantic import AfterValidator, BaseModel, BeforeValidator
+from pydantic import AfterValidator, BaseModel, BeforeValidator, field_validator
 from pydantic import Field as SchemaField
 from pydantic_core import PydanticCustomError
 from sqlalchemy import DateTime, Index, String, text
@@ -212,3 +212,56 @@ class EmailVerificationCreate(BaseModel):
 class VerificationEmailCreate(BaseModel):
     email: EmailField
     redirect: RedirectField = None
+
+
+class AccessTokenCreate(BaseModel):
+    """登入。不套用註冊時的格式驗證：格式不符與帳密錯誤回應完全相同（401）。"""
+
+    email: Annotated[str, BeforeValidator(_require_str)]
+    password: Annotated[str, BeforeValidator(_require_str)]
+
+
+class AccessToken(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_at: datetime
+
+
+class AccountRead(BaseModel):
+    """目前登入的帳號；也是 `CurrentAccount` 等權限依賴提供給 router 的型別。"""
+
+    id: uuid.UUID
+    email: str
+    display_name: str
+    school_id: uuid.UUID | None
+    email_verified: bool
+    is_platform_admin: bool
+    is_organizer: bool
+
+
+class IdentityKey(StrEnum):
+    """身分切換器的身分；之後的 Story 會加入我的隊伍、裁判、主辦方後台。"""
+
+    BROWSE = "browse"
+    PLATFORM_ADMIN = "platform_admin"
+
+
+class Identity(BaseModel):
+    key: IdentityKey
+    label: str
+    home_path: str
+
+
+class ProfileUpdate(BaseModel):
+    """S10 帳號資料：只改有送出的欄位；`school_id` 送 null 代表清除學校。"""
+
+    display_name: DisplayNameField | None = None
+    school_id: uuid.UUID | None = None
+
+    @field_validator("display_name")
+    @classmethod
+    def _display_name_not_null(cls, value: str | None) -> str | None:
+        # 有送出 display_name 卻是 null：顯示名稱不能清除
+        if value is None:
+            raise PydanticCustomError("display_name_required", "請輸入顯示名稱")
+        return value

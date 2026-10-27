@@ -39,7 +39,7 @@
 - **狀態列舉**：一律用英文 `StrEnum`，只能經唯一的轉換函式修改。賽事、報名、場次沿用期中文件的代號：Tournament `upcoming/open/closed/published/ongoing/finished/cancelled`；Registration `forming/pending/accepted/waitlisted/rejected/withdrawn/drawn/retired/disqualified`；Match `scheduled/live/appeal_window/appealed/confirmed/voided`。ApplicationStatus（待審核／核准／退回）、DeliveryStatus（待寄／已寄出／失敗）的英文值由 Story 1.1 依同一慣例訂定。
 - **前端**：頁面放 `src/routes/`（TanStack Router 檔案路由），元件與 hooks 放 `src/features/<模組>/`；只能呼叫 `@hey-api/openapi-ts` 產生的 client（要有重新產生 client 的指令），不手寫 fetch 或 axios。只用 TanStack Query 輪詢，本 Epic 只有一種：未讀通知數每 30 秒。身分清單由一支後端 API 依帳號資料產生。
 - **測試**：pytest 連線 compose 裡的 PostgreSQL 18，禁止 SQLite；測試放 `backend/tests/<模組>/` 與 `frontend/tests/`；與到期時間有關的測試以替換 `core.clock` 推進時間，不等待真實時間。
-- **待決**：登入憑證過期的處理方式（憑證時效、是否保留正在填寫的表單、導向 S6 並帶 `redirect`）在 Story 1.4 開工時定案，結果寫回 epics 的〈待決事項〉第 7 項。
+- **登入憑證過期**（epics〈待決事項〉第 7 項，已定案 2026-10-27）：access token 時效 7 天、不做 refresh token；已登入狀態下任何 API 回 401 時清除 token、顯示「登入已過期，請重新登入。」，導向 S6 並帶 `redirect` 回原頁，不保留正在填寫的表單；登入 API 本身的 401（`INVALID_CREDENTIALS`）不觸發。
 
 ## UX & Interaction Patterns
 

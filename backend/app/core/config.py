@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     )
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str
-    # 60 分鐘 × 24 小時 × 8 天 = 8 天
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
+    # 登入時效：60 分鐘 × 24 小時 × 7 天 = 7 天（Story 1.4 定案，不做 refresh token）
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     FRONTEND_HOST: str = "http://localhost:5173"
     FASTAPI_ENV: Literal["development"] | None = None
 

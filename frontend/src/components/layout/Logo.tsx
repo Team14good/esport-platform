@@ -1,13 +1,16 @@
-import { Link } from "@tanstack/react-router"
+import { HrefLink } from "@/components/common/HrefLink"
 
 // 品牌 SVG 都用同一個漸層 id，內嵌在同一頁會衝突，所以一律以 <img> 引用 public/brand/ 的檔案。
 // 深淺色切換只靠 CSS（.dark），不等 React，避免閃爍。
 
-/** 頂欄左側的 L2 logo：≥ sm 顯示 lockup（高 28px），< sm 只顯示標誌本體；點擊回首頁。 */
-export function Logo() {
+/**
+ * 頂欄左側的 L2 logo：≥ sm 顯示 lockup（高 28px），< sm 只顯示標誌本體。
+ * 點擊回首頁；登入後回到目前身分的首頁（`homePath`）。
+ */
+export function Logo({ homePath = "/" }: { homePath?: string }) {
   return (
-    <Link
-      to="/"
+    <HrefLink
+      href={homePath}
       aria-label="FLOW 首頁"
       className="flex shrink-0 items-center rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
@@ -43,6 +46,6 @@ export function Logo() {
           className="hidden size-7 dark:block"
         />
       </span>
-    </Link>
+    </HrefLink>
   )
 }

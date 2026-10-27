@@ -7,6 +7,7 @@
 """
 
 import re
+from collections.abc import Mapping
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -17,7 +18,14 @@ _CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 class BusinessError(Exception):
     """service 違反業務規則時拋出；router 不必攔截，由全域 handler 轉成 4xx。"""
 
-    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int = 400,
+        *,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
         if not _CODE_PATTERN.fullmatch(code):
             raise ValueError(f"BusinessError code must be UPPER_SNAKE: {code!r}")
         if not 400 <= status_code < 500:
@@ -26,6 +34,8 @@ class BusinessError(Exception):
         self.code = code
         self.message = message
         self.status_code = status_code
+        # 額外的回應標頭，例如 401 的 `WWW-Authenticate: Bearer`
+        self.headers = dict(headers) if headers else None
 
 
 class FieldError(BusinessError):
@@ -42,7 +52,9 @@ async def business_error_handler(_request: Request, exc: Exception) -> JSONRespo
         detail: object = [{"type": exc.code, "loc": list(exc.loc), "msg": exc.message}]
     else:
         detail = {"code": exc.code, "message": exc.message}
-    return JSONResponse(status_code=exc.status_code, content={"detail": detail})
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": detail}, headers=exc.headers
+    )
 
 
 def register_error_handlers(app: FastAPI) -> None:

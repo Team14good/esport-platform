@@ -5,5 +5,10 @@ set -e
 set -x
 
 FASTAPI_ENV=development coverage run -m pytest tests/ "$@"
-coverage report
-coverage html --title "coverage"
+# 只跑部分測試時 coverage 一定低於門檻（pyproject 的 fail_under），不以門檻判斷
+threshold=()
+if [ "$#" -gt 0 ]; then
+  threshold=(--fail-under=0)
+fi
+coverage report "${threshold[@]}"
+coverage html --title "coverage" "${threshold[@]}"

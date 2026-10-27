@@ -3,14 +3,24 @@
 import type { Client, Options as Options2, TDataShape } from "./client"
 import { client } from "./client.gen"
 import type {
+  identityListCurrentIdentitiesData,
+  identityListCurrentIdentitiesResponses,
   identityListSchoolsData,
   identityListSchoolsResponses,
+  identityLoginData,
+  identityLoginErrors,
+  identityLoginResponses,
+  identityReadCurrentAccountData,
+  identityReadCurrentAccountResponses,
   identityRegisterData,
   identityRegisterErrors,
   identityRegisterResponses,
   identityResendVerificationEmailData,
   identityResendVerificationEmailErrors,
   identityResendVerificationEmailResponses,
+  identityUpdateCurrentAccountData,
+  identityUpdateCurrentAccountErrors,
+  identityUpdateCurrentAccountResponses,
   identityVerifyEmailData,
   identityVerifyEmailErrors,
   identityVerifyEmailResponses,
@@ -140,6 +150,95 @@ export class IdentityService {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * Login
+   *
+   * 以 Email 與密碼登入，回傳 access token（之後以 `Authorization: Bearer` 帶上）。
+   *
+   * Email 不存在、密碼錯誤或格式不符都回 401 `INVALID_CREDENTIALS`，回應完全相同。
+   */
+  public static login<ThrowOnError extends boolean = true>(
+    options: Options<identityLoginData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identityLoginResponses,
+      identityLoginErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/access-tokens",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Read Current Account
+   *
+   * 目前登入的帳號。
+   */
+  public static readCurrentAccount<ThrowOnError extends boolean = true>(
+    options?: Options<identityReadCurrentAccountData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      identityReadCurrentAccountResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/accounts/me",
+      ...options,
+    })
+  }
+
+  /**
+   * Update Current Account
+   *
+   * 修改顯示名稱與學校（`school_id: null` 清除學校）；Email 與密碼不能在這裡改。
+   */
+  public static updateCurrentAccount<ThrowOnError extends boolean = true>(
+    options: Options<identityUpdateCurrentAccountData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).patch<
+      identityUpdateCurrentAccountResponses,
+      identityUpdateCurrentAccountErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/accounts/me",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * List Current Identities
+   *
+   * 目前帳號擁有的身分（身分切換器用），只由後端依帳號資料產生。
+   */
+  public static listCurrentIdentities<ThrowOnError extends boolean = true>(
+    options?: Options<identityListCurrentIdentitiesData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      identityListCurrentIdentitiesResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/accounts/me/identities",
+      ...options,
     })
   }
 }

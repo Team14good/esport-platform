@@ -192,7 +192,7 @@ UX-DR40：帳號畫面：S5 註冊（Email、密碼、學校〔選填；從學�
 4. **送出系列結果前修改某局**（EXPERIENCE OQ 23）：`record_game` 重送同一局是覆寫，還是另開 `update_game`？
 5. **自訂賽事報名連結的 token 欄位**：**已定案（2026-10-16）**：`Tournament.invite_token`（UNIQUE，校園賽為空），`TournamentService.reset_invite_link()` 更換 token、舊連結立即失效；已補進 C／D 打底稿 D-2。
 6. **期限推定值**（PRD §10）：**已定案（2026-10-16）**：驗證連結 24 小時、重設連結 1 小時、裁判邀請 7 天。
-7. **Session 時效**（EXPERIENCE OQ 20）：登入過期時正在填寫的表單如何處理。→ 由 Story 1.4 開工時決定，定案後寫回此處。
+7. **Session 時效**（EXPERIENCE OQ 20）：**已定案（2026-10-27）**：登入憑證（JWT access token）時效 7 天（`ACCESS_TOKEN_EXPIRE_MINUTES` 預設 `60 * 24 * 7`），不做 refresh token；登出只在前端清除。登入過期時不保留正在填寫的表單：已登入狀態下任何 API 回 401，前端清除 token、顯示「登入已過期，請重新登入。」，導向 S6 並帶 `redirect` 回原頁，登入後回到原頁、表單是空的；登入 API 本身的 401（`INVALID_CREDENTIALS`）不觸發這個流程。
 
 ### FR 對應表
 

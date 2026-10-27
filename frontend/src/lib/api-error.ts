@@ -7,11 +7,13 @@ import type { FieldValues, Path, UseFormReturn } from "react-hook-form"
 export const NETWORK_ERROR_MESSAGE = "無法連線到伺服器"
 export const FORBIDDEN_FALLBACK_MESSAGE = "你沒有權限查看這個頁面。"
 export const UNEXPECTED_ERROR_MESSAGE = "發生未預期的錯誤"
+export const UNAUTHORIZED_FALLBACK_MESSAGE = "請先登入。"
 
 export type ApiError =
   | { kind: "validation"; fields: Record<string, string> } // 422，key 取 loc 的最後一段
   | { kind: "business"; code: string; message: string } // 4xx 且 detail 是 {code, message}
   | { kind: "forbidden"; message: string; code?: string } // 403（給 S38 用；有業務代碼時一併保留）
+  | { kind: "unauthorized"; message: string; code?: string } // 401（未登入、登入過期、帳密錯誤）
   | { kind: "network"; message: typeof NETWORK_ERROR_MESSAGE }
   | { kind: "unknown"; message: string }
 
@@ -70,6 +72,18 @@ export function parseApiError(error: unknown): ApiError {
   if (status === 422) {
     const fields = asValidationFields(detail)
     if (fields) return { kind: "validation", fields }
+  }
+
+  if (status === 401) {
+    return business
+      ? { kind: "unauthorized", message: business.message, code: business.code }
+      : {
+          kind: "unauthorized",
+          message:
+            typeof detail === "string" && detail.length > 0
+              ? detail
+              : UNAUTHORIZED_FALLBACK_MESSAGE,
+        }
   }
 
   if (status === 403) {

@@ -5,6 +5,40 @@ export type ClientOptions = {
 }
 
 /**
+ * AccessToken
+ */
+export type AccessToken = {
+  /**
+   * Access Token
+   */
+  access_token: string
+  /**
+   * Token Type
+   */
+  token_type?: "bearer"
+  /**
+   * Expires At
+   */
+  expires_at: string
+}
+
+/**
+ * AccessTokenCreate
+ *
+ * 登入。不套用註冊時的格式驗證：格式不符與帳密錯誤回應完全相同（401）。
+ */
+export type AccessTokenCreate = {
+  /**
+   * Email
+   */
+  email: string
+  /**
+   * Password
+   */
+  password: string
+}
+
+/**
  * AccountCreate
  */
 export type AccountCreate = {
@@ -31,6 +65,42 @@ export type AccountCreate = {
 }
 
 /**
+ * AccountRead
+ *
+ * 目前登入的帳號；也是 `CurrentAccount` 等權限依賴提供給 router 的型別。
+ */
+export type AccountRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Email
+   */
+  email: string
+  /**
+   * Display Name
+   */
+  display_name: string
+  /**
+   * School Id
+   */
+  school_id: string | null
+  /**
+   * Email Verified
+   */
+  email_verified: boolean
+  /**
+   * Is Platform Admin
+   */
+  is_platform_admin: boolean
+  /**
+   * Is Organizer
+   */
+  is_organizer: boolean
+}
+
+/**
  * EmailVerificationCreate
  */
 export type EmailVerificationCreate = {
@@ -48,6 +118,44 @@ export type HTTPValidationError = {
    * Detail
    */
   detail?: Array<ValidationError>
+}
+
+/**
+ * Identity
+ */
+export type Identity = {
+  key: IdentityKey
+  /**
+   * Label
+   */
+  label: string
+  /**
+   * Home Path
+   */
+  home_path: string
+}
+
+/**
+ * IdentityKey
+ *
+ * 身分切換器的身分；之後的 Story 會加入我的隊伍、裁判、主辦方後台。
+ */
+export type IdentityKey = "browse" | "platform_admin"
+
+/**
+ * ProfileUpdate
+ *
+ * S10 帳號資料：只改有送出的欄位；`school_id` 送 null 代表清除學校。
+ */
+export type ProfileUpdate = {
+  /**
+   * Display Name
+   */
+  display_name?: string | null
+  /**
+   * School Id
+   */
+  school_id?: string | null
 }
 
 /**
@@ -247,3 +355,92 @@ export type identityResendVerificationEmailResponses = {
    */
   202: unknown
 }
+
+export type identityLoginData = {
+  body: AccessTokenCreate
+  path?: never
+  query?: never
+  url: "/api/v1/access-tokens"
+}
+
+export type identityLoginErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityLoginError = identityLoginErrors[keyof identityLoginErrors]
+
+export type identityLoginResponses = {
+  /**
+   * Successful Response
+   */
+  200: AccessToken
+}
+
+export type identityLoginResponse =
+  identityLoginResponses[keyof identityLoginResponses]
+
+export type identityReadCurrentAccountData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/accounts/me"
+}
+
+export type identityReadCurrentAccountResponses = {
+  /**
+   * Successful Response
+   */
+  200: AccountRead
+}
+
+export type identityReadCurrentAccountResponse =
+  identityReadCurrentAccountResponses[keyof identityReadCurrentAccountResponses]
+
+export type identityUpdateCurrentAccountData = {
+  body: ProfileUpdate
+  path?: never
+  query?: never
+  url: "/api/v1/accounts/me"
+}
+
+export type identityUpdateCurrentAccountErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityUpdateCurrentAccountError =
+  identityUpdateCurrentAccountErrors[keyof identityUpdateCurrentAccountErrors]
+
+export type identityUpdateCurrentAccountResponses = {
+  /**
+   * Successful Response
+   */
+  200: AccountRead
+}
+
+export type identityUpdateCurrentAccountResponse =
+  identityUpdateCurrentAccountResponses[keyof identityUpdateCurrentAccountResponses]
+
+export type identityListCurrentIdentitiesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/accounts/me/identities"
+}
+
+export type identityListCurrentIdentitiesResponses = {
+  /**
+   * Response Identity-List Current Identities
+   *
+   * Successful Response
+   */
+  200: Array<Identity>
+}
+
+export type identityListCurrentIdentitiesResponse =
+  identityListCurrentIdentitiesResponses[keyof identityListCurrentIdentitiesResponses]

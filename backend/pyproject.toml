@@ -74,6 +74,7 @@ source = ["app"]
 dynamic_context = "test_function"
 
 [tool.coverage.report]
+fail_under = 85
 show_missing = true
 sort = "-Cover"
 
