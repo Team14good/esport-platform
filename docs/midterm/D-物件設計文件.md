@@ -6,6 +6,7 @@
 | 1.1 | 2026-10-19 | 依審閱意見修訂：統一用語，新增「尚未開放」狀態與學校清單，補充輪空、棄權期限、名額同分與取消資格規則 |
 | 1.2 | 2026-10-20 | 依一致性審查補充類別方法（退出與解散隊伍、改派裁判、重新比賽）與列舉英文值，並拆分過大的類別圖；新增版本紀錄與參考文獻 |
 | 1.3 | 2026-10-23 | 配合截止補位改由所有候補依平均段位積分補位，AllocationPolicy 的 `fill_second_teams()` 改名為 `fill_from_waitlist()` |
+| 1.4 | 2026-10-28 | 依 Epic 1 實作補上 Account.credentials_version、EmailDelivery.next_attempt_at、AuditLog.seq，以及 ApplicationStatus、DeliveryStatus 的英文值 |
 
 # 壹、系統簡介
 
@@ -73,6 +74,7 @@ classDiagram
   direction LR
   class AuditLog {
     +UUID id
+    +int seq
     +UUID actor_id
     +UUID tournament_id
     +str action
@@ -152,6 +154,7 @@ classDiagram
     +UUID school_id
     +bool is_platform_admin
     +bool is_organizer
+    +int credentials_version
   }
   class School {
     +UUID id
@@ -627,6 +630,7 @@ classDiagram
     +DeliveryStatus status
     +int attempts
     +str last_error
+    +datetime next_attempt_at
   }
   class NotificationService {
     +handle_event(event)
@@ -729,7 +733,7 @@ sequenceDiagram
 | 列舉 | 所屬模組 | 成員 |
 | --- | --- | --- |
 | TokenPurpose | identity | verify_email、reset_password |
-| ApplicationStatus | identity | 待審核、核准、退回 |
+| ApplicationStatus | identity | 待審核（pending）、核准（approved）、退回（rejected） |
 | ScoreType | tournaments | win_loss（只記勝負）、rounds（回合比分） |
 | TournamentMode | tournaments | campus（校園賽）、custom（自訂） |
 | TournamentStatus | tournaments | 尚未開放（upcoming）、開放報名（open）、報名截止（closed）、賽程已公布（published）、進行中（ongoing）、已結束（finished）、已取消（cancelled） |
@@ -739,7 +743,7 @@ sequenceDiagram
 | MatchOutcome | competition | played（正常完賽）、forfeit（一方棄權）、double_forfeit（雙方棄權）、walkover（輪空）、disqualified（取消資格判負） |
 | AppealStatus／AppealDecision | disputes | 處理中、已結案／維持原結果、更正結果、重新比賽（只用於棄權判定） |
 | ReportStatus | disputes | 處理中、駁回、屬實 |
-| DeliveryStatus | notifications | 待寄、已寄出、失敗 |
+| DeliveryStatus | notifications | 待寄（pending）、已寄出（sent）、失敗（failed） |
 
 # 參考文獻
 

@@ -6,6 +6,7 @@
 | 1.1 | 2026-10-19 | 依審閱意見修訂：統一用語，新增「尚未開放」狀態與學校清單，補充輪空、棄權期限、名額同分與取消資格規則 |
 | 1.2 | 2026-10-20 | 依一致性審查補充規則（重新比賽、退出與解散隊伍、改派裁判、學校選填），並修正使用案例圖、狀態圖與 ERD；移除壓力測試（刪除原 Story 7.2、7.3，原 7.4、7.5 改為 7.2、7.3），NFR-1、NFR-2 改以整合與端對端測試驗證；新增版本紀錄與參考文獻 |
 | 1.3 | 2026-10-23 | 截止補位改由所有候補依平均段位積分補位、每校最多 2 隊，與報名截止後的遞補順序相同（名詞表、Story 3.6、功能說明 3.7、使用案例例外流程 5a、附錄 4.3 與 FR-16） |
+| 1.4 | 2026-10-28 | 依 Epic 1 實作定案的規則補充 FR-1（密碼長度、重寄驗證信、登入 7 天與過期處理）、FR-40（重設後登出其他裝置、視為完成驗證）；資料表補上 ACCOUNT.credentials_version、EMAIL_DELIVERY.next_attempt_at、AUDIT_LOG.seq |
 
 # 壹、系統整體概述
 
@@ -725,6 +726,7 @@ erDiagram
 | school_id | UUID | FK → SCHOOL.id | 學校（選填，從學校清單選擇；參加校園賽時必須設定） |
 | is_platform_admin | BOOLEAN |  | 是否為平台管理員 |
 | is_organizer | BOOLEAN |  | 是否具主辦方權限 |
+| credentials_version | INTEGER |  | 登入憑證版本；重設密碼時加 1，使先前簽發的登入憑證全部失效 |
 | created_at | TIMESTAMPTZ |  | 建立時間 |
 
 ### （二）SCHOOL 學校
@@ -1025,6 +1027,7 @@ erDiagram
 | status | VARCHAR（列舉） |  | 待寄、已寄出、失敗 |
 | attempts | INTEGER |  | 已嘗試次數 |
 | last_error | TEXT |  | 最近一次失敗原因 |
+| next_attempt_at | TIMESTAMPTZ |  | 下一次可以嘗試寄送的時間；失敗後往後延 |
 | created_at | TIMESTAMPTZ |  | 建立時間 |
 
 唯一鍵：（event_id, account_id）。
@@ -1034,6 +1037,7 @@ erDiagram
 | 欄位 | 資料型別 | PK／FK | 說明 |
 | --- | --- | --- | --- |
 | id | UUID | PK | 主鍵 |
+| seq | BIGINT |  | 資料庫產生的遞增序號；同一時間的紀錄依寫入順序排列 |
 | actor_id | UUID | FK → ACCOUNT.id | 操作者；系統自動執行時為空，代表 system |
 | tournament_id | UUID | FK → TOURNAMENT.id | 所屬賽事；帳號類的操作（註冊、主辦方申請等）不屬於任何賽事時為空 |
 | action | VARCHAR |  | 動作名稱 |
@@ -1043,7 +1047,7 @@ erDiagram
 | after | JSONB |  | 變更後內容 |
 | at | TIMESTAMPTZ |  | 操作時間 |
 
-本表由資料庫 trigger 拒絕 UPDATE 與 DELETE，只能新增；並以（tournament_id, at）建立索引，主辦方查閱自己賽事的紀錄時直接依 tournament_id 篩選，不必跨模組查詢各實體表。
+本表由資料庫 trigger 拒絕 UPDATE 與 DELETE，只能新增；並以（tournament_id, at, seq）建立索引，主辦方查閱自己賽事的紀錄時直接依 tournament_id 篩選，不必跨模組查詢各實體表。
 
 ### （二十四）OUTBOX_EVENT 事件
 
@@ -1308,7 +1312,9 @@ sequenceDiagram
 - 密碼以雜湊保存，資料庫中查不到明文。
 - 未驗證 Email 的帳號無法送出主辦方申請或報名。
 - 驗證連結 24 小時內有效；過期的連結無法完成驗證。
-- 未驗證的帳號可以要求重寄驗證信；重寄後，先前寄出的驗證連結全部失效。
+- 未驗證的帳號可以要求重寄驗證信；重寄後，先前寄出的驗證連結全部失效。要求重寄時不論 Email 是否存在、是否已驗證，回應都相同，只有未驗證的帳號真的會寄出。
+- 密碼至少 8 個字元，不限字元種類。
+- 登入狀態 7 天內有效，不自動延長（不做 refresh token）；過期後使用需要登入的功能時，系統顯示「登入已過期，請重新登入。」並導向登入頁，登入後回到原頁面，未送出的表單內容不保留。
 
 #### FR-40　忘記與重設密碼
 
@@ -1319,6 +1325,8 @@ sequenceDiagram
 - 重設連結 1 小時內有效，只能使用一次；過期或已使用的連結無法設定密碼。
 - 重新申請後，先前寄出的重設連結全部失效。
 - 設定新密碼後，舊密碼無法再登入。
+- 設定新密碼後，其他裝置上的登入全部失效，須重新登入。
+- 尚未完成 Email 驗證的帳號重設密碼成功時，一併視為已完成 Email 驗證。
 
 #### FR-2　主辦方申請
 

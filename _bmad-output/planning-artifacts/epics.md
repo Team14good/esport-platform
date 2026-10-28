@@ -194,6 +194,8 @@ UX-DR40：帳號畫面：S5 註冊（Email、密碼、學校〔選填；從學�
 6. **期限推定值**（PRD §10）：**已定案（2026-10-16）**：驗證連結 24 小時、重設連結 1 小時、裁判邀請 7 天。
 7. **Session 時效**（EXPERIENCE OQ 20）：**已定案（2026-10-27）**：登入憑證（JWT access token）時效 7 天（`ACCESS_TOKEN_EXPIRE_MINUTES` 預設 `60 * 24 * 7`），不做 refresh token；登出只在前端清除。登入過期時不保留正在填寫的表單：已登入狀態下任何 API 回 401，前端清除 token、顯示「登入已過期，請重新登入。」，導向 S6 並帶 `redirect` 回原頁，登入後回到原頁、表單是空的；登入 API 本身的 401（`INVALID_CREDENTIALS`）不觸發這個流程。
 
+8. **Epic 1 實作時定案的規則**（2026-10-28 回寫，來源為各 Story 的 spec Decisions）：密碼至少 8 個字元、不限字元種類（1.3）；重寄驗證信以 Email 識別，不論 Email 是否存在、是否已驗證回應都相同（1.3）；登入憑證 7 天、不做 refresh token，過期處理見第 7 項（1.4）；重設密碼成功後先前的登入憑證全部失效（`Account.credentials_version`＋token `ver` claim），未驗證帳號一併視為已驗證（1.5）。PRD FR-1、FR-40 已同步。
+
 ### FR 對應表
 
 FR-1：Epic 1 - 註冊、登入、Email 驗證與重寄驗證信
