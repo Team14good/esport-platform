@@ -93,6 +93,7 @@ bmad-build 的流程：
 - `/bmad-code-review`：再跑一次獨立的審查。改動很大時才跑，bmad-build 已經審查過一輪。
 - README〈測試與檢查〉的指令可以在本機先跑；push 之後 CI（`.github/workflows/ci.yml`）會自動跑全部項目，另外檢查 Alembic 只有一個 head、`frontend/src/client` 與後端 API 一致。
 - 在瀏覽器實際走一遍，包括 375 px 寬的手機畫面。
+- 確認這次的 AI 使用紀錄已記在 `docs/ai-usage/<自己>.md`（期末報告第 (g) 項，佔 project 分數 30%）。BMAD skill 結束時會提示 Claude 記錄；其他工作請 Claude 照 `docs/ai-usage/README.md` 補記。
 
 ### 3.5 送審、合併
 
@@ -126,7 +127,7 @@ bmad-build 的流程：
 - 不要 force push 別人也在用的分支。
 - 不要修改別人 spec 的 `<frozen-after-approval>` 區塊；需求要改時先討論。
 - 不要用 npm 安裝前端套件，一律用 Bun。也不要產生 `package-lock.json`。
-- `docs/` 的期中交付文件由組長（王閎立）維護；其他人要修改，開 PR 請組長審查。
+- `docs/` 的期中交付文件由組長（王閎立）維護；其他人要修改，開 PR 請組長審查。`docs/ai-usage/` 例外，每個人直接在自己的紀錄檔新增。
 
 ## 6. 期中分工與範圍（2026-10-28 定案）
 

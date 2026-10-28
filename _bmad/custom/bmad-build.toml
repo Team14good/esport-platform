@@ -15,3 +15,5 @@ persistent_facts = [
 4. 剩下有 commit，或 `git status --porcelain -- <planning_artifacts 目錄>` 有未提交的修改，才算過期；否則 context 有效，直接使用，不要重新產生。
 重新產生 context 前先告訴使用者是哪個 commit 或哪個檔案造成過期。""",
 ]
+
+on_complete = """記錄 AI 使用紀錄（課程期末報告第 (g) 項，佔 project 分數 30%）：依 `docs/ai-usage/README.md` 的格式，在使用者自己的紀錄檔尾新增本次的紀錄。用 `gh api user --jq .login` 對照 README 的成員表找出檔案，查不到就問使用者。內容取自本次執行的實際資料：spec 路徑、產出的檔案與測試數、審查找到並修正的問題數、延後的項目、測試或 CI 結果、commit。不要編造數字，沒有的資料就寫「未記錄」。一個 Story 可以分成需求或設計、程式、測試多筆。寫完後把新增的內容給使用者確認；不要修改既有的紀錄。"""
