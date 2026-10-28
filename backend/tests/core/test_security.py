@@ -9,6 +9,7 @@ import pytest
 from app.core.config import settings
 from app.core.security import (
     ALGORITHM,
+    AccessTokenClaims,
     create_access_token,
     decode_access_token,
     get_password_hash,
@@ -25,13 +26,31 @@ def _encode(payload: dict[str, object], key: str = settings.SECRET_KEY) -> str:
 def test_created_token_decodes_to_its_subject() -> None:
     subject = uuid.uuid4()
 
-    token = create_access_token(subject, timedelta(minutes=5))
+    token = create_access_token(subject, timedelta(minutes=5), version=0)
 
-    assert decode_access_token(token) == str(subject)
+    assert decode_access_token(token) == AccessTokenClaims(
+        subject=str(subject), version=0
+    )
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_created_token_carries_the_credentials_version() -> None:
+    token = create_access_token("abc", timedelta(minutes=5), version=3)
+
+    assert decode_access_token(token) == AccessTokenClaims(subject="abc", version=3)
+
+
+def test_token_without_ver_claim_is_version_0(frozen_clock: FrozenClock) -> None:
+    # Story 1.5 以前簽發的 token 沒有 ver：視為 0，不會讓現有登入全部失效
+    exp = frozen_clock.now() + timedelta(minutes=5)
+
+    claims = decode_access_token(_encode({"sub": "abc", "exp": exp}))
+
+    assert claims == AccessTokenClaims(subject="abc", version=0)
 
 
 def test_exp_is_computed_from_core_clock(frozen_clock: FrozenClock) -> None:
-    token = create_access_token("abc", timedelta(days=7))
+    token = create_access_token("abc", timedelta(days=7), version=0)
 
     payload = jwt.decode(
         token,
@@ -41,13 +60,14 @@ def test_exp_is_computed_from_core_clock(frozen_clock: FrozenClock) -> None:
     )
     assert payload["exp"] == int((frozen_clock.now() + timedelta(days=7)).timestamp())
     assert payload["sub"] == "abc"
+    assert payload["ver"] == 0
 
 
 def test_token_expires_by_core_clock(frozen_clock: FrozenClock) -> None:
-    token = create_access_token("abc", timedelta(minutes=10))
+    token = create_access_token("abc", timedelta(minutes=10), version=0)
 
     frozen_clock.advance(timedelta(minutes=9, seconds=59))
-    assert decode_access_token(token) == "abc"
+    assert decode_access_token(token) == AccessTokenClaims(subject="abc", version=0)
 
     frozen_clock.advance(timedelta(seconds=1))
     assert decode_access_token(token) is None
@@ -82,6 +102,11 @@ def test_malformed_token_is_rejected(token: str) -> None:
         {"sub": "abc", "exp": "soon"},
         {"sub": "abc", "exp": True},
         {"sub": "abc", "exp": 10**20},
+        {"sub": "abc", "exp": 4102444800, "ver": "1"},
+        {"sub": "abc", "exp": 4102444800, "ver": True},
+        {"sub": "abc", "exp": 4102444800, "ver": -1},
+        {"sub": "abc", "exp": 4102444800, "ver": 1.5},
+        {"sub": "abc", "exp": 4102444800, "ver": None},
     ],
 )
 def test_token_with_missing_or_invalid_claims_is_rejected(

@@ -3,6 +3,9 @@
 import type { Client, Options as Options2, TDataShape } from "./client"
 import { client } from "./client.gen"
 import type {
+  identityCheckPasswordResetLinkData,
+  identityCheckPasswordResetLinkErrors,
+  identityCheckPasswordResetLinkResponses,
   identityListCurrentIdentitiesData,
   identityListCurrentIdentitiesResponses,
   identityListSchoolsData,
@@ -15,9 +18,15 @@ import type {
   identityRegisterData,
   identityRegisterErrors,
   identityRegisterResponses,
+  identityRequestPasswordResetEmailData,
+  identityRequestPasswordResetEmailErrors,
+  identityRequestPasswordResetEmailResponses,
   identityResendVerificationEmailData,
   identityResendVerificationEmailErrors,
   identityResendVerificationEmailResponses,
+  identityResetPasswordData,
+  identityResetPasswordErrors,
+  identityResetPasswordResponses,
   identityUpdateCurrentAccountData,
   identityUpdateCurrentAccountErrors,
   identityUpdateCurrentAccountResponses,
@@ -145,6 +154,75 @@ export class IdentityService {
     >({
       responseType: "json",
       url: "/api/v1/verification-emails",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Request Password Reset Email
+   *
+   * 申請重設密碼信；不論 Email 是否已註冊，回應都相同。
+   */
+  public static requestPasswordResetEmail<ThrowOnError extends boolean = true>(
+    options: Options<identityRequestPasswordResetEmailData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identityRequestPasswordResetEmailResponses,
+      identityRequestPasswordResetEmailErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/password-reset-emails",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Check Password Reset Link
+   *
+   * 檢查重設連結是否仍有效（不會用掉 token）；失效回 400 `RESET_LINK_INVALID`。
+   *
+   * 用 POST 是為了不讓 token 出現在存取紀錄的網址裡。
+   */
+  public static checkPasswordResetLink<ThrowOnError extends boolean = true>(
+    options: Options<identityCheckPasswordResetLinkData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identityCheckPasswordResetLinkResponses,
+      identityCheckPasswordResetLinkErrors,
+      ThrowOnError
+    >({
+      url: "/api/v1/password-reset-checks",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Reset Password
+   *
+   * 以重設連結的 token 設定新密碼；之前簽發的 access token 一律失效，不會自動登入。
+   */
+  public static resetPassword<ThrowOnError extends boolean = true>(
+    options: Options<identityResetPasswordData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identityResetPasswordResponses,
+      identityResetPasswordErrors,
+      ThrowOnError
+    >({
+      url: "/api/v1/password-resets",
       ...options,
       headers: {
         "Content-Type": "application/json",

@@ -143,6 +143,46 @@ export type Identity = {
 export type IdentityKey = "browse" | "platform_admin"
 
 /**
+ * PasswordResetCheck
+ *
+ * S9 開啟時檢查重設連結是否仍有效（不使用 token）。
+ */
+export type PasswordResetCheck = {
+  /**
+   * Token
+   */
+  token: string
+}
+
+/**
+ * PasswordResetCreate
+ *
+ * S9 以重設連結的 token 設定新密碼。
+ */
+export type PasswordResetCreate = {
+  /**
+   * Token
+   */
+  token: string
+  /**
+   * New Password
+   */
+  new_password: string
+}
+
+/**
+ * PasswordResetEmailCreate
+ *
+ * S8 申請重設信；不論 Email 是否已註冊，回應都相同。
+ */
+export type PasswordResetEmailCreate = {
+  /**
+   * Email
+   */
+  email: string
+}
+
+/**
  * ProfileUpdate
  *
  * S10 帳號資料：只改有送出的欄位；`school_id` 送 null 代表清除學校。
@@ -355,6 +395,84 @@ export type identityResendVerificationEmailResponses = {
    */
   202: unknown
 }
+
+export type identityRequestPasswordResetEmailData = {
+  body: PasswordResetEmailCreate
+  path?: never
+  query?: never
+  url: "/api/v1/password-reset-emails"
+}
+
+export type identityRequestPasswordResetEmailErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityRequestPasswordResetEmailError =
+  identityRequestPasswordResetEmailErrors[keyof identityRequestPasswordResetEmailErrors]
+
+export type identityRequestPasswordResetEmailResponses = {
+  /**
+   * Successful Response
+   */
+  202: unknown
+}
+
+export type identityCheckPasswordResetLinkData = {
+  body: PasswordResetCheck
+  path?: never
+  query?: never
+  url: "/api/v1/password-reset-checks"
+}
+
+export type identityCheckPasswordResetLinkErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityCheckPasswordResetLinkError =
+  identityCheckPasswordResetLinkErrors[keyof identityCheckPasswordResetLinkErrors]
+
+export type identityCheckPasswordResetLinkResponses = {
+  /**
+   * Successful Response
+   */
+  204: void
+}
+
+export type identityCheckPasswordResetLinkResponse =
+  identityCheckPasswordResetLinkResponses[keyof identityCheckPasswordResetLinkResponses]
+
+export type identityResetPasswordData = {
+  body: PasswordResetCreate
+  path?: never
+  query?: never
+  url: "/api/v1/password-resets"
+}
+
+export type identityResetPasswordErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityResetPasswordError =
+  identityResetPasswordErrors[keyof identityResetPasswordErrors]
+
+export type identityResetPasswordResponses = {
+  /**
+   * Successful Response
+   */
+  204: void
+}
+
+export type identityResetPasswordResponse =
+  identityResetPasswordResponses[keyof identityResetPasswordResponses]
 
 export type identityLoginData = {
   body: AccessTokenCreate

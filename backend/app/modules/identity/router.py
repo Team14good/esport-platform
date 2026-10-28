@@ -16,19 +16,25 @@ from app.modules.identity.models import (
     AccountRead,
     EmailVerificationCreate,
     Identity,
+    PasswordResetCheck,
+    PasswordResetCreate,
+    PasswordResetEmailCreate,
     ProfileUpdate,
     PublicSchool,
     RegisteredAccount,
     VerificationEmailCreate,
 )
 
-# (方法, 路徑)：未登入也能呼叫的寫入端點（之後 Story 1.5 加入忘記／重設密碼）
+# (方法, 路徑)：未登入也能呼叫的寫入端點
 PUBLIC_WRITE_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
         ("POST", "/accounts"),
         ("POST", "/email-verifications"),
         ("POST", "/verification-emails"),
         ("POST", "/access-tokens"),
+        ("POST", "/password-reset-emails"),
+        ("POST", "/password-reset-checks"),
+        ("POST", "/password-resets"),
     }
 )
 
@@ -69,6 +75,31 @@ def resend_verification_email(
 ) -> None:
     """重寄驗證信；不論 Email 是否已註冊或已驗證，回應都相同。"""
     service.resend_verification(session, email=body.email, redirect=body.redirect)
+    session.commit()
+
+
+@router.post("/password-reset-emails", status_code=status.HTTP_202_ACCEPTED)
+def request_password_reset_email(
+    session: SessionDep, body: PasswordResetEmailCreate
+) -> None:
+    """申請重設密碼信；不論 Email 是否已註冊，回應都相同。"""
+    service.request_password_reset(session, email=body.email)
+    session.commit()
+
+
+@router.post("/password-reset-checks", status_code=status.HTTP_204_NO_CONTENT)
+def check_password_reset_link(session: SessionDep, body: PasswordResetCheck) -> None:
+    """檢查重設連結是否仍有效（不會用掉 token）；失效回 400 `RESET_LINK_INVALID`。
+
+    用 POST 是為了不讓 token 出現在存取紀錄的網址裡。
+    """
+    service.check_reset_token(session, token=body.token)
+
+
+@router.post("/password-resets", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(session: SessionDep, body: PasswordResetCreate) -> None:
+    """以重設連結的 token 設定新密碼；之前簽發的 access token 一律失效，不會自動登入。"""
+    service.reset_password(session, token=body.token, new_password=body.new_password)
     session.commit()
 
 

@@ -13,8 +13,16 @@ class DuplicateEmailError(Exception):
     """新增帳號時撞到 lower(email) 唯一索引（同時註冊的競態）。"""
 
 
-def get_account(session: Session, account_id: uuid.UUID) -> Account | None:
-    return session.get(Account, account_id)
+def get_account(
+    session: Session, account_id: uuid.UUID, *, for_update: bool = False
+) -> Account | None:
+    # for_update 時重新查詢並加鎖，並以資料庫的最新值覆蓋 identity map 裡已載入的同一筆
+    return session.get(
+        Account,
+        account_id,
+        with_for_update=for_update or None,
+        populate_existing=for_update,
+    )
 
 
 def get_account_by_email(
@@ -67,7 +75,10 @@ def get_token_by_hash(
         .where(AccountToken.purpose == purpose)
     )
     if for_update:
-        statement = statement.with_for_update()
+        # 加鎖後以資料庫的最新值覆蓋 identity map 裡已載入的同一筆
+        statement = statement.with_for_update().execution_options(
+            populate_existing=True
+        )
     return session.exec(statement).first()
 
 

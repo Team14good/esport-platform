@@ -33,6 +33,16 @@ export function codePointLength(value: string): number {
   return [...value].length
 }
 
+/** 密碼規則（註冊與 S9 設定新密碼共用），與後端 `PasswordField` 相同。 */
+export const passwordSchema = z
+  .string()
+  .refine((value) => codePointLength(value) >= PASSWORD_MIN_LENGTH, {
+    message: `密碼至少需要 ${PASSWORD_MIN_LENGTH} 個字元`,
+  })
+  .refine((value) => codePointLength(value) <= PASSWORD_MAX_LENGTH, {
+    message: `密碼最多 ${PASSWORD_MAX_LENGTH} 個字元`,
+  })
+
 // 與後端相同的規則；送出前先在前端擋下，伺服器的 422 仍會寫回對應欄位
 const signupSchema = z.object({
   email: z
@@ -40,14 +50,7 @@ const signupSchema = z.object({
     .trim()
     .min(1, "請輸入 Email")
     .pipe(z.email("請輸入有效的 Email")),
-  password: z
-    .string()
-    .refine((value) => codePointLength(value) >= PASSWORD_MIN_LENGTH, {
-      message: `密碼至少需要 ${PASSWORD_MIN_LENGTH} 個字元`,
-    })
-    .refine((value) => codePointLength(value) <= PASSWORD_MAX_LENGTH, {
-      message: `密碼最多 ${PASSWORD_MAX_LENGTH} 個字元`,
-    }),
+  password: passwordSchema,
   display_name: z
     .string()
     .trim()

@@ -25,6 +25,12 @@ function LoginPage() {
         </p>
       </div>
       <LoginForm redirect={redirect} />
+      <Link
+        to="/forgot-password"
+        className="self-end font-medium text-body text-primary underline-offset-4 hover:underline"
+      >
+        忘記密碼
+      </Link>
       <p className="text-center text-body text-muted-foreground">
         還沒有帳號？
         <Link

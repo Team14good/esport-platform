@@ -15,7 +15,8 @@ export const VERIFICATION_LINK_INVALID = "VERIFICATION_LINK_INVALID"
 
 const iconClass = "size-10"
 
-function PageCard({
+/** 置中的結果卡片（S7、S9 共用）：圖示＋標題＋內容。 */
+export function PageCard({
   icon,
   title,
   children,

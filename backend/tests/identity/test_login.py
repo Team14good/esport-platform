@@ -271,7 +271,7 @@ def test_token_with_wrong_signature_is_401(
 
 @pytest.mark.parametrize("subject", [str(uuid.uuid4()), "not-a-uuid"])
 def test_token_for_missing_account_is_401(client: TestClient, subject: str) -> None:
-    token = create_access_token(subject, timedelta(days=1))
+    token = create_access_token(subject, timedelta(days=1), version=0)
 
     _assert_authentication_required(
         client.get(f"{API}/accounts/me", headers=_bearer(token))

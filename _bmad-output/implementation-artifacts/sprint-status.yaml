@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 10-28-2026 02:20
+last_updated: 10-28-2026 10:46
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -40,7 +40,7 @@ development_status:
   1-2-flow-前端外框與主題: done
   1-3-以-email-註冊並完成驗證: done
   1-4-登入-登出-帳號資料與身分切換器: done
-  1-5-忘記與重設密碼: backlog
+  1-5-忘記與重設密碼: review
   1-6-通知中心: backlog
   1-7-申請成為主辦方: backlog
   1-8-平台管理員審核主辦方申請: backlog

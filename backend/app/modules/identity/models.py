@@ -72,6 +72,10 @@ class Account(SQLModel, table=True):
     school_id: uuid.UUID | None = Field(default=None, foreign_key="school.id")
     is_platform_admin: bool = False
     is_organizer: bool = False
+    # 憑證版本：access token 的 `ver` 與它不同時視為失效；重設密碼時＋1（登出其他裝置）
+    credentials_version: int = Field(
+        default=0, sa_column_kwargs={"server_default": "0"}
+    )
     created_at: datetime = Field(
         default_factory=clock.now, sa_type=DateTime(timezone=True)
     )
@@ -102,6 +106,13 @@ class VerificationEmailRequested(Event):
     account_id: uuid.UUID
     token: str
     redirect: str | None = None
+
+
+class PasswordResetRequested(Event):
+    """需要寄重設密碼信：帶 token 明文，notifications 只建立 EmailDelivery。"""
+
+    account_id: uuid.UUID
+    token: str
 
 
 # ---------------------------------------------------------------- API schema
@@ -212,6 +223,25 @@ class EmailVerificationCreate(BaseModel):
 class VerificationEmailCreate(BaseModel):
     email: EmailField
     redirect: RedirectField = None
+
+
+class PasswordResetEmailCreate(BaseModel):
+    """S8 申請重設信；不論 Email 是否已註冊，回應都相同。"""
+
+    email: EmailField
+
+
+class PasswordResetCheck(BaseModel):
+    """S9 開啟時檢查重設連結是否仍有效（不會用掉 token）。"""
+
+    token: str = SchemaField(min_length=1, max_length=200)
+
+
+class PasswordResetCreate(BaseModel):
+    """S9 以重設連結的 token 設定新密碼。"""
+
+    token: str = SchemaField(min_length=1, max_length=200)
+    new_password: PasswordField
 
 
 class AccessTokenCreate(BaseModel):

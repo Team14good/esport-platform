@@ -40,6 +40,7 @@
 - **前端**：頁面放 `src/routes/`（TanStack Router 檔案路由），元件與 hooks 放 `src/features/<模組>/`；只能呼叫 `@hey-api/openapi-ts` 產生的 client（要有重新產生 client 的指令），不手寫 fetch 或 axios。只用 TanStack Query 輪詢，本 Epic 只有一種：未讀通知數每 30 秒。身分清單由一支後端 API 依帳號資料產生。
 - **測試**：pytest 連線 compose 裡的 PostgreSQL 18，禁止 SQLite；測試放 `backend/tests/<模組>/` 與 `frontend/tests/`；與到期時間有關的測試以替換 `core.clock` 推進時間，不等待真實時間。
 - **登入憑證過期**（epics〈待決事項〉第 7 項，已定案 2026-10-27）：access token 時效 7 天、不做 refresh token；已登入狀態下任何 API 回 401 時清除 token、顯示「登入已過期，請重新登入。」，導向 S6 並帶 `redirect` 回原頁，不保留正在填寫的表單；登入 API 本身的 401（`INVALID_CREDENTIALS`）不觸發。
+- **重設密碼使舊登入失效**（Story 1.5 定案 2026-10-28）：Account 帶 `credentials_version`，access token 帶 `ver` claim，兩者不同時回 401；重設密碼成功時＋1，之前簽發的 token 全部失效（等同登出其他裝置）。沒有 `ver` 的 token 視為 0。重設成功也會把未驗證的帳號標為 Email 已驗證。
 
 ## UX & Interaction Patterns
 

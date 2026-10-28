@@ -29,6 +29,7 @@ from app.modules.identity.models import (
     AccountToken,
     Identity,
     IdentityKey,
+    PasswordResetRequested,
     ProfileUpdate,
     PublicSchool,
     RegisteredAccount,
@@ -39,6 +40,7 @@ from app.modules.identity.models import (
 
 FIRST_ADMIN_DISPLAY_NAME = "平台管理員"
 VERIFY_EMAIL_TOKEN_TTL = timedelta(hours=24)
+RESET_PASSWORD_TOKEN_TTL = timedelta(hours=1)
 
 
 class AccountContact(BaseModel):
@@ -233,6 +235,120 @@ def resend_verification(
     _issue_verification_token(session, account, redirect=redirect)
 
 
+# ---------------------------------------------------------------- 忘記與重設密碼
+
+
+def _reset_link_invalid() -> BusinessError:
+    return BusinessError("RESET_LINK_INVALID", "此重設連結已失效。", status_code=400)
+
+
+def _issue_reset_token(session: Session, account: Account) -> None:
+    """作廢舊的重設 token、產生新的，並發出 PasswordResetRequested。"""
+    repository.delete_unused_tokens(session, account.id, TokenPurpose.RESET_PASSWORD)
+    token = secrets.token_urlsafe(32)
+    now = clock.now()
+    repository.add_token(
+        session,
+        AccountToken(
+            account_id=account.id,
+            purpose=TokenPurpose.RESET_PASSWORD,
+            token_hash=hash_token(token),
+            expires_at=now + RESET_PASSWORD_TOKEN_TTL,
+            created_at=now,
+        ),
+    )
+    events.publish(session, PasswordResetRequested(account_id=account.id, token=token))
+
+
+def request_password_reset(session: Session, *, email: str) -> None:
+    """S8 申請重設信。不論 Email 是否存在，呼叫端的回應都相同；
+    只有已註冊的帳號（未驗證 Email 的也可以）會產生新 token 與事件。"""
+    account = repository.get_account_by_email(
+        session, normalize_email(email), for_update=True
+    )
+    if account is None:
+        return
+    _issue_reset_token(session, account)
+
+
+def _active_reset_token(
+    session: Session, token: str, *, for_update: bool = False
+) -> AccountToken | None:
+    """存在（沒被重新申請作廢）、沒用過、沒過期的重設 token；否則回傳 None。"""
+    record = repository.get_token_by_hash(
+        session, hash_token(token), TokenPurpose.RESET_PASSWORD, for_update=for_update
+    )
+    if record is None or record.used_at is not None:
+        return None
+    if record.expires_at <= clock.now():
+        return None
+    return record
+
+
+def is_reset_token_active(session: Session, token: str) -> bool:
+    """重設 token 是否仍可使用；notifications 寄重設信前呼叫，避免寄出已失效的連結。"""
+    return _active_reset_token(session, token) is not None
+
+
+def check_reset_token(session: Session, *, token: str) -> None:
+    """S9 開啟時檢查重設連結；失效拋 `RESET_LINK_INVALID`。不會用掉 token。"""
+    if not is_reset_token_active(session, token):
+        raise _reset_link_invalid()
+
+
+def reset_password(session: Session, *, token: str, new_password: str) -> None:
+    """以重設連結的 token 設定新密碼；token 用過、過期或已作廢都拋 `RESET_LINK_INVALID`。
+
+    成功時：更新密碼雜湊、`credentials_version`＋1（之前簽發的 access token 全部失效）、
+    token 寫入 `used_at`；未驗證 Email 的帳號一併視為已驗證。不自動登入。
+    """
+    # 加鎖順序與申請重設（先帳號、再 token）一致，避免兩者同時進行時互相等待
+    found = repository.get_token_by_hash(
+        session, hash_token(token), TokenPurpose.RESET_PASSWORD
+    )
+    if found is None:
+        raise _reset_link_invalid()
+    account = repository.get_account(session, found.account_id, for_update=True)
+    if account is None:
+        raise _reset_link_invalid()
+    # 鎖住後再判斷一次：等鎖期間 token 可能已被用掉或被重新申請作廢
+    record = _active_reset_token(session, token, for_update=True)
+    if record is None:
+        raise _reset_link_invalid()
+
+    now = clock.now()
+    record.used_at = now
+    session.add(record)
+    account.hashed_password = get_password_hash(new_password)
+    account.credentials_version += 1
+    session.add(account)
+    audit.record(
+        session,
+        actor_id=account.id,
+        tournament_id=None,
+        action="account.password_reset",
+        entity_type="account",
+        entity_id=account.id,
+        # 不記錄任何密碼或雜湊，只記錄憑證版本的變化
+        before={"credentials_version": account.credentials_version - 1},
+        after={"credentials_version": account.credentials_version},
+    )
+    if not account.email_verified:
+        # 能收到重設信就代表擁有這個 Email
+        account.email_verified = True
+        audit.record(
+            session,
+            actor_id=account.id,
+            tournament_id=None,
+            action="account.email_verified",
+            entity_type="account",
+            entity_id=account.id,
+            before={"email_verified": False},
+            after={"email_verified": True},
+        )
+    session.flush()
+
+
 # ---------------------------------------------------------------- 登入與目前帳號
 
 
@@ -281,22 +397,25 @@ def authenticate(session: Session, *, email: str, password: str) -> AccessToken:
 
     lifetime = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return AccessToken(
-        access_token=create_access_token(account.id, lifetime),
+        access_token=create_access_token(
+            account.id, lifetime, version=account.credentials_version
+        ),
         expires_at=clock.now() + lifetime,
     )
 
 
 def get_current_account(session: Session, token: str) -> AccountRead:
-    """以 access token 取得目前帳號；token 無效、過期或帳號不存在都拋 401。"""
-    subject = decode_access_token(token)
-    if subject is None:
+    """以 access token 取得目前帳號；token 無效、過期、帳號不存在，或憑證版本與帳號
+    目前的不同（簽發後重設過密碼）都拋 401。"""
+    claims = decode_access_token(token)
+    if claims is None:
         raise authentication_required()
     try:
-        account_id = uuid.UUID(subject)
+        account_id = uuid.UUID(claims.subject)
     except ValueError:
         raise authentication_required() from None
     account = repository.get_account(session, account_id)
-    if account is None:
+    if account is None or account.credentials_version != claims.version:
         raise authentication_required()
     return AccountRead.model_validate(account, from_attributes=True)
 

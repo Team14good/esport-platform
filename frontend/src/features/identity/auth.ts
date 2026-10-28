@@ -202,7 +202,8 @@ export function signIn(queryClient: QueryClient, accessToken: string): void {
   toast.dismiss(SESSION_EXPIRED_TEXT)
 }
 
-function signOut(queryClient: QueryClient): void {
+/** 清除登入狀態與快取（登出、登入過期、重設密碼後舊 token 已失效時）。 */
+export function signOut(queryClient: QueryClient): void {
   clearAccessToken()
   clearCachedQueries(queryClient)
 }
