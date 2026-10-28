@@ -1,21 +1,8 @@
 # 組員協作說明
 
-> **草案，協作流程待組內討論。** 第 3 節的認領、分支、PR 與合併流程是提議，還沒有定案；待決定的項目列在〈0. 待組內決定〉。第 1、2、4 節是專案現況與已知的坑，可以直接照做。第 6 節的期中分工與範圍已於 2026-10-28 定案。
-
 這份文件說明組員怎麼接手一個 Story，從開分支、用 BMAD 產生 spec 並實作，到發 PR 合併。專案的啟動與測試指令見 [README.md](README.md)。
 
-## 0. 待組內決定
-
-討論出結論後，更新第 3、5 節，並刪除這一節與開頭的草案標示。
-
-1. **認領 Story 的方式**：在群組說、用 GitHub Issue 指派，還是直接修改 `sprint-status.yaml`？
-2. **分支與合併**：一個 Story 一個分支、發 PR 合併，還是直接推 `main`？`main` 要不要設成受保護分支？
-3. **PR 審查**：要不要規定至少一位組員看過？審查時要不要跑 `/bmad-walkthrough` 或 `/bmad-code-review`？
-4. **誰把 Story 改成 `done`**：作者、審查者，還是組長？
-5. **commit 粒度**：一個 Story 一個 commit，還是允許多個？
-6. **是否一律用 BMAD 與 Claude Code 做 Story**：還是可以手寫程式？這會決定 Claude Code 和 uv 是不是必裝。
-7. ~~**分工方式**：按 Epic 分，還是按 Story 分？~~ **已定案（2026-10-28）**：依模組分工，期中前只做主線，見〈6. 期中分工與範圍〉。
-8. **`docs/` 期中交付文件由誰維護**？
+協作規則於 2026-10-28 定案：照標準的分支與 PR 流程走，並讓每個人的 Claude Code 都能照同一套規則做事（規則同時寫在 `CLAUDE.md`）。
 
 ## 1. 第一次準備
 
@@ -27,9 +14,10 @@
 | Git（Windows 請用 Git Bash 執行 `.sh` 腳本） | 版本控制 |
 | [Claude Code](https://claude.com/claude-code) | 執行 BMAD 工作流程（`.claude/skills/` 裡的 bmad skill） |
 | [uv](https://docs.astral.sh/uv/) | BMAD 的腳本用 `uv run` 執行（Python 3.11 以上，uv 會自動處理） |
+| [GitHub CLI](https://cli.github.com/)（`gh`） | 開 PR、看 CI；Claude Code 也靠它查別人的 PR。裝好後執行 `gh auth login` |
 
 ```bash
-git clone https://github.com/max930000/espory-platform.git
+git clone https://github.com/Team14good/espory-platform.git
 cd espory-platform
 cp .env.example .env                  # 本機設定，不會進版控
 docker compose up -d --build --wait   # 五個服務都 healthy 才算成功
@@ -59,23 +47,26 @@ user_name = "你的名字"
 
 ## 3. 做一個 Story 的流程
 
-### 3.1 認領
+### 3.1 認領與開分支
 
-1. 在群組或 GitHub Issue 說你要做哪個 Story，避免兩人做同一個。
-2. 先確認前置 Story 已經 `done`：
-   - `epics.md` 的 Story 是照順序設計的，每個 Story 都假設前面的 Story 已經完成。
-   - 具體依賴寫在 `epic-<N>-context.md` 的〈Cross-Story Dependencies〉。例如 1.7、1.8 的通知需要 1.6 的通知中心，1.8 審核的是 1.7 建立的申請。
-   - 期中前有 15 個 Story 擱置，依賴它們的地方改用〈6.3 期中版規則〉的做法，不必等。
-   - 前置 Story 還沒合併就開工，之後很難合併。
-   - 一個 Epic 還沒有 `epic-<N>-context.md` 時，第一個做該 Epic 的人跑 bmad-build 會自動產生它，記得一起提交。
+Story 的負責人已經依〈6.1〉排定。開工時**先開 Draft PR**，它就是認領的紀錄：大家在 GitHub 的 PR 列表看得到誰在做什麼，Claude 也能用 `gh pr list` 查到。
 
-### 3.2 開分支
+開工前先確認前置 Story：
+
+- `epics.md` 的 Story 照順序設計，每個 Story 都假設前面的已經完成；具體依賴寫在 `epic-<N>-context.md` 的〈Cross-Story Dependencies〉。
+- 期中擱置的 15 個 Story，依賴它們的地方改用〈6.3 期中版規則〉的做法，不必等。
+- 跨人的前置還沒合併時，照〈6.5〉先依約定介面寫，不要等。
 
 ```bash
 git switch main
 git pull
-git switch -c story/1-6-notification-center   # 一個 Story 一個分支
+git switch -c story/4-1                 # 分支名稱：story/<Epic>-<Story>，只用英數字
+git commit --allow-empty -m "chore: 開始 Story 4.1"
+git push -u origin story/4-1
+gh pr create --draft --title "feat: Story 4.1 主辦方提前抽籤並產生對戰表" --body "開發中"
 ```
+
+開發期間每天至少一次把 `main` 合併進自己的分支：`git fetch origin && git merge origin/main`。用 merge，不要 rebase 已經推上去的分支。
 
 ### 3.3 用 BMAD 產生 spec 並實作
 
@@ -99,22 +90,21 @@ bmad-build 的流程：
 ### 3.4 自己檢查
 
 - `/bmad-walkthrough`：帶你看這次的變更，指出風險最高的地方與測試方法。
-- `/bmad-code-review`：再跑一次獨立的審查。這是可選的，改動很大時建議跑。
-- 跑 README〈測試與檢查〉的全部指令，五項都要通過：
-  - 後端測試
-  - 後端 lint
-  - 前端 build、typecheck、biome
-  - 前端單元測試
+- `/bmad-code-review`：再跑一次獨立的審查。改動很大時才跑，bmad-build 已經審查過一輪。
+- README〈測試與檢查〉的指令可以在本機先跑；push 之後 CI（`.github/workflows/ci.yml`）會自動跑全部項目，另外檢查 Alembic 只有一個 head、`frontend/src/client` 與後端 API 一致。
 - 在瀏覽器實際走一遍，包括 375 px 寬的手機畫面。
 
-### 3.5 Commit、PR、合併
+### 3.5 送審、合併
 
-1. 一個 Story 原則上一個 commit，spec、`sprint-status.yaml` 與程式碼一起提交。
-   - 訊息格式：`feat: Story 1.6 通知中心`。
-   - 審查後另外修正時，用 `fix: Story 1.6 Code Review 修正`。
-2. `git push -u origin story/1-6-notification-center`，在 GitHub 開 PR 到 `main`。
-3. 至少一位組員看過 PR，可以搭配 `/bmad-walkthrough` 或 `/bmad-code-review` 一起看。
-4. 合併後，把 `sprint-status.yaml` 裡這個 Story 改成 `done`，提交到 `main`。
+1. 分支上可以有多個 commit，不必整理歷史。合併時用 **Squash merge**，`main` 上一個 Story 只留一個 commit，訊息就是 PR 標題：
+   - 新功能：`feat: Story 4.1 主辦方提前抽籤並產生對戰表`
+   - 修正：`fix: …`；文件：`docs: …`；雜項：`chore: …`
+2. 照 PR 範本填寫說明，把 Draft PR 改成 Ready for review（`gh pr ready`）。GitHub 會依 `.github/CODEOWNERS` 自動請相關模組的負責人審查。
+3. 合併條件（`main` 已設定規則，GitHub 會強制）：
+   - CI 全綠。
+   - 至少一位**作者以外**的組員 approve。審查者看 PR 說明，可以在自己的 Claude Code 跑 `/bmad-walkthrough <PR 連結>`；改動很大時再跑 `/bmad-code-review`。
+   - 分支已包含最新的 `main`。
+4. approve 後、合併前，作者把 `sprint-status.yaml` 裡這個 Story 改成 `done`，push 到 PR，再按 Squash merge。合併後 GitHub 會自動刪除遠端分支。
 
 ## 4. 容易出問題的地方
 
@@ -123,8 +113,8 @@ bmad-build 的流程：
 | 改了程式，測試卻還是舊的結果 | backend、frontend 容器是 build 時複製原始碼，沒有掛載。改完要 `docker compose up -d --build --wait` 再跑測試；開發時可改用 `docker compose up --build --watch` 自動同步 |
 | 後端 API 有變動 | 執行 `bash scripts/generate-client.sh` 重新產生 `frontend/src/client`，不要手改 |
 | 新增前端頁面 | `frontend/src/routeTree.gen.ts` 由 vite build 產生，不要手改。要在本機更新它，把整個 `frontend/` 掛進容器跑 `bunx vite build`；只掛 `src/` 會出現 `EXDEV` 錯誤 |
-| 兩個分支都新增了 Alembic 遷移 | 合併後會有兩個 head。後合併的那支要把 `down_revision` 改成先合併那支的 revision，再跑 `alembic heads`，確認只剩一個 head |
-| `sprint-status.yaml`、`deferred-work.md` 衝突 | 兩邊的修改都保留。`deferred-work.md` 只能新增項目，不修改別人的項目；項目已經處理完時才刪除 |
+| 兩個分支都新增了 Alembic 遷移 | 合併後會有兩個 head。後合併的那支要把 `down_revision` 改成先合併那支的 revision，再跑 `alembic heads`，確認只剩一個 head。CI 會檢查這一點 |
+| `sprint-status.yaml`、`deferred-work.md` 衝突 | 兩邊的修改都保留。`deferred-work.md` 已在 `.gitattributes` 設定 `merge=union`，兩邊都新增項目時 git 會自動保留雙方內容；它只能新增項目，不修改別人的項目，項目處理完才刪除 |
 | 產生的檔案衝突（`frontend/src/client/`、`routeTree.gen.ts`） | 不要手動合併，合併其他檔案後重新產生 |
 | 換行字元 | 一律 LF（`.gitattributes` 已設定）。Windows 上用 Python 改檔要用二進位模式，否則會寫成 CRLF，`.sh` 腳本會壞掉 |
 | 時間 | 後端一律 `app.core.clock.now()`；跟期限有關的測試用 `frozen_clock` 推進時間，不要等真實時間 |
@@ -132,10 +122,11 @@ bmad-build 的流程：
 ## 5. 不要做的事
 
 - 不要提交 `.env` 或任何真實密碼、金鑰。
-- 不要直接推 `main`，一律走 PR。
+- 不要直接推 `main`，一律走 PR（`main` 的規則會擋下直接 push）。
+- 不要 force push 別人也在用的分支。
 - 不要修改別人 spec 的 `<frozen-after-approval>` 區塊；需求要改時先討論。
 - 不要用 npm 安裝前端套件，一律用 Bun。也不要產生 `package-lock.json`。
-- 沒有共識前不要修改 `docs/` 的期中交付文件。
+- `docs/` 的期中交付文件由組長（王閎立）維護；其他人要修改，開 PR 請組長審查。
 
 ## 6. 期中分工與範圍（2026-10-28 定案）
 
@@ -143,14 +134,14 @@ bmad-build 的流程：
 
 ### 6.1 分工（依模組）
 
-同一個模組裡前後相依的 Story 交給同一個人。組員名字開會後填入。
+同一個模組裡前後相依的 Story 交給同一個人。GitHub 帳號用於 `.github/CODEOWNERS` 的自動請求審查。
 
 | 組員 | 負責模組 | 主線 Story | 數量 |
 | --- | --- | --- | --- |
-| A：【待填】 | identity、worker 排程、對戰樹畫面、整體驗收 | 1.7、1.8、4.6、5.2、5.8、7.1、7.2、7.3 | 8 |
-| B：【待填】 | tournaments、disputes（申訴） | 2.1、2.2、2.4、2.7、6.1、6.2、6.5 | 7 |
-| C：【待填】 | registration、disputes（檢舉） | 3.1、3.2、3.3、3.4、3.5、3.6、6.4 | 7 |
-| D：【待填】 | competition | 4.1、4.3、4.4、5.1、5.3、5.4、5.5、5.6 | 8 |
+| A：王閎立（@max930000） | identity、worker 排程、對戰樹畫面、整體驗收 | 1.7、1.8、4.6、5.2、5.8、7.1、7.2、7.3 | 8 |
+| B：蘇采羚（@sususu0804） | tournaments、disputes（申訴） | 2.1、2.2、2.4、2.7、6.1、6.2、6.5 | 7 |
+| C：邱芯彤（@happyhappy-happy） | registration、disputes（檢舉） | 3.1、3.2、3.3、3.4、3.5、3.6、6.4 | 7 |
+| D：黃鉅燊（@OG-Matcha） | competition | 4.1、4.3、4.4、5.1、5.3、5.4、5.5、5.6 | 8 |
 
 已完成：1.1～1.4；1.5 已實作、待審查。
 

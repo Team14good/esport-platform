@@ -34,7 +34,8 @@ project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
-# 期中分工（2026-10-28，詳見 CONTRIBUTING.md 第 6 節）：行尾「負責：A～D」為負責組員，
+# 期中分工（2026-10-28，詳見 CONTRIBUTING.md 第 6 節）：行尾「負責：A～D」為負責組員
+# （A 王閎立、B 蘇采羚、C 邱芯彤、D 黃鉅燊），
 # 「擱置」為期中前不做的 Story，狀態維持 backlog。註解若被工具改寫而消失，以 CONTRIBUTING.md 為準。
 development_status:
   epic-1: in-progress
