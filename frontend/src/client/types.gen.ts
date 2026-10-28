@@ -145,7 +145,7 @@ export type IdentityKey = "browse" | "platform_admin"
 /**
  * PasswordResetCheck
  *
- * S9 開啟時檢查重設連結是否仍有效（不使用 token）。
+ * S9 開啟時檢查重設連結是否仍有效（不會用掉 token）。
  */
 export type PasswordResetCheck = {
   /**
