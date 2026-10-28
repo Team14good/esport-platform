@@ -34,6 +34,8 @@ project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
+# 期中分工（2026-10-28，詳見 CONTRIBUTING.md 第 6 節）：行尾「負責：A～D」為負責組員，
+# 「擱置」為期中前不做的 Story，狀態維持 backlog。註解若被工具改寫而消失，以 CONTRIBUTING.md 為準。
 development_status:
   epic-1: in-progress
   1-1-以官方範本建立可一鍵啟動的專案骨架: done
@@ -41,67 +43,67 @@ development_status:
   1-3-以-email-註冊並完成驗證: done
   1-4-登入-登出-帳號資料與身分切換器: done
   1-5-忘記與重設密碼: review
-  1-6-通知中心: backlog
-  1-7-申請成為主辦方: backlog
-  1-8-平台管理員審核主辦方申請: backlog
+  1-6-通知中心: backlog  # 擱置（期中後）
+  1-7-申請成為主辦方: backlog  # 負責：A
+  1-8-平台管理員審核主辦方申請: backlog  # 負責：A
   epic-1-retrospective: optional
 
   epic-2: backlog
-  2-1-平台管理員維護遊戲設定與學校清單: backlog
-  2-2-主辦方建立賽事: backlog
-  2-3-分輪設定-bo-數: backlog
-  2-4-公開賽事列表與賽事頁: backlog
-  2-5-抽籤前修改賽事: backlog
-  2-6-取消賽事: backlog
-  2-7-邀請裁判: backlog
-  2-8-主辦方查閱操作紀錄: backlog
+  2-1-平台管理員維護遊戲設定與學校清單: backlog  # 負責：B
+  2-2-主辦方建立賽事: backlog  # 負責：B
+  2-3-分輪設定-bo-數: backlog  # 擱置（期中後）
+  2-4-公開賽事列表與賽事頁: backlog  # 負責：B
+  2-5-抽籤前修改賽事: backlog  # 擱置（期中後）
+  2-6-取消賽事: backlog  # 擱置（期中後）
+  2-7-邀請裁判: backlog  # 負責：B
+  2-8-主辦方查閱操作紀錄: backlog  # 擱置（期中後）
   epic-2-retrospective: optional
 
   epic-3: backlog
-  3-1-建立隊伍與邀請隊員: backlog
-  3-2-選手填寫參賽資料: backlog
-  3-3-送出報名與鎖定名單: backlog
-  3-4-優先期結束自動分配: backlog
-  3-5-先搶期即時分配: backlog
-  3-6-報名截止與截止補位: backlog
-  3-7-抽籤前撤回報名: backlog
-  3-8-主辦方檢視段位截圖與退回報名: backlog
-  3-9-公開正取名單與取消賽事通知: backlog
-  3-10-自訂模式的先到先得分配: backlog
-  3-11-隊員異動與解散隊伍: backlog
+  3-1-建立隊伍與邀請隊員: backlog  # 負責：C
+  3-2-選手填寫參賽資料: backlog  # 負責：C
+  3-3-送出報名與鎖定名單: backlog  # 負責：C
+  3-4-優先期結束自動分配: backlog  # 負責：C
+  3-5-先搶期即時分配: backlog  # 負責：C
+  3-6-報名截止與截止補位: backlog  # 負責：C
+  3-7-抽籤前撤回報名: backlog  # 擱置（期中後）
+  3-8-主辦方檢視段位截圖與退回報名: backlog  # 擱置（期中後）
+  3-9-公開正取名單與取消賽事通知: backlog  # 擱置（期中後）
+  3-10-自訂模式的先到先得分配: backlog  # 擱置（期中後）
+  3-11-隊員異動與解散隊伍: backlog  # 擱置（期中後）
   epic-3-retrospective: optional
 
   epic-4: backlog
-  4-1-主辦方提前抽籤並產生對戰表: backlog
-  4-2-報名截止時自動抽籤: backlog
-  4-3-排定與修改場次時間: backlog
-  4-4-指派裁判到場次: backlog
-  4-5-抽籤後退賽與候補遞補: backlog
-  4-6-視覺化對戰樹: backlog
-  4-7-對戰樹隊伍搜尋與晉級路徑: backlog
+  4-1-主辦方提前抽籤並產生對戰表: backlog  # 負責：D
+  4-2-報名截止時自動抽籤: backlog  # 擱置（期中後）
+  4-3-排定與修改場次時間: backlog  # 負責：D
+  4-4-指派裁判到場次: backlog  # 負責：D
+  4-5-抽籤後退賽與候補遞補: backlog  # 擱置（期中後）
+  4-6-視覺化對戰樹: backlog  # 負責：A
+  4-7-對戰樹隊伍搜尋與晉級路徑: backlog  # 擱置（期中後）
   epic-4-retrospective: optional
 
   epic-5: backlog
-  5-1-場次頁與隊長報到: backlog
-  5-2-逾時判棄權: backlog
-  5-3-裁判逐局登錄比分: backlog
-  5-4-送出系列結果: backlog
-  5-5-申訴期滿自動確認與一般晉級: backlog
-  5-6-季軍賽-雙方棄權與賽事結束: backlog
-  5-7-勝隊上傳結算截圖: backlog
-  5-8-場次頁與對戰樹結果標示: backlog
+  5-1-場次頁與隊長報到: backlog  # 負責：D
+  5-2-逾時判棄權: backlog  # 負責：A
+  5-3-裁判逐局登錄比分: backlog  # 負責：D
+  5-4-送出系列結果: backlog  # 負責：D
+  5-5-申訴期滿自動確認與一般晉級: backlog  # 負責：D
+  5-6-季軍賽-雙方棄權與賽事結束: backlog  # 負責：D
+  5-7-勝隊上傳結算截圖: backlog  # 擱置（期中後）
+  5-8-場次頁與對戰樹結果標示: backlog  # 負責：A
   epic-5-retrospective: optional
 
   epic-6: backlog
-  6-1-提出申訴: backlog
-  6-2-主辦方處理申訴: backlog
-  6-3-申訴逾期提醒與受影響場次暫停: backlog
-  6-4-提出檢舉: backlog
-  6-5-查證檢舉與取消資格: backlog
+  6-1-提出申訴: backlog  # 負責：B
+  6-2-主辦方處理申訴: backlog  # 負責：B
+  6-3-申訴逾期提醒與受影響場次暫停: backlog  # 擱置（期中後）
+  6-4-提出檢舉: backlog  # 負責：C
+  6-5-查證檢舉與取消資格: backlog  # 負責：B
   epic-6-retrospective: optional
 
   epic-7: backlog
-  7-1-一鍵載入示範資料: backlog
-  7-2-端對端演練-兩款遊戲的完整賽事: backlog
-  7-3-測試覆蓋率與測試報告素材: backlog
+  7-1-一鍵載入示範資料: backlog  # 負責：A
+  7-2-端對端演練-兩款遊戲的完整賽事: backlog  # 負責：A
+  7-3-測試覆蓋率與測試報告素材: backlog  # 負責：A
   epic-7-retrospective: optional
