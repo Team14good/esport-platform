@@ -92,6 +92,33 @@ context:
 - Given 375 px 寬，when 瀏覽 S8、S9，then 沒有橫向捲軸，介面文字全部為繁體中文。
 - Given 後端與前端，when 執行 Verification 的指令，then 全部通過。
 
+### Review Findings
+
+第二輪 Code Review（2026-10-28，Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）。
+
+- [x] [Review][Patch] 瀏覽器留著失效的 token 時，開啟 S9（以及 S7、S8、註冊頁）會被 401 導回 S6 [`frontend/src/features/identity/auth.ts:264`] — 使用者決定（2026-10-28）：在 `/signup`、`/verify-email`、`/forgot-password`、`/reset-password` 這四個免登入的帳號頁收到 401 時，只清掉 token，不顯示 Toast、不導向 S6；其他頁面維持 1.4 的行為；補前端測試。原始發現：這個瀏覽器的 token 已過期，或在別的裝置重設過密碼而 `ver` 不符時，TopBar 的 `IdentitySwitcher` 會用 `useCurrentAccount` 打 `/accounts/me`，拿到 401。`auth.ts` 的 `createUnauthorizedHandler` 只放過 `/login`，所以會清掉 token、跳出「登入已過期，請重新登入。」，並導到 `/login?redirect=/reset-password?token=…`，重設流程就此中斷。使用者要回信箱再點一次連結才能繼續，重設 token 也被帶進 S6 的網址。忘記密碼的人很可能就是久沒登入、token 已過期的人；1.5 的 `ver` 也讓別台裝置更常出現這種失效的 token。（medium；來源：Edge Case Hunter，已查證 `auth.ts:264-270` 與 `useIsSignedIn` 只看 token 是否存在）
+- [x] [Review][Patch] deferred-work 的 1.5 項目沒有自己的標題，排在 1.4 的標題下 [`_bmad-output/implementation-artifacts/deferred-work.md:22`] — 寫入本輪延後項目時已補上 `## Deferred from: code review of spec-1-5-forgot-reset-password.md (2026-10-28)`，既有項目內容沒有改動。
+- [x] [Review][Patch] 沒有 `ver` 的舊 token 沒有 API 層級的測試 [`backend/tests/identity/test_password_reset.py`] — 只測了 `decode_access_token`；要補「沒有 `ver` 的 token 對版本 0 的帳號，`/accounts/me` 回 200；重設一次後回 401」，對應 Design Notes「不會讓現有登入全部失效」。
+- [x] [Review][Patch] 兩支重設信測試假設 `FRONTEND_HOST` 沒有結尾斜線 [`backend/tests/notifications/test_email_delivery.py`] — `test_reset_password_link_points_to_s9` 與 `test_sent_reset_email_has_subject_body_button_and_link` 直接拿 `settings.FRONTEND_HOST` 比對；程式本身有 `rstrip("/")`，所以測試要改成和 `settings.FRONTEND_HOST.rstrip("/")` 比對。
+- [x] [Review][Defer] 「重設信不建立站內通知」沒有斷言 [`backend/tests/notifications/test_email_delivery.py`] — deferred：目前還沒有 notification 表，要等 Story 1.6 建立站內通知時補斷言。
+- [x] [Review][Defer] 遷移測試不比對 server default，也沒有測到「有資料的資料庫升級」 [`backend/tests/test_migrations.py:14`] — deferred：pre-existing（Story 1.1 起只開 `compare_type`）；開 `compare_server_default` 前，要先確認其他欄位沒有誤報。
+
+**Rejected**
+
+- `signOut` 不論登入的是誰都會執行（BH＋EC）：low。要在同一個瀏覽器以 A 登入、再重設 B 的密碼才會發生；前端只拿得到 token，不知道是哪個帳號，修正要新增 API 回傳或加判斷。
+- spec 的 `status: done` 與 sprint-status 的 `review` 不一致（BH＋AA）：本次審查結束時會一併同步，而且修正等於改 spec。
+- 「忘記密碼」連結在送出按鈕下方，不在密碼欄位旁（BH）：low。UX 只規定 S6 要有這個入口；手動檢查時已看過位置。
+- `reset_password` 在持有鎖時才跑 argon2（BH）：low。只有同一帳號同時申請與重設時才會多等幾百毫秒；把雜湊提前到驗證 token 之前，反而會讓無效 token 也耗掉 argon2 的 CPU。
+- 操作紀錄的 `before` 在＋1 之後才回推（BH）：false。目前的值是對的；文中說的錯誤要先改動程式才會發生。
+- `get_account_by_email(for_update=True)` 沒有 `populate_existing`（BH）：low。現有呼叫端在鎖之前都沒有載入過同一個帳號，讀不到舊值；沒有能證明的錯誤狀態。
+- S8 再送一次會作廢前一封信，畫面沒有提示（BH）：low。開到舊連結時，S9 的失效畫面已說明「之後又申請過重設信，就會失效」，並附重新寄送；改提示文案屬於 UX 決定。
+- Code Map 的行號已過時、Implementation Notes 有工作過程的敘述（BH）：修正等於改 spec。
+- notifications 的事件清單與 `_compose` 分支是兩處平行的清單（BH）：Story 1.6 會改成事件類型登錄機制，本 Story 依 spec 先用分支。
+- 缺少 token 時 API 回 422，不是 400（AA）：low。網址沒有 token 時前端直接顯示失效，不會送出；422 的 token 欄位錯誤，前端也會顯示失效畫面，使用者看到的行為符合矩陣。
+- S9 錯誤畫面的按鈕叫「重試」，不是動詞＋名詞（AA）：Design Notes 明定用「重試」，也與 S7 一致；要改需另外決定。
+- 內容損壞的重設事件會把 token 明文留在 outbox（AA）：low。沿用 1.3 的既有行為，正常流程不會產生這種事件；修正要多加分支。
+- deferred-work 的並行測試項目沒有點到 `get_account` 的 `populate_existing`（VG other）：low。該項已涵蓋 `reset_password` 的整段鎖定重查；既有項目不能修改。
+
 ## Implementation Notes
 
 - 遷移檔 `9e5b3f1a7c42_story_1_5_password_reset.py`：`account.credentials_version`（`server_default` 0）。

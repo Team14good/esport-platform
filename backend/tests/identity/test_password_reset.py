@@ -4,14 +4,16 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, func, select
 
+from app.core import clock
 from app.core.audit import AuditLog
 from app.core.config import settings
 from app.core.events import OutboxEvent
-from app.core.security import get_password_hash, verify_password
+from app.core.security import ALGORITHM, get_password_hash, verify_password
 from app.modules.identity import service
 from app.modules.identity.models import Account, AccountToken, TokenPurpose
 from tests.conftest import FrozenClock
@@ -423,6 +425,27 @@ def test_tokens_issued_before_reset_are_rejected_and_new_ones_work(
     accepted = client.get(me, headers={"Authorization": f"Bearer {new_token}"})
     assert accepted.status_code == 200
     assert accepted.json()["id"] == str(account.id)
+
+
+def test_token_without_ver_claim_works_until_the_first_reset(
+    client: TestClient, session: Session
+) -> None:
+    # Story 1.5 以前簽發的 token 沒有 ver：帳號版本是 0 時照常可用，重設一次後失效
+    account = _make_account(session)
+    legacy_token = jwt.encode(
+        {"sub": str(account.id), "exp": clock.now() + timedelta(days=1)},
+        settings.SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+    me = f"{API}/accounts/me"
+    headers = {"Authorization": f"Bearer {legacy_token}"}
+    assert client.get(me, headers=headers).status_code == 200
+
+    assert _reset(client, _issue(client, session, account)).status_code == 204
+
+    rejected = client.get(me, headers=headers)
+    assert rejected.status_code == 401
+    assert rejected.json()["detail"]["code"] == "AUTHENTICATION_REQUIRED"
 
 
 def test_each_reset_bumps_the_credentials_version(

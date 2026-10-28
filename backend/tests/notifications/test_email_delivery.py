@@ -463,7 +463,7 @@ def test_reset_event_name_comes_from_the_identity_event_class() -> None:
 def test_reset_password_link_points_to_s9() -> None:
     assert (
         service.reset_password_link("abc")
-        == f"{settings.FRONTEND_HOST}/reset-password?token=abc"
+        == f"{settings.FRONTEND_HOST.rstrip('/')}/reset-password?token=abc"
     )
 
 
@@ -506,9 +506,8 @@ def test_sent_reset_email_has_subject_body_button_and_link(
     assert "設定新密碼" in message.html
     link = service.reset_password_link(token)
     assert link in message.html
+    assert link.startswith(f"{settings.FRONTEND_HOST.rstrip('/')}/reset-password?")
     parts = urlsplit(link)
-    assert f"{parts.scheme}://{parts.netloc}" == settings.FRONTEND_HOST
-    assert parts.path == "/reset-password"
     assert parse_qs(parts.query) == {"token": [token]}
     [delivery] = _deliveries(session, event.id)
     assert delivery.status == DeliveryStatus.SENT

@@ -237,10 +237,20 @@ export function requireSignedIn({
 
 // ---------------------------------------------------------------- 401 處理
 
+// 免登入的帳號頁（註冊、S7 驗證 Email、S8 忘記密碼、S9 重設密碼）：本來就給沒登入的人用，
+// 瀏覽器留著失效的 token（過期，或在別處重設過密碼）時只清掉，不打斷正在進行的流程
+const PUBLIC_ACCOUNT_PATHS: ReadonlySet<string> = new Set([
+  "/signup",
+  "/verify-email",
+  "/forgot-password",
+  "/reset-password",
+])
+
 /**
  * 產生的 client（axios）的回應攔截器：API 回 401 時清除 token，導向 S6 並帶
  * `redirect` 回原頁。原本是登入狀態時另外顯示「登入已過期，請重新登入。」；
  * 正在填寫的表單內容不保留。登入 API 本身的 401（`INVALID_CREDENTIALS`）不處理。
+ * 在免登入的帳號頁只清除登入狀態，不顯示訊息也不導向。
  */
 export function createUnauthorizedHandler(
   router: AnyRouter,
@@ -252,6 +262,11 @@ export function createUnauthorizedHandler(
       apiError.kind === "unauthorized" &&
       apiError.code !== INVALID_CREDENTIALS
     ) {
+      const { pathname, href } = router.state.location
+      if (PUBLIC_ACCOUNT_PATHS.has(pathname)) {
+        signOut(queryClient)
+        return Promise.reject(error)
+      }
       if (getAccessToken() !== null) {
         signOut(queryClient)
         // 以訊息當 id：同時有好幾個請求回 401 時只顯示一則
@@ -261,7 +276,6 @@ export function createUnauthorizedHandler(
           closeButton: true,
         })
       }
-      const { pathname, href } = router.state.location
       if (pathname !== "/login") {
         router.navigate({
           to: "/login",

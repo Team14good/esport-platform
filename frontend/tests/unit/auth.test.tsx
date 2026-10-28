@@ -195,8 +195,8 @@ describe("API client 設定", () => {
   })
 
   it("API 回 401 AUTHENTICATION_REQUIRED：清除 token，導向 S6 並帶 redirect", async () => {
-    const { router, queryClient } = setup("/signup?x=1")
-    await screen.findByRole("heading", { name: "註冊帳號" })
+    const { router, queryClient } = setup("/?x=1")
+    await screen.findByRole("heading", { name: "FLOW" })
     const eject = configureApiClient(router, queryClient)
     const adapter = stubAdapter((config) =>
       jsonResponse(config, 401, {
@@ -212,7 +212,39 @@ describe("API client 設定", () => {
 
       expect(getAccessToken()).toBeNull()
       await waitFor(() => expect(router.state.location.pathname).toBe("/login"))
-      expect(router.state.location.search).toEqual({ redirect: "/signup?x=1" })
+      expect(router.state.location.search).toEqual({ redirect: "/?x=1" })
+    } finally {
+      adapter.restore()
+      eject()
+    }
+  })
+
+  it("S9 開啟時瀏覽器留著失效的 token：頂欄的 /accounts/me 回 401 只清掉 token，S9 不被打斷", async () => {
+    const toastError = vi.spyOn(toast, "error")
+    const adapter = stubAdapter((config) =>
+      config.url?.startsWith("/api/v1/accounts/me")
+        ? jsonResponse(config, 401, {
+            detail: { code: "AUTHENTICATION_REQUIRED", message: "請先登入。" },
+          })
+        : jsonResponse(config, 204, undefined),
+    )
+    const { router, queryClient } = setup("/reset-password?token=abc")
+    await screen.findByRole("heading", { name: "設定新密碼" })
+    const eject = configureApiClient(router, queryClient)
+    try {
+      setAccessToken("stale-token")
+
+      await waitFor(() => expect(getAccessToken()).toBeNull())
+      expect(
+        adapter.requests.some(
+          (request) => request.url === "/api/v1/accounts/me",
+        ),
+      ).toBe(true)
+      expect(router.state.location.pathname).toBe("/reset-password")
+      expect(
+        screen.getByRole("heading", { name: "設定新密碼" }),
+      ).toBeInTheDocument()
+      expect(toastError).not.toHaveBeenCalled()
     } finally {
       adapter.restore()
       eject()
@@ -266,15 +298,42 @@ describe("API 回 401 的處理", () => {
 
   it("未登入時寫入被拒（401）：導向 S6 並帶 redirect，不顯示「登入已過期」", async () => {
     const toastError = vi.spyOn(toast, "error")
-    const { router, handle } = setup("/signup")
-    await screen.findByRole("heading", { name: "註冊帳號" })
+    const { router, handle } = setup("/")
+    await screen.findByRole("heading", { name: "FLOW" })
 
     await expect(handle(AUTH_REQUIRED)).rejects.toBe(AUTH_REQUIRED)
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"))
-    expect(router.state.location.search).toEqual({ redirect: "/signup" })
+    expect(router.state.location.search).toEqual({ redirect: "/" })
     expect(toastError).not.toHaveBeenCalled()
   })
+
+  it.each([
+    "/signup",
+    "/verify-email?token=abc",
+    "/forgot-password",
+    "/reset-password?token=abc",
+  ])(
+    "免登入的帳號頁 %s：只清除 token 與快取，不顯示「登入已過期」、不導向",
+    async (url) => {
+      const toastError = vi.spyOn(toast, "error")
+      setAccessToken("stale-token")
+      const { router, queryClient, handle } = setup(url)
+      await waitFor(() => expect(router.state.status).toBe("idle"))
+      const pathname = router.state.location.pathname
+      queryClient.setQueryData([...ME_QUERY_KEY, "account"], ACCOUNT)
+
+      await expect(handle(AUTH_REQUIRED)).rejects.toBe(AUTH_REQUIRED)
+
+      expect(getAccessToken()).toBeNull()
+      expect(queryClient.getQueryData([...ME_QUERY_KEY, "account"])).toBe(
+        undefined,
+      )
+      expect(toastError).not.toHaveBeenCalled()
+      expect(router.state.location.pathname).toBe(pathname)
+      expect(url.startsWith(pathname)).toBe(true)
+    },
+  )
 
   it("登入 API 的 401（INVALID_CREDENTIALS）：不處理", async () => {
     const toastError = vi.spyOn(toast, "error")
