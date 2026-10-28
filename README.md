@@ -2,6 +2,8 @@
 
 模組化單體（modular monolith）：一個 FastAPI 後端（六個業務模組＋共用核心＋worker）與一個 React 前端，全部由 `docker compose` 在本機一鍵啟動。
 
+組員接手 Story 的流程（分支、BMAD、PR）見 [CONTRIBUTING.md](./CONTRIBUTING.md)；給 Claude 的專案規則見 [CLAUDE.md](./CLAUDE.md)。
+
 ## 範本來源
 
 以 [fastapi/full-stack-fastapi-template](https://github.com/fastapi/full-stack-fastapi-template) 的 master 分支為起點：
@@ -12,7 +14,9 @@
 
 ## 需要的工具
 
-只需要 Docker（含 Docker Compose v2.23 以上）。本機不必安裝 Python、uv 或 Bun；所有指令都在容器裡執行。
+啟動、測試與建置只需要 Docker（含 Docker Compose v2.23 以上）。本機不必安裝 Python 或 Bun，這些指令都在容器裡執行。
+
+用 BMAD 做 Story 時，另外需要 [Claude Code](https://claude.com/claude-code) 與 [uv](https://docs.astral.sh/uv/)：BMAD 的腳本以 `uv run` 執行。
 
 ## 啟動
 

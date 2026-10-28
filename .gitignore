@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# BMAD 安裝程式寫入的個人設定（名字等）；團隊設定在 _bmad/custom/config.toml
+_bmad/config.user.toml
+
 # 依賴與建置產物
 node_modules/
 dist/

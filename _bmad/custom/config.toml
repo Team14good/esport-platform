@@ -5,3 +5,8 @@
 #
 # [agents.bmad-agent-pm]
 # description = "Prefers short, bulleted PRDs over narrative drafts."
+
+# FLOW 專案：BMAD 一律用繁體中文溝通（文件輸出語言已在 _bmad/config.toml 設定）。
+# 個人名字請寫在 _bmad/custom/config.user.toml 的 [core] user_name（不進版控）。
+[core]
+communication_language = "Traditional Chinese"

@@ -1,0 +1,137 @@
+# 組員協作說明
+
+> **草案，協作流程待組內討論。** 第 3 節的認領、分支、PR 與合併流程是提議，還沒有定案；待決定的項目列在〈0. 待組內決定〉。第 1、2、4 節是專案現況與已知的坑，可以直接照做。
+
+這份文件說明組員怎麼接手一個 Story，從開分支、用 BMAD 產生 spec 並實作，到發 PR 合併。專案的啟動與測試指令見 [README.md](README.md)。
+
+## 0. 待組內決定
+
+討論出結論後，更新第 3、5 節，並刪除這一節與開頭的草案標示。
+
+1. **認領 Story 的方式**：在群組說、用 GitHub Issue 指派，還是直接修改 `sprint-status.yaml`？
+2. **分支與合併**：一個 Story 一個分支、發 PR 合併，還是直接推 `main`？`main` 要不要設成受保護分支？
+3. **PR 審查**：要不要規定至少一位組員看過？審查時要不要跑 `/bmad-walkthrough` 或 `/bmad-code-review`？
+4. **誰把 Story 改成 `done`**：作者、審查者，還是組長？
+5. **commit 粒度**：一個 Story 一個 commit，還是允許多個？
+6. **是否一律用 BMAD 與 Claude Code 做 Story**：還是可以手寫程式？這會決定 Claude Code 和 uv 是不是必裝。
+7. **分工方式**：按 Epic 分，還是按 Story 分？同一個 Epic 的 Story 有先後依賴，例如 Epic 1 剩下的 1.6 → 1.7 → 1.8，很難同時開工。
+8. **`docs/` 期中交付文件由誰維護**？
+
+## 1. 第一次準備
+
+需要的工具：
+
+| 工具 | 用途 |
+| --- | --- |
+| Docker（含 Docker Compose v2.23 以上） | 啟動與測試整套服務（後端、前端、資料庫、寄信） |
+| Git（Windows 請用 Git Bash 執行 `.sh` 腳本） | 版本控制 |
+| [Claude Code](https://claude.com/claude-code) | 執行 BMAD 工作流程（`.claude/skills/` 裡的 bmad skill） |
+| [uv](https://docs.astral.sh/uv/) | BMAD 的腳本用 `uv run` 執行（Python 3.11 以上，uv 會自動處理） |
+
+```bash
+git clone https://github.com/max930000/espory-platform.git
+cd espory-platform
+cp .env.example .env                  # 本機設定，不會進版控
+docker compose up -d --build --wait   # 五個服務都 healthy 才算成功
+```
+
+接著設定你在 BMAD 裡的名字。建立 `_bmad/custom/config.user.toml`，這個檔案不進版控：
+
+```toml
+[core]
+user_name = "你的名字"
+```
+
+團隊共用的設定放在 `_bmad/custom/config.toml`，例如「一律用繁體中文溝通」。不要把個人設定寫進那個檔案。
+
+## 2. 先讀哪些文件
+
+| 文件 | 內容 |
+| --- | --- |
+| `_bmad-output/implementation-artifacts/sprint-status.yaml` | 每個 Story 的狀態：`backlog` → `in-progress` → `review` → `done` |
+| `_bmad-output/planning-artifacts/epics.md` | 所有 Epic 與 Story 的驗收條件、〈待決事項〉 |
+| `_bmad-output/implementation-artifacts/epic-<N>-context.md` | 某個 Epic 濃縮後的需求、技術決策與 UX 規則；bmad-build 會優先讀它 |
+| `_bmad-output/implementation-artifacts/spec-*.md` | 已完成 Story 的 spec：Code Map、Design Notes、審查紀錄，是下一個 Story 的參考 |
+| `_bmad-output/implementation-artifacts/deferred-work.md` | 審查時延後處理的問題；做到相關 Story 時要看 |
+| `_bmad-output/planning-artifacts/architecture/` | 架構骨幹（AD-1～AD-21） |
+| `_bmad-output/planning-artifacts/ux-designs/` | `DESIGN.md`（外觀）與 `EXPERIENCE.md`（畫面與行為，S1～S38） |
+| `CLAUDE.md` | 給 Claude 的專案規則，人也值得讀一遍 |
+
+## 3. 做一個 Story 的流程
+
+### 3.1 認領
+
+1. 在群組或 GitHub Issue 說你要做哪個 Story，避免兩人做同一個。
+2. 先確認前置 Story 已經 `done`：
+   - `epics.md` 的 Story 是照順序設計的，每個 Story 都假設前面的 Story 已經完成。
+   - 具體依賴寫在 `epic-<N>-context.md` 的〈Cross-Story Dependencies〉。例如 1.7、1.8 的通知需要 1.6 的通知中心，1.8 審核的是 1.7 建立的申請。
+   - 前置 Story 還沒合併就開工，之後很難合併。
+   - 一個 Epic 還沒有 `epic-<N>-context.md` 時，第一個做該 Epic 的人跑 bmad-build 會自動產生它，記得一起提交。
+
+### 3.2 開分支
+
+```bash
+git switch main
+git pull
+git switch -c story/1-6-notification-center   # 一個 Story 一個分支
+```
+
+### 3.3 用 BMAD 產生 spec 並實作
+
+在專案根目錄開啟 Claude Code，輸入：
+
+```text
+/bmad-build Story 1.6：通知中心（sprint key 1-6-通知中心）
+```
+
+bmad-build 的流程：
+
+1. **讀資料**：讀 epic context 與前一個 Story 的 spec，調查程式碼。
+2. **寫 spec**：寫出 `spec-<story>.md`。需求沒講清楚、只有人能決定的事，會列成「Open Questions」問你。
+3. **Checkpoint**：你核准 spec 後，`<frozen-after-approval>` 區塊就鎖定，只有人能改。
+4. **實作**：實作子代理依 spec 寫程式與測試，並把 `sprint-status.yaml` 改成 `in-progress`。
+5. **審查**：三個審查者（Blind Hunter、Edge Case Hunter、Verification Gap）審 diff。小問題自動修正，大問題延後並記進 `deferred-work.md`。
+6. **完成**：spec 標為 `done`，sprint 狀態改成 `review`。
+
+如果要你決定的事超出 Story 範圍，例如 PRD 沒寫、會影響其他 Story 的規則，先在群組討論，再把結論寫回 spec 的 Decisions。
+
+### 3.4 自己檢查
+
+- `/bmad-walkthrough`：帶你看這次的變更，指出風險最高的地方與測試方法。
+- `/bmad-code-review`：再跑一次獨立的審查。這是可選的，改動很大時建議跑。
+- 跑 README〈測試與檢查〉的全部指令，五項都要通過：
+  - 後端測試
+  - 後端 lint
+  - 前端 build、typecheck、biome
+  - 前端單元測試
+- 在瀏覽器實際走一遍，包括 375 px 寬的手機畫面。
+
+### 3.5 Commit、PR、合併
+
+1. 一個 Story 原則上一個 commit，spec、`sprint-status.yaml` 與程式碼一起提交。
+   - 訊息格式：`feat: Story 1.6 通知中心`。
+   - 審查後另外修正時，用 `fix: Story 1.6 Code Review 修正`。
+2. `git push -u origin story/1-6-notification-center`，在 GitHub 開 PR 到 `main`。
+3. 至少一位組員看過 PR，可以搭配 `/bmad-walkthrough` 或 `/bmad-code-review` 一起看。
+4. 合併後，把 `sprint-status.yaml` 裡這個 Story 改成 `done`，提交到 `main`。
+
+## 4. 容易出問題的地方
+
+| 情況 | 怎麼做 |
+| --- | --- |
+| 改了程式，測試卻還是舊的結果 | backend、frontend 容器是 build 時複製原始碼，沒有掛載。改完要 `docker compose up -d --build --wait` 再跑測試；開發時可改用 `docker compose up --build --watch` 自動同步 |
+| 後端 API 有變動 | 執行 `bash scripts/generate-client.sh` 重新產生 `frontend/src/client`，不要手改 |
+| 新增前端頁面 | `frontend/src/routeTree.gen.ts` 由 vite build 產生，不要手改。要在本機更新它，把整個 `frontend/` 掛進容器跑 `bunx vite build`；只掛 `src/` 會出現 `EXDEV` 錯誤 |
+| 兩個分支都新增了 Alembic 遷移 | 合併後會有兩個 head。後合併的那支要把 `down_revision` 改成先合併那支的 revision，再跑 `alembic heads`，確認只剩一個 head |
+| `sprint-status.yaml`、`deferred-work.md` 衝突 | 兩邊的修改都保留。`deferred-work.md` 只能新增項目，不修改別人的項目；項目已經處理完時才刪除 |
+| 產生的檔案衝突（`frontend/src/client/`、`routeTree.gen.ts`） | 不要手動合併，合併其他檔案後重新產生 |
+| 換行字元 | 一律 LF（`.gitattributes` 已設定）。Windows 上用 Python 改檔要用二進位模式，否則會寫成 CRLF，`.sh` 腳本會壞掉 |
+| 時間 | 後端一律 `app.core.clock.now()`；跟期限有關的測試用 `frozen_clock` 推進時間，不要等真實時間 |
+
+## 5. 不要做的事
+
+- 不要提交 `.env` 或任何真實密碼、金鑰。
+- 不要直接推 `main`，一律走 PR。
+- 不要修改別人 spec 的 `<frozen-after-approval>` 區塊；需求要改時先討論。
+- 不要用 npm 安裝前端套件，一律用 Bun。也不要產生 `package-lock.json`。
+- 沒有共識前不要修改 `docs/` 的期中交付文件。
