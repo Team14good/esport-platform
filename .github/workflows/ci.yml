@@ -1,0 +1,68 @@
+# 每個 PR 與 main 的 push 都跑 README〈測試與檢查〉的全部項目，
+# 另外檢查 Alembic 只有一個 head、frontend/src/client 與後端 API 一致。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 啟動服務
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait
+
+      - name: Alembic 只有一個 head
+        run: |
+          heads=$(docker compose exec -T backend alembic heads | grep -c '(head)')
+          if [ "$heads" -ne 1 ]; then
+            docker compose exec -T backend alembic heads
+            echo "::error::Alembic 有 $heads 個 head，後合併的遷移檔要把 down_revision 改成另一支的 revision（見 CONTRIBUTING 第 4 節）"
+            exit 1
+          fi
+
+      - name: 後端測試
+        run: docker compose exec -T backend bash scripts/test.sh
+
+      - name: 後端靜態檢查
+        run: docker compose exec -T backend bash scripts/lint.sh
+
+      - name: 前端建置
+        run: docker compose exec -T frontend bun run --filter frontend build
+
+      - name: 前端型別檢查
+        run: docker compose exec -T frontend bun run --filter frontend typecheck
+
+      - name: 前端 lint 與格式
+        run: docker compose exec -T frontend bunx biome check
+
+      - name: 前端單元測試
+        run: docker compose exec -T frontend bun run test:unit
+
+      - name: API client 與後端一致
+        run: |
+          bash scripts/generate-client.sh
+          if ! git diff --quiet -- frontend/src/client || [ -n "$(git ls-files --others --exclude-standard frontend/src/client)" ]; then
+            git status --short frontend/src/client
+            echo "::error::frontend/src/client 與後端 API 不一致，請執行 bash scripts/generate-client.sh 並提交結果"
+            exit 1
+          fi
+
+      - name: 失敗時印出服務日誌
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: 關閉服務
+        if: always()
+        run: docker compose down -v

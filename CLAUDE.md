@@ -17,6 +17,16 @@
 - spec 的 `<frozen-after-approval>` 區塊只有人能改。需求沒講清楚而會被使用者察覺的地方，要問人，不要自己假設。
 - `deferred-work.md` 只新增項目，不修改既有項目；項目在本 Story 處理完時才刪除。
 - 除非使用者要求，不要 commit 或 push。commit 時不要包含 `.env`；除非使用者要求，也不要包含 `docs/`。
+
+## Git 與 PR（流程細節見 CONTRIBUTING 第 3 節）
+
+- 不要在 `main` 上改程式或 commit；`main` 有規則保護，只能經 PR 合併。開工前確認目前在 `story/<Epic>-<Story>` 分支。
+- 開始一個 Story 前，先 `gh pr list --state all` 看別人的 PR，確認沒有重複，並找出要依賴的公開函式是否已合併。
+- 同步 `main` 用 `git fetch origin && git merge origin/main`；不要 rebase 或 force push 已推上去的分支。
+- PR 標題就是 Squash merge 後的 commit 訊息：`feat: Story 4.1 <Story 名稱>`；說明照 `.github/pull_request_template.md` 填。
+- 動到其他組員負責的模組時（CONTRIBUTING 6.1、6.6），只新增檔案或公開函式，不改對方既有函式，並在 PR 說明列出來。
+- 合併有衝突時：`frontend/src/client/`、`routeTree.gen.ts` 不手動合併，合併其他檔案後重新產生；兩個 Alembic head 依 CONTRIBUTING 第 4 節處理。
+- CI 失敗時先讀 log（`gh run view --log-failed`），修正根本原因；不要為了讓 CI 通過而跳過或刪除測試。
 - 使用者表達過的偏好與決定，要記錄在 spec 的 Decisions，不要只留在對話裡。
 
 ## 架構規則（細節見 `_bmad-output/planning-artifacts/architecture/` 與 README）

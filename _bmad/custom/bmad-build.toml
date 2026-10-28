@@ -1,0 +1,17 @@
+# FLOW 專案的團隊客製（進版控，對每位組員生效）。個人設定放 _bmad/custom/<skill>.user.toml。
+#
+# 為什麼要這份：原本 step-01 用「planning-artifacts 裡有沒有檔案比 epic context 新」
+# 判斷 context 是否過期。Git 不保存檔案時間，clone、pull、切分支後檔案時間是亂的，
+# 每個組員都會被判定過期、各自重新產生 context（燒 token，而且四人產出不同版本會衝突）。
+# 改成依 git 的 commit 時間判斷。
+
+[workflow]
+
+persistent_facts = [
+  """FLOW 專案規則（覆寫 step-01 的 epic context 有效性判斷）：判斷 `epic-<N>-context.md` 是否「比 planning artifacts 舊」時，不要比檔案的修改時間（git 不保存檔案時間，clone／pull 後必定誤判）。改用 git：
+1. 取 context 最後一次 commit：`git log -1 --format=%H -- <context 檔>`。檔案從未 commit 過時，依原規則以檔案時間判斷。
+2. 列出之後動到 planning artifacts 的 commit：`git log --format='%H %s%n%b' <上一步的 hash>..HEAD -- <planning_artifacts 目錄>`。
+3. 忽略 body 含 `Epic-Context: unaffected` 這一行的 commit（只改 metadata、刪備份等，不影響需求內容）。
+4. 剩下有 commit，或 `git status --porcelain -- <planning_artifacts 目錄>` 有未提交的修改，才算過期；否則 context 有效，直接使用，不要重新產生。
+重新產生 context 前先告訴使用者是哪個 commit 或哪個檔案造成過期。""",
+]
