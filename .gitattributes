@@ -3,3 +3,4 @@
 
 # 只新增項目的檔案：兩個分支都新增時保留雙方內容，不產生衝突
 _bmad-output/implementation-artifacts/deferred-work.md merge=union
+docs/ai-usage/[A-D]-*.md merge=union

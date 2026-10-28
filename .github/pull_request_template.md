@@ -20,4 +20,5 @@
 - [ ] 已在瀏覽器實際走過，含 375 px 寬的手機畫面（有畫面變動時附截圖）
 - [ ] 跨模組呼叫只用對方 `service.py` 的公開函式；新增的公開函式已寫在 PR 說明
 - [ ] 新的延後項目已寫進 `deferred-work.md`
+- [ ] 這次用到 AI 的活動已記在 `docs/ai-usage/<自己>.md`
 - [ ] 合併前：`sprint-status.yaml` 這個 Story 已改成 `done`
