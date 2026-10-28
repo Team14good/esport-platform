@@ -175,7 +175,7 @@ bmad-build 的流程：
 - **1.8 核准後**：沒有通知輪詢，申請人重新整理頁面後才出現主辦方身分。
 - **7.1 示範資料**：只放校園賽，不放自訂模式的賽事。
 
-Epic 1～7 的 context（`_bmad-output/implementation-artifacts/epic-*-context.md`）已預先產生，含期中規則與交接期限。Git 不保存檔案時間，clone 或 pull 後 `bmad-build` 可能判定 context 過期而重新產生；想保留現有版本，先在專案根目錄執行 `touch _bmad-output/implementation-artifacts/epic-*-context.md`。
+Epic 1～7 的 context（`_bmad-output/implementation-artifacts/epic-*-context.md`）已預先產生，含期中規則與交接期限。`_bmad/custom/bmad-build.toml` 讓 `bmad-build` 依 git commit 判斷 context 是否過期，clone 或 pull 後不會重新產生，不必再 `touch`。修改 `planning-artifacts/` 但不影響需求內容時（改 metadata、刪備份），在 commit 訊息 body 加一行 `Epic-Context: unaffected`，避免全組的 context 被判定過期。
 
 ### 6.4 時程與交接期限
 
