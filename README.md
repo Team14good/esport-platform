@@ -81,6 +81,8 @@ docker compose exec frontend bunx biome check
 docker compose exec frontend bun run test:unit
 ```
 
+每個 PR 與 `main` 的 push 都由 GitHub Actions（`.github/workflows/ci.yml`）跑上面全部項目，另外檢查 Alembic 只有一個 head、`frontend/src/client` 與後端 API 一致；範本原本的 Actions 已移除，這份是本專案自己的。
+
 測試不會寫入開發用資料庫：每個測試包在一個外層交易裡並在結束時回滾；`<POSTGRES_DB>_test` 在每次測試開始時刪除重建並跑完遷移。
 
 ## 重新產生前端 API client

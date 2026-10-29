@@ -16,7 +16,24 @@
   3. `_bmad-output/planning-artifacts/`（epics、PRD、架構、UX）
 - spec 的 `<frozen-after-approval>` 區塊只有人能改。需求沒講清楚而會被使用者察覺的地方，要問人，不要自己假設。
 - `deferred-work.md` 只新增項目，不修改既有項目；項目在本 Story 處理完時才刪除。
-- 除非使用者要求，不要 commit 或 push。commit 時不要包含 `.env`；除非使用者要求，也不要包含 `docs/`。
+- 除非使用者要求，不要 commit 或 push。commit 時不要包含 `.env`；除非使用者要求，也不要包含 `docs/`（例外：`docs/ai-usage/` 的紀錄跟著該次的 PR 提交）。
+
+## AI 使用紀錄（課程期末報告第 (g) 項，佔 project 分數 30%）
+
+- 用 AI 完成一個有成果的軟工活動後（需求、設計、程式、測試、專案管理與流程），依 `docs/ai-usage/README.md` 的格式，在使用者自己的紀錄檔尾新增一筆。用 `gh api user --jq .login` 對照成員表找出檔案。
+- BMAD skill 結束時會自動提示記錄；不經 BMAD 的工作（debug、畫圖、寫文件、壓力測試等）要自己記得。只問一句話、沒有產出的不記。
+- 數字與證據只取自實際執行的結果，不要編造。〈問題與修正〉要寫 AI 錯在哪、怎麼被發現，這是評分重點。
+- 只新增，不修改既有的紀錄，也不改別人的檔案。
+
+## Git 與 PR（流程細節見 CONTRIBUTING 第 3 節）
+
+- 不要在 `main` 上改程式或 commit；`main` 有規則保護，只能經 PR 合併。開工前確認目前在 `story/<Epic>-<Story>` 分支。
+- 開始一個 Story 前，先 `gh pr list --state all` 看別人的 PR，確認沒有重複，並找出要依賴的公開函式是否已合併。
+- 同步 `main` 用 `git fetch origin && git merge origin/main`；不要 rebase 或 force push 已推上去的分支。
+- PR 標題就是 Squash merge 後的 commit 訊息：`feat: Story 4.1 <Story 名稱>`；說明照 `.github/pull_request_template.md` 填。
+- 動到其他組員負責的模組時（CONTRIBUTING 6.1、6.6），只新增檔案或公開函式，不改對方既有函式，並在 PR 說明列出來。
+- 合併有衝突時：`frontend/src/client/`、`routeTree.gen.ts` 不手動合併，合併其他檔案後重新產生；兩個 Alembic head 依 CONTRIBUTING 第 4 節處理。
+- CI 失敗時先讀 log（`gh run view --log-failed`），修正根本原因；不要為了讓 CI 通過而跳過或刪除測試。
 - 使用者表達過的偏好與決定，要記錄在 spec 的 Decisions，不要只留在對話裡。
 
 ## 架構規則（細節見 `_bmad-output/planning-artifacts/architecture/` 與 README）

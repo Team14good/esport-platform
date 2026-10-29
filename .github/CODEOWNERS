@@ -1,0 +1,24 @@
+# 開 PR 時自動請對應模組的負責人審查（分工見 CONTRIBUTING.md 第 6 節）。
+# A 王閎立 @max930000｜B 蘇采羚 @sususu0804｜C 邱芯彤 @happyhappy-happy｜D 黃鉅燊 @OG-Matcha
+# 後面的規則優先；沒有對應到的檔案由組長審查。
+
+*                                        @max930000
+
+/backend/app/modules/identity/           @max930000
+/backend/app/worker/                     @max930000
+/frontend/src/features/identity/         @max930000
+
+/backend/app/modules/tournaments/        @sususu0804
+/frontend/src/features/tournaments/      @sususu0804
+
+/backend/app/modules/registration/       @happyhappy-happy
+/frontend/src/features/registration/     @happyhappy-happy
+
+/backend/app/modules/competition/        @OG-Matcha
+/frontend/src/features/competition/      @OG-Matcha
+
+/backend/app/modules/disputes/           @sususu0804 @happyhappy-happy
+/frontend/src/features/disputes/         @sususu0804 @happyhappy-happy
+
+/.github/                                @OG-Matcha @max930000
+/_bmad/custom/                           @OG-Matcha @max930000

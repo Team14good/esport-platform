@@ -2,7 +2,7 @@
 status: final
 stepsCompleted: [1, 2, 3, 4]
 mode: update
-basedOn: _bmad-output/planning-artifacts/epics.backup-2026-10-15.md
+basedOn: "git b20d0dd:_bmad-output/planning-artifacts/epics.backup-2026-10-15.md"
 inputDocuments:
   - _bmad-output/planning-artifacts/prds/prd-se-final-project-2026-10-14/prd.md
   - _bmad-output/planning-artifacts/architecture/architecture-se-final-project-2026-10-14/ARCHITECTURE-SPINE.md

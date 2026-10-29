@@ -25,6 +25,9 @@ coverage/
 /blob-report/
 /playwright/.cache/
 
+# 期中文件排版的中間檔（node docs/midterm/_build/build.mjs 產生）
+docs/midterm/_build/html/
+
 # 由 scripts/generate-client.sh 產生的暫存檔
 frontend/openapi.json
 
