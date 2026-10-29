@@ -101,6 +101,13 @@ export type AccountRead = {
 }
 
 /**
+ * ApplicationStatus
+ *
+ * 主辦方申請（OrganizerApplication）的狀態：待審核、核准、退回。
+ */
+export type ApplicationStatus = "pending" | "approved" | "rejected"
+
+/**
  * EmailVerificationCreate
  */
 export type EmailVerificationCreate = {
@@ -143,9 +150,58 @@ export type Identity = {
 export type IdentityKey = "browse" | "platform_admin"
 
 /**
+ * OrganizerApplicationCreate
+ *
+ * S15 送出主辦方申請：社團名稱與學校（只能從學校清單選擇）。
+ */
+export type OrganizerApplicationCreate = {
+  /**
+   * Club Name
+   */
+  club_name: string
+  /**
+   * School Id
+   */
+  school_id: string
+}
+
+/**
+ * OrganizerApplicationRead
+ *
+ * 主辦方申請；帶學校名稱，S15 與審核清單不必再對照學校清單。
+ */
+export type OrganizerApplicationRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Club Name
+   */
+  club_name: string
+  /**
+   * School Id
+   */
+  school_id: string
+  /**
+   * School Name
+   */
+  school_name: string
+  status: ApplicationStatus
+  /**
+   * Reject Reason
+   */
+  reject_reason: string | null
+  /**
+   * Created At
+   */
+  created_at: string
+}
+
+/**
  * PasswordResetCheck
  *
- * S9 開啟時檢查重設連結是否仍有效（不使用 token）。
+ * S9 開啟時檢查重設連結是否仍有效（不會用掉 token）。
  */
 export type PasswordResetCheck = {
   /**
@@ -562,3 +618,49 @@ export type identityListCurrentIdentitiesResponses = {
 
 export type identityListCurrentIdentitiesResponse =
   identityListCurrentIdentitiesResponses[keyof identityListCurrentIdentitiesResponses]
+
+export type identitySubmitOrganizerApplicationData = {
+  body: OrganizerApplicationCreate
+  path?: never
+  query?: never
+  url: "/api/v1/organizer-applications"
+}
+
+export type identitySubmitOrganizerApplicationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identitySubmitOrganizerApplicationError =
+  identitySubmitOrganizerApplicationErrors[keyof identitySubmitOrganizerApplicationErrors]
+
+export type identitySubmitOrganizerApplicationResponses = {
+  /**
+   * Successful Response
+   */
+  201: OrganizerApplicationRead
+}
+
+export type identitySubmitOrganizerApplicationResponse =
+  identitySubmitOrganizerApplicationResponses[keyof identitySubmitOrganizerApplicationResponses]
+
+export type identityReadCurrentOrganizerApplicationData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/accounts/me/organizer-application"
+}
+
+export type identityReadCurrentOrganizerApplicationResponses = {
+  /**
+   * Response Identity-Read Current Organizer Application
+   *
+   * Successful Response
+   */
+  200: OrganizerApplicationRead | null
+}
+
+export type identityReadCurrentOrganizerApplicationResponse =
+  identityReadCurrentOrganizerApplicationResponses[keyof identityReadCurrentOrganizerApplicationResponses]

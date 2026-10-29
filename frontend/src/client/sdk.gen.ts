@@ -15,6 +15,8 @@ import type {
   identityLoginResponses,
   identityReadCurrentAccountData,
   identityReadCurrentAccountResponses,
+  identityReadCurrentOrganizerApplicationData,
+  identityReadCurrentOrganizerApplicationResponses,
   identityRegisterData,
   identityRegisterErrors,
   identityRegisterResponses,
@@ -27,6 +29,9 @@ import type {
   identityResetPasswordData,
   identityResetPasswordErrors,
   identityResetPasswordResponses,
+  identitySubmitOrganizerApplicationData,
+  identitySubmitOrganizerApplicationErrors,
+  identitySubmitOrganizerApplicationResponses,
   identityUpdateCurrentAccountData,
   identityUpdateCurrentAccountErrors,
   identityUpdateCurrentAccountResponses,
@@ -316,6 +321,55 @@ export class IdentityService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/accounts/me/identities",
+      ...options,
+    })
+  }
+
+  /**
+   * Submit Organizer Application
+   *
+   * 送出主辦方申請（需已驗證 Email）；同一帳號同時只能有一筆待審核。
+   */
+  public static submitOrganizerApplication<ThrowOnError extends boolean = true>(
+    options: Options<identitySubmitOrganizerApplicationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identitySubmitOrganizerApplicationResponses,
+      identitySubmitOrganizerApplicationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer-applications",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Read Current Organizer Application
+   *
+   * 目前帳號最新的一筆主辦方申請；從沒申請過時回傳 null。未驗證 Email 也能讀。
+   */
+  public static readCurrentOrganizerApplication<
+    ThrowOnError extends boolean = true,
+  >(
+    options?: Options<
+      identityReadCurrentOrganizerApplicationData,
+      ThrowOnError
+    >,
+  ) {
+    return (options?.client ?? client).get<
+      identityReadCurrentOrganizerApplicationResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/accounts/me/organizer-application",
       ...options,
     })
   }

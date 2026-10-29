@@ -1,13 +1,18 @@
 import { useMutation } from "@tanstack/react-query"
+import { Link, useRouterState } from "@tanstack/react-router"
 import { MailWarningIcon } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { IdentityService } from "@/client"
+import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { notifyError, notifySuccess } from "@/lib/feedback"
 import { cn } from "@/lib/utils"
 import { useCurrentAccount, useIsSignedIn } from "./auth"
 import { RESEND_SUCCESS_TEXT } from "./ResendVerificationForm"
+import { safeRedirect } from "./redirect"
+
+export const GO_TO_VERIFY_TEXT = "前往 Email 驗證"
 
 /** 以帳號 Email 重寄驗證信（S10 與 VerificationRequired 共用）；成功與失敗都以 Toast 回饋。 */
 export function useResendVerificationEmail() {
@@ -26,22 +31,30 @@ type VerificationRequiredProps = {
   action: string
   /** 要停用的動作（按鈕、表單）；Email 已驗證或未登入時原樣顯示 */
   children: ReactNode
+  /**
+   * 把「重寄驗證信」換成「前往 Email 驗證」連結（S7，帶 redirect 回目前頁面）；
+   * 整個表單被停用的頁面（S15）用這個
+   */
+  linkToVerifyPage?: boolean
   className?: string
 }
 
 /**
- * Email 未驗證時停用動作，並說明「完成 Email 驗證後才能…」＋「重寄驗證信」。
+ * Email 未驗證時停用動作，並說明「完成 Email 驗證後才能…」＋「重寄驗證信」
+ * （或「前往 Email 驗證」）。
  * 這只是提示：伺服器仍以 `require_verified` 回 403 `EMAIL_NOT_VERIFIED` 為準（AD-10）。
  * 未登入時不處理，交給 401 的導向 S6 流程。
  */
 export function VerificationRequired({
   action,
   children,
+  linkToVerifyPage = false,
   className,
 }: VerificationRequiredProps) {
   const signedIn = useIsSignedIn()
   const account = useCurrentAccount()
   const resend = useResendVerificationEmail()
+  const currentHref = useRouterState({ select: (state) => state.location.href })
 
   if (!signedIn || account.data?.email_verified) return <>{children}</>
   if (!account.data) {
@@ -68,15 +81,26 @@ export function VerificationRequired({
           />
           完成 Email 驗證後才能{action}。
         </p>
-        <LoadingButton
-          type="button"
-          variant="outline"
-          size="sm"
-          loading={resend.isPending}
-          onClick={() => resend.mutate(email)}
-        >
-          重寄驗證信
-        </LoadingButton>
+        {linkToVerifyPage ? (
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            <Link
+              to="/verify-email"
+              search={{ redirect: safeRedirect(currentHref) }}
+            >
+              {GO_TO_VERIFY_TEXT}
+            </Link>
+          </Button>
+        ) : (
+          <LoadingButton
+            type="button"
+            variant="outline"
+            size="sm"
+            loading={resend.isPending}
+            onClick={() => resend.mutate(email)}
+          >
+            重寄驗證信
+          </LoadingButton>
+        )}
       </div>
     </div>
   )

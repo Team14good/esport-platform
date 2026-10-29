@@ -8,7 +8,7 @@ from fastapi import APIRouter, status
 
 from app.core.db import SessionDep
 from app.modules.identity import service
-from app.modules.identity.deps import CurrentAccount
+from app.modules.identity.deps import CurrentAccount, VerifiedAccount
 from app.modules.identity.models import (
     AccessToken,
     AccessTokenCreate,
@@ -16,6 +16,8 @@ from app.modules.identity.models import (
     AccountRead,
     EmailVerificationCreate,
     Identity,
+    OrganizerApplicationCreate,
+    OrganizerApplicationRead,
     PasswordResetCheck,
     PasswordResetCreate,
     PasswordResetEmailCreate,
@@ -137,3 +139,26 @@ def list_current_identities(
 ) -> list[Identity]:
     """目前帳號擁有的身分（身分切換器用），只由後端依帳號資料產生。"""
     return service.list_identities(session, account)
+
+
+@router.post("/organizer-applications", status_code=status.HTTP_201_CREATED)
+def submit_organizer_application(
+    session: SessionDep, account: VerifiedAccount, body: OrganizerApplicationCreate
+) -> OrganizerApplicationRead:
+    """送出主辦方申請（需已驗證 Email）；同一帳號同時只能有一筆待審核。"""
+    application = service.submit_organizer_application(
+        session,
+        account_id=account.id,
+        club_name=body.club_name,
+        school_id=body.school_id,
+    )
+    session.commit()
+    return application
+
+
+@router.get("/accounts/me/organizer-application")
+def read_current_organizer_application(
+    session: SessionDep, account: CurrentAccount
+) -> OrganizerApplicationRead | None:
+    """目前帳號最新的一筆主辦方申請；從沒申請過時回傳 null。未驗證 Email 也能讀。"""
+    return service.get_my_organizer_application(session, account.id)
