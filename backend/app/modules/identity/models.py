@@ -36,6 +36,9 @@ PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 DISPLAY_NAME_MAX_LENGTH = 50
 CLUB_NAME_MAX_LENGTH = 50
+REJECT_REASON_MAX_LENGTH = 200
+# 分頁 API 每頁固定筆數（全專案的列表沿用）
+PAGE_SIZE = 20
 REDIRECT_MAX_LENGTH = 2000
 # 同一帳號同時只能有一筆待審核申請的部分唯一索引（repository 以名稱辨識違反）
 PENDING_APPLICATION_INDEX = "ix_organizer_application_pending_account_id"
@@ -152,6 +155,18 @@ class OrganizerApplicationSubmitted(Event):
     application_id: uuid.UUID
 
 
+class OrganizerApplicationApproved(Event):
+    """平台管理員核准主辦方申請。期中不登錄收件規則（worker 略過並標為已處理）。"""
+
+    application_id: uuid.UUID
+
+
+class OrganizerApplicationRejected(Event):
+    """平台管理員退回主辦方申請。期中不登錄收件規則（worker 略過並標為已處理）。"""
+
+    application_id: uuid.UUID
+
+
 # ---------------------------------------------------------------- API schema
 # 欄位驗證錯誤以 PydanticCustomError 拋出，422 的 msg 直接是繁中訊息。
 
@@ -199,6 +214,17 @@ def _validate_club_name(value: str) -> str:
             "club_name_too_long", f"社團名稱最多 {CLUB_NAME_MAX_LENGTH} 個字"
         )
     return name
+
+
+def _validate_reject_reason(value: str) -> str:
+    reason = value.strip()
+    if not reason:
+        raise PydanticCustomError("reject_reason_required", "請輸入退回原因")
+    if len(reason) > REJECT_REASON_MAX_LENGTH:
+        raise PydanticCustomError(
+            "reject_reason_too_long", f"退回原因最多 {REJECT_REASON_MAX_LENGTH} 個字"
+        )
+    return reason
 
 
 def _require_school(value: object) -> object:
@@ -256,6 +282,9 @@ ClubNameField = Annotated[
     str, BeforeValidator(_require_str), AfterValidator(_validate_club_name)
 ]
 RequiredSchoolField = Annotated[uuid.UUID, BeforeValidator(_require_school)]
+RejectReasonField = Annotated[
+    str, BeforeValidator(_require_str), AfterValidator(_validate_reject_reason)
+]
 
 
 class PublicSchool(BaseModel):
@@ -334,9 +363,10 @@ class AccountRead(BaseModel):
 
 
 class IdentityKey(StrEnum):
-    """身分切換器的身分；之後的 Story 會加入我的隊伍、裁判、主辦方後台。"""
+    """身分切換器的身分；之後的 Story 會加入我的隊伍、裁判。"""
 
     BROWSE = "browse"
+    ORGANIZER = "organizer"
     PLATFORM_ADMIN = "platform_admin"
 
 
@@ -378,3 +408,28 @@ class OrganizerApplicationRead(BaseModel):
     status: ApplicationStatus
     reject_reason: str | None
     created_at: datetime
+
+
+class AdminOrganizerApplication(OrganizerApplicationRead):
+    """S35 審核清單的一筆：另帶申請人的顯示名稱與 Email。"""
+
+    applicant_display_name: str
+    applicant_email: str
+
+
+class OrganizerApplicationPage(BaseModel):
+    """主辦方申請的分頁結果（全專案第一個分頁 API，之後的列表沿用同一格式）。
+
+    `page` 超過總頁數時 `items` 為空、`total` 照實。
+    """
+
+    items: list[AdminOrganizerApplication]
+    total: int
+    page: int
+    page_size: int
+
+
+class OrganizerApplicationRejection(BaseModel):
+    """S35 退回主辦方申請：退回原因必填，去除前後空白後 1～200 字。"""
+
+    reason: RejectReasonField

@@ -4,20 +4,27 @@
 套用 `CurrentAccount`（或更嚴格的依賴），未登入回 401（tests 會逐一檢查）。
 """
 
-from fastapi import APIRouter, status
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Query, status
 
 from app.core.db import SessionDep
 from app.modules.identity import service
-from app.modules.identity.deps import CurrentAccount, VerifiedAccount
+from app.modules.identity.deps import CurrentAccount, PlatformAdmin, VerifiedAccount
 from app.modules.identity.models import (
     AccessToken,
     AccessTokenCreate,
     AccountCreate,
     AccountRead,
+    AdminOrganizerApplication,
+    ApplicationStatus,
     EmailVerificationCreate,
     Identity,
     OrganizerApplicationCreate,
+    OrganizerApplicationPage,
     OrganizerApplicationRead,
+    OrganizerApplicationRejection,
     PasswordResetCheck,
     PasswordResetCreate,
     PasswordResetEmailCreate,
@@ -162,3 +169,44 @@ def read_current_organizer_application(
 ) -> OrganizerApplicationRead | None:
     """目前帳號最新的一筆主辦方申請；從沒申請過時回傳 null。未驗證 Email 也能讀。"""
     return service.get_my_organizer_application(session, account.id)
+
+
+# ---------------------------------------------------------------- 平台管理：審核主辦方申請
+
+
+@router.get("/admin/organizer-applications")
+def list_organizer_applications(
+    session: SessionDep,
+    _admin: PlatformAdmin,
+    status_filter: Annotated[ApplicationStatus | None, Query(alias="status")] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+) -> OrganizerApplicationPage:
+    """主辦方申請清單（平台管理員）：依送出時間由舊到新、每頁 20 筆；`status` 省略表示全部。"""
+    return service.list_organizer_applications(session, status=status_filter, page=page)
+
+
+@router.post("/admin/organizer-applications/{application_id}/approval")
+def approve_organizer_application(
+    session: SessionDep, admin: PlatformAdmin, application_id: uuid.UUID
+) -> AdminOrganizerApplication:
+    """核准主辦方申請：申請人立即成為主辦方。已審核過回 409 `APPLICATION_NOT_PENDING`。"""
+    application = service.approve_organizer_application(
+        session, admin_id=admin.id, application_id=application_id
+    )
+    session.commit()
+    return application
+
+
+@router.post("/admin/organizer-applications/{application_id}/rejection")
+def reject_organizer_application(
+    session: SessionDep,
+    admin: PlatformAdmin,
+    application_id: uuid.UUID,
+    body: OrganizerApplicationRejection,
+) -> AdminOrganizerApplication:
+    """退回主辦方申請（必填原因）；申請人可以修改後重送。已審核過回 409。"""
+    application = service.reject_organizer_application(
+        session, admin_id=admin.id, application_id=application_id, reason=body.reason
+    )
+    session.commit()
+    return application

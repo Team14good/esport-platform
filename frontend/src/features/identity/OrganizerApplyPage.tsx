@@ -1,5 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { Link } from "@tanstack/react-router"
+import { CircleAlertIcon } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -11,6 +13,7 @@ import {
 } from "@/client"
 import { FormErrorAlert } from "@/components/common/FormErrorAlert"
 import { StatusBadge } from "@/components/common/StatusBadge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
@@ -48,6 +51,9 @@ export const CLUB_NAME_MAX_LENGTH = 50
 export const APPLICATION_SUBMITTED_TEXT = "已送出主辦方申請。"
 export const PENDING_SUMMARY_TEXT = "平台管理員審核後，結果會顯示在這裡。"
 export const ALREADY_ORGANIZER_TEXT = "你已經是主辦方。"
+export const GO_TO_ORGANIZER_TEXT = "前往主辦方後台"
+export const RESUBMIT_TEXT = "重新送出申請"
+export const REJECT_REASON_LABEL = "退回原因："
 
 // 與後端相同的規則；伺服器的 422 仍會寫回對應欄位
 const applicationSchema = z.object({
@@ -73,14 +79,26 @@ const applicationSchema = z.object({
 type ApplicationInput = z.input<typeof applicationSchema>
 type ApplicationValues = z.output<typeof applicationSchema>
 
-function ApplicationForm({ account }: { account: AccountRead }) {
+/**
+ * 申請表單。`previous` 是被退回的那筆申請：預填社團名稱與學校、可修改後重送
+ * （重送一律建立新的一筆申請，舊的退回紀錄保留）。
+ */
+function ApplicationForm({
+  account,
+  previous,
+}: {
+  account: AccountRead
+  previous?: OrganizerApplicationRead
+}) {
   const queryClient = useQueryClient()
   const schools = useSchools()
   const [formError, setFormError] = useState<ApiError | null>(null)
   const form = useForm<ApplicationInput, unknown, ApplicationValues>({
     resolver: zodResolver(applicationSchema),
-    // 學校預設帶入帳號的學校，可以改
-    defaultValues: { club_name: "", school_id: account.school_id ?? null },
+    // 重送時預填被退回的那筆；第一次申請時學校預設帶入帳號的學校，可以改
+    defaultValues: previous
+      ? { club_name: previous.club_name, school_id: previous.school_id }
+      : { club_name: "", school_id: account.school_id ?? null },
   })
 
   const submit = useMutation({
@@ -99,12 +117,16 @@ function ApplicationForm({ account }: { account: AccountRead }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-heading-lg">申請成為主辦方</h1>
-        <p className="text-body text-muted-foreground">
-          平台管理員會依社團名稱與學校審核。
-        </p>
-      </div>
+      {previous ? (
+        <h2 className="text-heading-md">修改後重新申請</h2>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <h1 className="text-heading-lg">申請成為主辦方</h1>
+          <p className="text-body text-muted-foreground">
+            平台管理員會依社團名稱與學校審核。
+          </p>
+        </div>
+      )}
       <VerificationRequired action="申請成為主辦方" linkToVerifyPage>
         <Form {...form}>
           <form
@@ -157,7 +179,7 @@ function ApplicationForm({ account }: { account: AccountRead }) {
               loading={submit.isPending}
               className="mt-1 w-full sm:w-auto sm:self-start"
             >
-              送出申請
+              {previous ? RESUBMIT_TEXT : "送出申請"}
             </LoadingButton>
           </form>
         </Form>
@@ -166,7 +188,10 @@ function ApplicationForm({ account }: { account: AccountRead }) {
   )
 }
 
-/** 已送出的申請：唯讀摘要（社團名稱、學校、送出時間、狀態徽章）。 */
+/**
+ * 最新一筆申請的唯讀摘要（社團名稱、學校、送出時間、狀態徽章）：待審核時附說明、
+ * 核准時附「前往主辦方後台」、退回時附退回原因。
+ */
 function ApplicationSummary({
   application,
 }: {
@@ -196,13 +221,27 @@ function ApplicationSummary({
           {PENDING_SUMMARY_TEXT}
         </p>
       )}
+      {application.status === "rejected" && (
+        <Alert variant="destructive" className="rounded-md">
+          <CircleAlertIcon />
+          <AlertDescription className="break-words text-destructive">
+            {REJECT_REASON_LABEL}
+            {application.reject_reason}
+          </AlertDescription>
+        </Alert>
+      )}
+      {application.status === "approved" && (
+        <Button asChild className="w-full sm:w-auto sm:self-start">
+          <Link to="/organizer">{GO_TO_ORGANIZER_TEXT}</Link>
+        </Button>
+      )}
     </Card>
   )
 }
 
 /**
  * S15 主辦方申請：沒有申請時顯示表單（Email 未驗證時整個停用並連到 S7）；
- * 有申請時顯示最新一筆的唯讀摘要。審核、退回原因與重送在 Story 1.8。
+ * 有申請時顯示最新一筆的唯讀摘要；最新一筆被退回時，摘要下方是預填原資料的重送表單。
  */
 export function OrganizerApplyPage() {
   const account = useCurrentAccount()
@@ -236,6 +275,17 @@ export function OrganizerApplyPage() {
           重新載入
         </Button>
       </div>
+    )
+  } else if (application.data?.status === "rejected") {
+    content = (
+      <>
+        <ApplicationSummary application={application.data} />
+        <ApplicationForm
+          key={application.data.id}
+          account={account.data}
+          previous={application.data}
+        />
+      </>
     )
   } else if (application.data) {
     content = <ApplicationSummary application={application.data} />

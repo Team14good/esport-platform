@@ -101,6 +101,47 @@ export type AccountRead = {
 }
 
 /**
+ * AdminOrganizerApplication
+ *
+ * S35 審核清單的一筆：另帶申請人的顯示名稱與 Email。
+ */
+export type AdminOrganizerApplication = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Club Name
+   */
+  club_name: string
+  /**
+   * School Id
+   */
+  school_id: string
+  /**
+   * School Name
+   */
+  school_name: string
+  status: ApplicationStatus
+  /**
+   * Reject Reason
+   */
+  reject_reason: string | null
+  /**
+   * Created At
+   */
+  created_at: string
+  /**
+   * Applicant Display Name
+   */
+  applicant_display_name: string
+  /**
+   * Applicant Email
+   */
+  applicant_email: string
+}
+
+/**
  * ApplicationStatus
  *
  * 主辦方申請（OrganizerApplication）的狀態：待審核、核准、退回。
@@ -145,9 +186,9 @@ export type Identity = {
 /**
  * IdentityKey
  *
- * 身分切換器的身分；之後的 Story 會加入我的隊伍、裁判、主辦方後台。
+ * 身分切換器的身分；之後的 Story 會加入我的隊伍、裁判。
  */
-export type IdentityKey = "browse" | "platform_admin"
+export type IdentityKey = "browse" | "organizer" | "platform_admin"
 
 /**
  * OrganizerApplicationCreate
@@ -163,6 +204,32 @@ export type OrganizerApplicationCreate = {
    * School Id
    */
   school_id: string
+}
+
+/**
+ * OrganizerApplicationPage
+ *
+ * 主辦方申請的分頁結果（全專案第一個分頁 API，之後的列表沿用同一格式）。
+ *
+ * `page` 超過總頁數時 `items` 為空、`total` 照實。
+ */
+export type OrganizerApplicationPage = {
+  /**
+   * Items
+   */
+  items: Array<AdminOrganizerApplication>
+  /**
+   * Total
+   */
+  total: number
+  /**
+   * Page
+   */
+  page: number
+  /**
+   * Page Size
+   */
+  page_size: number
 }
 
 /**
@@ -196,6 +263,18 @@ export type OrganizerApplicationRead = {
    * Created At
    */
   created_at: string
+}
+
+/**
+ * OrganizerApplicationRejection
+ *
+ * S35 退回主辦方申請：退回原因必填，去除前後空白後 1～200 字。
+ */
+export type OrganizerApplicationRejection = {
+  /**
+   * Reason
+   */
+  reason: string
 }
 
 /**
@@ -664,3 +743,103 @@ export type identityReadCurrentOrganizerApplicationResponses = {
 
 export type identityReadCurrentOrganizerApplicationResponse =
   identityReadCurrentOrganizerApplicationResponses[keyof identityReadCurrentOrganizerApplicationResponses]
+
+export type identityListOrganizerApplicationsData = {
+  body?: never
+  path?: never
+  query?: {
+    /**
+     * Status
+     */
+    status?: ApplicationStatus | null
+    /**
+     * Page
+     */
+    page?: number
+  }
+  url: "/api/v1/admin/organizer-applications"
+}
+
+export type identityListOrganizerApplicationsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityListOrganizerApplicationsError =
+  identityListOrganizerApplicationsErrors[keyof identityListOrganizerApplicationsErrors]
+
+export type identityListOrganizerApplicationsResponses = {
+  /**
+   * Successful Response
+   */
+  200: OrganizerApplicationPage
+}
+
+export type identityListOrganizerApplicationsResponse =
+  identityListOrganizerApplicationsResponses[keyof identityListOrganizerApplicationsResponses]
+
+export type identityApproveOrganizerApplicationData = {
+  body?: never
+  path: {
+    /**
+     * Application Id
+     */
+    application_id: string
+  }
+  query?: never
+  url: "/api/v1/admin/organizer-applications/{application_id}/approval"
+}
+
+export type identityApproveOrganizerApplicationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityApproveOrganizerApplicationError =
+  identityApproveOrganizerApplicationErrors[keyof identityApproveOrganizerApplicationErrors]
+
+export type identityApproveOrganizerApplicationResponses = {
+  /**
+   * Successful Response
+   */
+  200: AdminOrganizerApplication
+}
+
+export type identityApproveOrganizerApplicationResponse =
+  identityApproveOrganizerApplicationResponses[keyof identityApproveOrganizerApplicationResponses]
+
+export type identityRejectOrganizerApplicationData = {
+  body: OrganizerApplicationRejection
+  path: {
+    /**
+     * Application Id
+     */
+    application_id: string
+  }
+  query?: never
+  url: "/api/v1/admin/organizer-applications/{application_id}/rejection"
+}
+
+export type identityRejectOrganizerApplicationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityRejectOrganizerApplicationError =
+  identityRejectOrganizerApplicationErrors[keyof identityRejectOrganizerApplicationErrors]
+
+export type identityRejectOrganizerApplicationResponses = {
+  /**
+   * Successful Response
+   */
+  200: AdminOrganizerApplication
+}
+
+export type identityRejectOrganizerApplicationResponse =
+  identityRejectOrganizerApplicationResponses[keyof identityRejectOrganizerApplicationResponses]

@@ -1,6 +1,7 @@
 """identity 擁有的資料表的查詢與加鎖；不做業務判斷、不碰其他模組的資料表。"""
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import delete, func
 from sqlalchemy.exc import IntegrityError
@@ -143,3 +144,43 @@ def add_organizer_application(
             raise DuplicatePendingApplicationError from exc
         raise
     return application
+
+
+def get_application(
+    session: Session, application_id: uuid.UUID, *, for_update: bool = False
+) -> OrganizerApplication | None:
+    # for_update 時重新查詢並加鎖，並以資料庫的最新值覆蓋 identity map 裡已載入的同一筆
+    return session.get(
+        OrganizerApplication,
+        application_id,
+        with_for_update=for_update or None,
+        populate_existing=for_update,
+    )
+
+
+def count_applications(session: Session, status: ApplicationStatus | None) -> int:
+    statement = select(func.count()).select_from(OrganizerApplication)
+    if status is not None:
+        statement = statement.where(OrganizerApplication.status == status)
+    return session.exec(statement).one()
+
+
+def list_applications(
+    session: Session, status: ApplicationStatus | None, *, offset: int, limit: int
+) -> Sequence[tuple[OrganizerApplication, Account, School]]:
+    """主辦方申請連同申請人與學校，依送出時間由舊到新；`status` 為 None 表示全部。"""
+    statement = (
+        select(OrganizerApplication, Account, School)
+        .join(Account, col(Account.id) == col(OrganizerApplication.account_id))
+        .join(School, col(School.id) == col(OrganizerApplication.school_id))
+    )
+    if status is not None:
+        statement = statement.where(OrganizerApplication.status == status)
+    statement = (
+        statement.order_by(
+            col(OrganizerApplication.created_at), col(OrganizerApplication.id)
+        )
+        .offset(offset)
+        .limit(limit)
+    )
+    return session.exec(statement).all()

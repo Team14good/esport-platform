@@ -99,3 +99,27 @@
 - 問題與修正：單元測試全部通過，S15 在實際瀏覽器卻崩潰。原因是產生的 client 會把後端的 `null` 回應換成 `{}`，AI 寫的程式與測試都假設會收到 `null`，所以測試測不到。手動檢查時才發現，改成以有沒有 `id` 判斷，測試也照實改用 `{}` 模擬，並寫進 spec 的 Implementation Notes 提醒後續 Story。另外子代理自己列出兩個沒處理的風險：遷移一致性測試可能不比對部分索引的 WHERE 條件；`school_id` 整個缺少時的 422 訊息是 pydantic 的英文預設訊息
 - 成熟度：L3（AI 依 spec 產出並自動驗證，但這次略過多審查者，`null` 問題是靠人手動檢查才發現）
 - 證據：commit `d3b77d4b956da8f563f174647a95db6cb7296f86`、`_bmad-output/implementation-artifacts/spec-1-7-apply-to-be-organizer.md`
+
+### 2026-10-29｜需求、設計／Story 1.8 spec｜由 epic context 與程式調查寫出審核主辦方申請的 spec
+
+- Story／範圍：1.8
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（調查子代理 → spec → checkpoint）
+- 怎麼用：輸入「/bmad-build 1.8」，AI 讀 epic-1 context 與 1.7 spec，派子代理調查 identity 模組、前端元件與 UX 文件，再寫 spec 並列出待決問題
+- AI 產出：`spec-1-8-review-organizer-applications.md`（I/O 矩陣 8 列、Decisions 6 項、Tasks 14 項）；訂下全專案第一個分頁 API 格式 `{items,total,page,page_size}`
+- 人做了什麼：回答 2 個待決問題：核准後的「主辦方後台」身分與 S25 佔位頁在 1.8 做（選 A）、保留完整 spec 不拆分；核准 spec
+- 驗證：AI 依 Ready for Development 標準自查；調查時比對 B 的 2.1 分支，沿用 `/admin/` 路徑前綴，並避開 B 也會新增的 `backend/tests/helpers.py`
+- 問題與修正：AI 發現 UX 要求核准後連到 S25，但 epics 把 S25 外框排在 B 的 2.2，兩份文件的分工有落差，沒有自己假設，列成待決問題交給人決定；spec 粗估約 4,300 tokens，超過建議的 1,600，也交給人決定
+- 成熟度：L3（AI 依既有規格與程式產出 spec，跨人分工的取捨由人決定）
+- 證據：`_bmad-output/implementation-artifacts/spec-1-8-review-organizer-applications.md`
+
+### 2026-10-29｜程式、測試／Story 1.8｜以 bmad-build 實作 S35 審核頁、後台版面、Data table 與確認對話框
+
+- Story／範圍：1.8（分支 `story/1-8`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理；step-04 審查依使用者決定略過）
+- 怎麼用：spec 核准後交給沒有對話脈絡的實作子代理，只給 spec；主對話再讀 diff 逐項核對任務、I/O 矩陣與驗收條件，並重跑全部檢查
+- AI 產出：33 個檔案、新增 3748 行。後端 3 支平台管理 API、唯一的狀態轉換函式、主辦方身分；前端 `ConfirmDialog`、`DataTable`、`BackofficeLayout`、`EmptyState`、`AccountGate`、S35、S15 的核准與退回重送、S25 佔位頁。測試：後端新檔 21 個測試函式（含兩條真實連線的併發測試）；前端新增 4 個測試檔，並補 `organizer-apply` 的情境
+- 人做了什麼：核准 spec；決定不跑逐 Story 的 code review
+- 驗證：主對話重建容器後重跑：後端 310 個測試通過（1.7 時 278）、覆蓋率 95%；mypy、ty、ruff 通過；前端 25 個檔案 228 個測試通過（1.7 時 190），build、typecheck、biome 通過；Alembic 單一 head；I/O 矩陣 8 列都有通過的測試；子代理另以瀏覽器在 375 px 檢查沒有橫向捲軸
+- 問題與修正：子代理發現 shadcn `Sidebar` 的手機斷點寫死 768 px、又是 fixed 定位會蓋住頂欄，改成自己排版；但也因此把手機版開側欄的按鈕放在內容區，與 spec「從頂欄開啟」不同，子代理自己寫進 Implementation Notes，主對話讀 diff 時確認並交給人決定。另外 1.7 的身分切換器測試原本預期 `/admin/applications` 是 404，實作後失效，已改成以平台管理員進入 S35
+- 成熟度：L3（AI 依 spec 實作並自動驗證；這次略過多審查者，偏離 spec 的地方靠讀 diff 找出）
+- 證據：spec 同上；尚未 commit

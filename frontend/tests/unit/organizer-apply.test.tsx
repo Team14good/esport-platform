@@ -7,7 +7,9 @@ import { IdentityService, type OrganizerApplicationRead } from "@/client"
 import {
   ALREADY_ORGANIZER_TEXT,
   APPLICATION_SUBMITTED_TEXT,
+  GO_TO_ORGANIZER_TEXT,
   PENDING_SUMMARY_TEXT,
+  RESUBMIT_TEXT,
 } from "@/features/identity/OrganizerApplyPage"
 import { GO_TO_VERIFY_TEXT } from "@/features/identity/VerificationRequired"
 import { formatDateTime } from "@/lib/datetime"
@@ -329,5 +331,94 @@ describe("S15 主辦方申請", () => {
       await screen.findByRole("heading", { name: "申請成為主辦方" }),
     ).toBeInTheDocument()
     expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it("核准：摘要＋「核准」徽章＋主要按鈕「前往主辦方後台」→ S25", async () => {
+    mockSchools()
+    mockApplication({ ...PENDING, status: "approved" })
+    signInAs({ account: { ...ACCOUNT, is_organizer: true } })
+    renderApp("/organizer/apply")
+
+    const heading = await screen.findByRole("heading", { name: "主辦方申請" })
+    const card = heading.closest("[data-slot=card]") as HTMLElement
+    expect(within(card).getByText("核准")).toHaveAttribute(
+      "data-tone",
+      "confirmed",
+    )
+    expect(
+      within(card).getByRole("link", { name: GO_TO_ORGANIZER_TEXT }),
+    ).toHaveAttribute("href", "/organizer")
+    expect(within(card).queryByText(PENDING_SUMMARY_TEXT)).toBeNull()
+    expect(screen.queryByLabelText("社團名稱")).toBeNull()
+  })
+
+  it("退回：摘要＋退回原因＋預填原資料的表單，按鈕「重新送出申請」", async () => {
+    mockSchools()
+    mockApplication({
+      ...PENDING,
+      status: "rejected",
+      reject_reason: "請附上社團名稱全名",
+    })
+    // 帳號的學校與申請的不同：預填的是被退回那筆的學校
+    signInAs({ account: { ...ACCOUNT, school_id: "school-nthu" } })
+    renderApp("/organizer/apply")
+
+    const heading = await screen.findByRole("heading", { name: "主辦方申請" })
+    const card = heading.closest("[data-slot=card]") as HTMLElement
+    expect(within(card).getByText("退回")).toHaveAttribute(
+      "data-tone",
+      "destructive",
+    )
+    expect(within(card).getByRole("alert")).toHaveTextContent(
+      "退回原因：請附上社團名稱全名",
+    )
+    expect(
+      screen.getByRole("heading", { name: "修改後重新申請" }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("社團名稱")).toHaveValue("臺大電競社")
+    expect(
+      await within(screen.getByLabelText("學校")).findByText("國立臺灣大學"),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: RESUBMIT_TEXT })).toBeEnabled()
+    expect(screen.queryByRole("button", { name: "送出申請" })).toBeNull()
+  })
+
+  it("重送：送出修改後的資料，成功後換成新的待審核摘要，不再重抓", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    mockSchools()
+    const read = mockApplication({
+      ...PENDING,
+      status: "rejected",
+      reject_reason: "請附上社團名稱全名",
+    })
+    signInAs()
+    const submit = vi
+      .spyOn(IdentityService, "submitOrganizerApplication")
+      .mockResolvedValue({
+        data: { ...PENDING, id: "app-2", club_name: "國立臺灣大學電競社" },
+      } as SubmitResult)
+    renderApp("/organizer/apply")
+
+    const field = await screen.findByLabelText("社團名稱")
+    await user.clear(field)
+    await user.type(field, "國立臺灣大學電競社")
+    await user.click(screen.getByRole("button", { name: RESUBMIT_TEXT }))
+
+    await waitFor(() =>
+      expect(submit).toHaveBeenCalledWith({
+        body: { club_name: "國立臺灣大學電競社", school_id: "school-ntu" },
+      }),
+    )
+    expect(await screen.findByText(PENDING_SUMMARY_TEXT)).toBeInTheDocument()
+    expect(screen.getByText("待審核")).toHaveAttribute("data-tone", "appeal")
+    expect(screen.queryByRole("alert")).toBeNull()
+    expect(screen.queryByLabelText("社團名稱")).toBeNull()
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(APPLICATION_SUBMITTED_TEXT, {
+        duration: 3000,
+      }),
+    )
+    expect(read).toHaveBeenCalledTimes(1)
   })
 })
