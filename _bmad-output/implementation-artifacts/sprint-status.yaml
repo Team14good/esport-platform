@@ -84,11 +84,11 @@ development_status:
   4-7-對戰樹隊伍搜尋與晉級路徑: backlog  # 擱置（期中後）
   epic-4-retrospective: optional
 
-  epic-5: backlog
+  epic-5: in-progress
   5-1-場次頁與隊長報到: backlog  # 負責：D
   5-2-逾時判棄權: backlog  # 負責：A
-  5-3-裁判逐局登錄比分: backlog  # 負責：D
-  5-4-送出系列結果: backlog  # 負責：D
+  5-3-裁判逐局登錄比分: in-progress  # 負責：D；第一階段（scoring.py 純函式，含 5.4 規則）完成，第二階段待 2.2、4.1
+  5-4-送出系列結果: backlog  # 負責：D；系列結果與送出條件已在 5.3 的 scoring.py
   5-5-申訴期滿自動確認與一般晉級: backlog  # 負責：D
   5-6-季軍賽-雙方棄權與賽事結束: backlog  # 負責：D
   5-7-勝隊上傳結算截圖: backlog  # 擱置（期中後）
