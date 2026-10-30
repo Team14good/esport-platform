@@ -6,6 +6,7 @@ import {
 import { useState } from "react"
 
 import type { PublicBracket, PublicMatch } from "./bracket-types"
+import { useConsecutiveFailures } from "./use-consecutive-failures"
 
 // 公開對戰樹每 5 秒輪詢（AD-14、EXPERIENCE.md〈Foundation〉即時性）
 export const BRACKET_POLL_INTERVAL_MS = 5000
@@ -76,13 +77,6 @@ type Snapshot = {
   changed: ReadonlySet<string>
 }
 
-type FailureBaseline = {
-  /** 上一次成功的時間（dataUpdatedAt） */
-  successAt: number
-  /** 上一次成功時累計的失敗次數（errorUpdateCount） */
-  errorsAtSuccess: number
-}
-
 /**
  * 公開對戰樹的輪詢：每 5 秒重抓、分頁在背景時暫停、回到前景立即重抓。
  * 失敗不由 TanStack 重試，連續失敗次數由這個 hook 自己算。
@@ -120,16 +114,10 @@ export function useBracketPolling({
     setSnapshot({ data, changed })
   }
 
-  const [baseline, setBaseline] = useState<FailureBaseline>({
-    successAt: dataUpdatedAt,
-    errorsAtSuccess: errorUpdateCount,
-  })
-  let errorsAtSuccess = baseline.errorsAtSuccess
-  if (baseline.successAt !== dataUpdatedAt) {
-    errorsAtSuccess = errorUpdateCount
-    setBaseline({ successAt: dataUpdatedAt, errorsAtSuccess })
-  }
-  const consecutiveFailures = errorUpdateCount - errorsAtSuccess
+  const consecutiveFailures = useConsecutiveFailures(
+    dataUpdatedAt,
+    errorUpdateCount,
+  )
 
   return {
     bracket: data,

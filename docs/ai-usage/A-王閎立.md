@@ -147,3 +147,43 @@
 - 問題與修正：子代理發現同一張卡連續兩次變動時 class 不變、動畫不會重播，改用重新掛載並加測試；也發現 TanStack Query 在假時鐘下通知會晚一輪，測試期間改用 `queueMicrotask`。另有三個版面常數（卡高 67、首卡上方 19、季軍賽距決賽 83）與 walkover 不顯示比分是 AI 依示意圖與 UX 文件自行判斷，記在 Implementation Notes 交給人確認
 - 成熟度：L3（AI 依 spec 實作並自動驗證，未經多審查者）
 - 證據：spec 同上；尚未 commit
+
+### 2026-10-30｜需求、設計／spec｜Story 5.8：場次頁觀眾檢視的 spec
+
+- Story／範圍：5.8
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Explore 子代理整理 UX）
+- 怎麼用：`/bmad-build 5.8`。子代理先整理 S4 的 UX 規定，涵蓋 EXPERIENCE、DESIGN、mockup 與 contract；AI 依此寫 spec，再把文件沒定義的地方列成問題讓人選
+- AI 產出：`spec-5-8-match-page-results.md`，包含 16 列 I/O 矩陣、7 項 Decisions、12 個工作項目。這份 spec 也提議了公開單場 API 的形狀 `PublicMatchDetail`，要請 D 補進 contract
+- 人做了什麼：回答 4 個問題：
+  - 範圍：相依的 Story 還沒做的部分先用假資料，把 5.8 完整做出來
+  - 申訴期只在已確認後才套用勝敗樣式
+  - 沒有比分時顯示隊名＋「—」＋標記
+  - `win_loss` 型態寫「勝／負」
+- 驗證：子代理確認 contract 沒有定義公開的單場 API，也沒有各局的形狀，列為第二階段要補的項目
+- 問題與修正：AI 原本規劃只做元件，S4 路由留到之後。使用者要求用假資料把 5.8 做完整，於是改成建立正式的 S4 路由與「場次卡點了進入 S4」，資料改由同一個資料來源函式取得，正式 build 時顯示 404
+- 成熟度：L3（AI 依 UX 文件產出 spec，並找出文件沒有定義的地方交給人決定）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-8-match-page-results.md`
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.8：S4 路由、觀眾檢視元件與單場輪詢
+
+- Story／範圍：5.8
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：子代理只讀 spec 實作；主對話讀 diff，逐列檢查 I/O 矩陣，重建 frontend 後重跑全部檢查
+- AI 產出：
+  - 新增 11 個原始檔：S4 路由、4 個區塊元件與組合元件、`match-status`、`match-source`、`use-match-polling` 等
+  - 修改 4 個檔案：場次卡可點、抽出共用的狀態對照與失敗計數
+  - `/dev/match` 預覽頁
+  - 新增 8 個測試檔，`bracket-match-card` 測試補上連結的案例
+- 人做了什麼：在 checkpoint 核准 spec；略過 code review
+- 驗證：
+  - 前端單元測試 37 個檔案、354 個通過，新增 76 個
+  - build、typecheck、biome 都通過
+  - 正式 build 的 `dist/assets` 不含假資料
+  - 後端 310 passed
+  - 子代理用瀏覽器量過：1280px 兩欄，375px 單欄、沒有橫向捲軸
+- 問題與修正：
+  - S3 路由還不存在，TanStack `Link` 過不了型別檢查，返回連結先改成一般的 `<a>`，記在 `deferred-work.md`
+  - 子代理把「申訴期不套勝敗樣式」解讀成只限系列比分，各局列表照樣套用勝敗樣式，這點寫在 Implementation Notes 給人確認
+  - 實作途中 Docker Desktop 停止，人提出後由 AI 重新啟動並重建容器
+- 成熟度：L3（AI 依 spec 產出並自動驗證，這次沒有多審查者）
+- 證據：`frontend/src/features/competition/`、`frontend/src/routes/tournaments/$tournamentId/matches/$matchId.tsx`；尚未 commit

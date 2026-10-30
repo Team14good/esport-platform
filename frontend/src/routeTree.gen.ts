@@ -20,8 +20,10 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
 import { Route as DevBracketRouteImport } from './routes/dev/bracket'
+import { Route as DevMatchRouteImport } from './routes/dev/match'
 import { Route as OrganizerIndexRouteImport } from './routes/organizer/index'
 import { Route as OrganizerApplyRouteImport } from './routes/organizer/apply'
+import { Route as TournamentsTournamentIdMatchesMatchIdRouteImport } from './routes/tournaments/$tournamentId/matches/$matchId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -78,6 +80,11 @@ const DevBracketRoute = DevBracketRouteImport.update({
   path: '/dev/bracket',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevMatchRoute = DevMatchRouteImport.update({
+  id: '/dev/match',
+  path: '/dev/match',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrganizerIndexRoute = OrganizerIndexRouteImport.update({
   id: '/organizer/',
   path: '/organizer/',
@@ -88,6 +95,12 @@ const OrganizerApplyRoute = OrganizerApplyRouteImport.update({
   path: '/organizer/apply',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TournamentsTournamentIdMatchesMatchIdRoute =
+  TournamentsTournamentIdMatchesMatchIdRouteImport.update({
+    id: '/tournaments/$tournamentId/matches/$matchId',
+    path: '/tournaments/$tournamentId/matches/$matchId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -101,8 +114,10 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/dev/bracket': typeof DevBracketRoute
+  '/dev/match': typeof DevMatchRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer/': typeof OrganizerIndexRoute
+  '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -116,8 +131,10 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/dev/bracket': typeof DevBracketRoute
+  '/dev/match': typeof DevMatchRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer': typeof OrganizerIndexRoute
+  '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -132,8 +149,10 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/dev/bracket': typeof DevBracketRoute
+  '/dev/match': typeof DevMatchRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer/': typeof OrganizerIndexRoute
+  '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -149,8 +168,10 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/dev/bracket'
+    | '/dev/match'
     | '/organizer/apply'
     | '/organizer/'
+    | '/tournaments/$tournamentId/matches/$matchId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -164,8 +185,10 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/dev/bracket'
+    | '/dev/match'
     | '/organizer/apply'
     | '/organizer'
+    | '/tournaments/$tournamentId/matches/$matchId'
   id:
     | '__root__'
     | '/'
@@ -179,8 +202,10 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/dev/bracket'
+    | '/dev/match'
     | '/organizer/apply'
     | '/organizer/'
+    | '/tournaments/$tournamentId/matches/$matchId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -194,8 +219,10 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   DevBracketRoute: typeof DevBracketRoute
+  DevMatchRoute: typeof DevMatchRoute
   OrganizerApplyRoute: typeof OrganizerApplyRoute
   OrganizerIndexRoute: typeof OrganizerIndexRoute
+  TournamentsTournamentIdMatchesMatchIdRoute: typeof TournamentsTournamentIdMatchesMatchIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -277,6 +304,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevBracketRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/match': {
+      id: '/dev/match'
+      path: '/dev/match'
+      fullPath: '/dev/match'
+      preLoaderRoute: typeof DevMatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/organizer/': {
       id: '/organizer/'
       path: '/organizer'
@@ -289,6 +323,13 @@ declare module '@tanstack/react-router' {
       path: '/organizer/apply'
       fullPath: '/organizer/apply'
       preLoaderRoute: typeof OrganizerApplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tournaments/$tournamentId/matches/$matchId': {
+      id: '/tournaments/$tournamentId/matches/$matchId'
+      path: '/tournaments/$tournamentId/matches/$matchId'
+      fullPath: '/tournaments/$tournamentId/matches/$matchId'
+      preLoaderRoute: typeof TournamentsTournamentIdMatchesMatchIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -317,8 +358,11 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   DevBracketRoute: DevBracketRoute,
+  DevMatchRoute: DevMatchRoute,
   OrganizerApplyRoute: OrganizerApplyRoute,
   OrganizerIndexRoute: OrganizerIndexRoute,
+  TournamentsTournamentIdMatchesMatchIdRoute:
+    TournamentsTournamentIdMatchesMatchIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

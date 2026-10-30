@@ -15,6 +15,10 @@ import {
 } from "@/features/competition/bracket-fixtures"
 import type { PublicBracket } from "@/features/competition/bracket-types"
 import { ConnectionLostBanner } from "@/features/competition/ConnectionLostBanner"
+import {
+  DEV_MATCH_SOURCE_TOURNAMENT_ID,
+  matchPath,
+} from "@/features/competition/match-source"
 import { useBracketPolling } from "@/features/competition/use-bracket-polling"
 
 export const Route = createFileRoute("/dev/bracket")({
@@ -106,6 +110,12 @@ function BracketPreview() {
       enabled: teamCount !== "pending",
     })
 
+  // S4 的假資料固定是 32 隊「進行中」的對戰樹，只有同一份設定的卡片連到 S4，內容才會一致
+  const linkable = teamCount === 32 && scenario === "in_progress"
+  const matchHref = linkable
+    ? (matchId: string) => matchPath(DEV_MATCH_SOURCE_TOURNAMENT_ID, matchId)
+    : undefined
+
   const simulateChange = () => {
     store.current.set(config, simulateBracketChange(current()))
     void queryClient.refetchQueries({ queryKey })
@@ -118,7 +128,7 @@ function BracketPreview() {
         <h1 className="text-heading-lg">對戰樹預覽</h1>
         <p className="text-muted-foreground">
           開發模式專用，以假資料每 5 秒輪詢。「模擬斷線」後連續失敗 3 次（約 15
-          秒）會出現連線中斷橫幅。
+          秒）會出現連線中斷橫幅。32 隊「進行中」時可以點場次卡進入場次頁。
         </p>
       </header>
       <div className="flex flex-col gap-4">
@@ -159,7 +169,11 @@ function BracketPreview() {
         {teamCount === "pending" || bracket === undefined ? (
           <BracketPending />
         ) : (
-          <BracketTree bracket={bracket} changedMatchIds={changedMatchIds} />
+          <BracketTree
+            bracket={bracket}
+            changedMatchIds={changedMatchIds}
+            matchHref={matchHref}
+          />
         )}
       </section>
     </div>

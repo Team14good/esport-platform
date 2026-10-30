@@ -1,8 +1,21 @@
-import { render, screen, within } from "@testing-library/react"
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { BracketMatchCard } from "@/features/competition/BracketMatchCard"
+import { BracketTree } from "@/features/competition/BracketTree"
+import { createBracketFixture } from "@/features/competition/bracket-fixtures"
 import type { PublicMatch } from "@/features/competition/bracket-types"
+import {
+  DEV_MATCH_SOURCE_TOURNAMENT_ID,
+  matchPath,
+} from "@/features/competition/match-source"
+import { renderInRouter } from "./render-router"
 
 const TEAM_A = { id: "team-a", name: "清大 Hydra" }
 const TEAM_B = { id: "team-b", name: "交大 Nova" }
@@ -305,5 +318,52 @@ describe("對戰樹場次卡", () => {
     const { rerender } = render(<BracketMatchCard match={match({ id: "x" })} />)
     rerender(<BracketMatchCard match={match({ id: "x" })} />)
     expect(screen.getAllByRole("article")[1]).not.toHaveClass("update-flash")
+  })
+})
+
+describe("場次卡連到 S4", () => {
+  it("提供 matchHref 時整張卡是連結，可用鍵盤 focus、focus 時有外框", async () => {
+    await renderInRouter(
+      <BracketMatchCard
+        match={match({ id: "match-M3", code: "M3" })}
+        matchHref={(id) => `/tournaments/t1/matches/${id}`}
+        className="absolute"
+      />,
+    )
+
+    const link = await screen.findByRole("link")
+    expect(link).toHaveAttribute("href", "/tournaments/t1/matches/match-M3")
+    // 定位樣式移到外層連結，卡片內容不變
+    expect(link).toHaveClass("absolute", "focus-visible:outline-2")
+    expect(within(link).getByRole("article")).toHaveAccessibleName("M3")
+    expect(link).toHaveTextContent(TEAM_A.name)
+
+    link.focus()
+    expect(link).toHaveFocus()
+  })
+
+  it("沒有 matchHref 時維持原本的樣子，沒有連結", () => {
+    render(<BracketMatchCard match={match()} className="absolute" />)
+
+    expect(screen.queryByRole("link")).toBeNull()
+    expect(screen.getByRole("article")).toHaveClass("absolute")
+  })
+
+  it("對戰樹上點 M3：進入 /tournaments/{id}/matches/{M3 的 id}", async () => {
+    const bracket = createBracketFixture({ teamCount: 8 })
+    const { router } = await renderInRouter(
+      <BracketTree
+        bracket={bracket}
+        matchHref={(id) => matchPath(DEV_MATCH_SOURCE_TOURNAMENT_ID, id)}
+      />,
+    )
+
+    const card = await screen.findByRole("article", { name: "M3" })
+    fireEvent.click(card)
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/tournaments/${DEV_MATCH_SOURCE_TOURNAMENT_ID}/matches/match-M3`,
+      ),
+    )
   })
 })
