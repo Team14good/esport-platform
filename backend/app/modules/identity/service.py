@@ -76,6 +76,50 @@ def ensure_first_admin(session: Session, *, email: str, password: str) -> bool:
     return True
 
 
+def ensure_demo_account(
+    session: Session,
+    *,
+    email: str,
+    password: str,
+    display_name: str,
+    school_name: str,
+    is_organizer: bool = False,
+) -> bool:
+    """建立已驗證 Email 的示範帳號；同 Email 已存在就略過、不覆寫任何欄位。
+
+    同 Email 已被真人註冊時也視為已存在，不會改成主辦方。找不到學校時拋 LookupError
+    （學校清單由遷移檔載入，找不到代表示範資料設定有誤）。示範帳號是系統初始資料，
+    與第一個平台管理員一樣不寫操作紀錄。回傳是否新建了帳號；交易由呼叫端提交。
+    """
+    email = normalize_email(email)
+    if repository.get_account_by_email(session, email) is not None:
+        return False
+    school = next(
+        (s for s in repository.list_schools(session) if s.name == school_name), None
+    )
+    if school is None:
+        raise LookupError(f"找不到學校：{school_name}")
+    repository.add_account(
+        session,
+        Account(
+            email=email,
+            hashed_password=get_password_hash(password),
+            email_verified=True,
+            display_name=display_name,
+            school_id=school.id,
+            is_organizer=is_organizer,
+            created_at=clock.now(),
+        ),
+    )
+    return True
+
+
+def find_account_id_by_email(session: Session, email: str) -> uuid.UUID | None:
+    """以 Email 查帳號 id（示範資料的後續步驟用來取得已存在的示範帳號）。"""
+    account = repository.get_account_by_email(session, normalize_email(email))
+    return None if account is None else account.id
+
+
 def list_schools(session: Session) -> list[PublicSchool]:
     """公開的學校清單，依名稱排序。"""
     return [
