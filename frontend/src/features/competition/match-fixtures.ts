@@ -67,6 +67,18 @@ function sameRoundOrder(a: PublicMatch, b: PublicMatch) {
   )
 }
 
+/** 假資料的申訴期長度：預定時間後 2 小時截止 */
+const FIXTURE_APPEAL_WINDOW_MS = 2 * 60 * 60 * 1000
+
+/** 申訴期、申訴中的場次才有截止時間，其他狀態為 null */
+function fixtureAppealDeadline(match: PublicMatch): string | null {
+  if (match.status !== "appeal_window" && match.status !== "appealed")
+    return null
+  const scheduled = Date.parse(match.scheduled_at)
+  if (Number.isNaN(scheduled)) return null
+  return new Date(scheduled + FIXTURE_APPEAL_WINDOW_MS).toISOString()
+}
+
 /** 由一份對戰樹推導其中一場的 PublicMatchDetail；找不到時回傳 undefined。 */
 export function matchDetailFromBracket(
   bracket: PublicBracket,
@@ -86,6 +98,7 @@ export function matchDetailFromBracket(
     same_round: bracket.matches
       .filter((m) => m.round_no === match.round_no && m.id !== match.id)
       .sort(sameRoundOrder),
+    appeal_deadline: fixtureAppealDeadline(match),
     updated_at: bracket.updated_at,
   }
 }

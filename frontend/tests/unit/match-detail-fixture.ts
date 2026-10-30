@@ -40,6 +40,7 @@ export function matchDetail(
     round_name: "32 強",
     games: [],
     same_round: [],
+    appeal_deadline: null,
     updated_at: "2026-10-18T05:00:00Z",
     ...overrides,
   }

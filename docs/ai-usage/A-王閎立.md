@@ -187,3 +187,20 @@
   - 實作途中 Docker Desktop 停止，人提出後由 AI 重新啟動並重建容器
 - 成熟度：L3（AI 依 spec 產出並自動驗證，這次沒有多審查者）
 - 證據：`frontend/src/features/competition/`、`frontend/src/routes/tournaments/$tournamentId/matches/$matchId.tsx`；尚未 commit
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.2：S4 申訴期區塊（截止時間＋倒數插槽）
+
+- Story／範圍：5.2（S4 部分，在 `story/5-8` 實作）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：Countdown 元件是 B 的 2.4，還沒做。AI 提出三個選項，人選了「先顯示截止時間，再留一個倒數插槽」。AI 依 EXPERIENCE.md〈場次頁（S4）〉寫 spec，交給子代理實作，主對話讀 diff 驗收
+- AI 產出：
+  - 新增 `MatchAppealWindow.tsx`
+  - `PublicMatchDetail` 加上 `appeal_deadline`，假資料一併補上
+  - `MatchSpectatorView` 重排：`< lg` 用 `display: contents` 加 `order`，把申訴期排在比分與各局之間；`≥ lg` 放在右欄最上方。每個區塊只渲染一次
+  - 13 個測試
+  - `deferred-work.md` 新增一項
+- 人做了什麼：選擇插槽做法，不重做 B 的元件
+- 驗證：前端 38 個測試檔、367 個測試通過，新增 13 個；build、typecheck、biome 都通過；子代理在瀏覽器量過 1280px 與 375px 的位置，沒有橫向捲軸
+- 問題與修正：子代理沒有用 grid area，因為兩欄會共用列高，左欄會撐出空白，改用 `display: contents`。它也指出手機寬度時 DOM 順序和畫面順序不一致，Epic 6 加「提出申訴」按鈕時要再確認焦點順序，已寫進 Implementation Notes
+- 成熟度：L3（AI 依 UX 文件產出並自動驗證，人做範圍取捨；這次沒有多審查者）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-2-appeal-window-display.md`、`frontend/src/features/competition/MatchAppealWindow.tsx`；尚未 commit

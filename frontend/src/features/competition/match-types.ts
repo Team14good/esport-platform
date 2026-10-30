@@ -28,6 +28,8 @@ export type PublicMatchDetail = PublicMatch & {
   games: PublicGame[]
   /** 同一輪的其他場次（不含自己）；季軍賽與決賽同輪，會互相列出 */
   same_round: PublicMatch[]
+  /** 申訴期截止時間（ISO）；申訴期、申訴中才有值，其他狀態為 null */
+  appeal_deadline: string | null
   /** ISO 時間 */
   updated_at: string
 }
