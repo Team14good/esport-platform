@@ -116,3 +116,23 @@
   - 子代理為了測試而重建 backend 時，發現開發資料庫已被 `story/1-7` 的遷移 `c7e2a4d9b8f1` 升級過，在 `story/5-2` 分支上 backend 起不來。測試用的是獨立的 `_test` 資料庫，所以不受影響；這個問題記在 spec 的 Implementation Notes
 - 成熟度：L3（AI 依 spec 產出並自動驗證，但這次沒有多審查者）
 - 證據：`backend/app/modules/competition/forfeit.py`、`backend/tests/competition/test_forfeit.py`；尚未 commit
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.2 第二階段：判棄權 worker 工作（依約定介面、以假 service 測試）
+
+- Story／範圍：5.2（第二階段）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：
+  - 上游的 D、B 函式還沒合併。AI 提出兩種做法：等合併，或是依 `contracts/competition.md` 的約定介面先寫完。人選了後者。
+  - AI 寫 spec：用 `ForfeitPorts` 注入 D、B 的函式，人在 checkpoint 核准。
+  - 子代理照 spec 實作，主對話讀程式碼驗收。
+- AI 產出：
+  - `competition/forfeit_job.py`：`MatchForfeited` 事件、`ForfeitPorts` 介面、`forfeit_next_due`、`make_forfeit_job`。處理流程是先鎖賽事、再鎖場次，重新判定後寫入結果，轉為申訴期，寫操作紀錄（system），最後發事件。
+  - `tests/competition/test_forfeit_job.py`：13 個測試，用假的 ports 搭配真的 session，涵蓋 `run_once` 的一輪與失敗回滾。
+  - `deferred-work.md` 新增一項：合併後要寫的轉接層與註冊方式。
+- 人做了什麼：選擇用假 service 先寫完；核准 spec；選擇 S4 申訴期先只顯示截止時間，倒數的位置留給之後放倒數元件。略過了 code review。
+- 驗證：後端 304 passed，其中新增 13 個；`forfeit_job.py` 分支覆蓋率 100%；lint 通過。
+- 問題與修正：
+  - 子代理照 spec 寫，但留下一個風險：只要有一場資料不合法、判定時拋出 `ValueError`，那一場每輪都會排在最前面，後面所有到期的場次都判不到。子代理在報告裡自己指出了這一點。主對話驗收時判斷這屬於 bug，改成記錄日誌後略過那一場，並補了測試。
+  - 子代理讓模組 import 了 `app.worker`，模組和 worker 之間的依賴方向反了。主對話改成在檔案裡自己定義型別。
+- 成熟度：L3（AI 依規格產出並自動驗證，人做範圍取捨；這次沒有多審查者）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-2-forfeit-job.md`、`backend/app/modules/competition/forfeit_job.py`；尚未 commit
