@@ -2,6 +2,7 @@ import {
   CompassIcon,
   type LucideIcon,
   ShieldCheckIcon,
+  TrophyIcon,
   UserIcon,
 } from "lucide-react"
 
@@ -10,6 +11,7 @@ import type { IdentityKey } from "@/client"
 // 以產生的 IdentityKey 為鍵：後端新增身分、重新產生 client 後，忘了補圖示會編譯失敗
 const IDENTITY_ICONS: Record<IdentityKey, LucideIcon> = {
   browse: CompassIcon,
+  organizer: TrophyIcon,
   platform_admin: ShieldCheckIcon,
 }
 
