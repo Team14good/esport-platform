@@ -27,8 +27,12 @@ from app.modules.identity.models import (
     Account,
     AccountRead,
     AccountToken,
+    ApplicationStatus,
     Identity,
     IdentityKey,
+    OrganizerApplication,
+    OrganizerApplicationRead,
+    OrganizerApplicationSubmitted,
     PasswordResetRequested,
     ProfileUpdate,
     PublicSchool,
@@ -485,3 +489,90 @@ def update_profile(
         )
         session.flush()
     return AccountRead.model_validate(account, from_attributes=True)
+
+
+# ---------------------------------------------------------------- 主辦方申請
+
+
+def _application_pending() -> BusinessError:
+    return BusinessError(
+        "APPLICATION_PENDING", "你已有一筆待審核的主辦方申請。", status_code=409
+    )
+
+
+def _application_read(
+    session: Session, application: OrganizerApplication
+) -> OrganizerApplicationRead:
+    school = repository.get_school(session, application.school_id)
+    assert school is not None  # 外鍵保證學校存在
+    return OrganizerApplicationRead(
+        id=application.id,
+        club_name=application.club_name,
+        school_id=application.school_id,
+        school_name=school.name,
+        status=application.status,
+        reject_reason=application.reject_reason,
+        created_at=application.created_at,
+    )
+
+
+def submit_organizer_application(
+    session: Session, *, account_id: uuid.UUID, club_name: str, school_id: uuid.UUID
+) -> OrganizerApplicationRead:
+    """送出主辦方申請（Email 是否已驗證由 router 的 `VerifiedAccount` 檢查）。
+
+    先鎖帳號再檢查：已是主辦方拋 `ALREADY_ORGANIZER`、已有待審核拋
+    `APPLICATION_PENDING`、學校不存在拋 `SCHOOL_NOT_FOUND`（欄位錯誤）。
+    申請、操作紀錄與 `OrganizerApplicationSubmitted` 在同一個交易寫入。
+    """
+    account = repository.get_account(session, account_id, for_update=True)
+    if account is None:
+        raise authentication_required()
+    if account.is_organizer:
+        raise BusinessError("ALREADY_ORGANIZER", "你已經是主辦方。", status_code=409)
+    if repository.get_pending_application(session, account.id) is not None:
+        raise _application_pending()
+    if repository.get_school(session, school_id) is None:
+        raise _school_not_found()
+
+    application = OrganizerApplication(
+        account_id=account.id,
+        club_name=club_name.strip(),
+        school_id=school_id,
+        status=ApplicationStatus.PENDING,
+        created_at=clock.now(),
+    )
+    try:
+        repository.add_organizer_application(session, application)
+    except repository.DuplicatePendingApplicationError:
+        # 帳號鎖之外的寫入路徑同時新增了一筆待審核：交給部分唯一索引擋下
+        raise _application_pending()
+
+    audit.record(
+        session,
+        actor_id=account.id,
+        tournament_id=None,
+        action="organizer_application.submitted",
+        entity_type="organizer_application",
+        entity_id=application.id,
+        before=None,
+        after={
+            "club_name": application.club_name,
+            "school_id": application.school_id,
+            "status": application.status,
+        },
+    )
+    events.publish(
+        session, OrganizerApplicationSubmitted(application_id=application.id)
+    )
+    return _application_read(session, application)
+
+
+def get_my_organizer_application(
+    session: Session, account_id: uuid.UUID
+) -> OrganizerApplicationRead | None:
+    """帳號最新的一筆主辦方申請；從沒申請過時回傳 None。"""
+    application = repository.get_latest_application(session, account_id)
+    if application is None:
+        return None
+    return _application_read(session, application)

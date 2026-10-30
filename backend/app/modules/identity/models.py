@@ -9,7 +9,7 @@ from email_validator import EmailNotValidError, validate_email
 from pydantic import AfterValidator, BaseModel, BeforeValidator, field_validator
 from pydantic import Field as SchemaField
 from pydantic_core import PydanticCustomError
-from sqlalchemy import DateTime, Index, String, text
+from sqlalchemy import DateTime, Index, String, Text, text
 from sqlmodel import Field, SQLModel
 
 from app.core import clock
@@ -24,7 +24,7 @@ class TokenPurpose(StrEnum):
 
 
 class ApplicationStatus(StrEnum):
-    """主辦方申請狀態：待審核、核准、退回（OrganizerApplication 由 Story 1.7 建立）。"""
+    """主辦方申請（OrganizerApplication）的狀態：待審核、核准、退回。"""
 
     PENDING = "pending"
     APPROVED = "approved"
@@ -35,7 +35,10 @@ EMAIL_MAX_LENGTH = 255
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 DISPLAY_NAME_MAX_LENGTH = 50
+CLUB_NAME_MAX_LENGTH = 50
 REDIRECT_MAX_LENGTH = 2000
+# 同一帳號同時只能有一筆待審核申請的部分唯一索引（repository 以名稱辨識違反）
+PENDING_APPLICATION_INDEX = "ix_organizer_application_pending_account_id"
 
 
 def normalize_email(email: str) -> str:
@@ -97,6 +100,34 @@ class AccountToken(SQLModel, table=True):
     )
 
 
+class OrganizerApplication(SQLModel, table=True):
+    """主辦方申請。被退回後可以再送新的一筆，所以同一帳號可以有多筆；
+    待審核（pending）同時只能有一筆，由部分唯一索引保底。"""
+
+    __tablename__ = "organizer_application"
+    __table_args__ = (
+        Index(
+            PENDING_APPLICATION_INDEX,
+            "account_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    account_id: uuid.UUID = Field(foreign_key="account.id", index=True)
+    club_name: str = Field(max_length=255)
+    school_id: uuid.UUID = Field(foreign_key="school.id")
+    status: ApplicationStatus = Field(
+        default=ApplicationStatus.PENDING, sa_type=String(32)
+    )
+    # 退回原因；由 Story 1.8 的審核寫入
+    reject_reason: str | None = Field(default=None, sa_type=Text)
+    created_at: datetime = Field(
+        default_factory=clock.now, sa_type=DateTime(timezone=True)
+    )
+
+
 # ---------------------------------------------------------------- 事件
 
 
@@ -113,6 +144,12 @@ class PasswordResetRequested(Event):
 
     account_id: uuid.UUID
     token: str
+
+
+class OrganizerApplicationSubmitted(Event):
+    """有人送出主辦方申請。期中不登錄收件規則（worker 略過並標為已處理）。"""
+
+    application_id: uuid.UUID
 
 
 # ---------------------------------------------------------------- API schema
@@ -151,6 +188,29 @@ def _validate_display_name(value: str) -> str:
             "display_name_too_long", f"顯示名稱最多 {DISPLAY_NAME_MAX_LENGTH} 個字"
         )
     return name
+
+
+def _validate_club_name(value: str) -> str:
+    name = value.strip()
+    if not name:
+        raise PydanticCustomError("club_name_required", "請輸入社團名稱")
+    if len(name) > CLUB_NAME_MAX_LENGTH:
+        raise PydanticCustomError(
+            "club_name_too_long", f"社團名稱最多 {CLUB_NAME_MAX_LENGTH} 個字"
+        )
+    return name
+
+
+def _require_school(value: object) -> object:
+    # 沒選學校或不是學校 id 時給繁中訊息；id 合法但不存在，由 service 回 SCHOOL_NOT_FOUND
+    if value is None or value == "":
+        raise PydanticCustomError("school_required", "請選擇學校")
+    if isinstance(value, str):
+        try:
+            return uuid.UUID(value)
+        except ValueError:
+            raise PydanticCustomError("school_invalid", "找不到這間學校") from None
+    return value
 
 
 def _validate_redirect(value: str | None) -> str | None:
@@ -192,6 +252,10 @@ DisplayNameField = Annotated[
     str, BeforeValidator(_require_str), AfterValidator(_validate_display_name)
 ]
 RedirectField = Annotated[str | None, AfterValidator(_validate_redirect)]
+ClubNameField = Annotated[
+    str, BeforeValidator(_require_str), AfterValidator(_validate_club_name)
+]
+RequiredSchoolField = Annotated[uuid.UUID, BeforeValidator(_require_school)]
 
 
 class PublicSchool(BaseModel):
@@ -295,3 +359,22 @@ class ProfileUpdate(BaseModel):
         if value is None:
             raise PydanticCustomError("display_name_required", "請輸入顯示名稱")
         return value
+
+
+class OrganizerApplicationCreate(BaseModel):
+    """S15 送出主辦方申請：社團名稱與學校（只能從學校清單選擇）。"""
+
+    club_name: ClubNameField
+    school_id: RequiredSchoolField
+
+
+class OrganizerApplicationRead(BaseModel):
+    """主辦方申請；帶學校名稱，S15 與審核清單不必再對照學校清單。"""
+
+    id: uuid.UUID
+    club_name: str
+    school_id: uuid.UUID
+    school_name: str
+    status: ApplicationStatus
+    reject_reason: str | None
+    created_at: datetime
