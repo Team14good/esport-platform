@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 import psycopg
@@ -9,7 +10,12 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.modules.tournaments.models import GameTitle, RankTier
+from app.modules.tournaments.models import (
+    GameTitle,
+    RankTier,
+    Tournament,
+    TournamentStatus,
+)
 
 GAME_NAME_INDEX = "ix_game_title_lower_name"
 
@@ -34,14 +40,24 @@ def _flush_game(session: Session, write: Callable[[], None]) -> None:
 
 
 def get_game(
-    session: Session, game_id: uuid.UUID, *, for_update: bool = False
+    session: Session,
+    game_id: uuid.UUID,
+    *,
+    for_update: bool = False,
+    for_share: bool = False,
 ) -> GameTitle | None:
-    # for_update 時重新查詢並加鎖，並以資料庫的最新值覆蓋 identity map 裡已載入的同一筆
+    # for_update（FOR UPDATE）或 for_share（FOR SHARE）時重新查詢並加鎖，
+    # 並以資料庫的最新值覆蓋 identity map 裡已載入的同一筆
+    lock: bool | dict[str, bool] | None = None
+    if for_update:
+        lock = True
+    elif for_share:
+        lock = {"read": True}
     return session.get(
         GameTitle,
         game_id,
-        with_for_update=for_update or None,
-        populate_existing=for_update,
+        with_for_update=lock,
+        populate_existing=lock is not None,
     )
 
 
@@ -111,3 +127,58 @@ def replace_rank_tiers(
     session.flush()
     session.add_all(tiers)
     session.flush()
+
+
+# ---------------------------------------------------------------- 賽事
+
+
+def add_tournament(session: Session, tournament: Tournament) -> Tournament:
+    session.add(tournament)
+    session.flush()
+    return tournament
+
+
+def get_tournament(
+    session: Session, tournament_id: uuid.UUID, *, for_update: bool = False
+) -> Tournament | None:
+    # for_update 時 SELECT … FOR UPDATE，並以資料庫的最新值覆蓋 identity map 裡的同一筆
+    return session.get(
+        Tournament,
+        tournament_id,
+        with_for_update=for_update or None,
+        populate_existing=for_update,
+    )
+
+
+def list_tournaments_by_organizer(
+    session: Session, organizer_id: uuid.UUID
+) -> list[Tournament]:
+    """某主辦方的賽事，新建立的在前。"""
+    statement = (
+        select(Tournament)
+        .where(Tournament.organizer_id == organizer_id)
+        .order_by(col(Tournament.created_at).desc(), col(Tournament.id))
+    )
+    return list(session.exec(statement))
+
+
+def find_due_upcoming_id(session: Session, now: datetime) -> uuid.UUID | None:
+    """一筆尚未開放、報名開始已到的賽事 id（最早到期的優先）；不加鎖。"""
+    statement = (
+        select(Tournament.id)
+        .where(Tournament.status == TournamentStatus.UPCOMING)
+        .where(col(Tournament.registration_start) <= now)
+        .order_by(col(Tournament.registration_start), col(Tournament.id))
+        .limit(1)
+    )
+    return session.exec(statement).first()
+
+
+def set_tournament_status(
+    session: Session, tournament: Tournament, status: TournamentStatus, at: datetime
+) -> Tournament:
+    tournament.status = status
+    tournament.updated_at = at
+    session.add(tournament)
+    session.flush()
+    return tournament

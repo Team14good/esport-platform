@@ -356,6 +356,181 @@ export type SchoolIn = {
 export type ScoreType = "win_loss" | "rounds"
 
 /**
+ * TournamentCreate
+ *
+ * 建立賽事。時間必須帶時區；先發、替補、BO 未填時帶入遊戲的值。
+ *
+ * 期中一律為校園賽，不接受模式欄位。要對照遊戲或現在時間的檢查（日期順序、
+ * 優先期、每輪間隔）由 service 進行，錯誤同樣是 422 並指向欄位。
+ */
+export type TournamentCreate = {
+  /**
+   * Name
+   */
+  name: string
+  /**
+   * Game Id
+   */
+  game_id: string
+  /**
+   * Capacity
+   */
+  capacity: number
+  /**
+   * Registration Start
+   */
+  registration_start: string
+  /**
+   * Registration End
+   */
+  registration_end: string
+  /**
+   * Priority Hours
+   */
+  priority_hours?: number
+  /**
+   * Start At
+   */
+  start_at: string
+  /**
+   * Round Interval Minutes
+   */
+  round_interval_minutes: number
+  /**
+   * Forfeit Minutes
+   */
+  forfeit_minutes?: number
+  /**
+   * Appeal Minutes
+   */
+  appeal_minutes?: number
+  /**
+   * Starters
+   */
+  starters?: number | null
+  /**
+   * Substitutes
+   */
+  substitutes?: number | null
+  /**
+   * Bo
+   */
+  bo?: number | null
+  /**
+   * Livestream Url
+   */
+  livestream_url?: string | null
+}
+
+/**
+ * TournamentMode
+ *
+ * 賽事模式（AD-20）：校園賽、自訂。
+ */
+export type TournamentMode = "campus" | "custom"
+
+/**
+ * TournamentRead
+ *
+ * 賽事；遊戲相關欄位（`game_name` 以下）來自建立時的快照（AD-12）。
+ */
+export type TournamentRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Organizer Id
+   */
+  organizer_id: string
+  /**
+   * Name
+   */
+  name: string
+  status: TournamentStatus
+  mode: TournamentMode
+  /**
+   * Capacity
+   */
+  capacity: number
+  /**
+   * Registration Start
+   */
+  registration_start: string
+  /**
+   * Priority End
+   */
+  priority_end: string
+  /**
+   * Registration End
+   */
+  registration_end: string
+  /**
+   * Start At
+   */
+  start_at: string
+  /**
+   * Round Interval Minutes
+   */
+  round_interval_minutes: number
+  /**
+   * Forfeit Minutes
+   */
+  forfeit_minutes: number
+  /**
+   * Appeal Minutes
+   */
+  appeal_minutes: number
+  /**
+   * Livestream Url
+   */
+  livestream_url: string | null
+  /**
+   * Game Id
+   */
+  game_id: string
+  /**
+   * Game Name
+   */
+  game_name: string
+  /**
+   * Starters
+   */
+  starters: number
+  /**
+   * Substitutes
+   */
+  substitutes: number
+  /**
+   * Bo
+   */
+  bo: number
+  /**
+   * Game Minutes
+   */
+  game_minutes: number
+  score_type: ScoreType
+  /**
+   * Rank Tiers
+   */
+  rank_tiers: Array<RankTierRead>
+}
+
+/**
+ * TournamentStatus
+ *
+ * 賽事狀態：尚未開放、開放報名、報名截止、賽程已公布、進行中、已結束、已取消。
+ */
+export type TournamentStatus =
+  | "upcoming"
+  | "open"
+  | "closed"
+  | "published"
+  | "ongoing"
+  | "finished"
+  | "cancelled"
+
+/**
  * ValidationError
  */
 export type ValidationError = {
@@ -848,3 +1023,100 @@ export type tournamentsUpdateGameResponses = {
 
 export type tournamentsUpdateGameResponse =
   tournamentsUpdateGameResponses[keyof tournamentsUpdateGameResponses]
+
+export type tournamentsListGamesForOrganizerData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/games"
+}
+
+export type tournamentsListGamesForOrganizerResponses = {
+  /**
+   * Response Tournaments-List Games For Organizer
+   *
+   * Successful Response
+   */
+  200: Array<GameRead>
+}
+
+export type tournamentsListGamesForOrganizerResponse =
+  tournamentsListGamesForOrganizerResponses[keyof tournamentsListGamesForOrganizerResponses]
+
+export type tournamentsListMyTournamentsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/organizer/tournaments"
+}
+
+export type tournamentsListMyTournamentsResponses = {
+  /**
+   * Response Tournaments-List My Tournaments
+   *
+   * Successful Response
+   */
+  200: Array<TournamentRead>
+}
+
+export type tournamentsListMyTournamentsResponse =
+  tournamentsListMyTournamentsResponses[keyof tournamentsListMyTournamentsResponses]
+
+export type tournamentsCreateTournamentData = {
+  body: TournamentCreate
+  path?: never
+  query?: never
+  url: "/api/v1/organizer/tournaments"
+}
+
+export type tournamentsCreateTournamentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsCreateTournamentError =
+  tournamentsCreateTournamentErrors[keyof tournamentsCreateTournamentErrors]
+
+export type tournamentsCreateTournamentResponses = {
+  /**
+   * Successful Response
+   */
+  201: TournamentRead
+}
+
+export type tournamentsCreateTournamentResponse =
+  tournamentsCreateTournamentResponses[keyof tournamentsCreateTournamentResponses]
+
+export type tournamentsReadMyTournamentData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}"
+}
+
+export type tournamentsReadMyTournamentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsReadMyTournamentError =
+  tournamentsReadMyTournamentErrors[keyof tournamentsReadMyTournamentErrors]
+
+export type tournamentsReadMyTournamentResponses = {
+  /**
+   * Successful Response
+   */
+  200: TournamentRead
+}
+
+export type tournamentsReadMyTournamentResponse =
+  tournamentsReadMyTournamentResponses[keyof tournamentsReadMyTournamentResponses]
