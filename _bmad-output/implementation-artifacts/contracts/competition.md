@@ -49,10 +49,10 @@ class PublicMatch(BaseModel):    # 公開 API 用（AD-19）：不含 Email、�
     is_third_place: bool
     team_a: PublicTeamRef | None  # {id, name}
     team_b: PublicTeamRef | None
-    source_a: str | None          # 待定時的說明，例如 "M4 勝者"、"M29 敗者"（由 competition/bracket.py 產生）；該方已有隊伍、或確定不會有隊伍（已確認的 walkover 空缺方）時為 null
+    source_a: str | None          # 待定時的說明，例如 "M4 勝者"、"M29 敗者"（由 competition/bracket.py 產生）；該方已有隊伍、或確定不會有隊伍（已確認的 walkover、已取消的季軍賽）時為 null
     source_b: str | None
     bye_a: bool                   # a 方由輪空直接進入本輪，前端標「輪空」
-    bye_b: bool                   # b 方同上；兩方可能都是輪空
+    bye_b: bool                   # b 方同上；輪空多於 P÷4 時兩方可能都是輪空
     scheduled_at: datetime
     status: MatchStatus
     outcome: MatchOutcome | None
