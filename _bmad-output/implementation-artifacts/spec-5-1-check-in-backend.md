@@ -2,10 +2,10 @@
 title: 'Story 5.1（第二階段）：報到紀錄、報到 API 與賽事開始'
 type: 'feature'
 created: '2026-11-01'
-status: 'in-review'
+status: 'done'
 baseline_commit: '9a0278ef8e68b69d03795507d2d5a96abc808d74'
 route: 'dispatch'
-review_loop_iteration: 0
+review_loop_iteration: 1
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-5-1-check-in-rules.md'
@@ -82,14 +82,14 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `models.py`、遷移 -- CheckIn 表與 schema
-- [ ] `registration_port.py` -- `is_captain`
-- [ ] `service.py` -- `check_in`、`get_check_in_status`、`list_check_ins`、`list_forfeit_due`、`start_due_tournament`（worker 單筆）
-- [ ] `router.py` -- POST／GET check-in
-- [ ] `worker/jobs.py` -- 註冊工作
-- [ ] `tests/competition/test_check_in.py` -- I/O 矩陣每一列；併發兩隊報到；worker 重跑
-- [ ] `get_public_match` -- 帶出 `check_in_a_at`、`check_in_b_at`
-- [ ] 重新產生 `frontend/src/client`；更新 `contracts/competition.md`
+- [x] `models.py`、遷移 -- CheckIn 表與 schema
+- [x] `registration_port.py` -- `is_captain`
+- [x] `service.py` -- `check_in`、`get_check_in_status`、`list_check_ins`、`list_forfeit_due`、`start_due_tournament`（worker 單筆）
+- [x] `router.py` -- POST／GET check-in
+- [x] `worker/jobs.py` -- 註冊工作
+- [x] `tests/competition/test_check_in.py` -- I/O 矩陣每一列；併發兩隊報到；worker 重跑（併發以先後兩次請求＋唯一鍵驗證，真併發記入 deferred-work）
+- [x] `get_public_match` -- 帶出 `check_in_a_at`、`check_in_b_at`
+- [x] 重新產生 `frontend/src/client`；更新 `contracts/competition.md`
 
 **Acceptance Criteria:**
 - Given 8 隊抽籤後第一輪場次，when 兩隊隊長在開放後各自報到，then 都回 201，`list_check_ins` 有兩筆，`list_forfeit_due` 在期限後不含這場。
@@ -110,3 +110,28 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+2026-11-01 第 1 輪（Blind Hunter 12 點、Edge Case Hunter 9 點、Verification Gap 3 個缺口＋2 點其他）。沒有需求缺口。
+
+| # | 來源 | 發現 | 處理 |
+|---|------|------|------|
+| 1 | BH | `check_in` 先讀場次再鎖，可能用到舊值 | 駁回：`lock_match` 用 `populate_existing`，鎖住時以資料庫最新值覆蓋 |
+| 2 | BH、ECH | 讀賽事狀態不加鎖，和取消賽事同時發生 | 延後：期中不能取消賽事（2.6）；記入 deferred-work |
+| 3 | BH | 撞唯一鍵回 500 | **修正**：`begin_nested` 捕捉 `IntegrityError` 轉 409 `ALREADY_CHECKED_IN`，補測試 |
+| 4 | BH、自審 | 「太早」訊息寫 UTC | **修正**：改台北時間 `10/26（一）18:30 起可報到。`，與 UX 絕對時間格式一致 |
+| 5 | BH、ECH | 真隊長在不可報到或待定場次 `side` 為 null | **修正**：兩隊確定就先算 `side` |
+| 6 | VG、自審 | 狀態查詢回大寫 API 碼，`CheckInPanel` 吃小寫原因 | **修正**：`reason` 改小寫並新增 `not_checkable`、`not_captain`；面板型別與測試同步 |
+| 7 | ECH | 兩隊確定但沒有期限、或期限不晚於開放時間時 500 | **修正**：回 `not_checkable`／409 `MATCH_NOT_CHECKABLE` |
+| 8 | BH、ECH | `start_due_tournament` 未處理卻回 True，同輪重複選到 | **修正**：該分支回 False |
+| 9 | BH | 遷移沒有回填 `start_handled_at` | 駁回：尚無正式資料；既有對戰表被 worker 各看一次並標記，賽程已公布且已過開始時間者轉進行中正是預期行為 |
+| 10 | BH | `match_id` 單欄索引多餘 | **修正**：模型與遷移移除 |
+| 11 | BH | `monkeypatch.undo()` 範圍太大 | **修正**：只還原 `is_captain` |
+| 12 | BH | 「原因為 null 若且唯若成功」測試情境不足 | **修正**：補 B 隊隊長、別場隊長、旁觀者、待定、申訴期、已報到 |
+| 13 | BH | 錯誤表有死碼、未知原因裸 `KeyError` | **修正**：整理成 `_REJECTIONS`，未知原因當 `not_checkable` |
+| 14 | VG | `list_forfeit_due`、`list_check_ins` 排序沒有測試 | **修正**：期限與 id 順序相反、插入順序與時間相反的測試 |
+| 15 | ECH | 契約中 `REGISTRATION_UNAVAILABLE` 的順序不對 | **修正**：移到 `CAPTAIN_REQUIRED` 前；另補兩隊都報到後的推進、回傳值意義、事件消費者 |
+| 16 | ECH | 6.2 重新比賽沿用舊報到紀錄 | 延後：記入 deferred-work（6.2 需要 D 提供清除函式） |
+| 17 | ECH | 沒有真併發測試 | 延後：測試環境共用單一連線；記入 deferred-work |
+| 18 | VG | 正式環境 `is_captain` 尚未提供，報到一律 503 | 已知：等 C 合併，PR 說明列出 |
+
+修正後驗證：後端全套 1132 passed（合入 #21 最新版後），`scripts/lint.sh` 全過；前端單元測試 239 個中 3 個 identity 測試在全套負載下逾時，單獨重跑全過（與本變更無關），biome、build 通過；重新產生 client 無差異。突變檢查：`list_forfeit_due` 不排除兩隊都報到 → 1 失敗；不捕捉 `IntegrityError` → 2 失敗；不依期限排序 → 1 失敗。
