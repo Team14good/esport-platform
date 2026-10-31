@@ -73,3 +73,38 @@
 - 問題與修正：子代理第一次回報時只說「應該是負載」；若直接採信或為了讓測試通過去改舊測試，都可能掩蓋真正的問題。對照實驗後才記入 deferred-work，並寫下可能的修法
 - 成熟度：L4（以對照實驗取代「看起來像是負載」的猜測）
 - 證據：`deferred-work.md` 的前端測試冷啟動項目
+### 2026-10-29｜設計／介面設計｜competition 模組介面約定
+
+- Story／範圍：CONTRIBUTING 6.5 約定介面（PR #3）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：請 AI 讀 D 物件設計文件、B 文件的 MATCH 資料表與 epic 4～6 context，整理出 competition 對外提供與向上游要求的函式
+- AI 產出：`contracts/competition.md`，內容包括 4 個 schema、2 個 HTTP API、12 個公開函式、6 個事件，以及要 tournaments、registration 提供的 12 個函式
+- 人做了什麼：決定先約定介面、讓各模組不必等上游，請 A、B、C 審查
+- 驗證：未記錄（等組員在 PR #3 確認）
+- 問題與修正：AI 整理時發現設計文件沒有指定申訴相關函式（`mark_appealed` 等）由誰實作，列為待確認問題請 B 回覆；後來 4.1 實作時發現約定的 `is_bye` 不足以表示是哪一方輪空、輪次名「準決賽」與 UX 文件的「4 強」不一致，已在 PR #3 補一個 commit 修正
+- 成熟度：L3（AI 依設計文件產出介面，人決定協作方式）
+- 證據：PR #3、`_bmad-output/implementation-artifacts/contracts/competition.md`
+
+### 2026-10-29｜程式／程式生成｜Story 4.1 第一階段：對戰表產生器 bracket.py
+
+- Story／範圍：4.1 第一階段（PR #4）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（spec → 實作子代理）
+- 怎麼用：上游 2.2、3.x 還沒完成，請 AI 先做不碰資料庫的純函式。bmad-build 先寫 spec，人核准後交給沒有對話脈絡的子代理實作
+- AI 產出：`backend/app/modules/competition/bracket.py`（`plan`、`assign`、`round_name`、`source_label`），以及 `tests/competition/test_bracket.py`（146 個測試案例，2～64 隊逐一檢查）
+- 人做了什麼：在 spec checkpoint 核准；決定 spec 超過建議長度時保留不拆
+- 驗證：全部 399 個後端測試通過；`bracket.py` 分支覆蓋率 100%（48 個分支，要求 90%）；lint 通過
+- 問題與修正：AI 在 spec 初稿漏掉範本規定的 3 個區段，審查時才補回；輪次名稱兩份需求文件不一致（epic context 寫「準決賽」、UX 寫「4 強」），AI 以 UX 文件為準並記在 spec
+- 成熟度：L4（spec → 實作 → 多審查者 → 自動驗證，人只在 checkpoint 決策）
+- 證據：`_bmad-output/implementation-artifacts/spec-4-1-bracket-generator.md`
+
+### 2026-10-29｜測試／測試審查與突變測試｜三位 AI 審查者找出測試沒釘住的規則
+
+- Story／範圍：4.1 第一階段
+- 工具：Claude Code（Opus 5.5）＋ bmad-build 的 3 位審查者（Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：3 位沒有對話脈絡的審查子代理平行審查 diff；主代理逐項查證、判定後，把要修的交回實作子代理
+- AI 產出：16 項發現。7 項修正（都是測試與 docstring）、1 項在完成步驟處理、3 項判定不屬實、2 項不修，分類紀錄寫在 spec 的 Review Triage Log
+- 人做了什麼：未介入（依 bmad-build 規則，沒有需求缺口就不需要人決定）
+- 驗證：主代理自己做突變測試。把輪空分散改成依序排列 → 39 個測試失敗；把季軍賽來源改錯 → 62 個測試失敗。兩者在修正前都不會被抓到
+- 問題與修正：**實作子代理的測試全綠、覆蓋率 100%，但沒有真正驗證「輪空交替落在上、下半區」**：13 隊與 10 隊兩種順序結果相同，換掉演算法測試也不會失敗。Verification Gap 審查者指出這點，主代理用 14 隊補上精確測試，再用突變測試證明新測試有效。這個案例說明覆蓋率 100% 不等於規則有被驗證
+- 成熟度：L5（以多個獨立 AI 審查者加上突變測試，抓出 AI 自己寫的測試的盲點）
+- 證據：spec 的 Review Triage Log 與 Implementation Notes
