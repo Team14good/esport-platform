@@ -87,3 +87,52 @@
 - 問題與修正：AI 發現擱置 4.2 後，原版 4.1 只能在報名截止前抽籤，流程會卡住，於是放寬；也發現 CONTRIBUTING 原本的 6.3 規則與架構 AD-7 不一致，已更正
 - 成熟度：L4（AI 做影響分析並找出流程卡點，人做取捨）
 - 證據：`_bmad-output/planning-artifacts/sprint-change-proposal-2026-10-28.md`、commit `5aa5e0e`、`50a3bdc`
+
+### 2026-10-30｜需求、設計／spec｜Story 5.2 第一階段：逾時判棄權規則的 spec
+
+- Story／範圍：5.2（第一階段）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：輸入「/bmad-build 5.2 不要讓我選 全部選你推薦的」。AI 讀了 epic 5 context、competition 介面約定，以及 D 在 `story/5-1`、`5-3`、`5-5` 的規則檔，寫出 spec，並自己選定所有推薦選項
+- AI 產出：`spec-5-2-forfeit-rules.md`，內容包括 14 列 I/O 矩陣、3 條驗收條件，以及 4 項 Decisions。Decisions 寫明只做第一階段、申訴期從判定時間起算、哪些情況算呼叫端錯誤、不做 code review
+- 人做了什麼：事先授權 AI 選推薦選項，沒有在 checkpoint 停下來，也沒有逐項確認
+- 驗證：spec 依 READY FOR DEVELOPMENT 標準自我檢查；介面名稱（`list_forfeit_due`、`lock_match`、`transition_match`）與 `contracts/competition.md` 一致
+- 問題與修正：AI 起初考慮讓申訴期從棄權期限起算，這樣判定結果不受 worker 執行時間影響。後來查到 PRD FR-30 寫「判棄權時起算」，改成從判定時間起算，worker 延遲時兩隊仍有完整的申訴期
+- 成熟度：L3（AI 依既有規格與組員的寫法產出 spec，人只事先授權採用推薦選項）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-2-forfeit-rules.md`
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.2 第一階段：判棄權純函式與測試
+
+- Story／範圍：5.2（第一階段）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：子代理只讀 spec 實作。主對話讀 diff，逐項確認每列 I/O 矩陣都有對應的測試，重建 backend image 後重跑全部檢查
+- AI 產出：
+  - `competition/forfeit.py`：`ForfeitVerdict`、`judge_forfeit`、`appeal_deadline`，共 101 行
+  - `tests/competition/test_forfeit.py`：38 個測試，包含 5000 組固定種子的隨機輸入，以及 import 與「不讀時鐘」的 AST 檢查
+  - `deferred-work.md`：新增第二階段的範圍
+- 人做了什麼：依先前的決定，略過 code review
+- 驗證：後端 291 passed，其中新增 38 個；`forfeit.py` 分支覆蓋率 100%（42 行、24 個分支）；lint（mypy、ty、ruff）通過；新檔都是 LF
+- 問題與修正：
+  - 子代理的隨機測試最初在迴圈裡用閉包，被 ruff B023 擋下，改成 kwargs dict
+  - 子代理為了測試而重建 backend 時，發現開發資料庫已被 `story/1-7` 的遷移 `c7e2a4d9b8f1` 升級過，在 `story/5-2` 分支上 backend 起不來。測試用的是獨立的 `_test` 資料庫，所以不受影響；這個問題記在 spec 的 Implementation Notes
+- 成熟度：L3（AI 依 spec 產出並自動驗證，但這次沒有多審查者）
+- 證據：`backend/app/modules/competition/forfeit.py`、`backend/tests/competition/test_forfeit.py`；尚未 commit
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.2 第二階段：判棄權 worker 工作（依約定介面、以假 service 測試）
+
+- Story／範圍：5.2（第二階段）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：
+  - 上游的 D、B 函式還沒合併。AI 提出兩種做法：等合併，或是依 `contracts/competition.md` 的約定介面先寫完。人選了後者。
+  - AI 寫 spec：用 `ForfeitPorts` 注入 D、B 的函式，人在 checkpoint 核准。
+  - 子代理照 spec 實作，主對話讀程式碼驗收。
+- AI 產出：
+  - `competition/forfeit_job.py`：`MatchForfeited` 事件、`ForfeitPorts` 介面、`forfeit_next_due`、`make_forfeit_job`。處理流程是先鎖賽事、再鎖場次，重新判定後寫入結果，轉為申訴期，寫操作紀錄（system），最後發事件。
+  - `tests/competition/test_forfeit_job.py`：13 個測試，用假的 ports 搭配真的 session，涵蓋 `run_once` 的一輪與失敗回滾。
+  - `deferred-work.md` 新增一項：合併後要寫的轉接層與註冊方式。
+- 人做了什麼：選擇用假 service 先寫完；核准 spec；選擇 S4 申訴期先只顯示截止時間，倒數的位置留給之後放倒數元件。略過了 code review。
+- 驗證：後端 304 passed，其中新增 13 個；`forfeit_job.py` 分支覆蓋率 100%；lint 通過。
+- 問題與修正：
+  - 子代理照 spec 寫，但留下一個風險：只要有一場資料不合法、判定時拋出 `ValueError`，那一場每輪都會排在最前面，後面所有到期的場次都判不到。子代理在報告裡自己指出了這一點。主對話驗收時判斷這屬於 bug，改成記錄日誌後略過那一場，並補了測試。
+  - 子代理讓模組 import 了 `app.worker`，模組和 worker 之間的依賴方向反了。主對話改成在檔案裡自己定義型別。
+- 成熟度：L3（AI 依規格產出並自動驗證，人做範圍取捨；這次沒有多審查者）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-2-forfeit-job.md`、`backend/app/modules/competition/forfeit_job.py`；尚未 commit

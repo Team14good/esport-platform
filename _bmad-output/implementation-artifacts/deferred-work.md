@@ -37,3 +37,23 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-5-forgot-reset-password.md`
   summary: `tests/test_migrations.py` 只開 `compare_type`，沒有比對 server default；遷移檔與模型的 `server_default` 不一致（例如 `account.credentials_version` 的 `"0"` 被刪掉或改值）時測試照樣通過。測試資料庫每次從空表升級，也測不到「既有帳號升級後拿到 0」（低；若遷移檔被改錯，為 medium：有資料的資料庫升級失敗，或舊登入全部失效）。
   evidence: 2026-10-28 Story 1.5 第二輪 Code Review（Verification Gap）。比對設定自 Story 1.1 起就是如此，不是本 Story 造成。處理時在 `MigrationContext.configure` 加 `"compare_server_default": True`，先跑一次確認其他既有欄位沒有誤報；要完整守住資料升級，另寫一支「升到上一版、插入帳號、再升到 head」的測試。
+
+## Deferred from: spec-5-2-forfeit-rules.md (2026-10-30)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-forfeit-rules.md`
+  summary: Story 5.2 第二階段尚未實作：第一階段只有 `competition/forfeit.py` 的純函式（`judge_forfeit`、`appeal_deadline`），還沒有 worker 工作、資料寫入、事件與畫面，所以逾時後實際上不會判棄權。
+  evidence: 依賴 D 的 4.1（Match 資料表、`lock_match`、`transition_match`）與 5.1（`list_forfeit_due`、`list_check_ins`），兩者尚未合併。合併後在 competition 新增檔案完成以下範圍（不修改 D 的 `service.py` 既有函式）：
+    - worker 工作：用 `list_forfeit_due` 選場次，`lock_match` 後以 `list_check_ins` 與賽事狀態重新呼叫 `judge_forfeit`；有結果時寫入 outcome、勝隊、wins 與 `appeal_deadline(decided_at=現在, appeal_minutes=賽事申訴時限)`，`submitted_by` 留空，再用 `transition_match` 轉為申訴期。重複執行沒有副作用。
+    - 操作紀錄以 `app.core.audit.record()` 記 actor 為 system；發出判棄權事件（期中只發不通知）。
+    - S4 顯示哪一隊棄權（雙方棄權時兩隊都標示）與申訴期倒數。
+    - 確認 D 的場次狀態轉換表允許「待開打 → 申訴期」；若不允許，請 D 在轉換表新增，不由 5.2 修改。
+
+## Deferred from: spec-5-2-forfeit-job.md (2026-10-30)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-forfeit-job.md`
+  summary: 逾時判棄權的 worker 工作（`competition/forfeit_job.py` 的 `make_forfeit_job`）已依約定介面寫好並以假的 `ForfeitPorts` 測過，但還沒接上真的 D、B 函式，也沒有加進 `app/worker/jobs.py` 的 `JOBS`，所以 worker 目前實際上不會判棄權。
+  evidence: D 的 4.1、5.1（Match 資料表、`get_match`、`lock_match`、`transition_match`、`list_forfeit_due`、`list_check_ins`）與 B 的 `lock_tournament` 尚未合併。合併後：
+    - 在 competition 新增轉接層檔案，實作 `ForfeitPorts`：`list_forfeit_due` → `service.list_forfeit_due(now=)`；`get_tournament_id` → `service.get_match(match_id=).tournament_id`；`lock_tournament` → tournaments `service.lock_tournament(tournament_id=)`，轉成 `TournamentForfeitInfo(cancelled=狀態是否為已取消, appeal_minutes=)`；`lock_match` → `service.lock_match(match_id=)`，直接回傳 Match 資料列；`list_checked_in_team_ids` → `service.list_check_ins(match_id=)` 的 `team_id`；`transition_to_appeal_window` → `service.transition_match(match=, to=MatchStatus.APPEAL_WINDOW)`。
+    - 把 `make_forfeit_job(轉接層)` 加進 `JOBS`，並補一個用真資料表跑 `run_once` 的整合測試。
+    - 確認 D 的轉換表允許「待開打 → 申訴期」；若不允許，請 D 新增，不由 5.2 修改。
+    - 請 D 評估 `list_forfeit_due` 是否排除「兩隊都已報到」的場次：目前的約定只排除非待開打，兩隊都報到但還沒登錄第一局的場次，每輪都會被重新鎖住再略過；這段期間它們的賽事列與場次列的鎖會留到該交易結束。
