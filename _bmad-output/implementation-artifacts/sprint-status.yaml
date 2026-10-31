@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 10-29-2026 00:45
+last_updated: 10-29-2026 00:20
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -75,7 +75,7 @@ development_status:
   epic-3-retrospective: optional
 
   epic-4: in-progress
-  4-1-主辦方提前抽籤並產生對戰表: backlog  # 負責：D
+  4-1-主辦方提前抽籤並產生對戰表: in-progress  # 負責：D；第一階段（bracket.py 純函式）完成，第二階段待 2.2、3.x
   4-2-報名截止時自動抽籤: backlog  # 擱置（期中後）
   4-3-排定與修改場次時間: in-progress  # 負責：D；第一階段（schedule.py 純函式）完成，第二階段待 2.2、4.1
   4-4-指派裁判到場次: backlog  # 負責：D
