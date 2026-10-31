@@ -439,6 +439,30 @@ export type PublicBracket = {
 }
 
 /**
+ * PublicGame
+ *
+ * 已登錄的一局（公開）；段位截圖不出現在公開 API（AD-19）。
+ */
+export type PublicGame = {
+  /**
+   * Game No
+   */
+  game_no: number
+  /**
+   * Winner Side
+   */
+  winner_side: "a" | "b"
+  /**
+   * Score A
+   */
+  score_a: number | null
+  /**
+   * Score B
+   */
+  score_b: number | null
+}
+
+/**
  * PublicMatch
  *
  * 公開 API 用（AD-19）：不含 Email、學校、截圖鍵值。
@@ -503,6 +527,100 @@ export type PublicMatch = {
 }
 
 /**
+ * PublicMatchDetail
+ *
+ * 公開單場（5.8 S4 場次頁）：`PublicMatch` 加上賽事、輪次與同輪場次。
+ */
+export type PublicMatchDetail = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Code
+   */
+  code: string
+  /**
+   * Round No
+   */
+  round_no: number
+  /**
+   * Slot No
+   */
+  slot_no: number
+  /**
+   * Is Third Place
+   */
+  is_third_place: boolean
+  team_a: PublicTeamRef | null
+  team_b: PublicTeamRef | null
+  /**
+   * Source A
+   */
+  source_a: string | null
+  /**
+   * Source B
+   */
+  source_b: string | null
+  /**
+   * Bye A
+   */
+  bye_a: boolean
+  /**
+   * Bye B
+   */
+  bye_b: boolean
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+  status: MatchStatus
+  outcome: MatchOutcome | null
+  /**
+   * Winner Id
+   */
+  winner_id: string | null
+  /**
+   * Wins A
+   */
+  wins_a: number
+  /**
+   * Wins B
+   */
+  wins_b: number
+  tournament: PublicTournamentRef
+  /**
+   * Game Name
+   */
+  game_name: string
+  /**
+   * Best Of
+   */
+  best_of: number
+  score_type: ScoreType
+  /**
+   * Round Name
+   */
+  round_name: string
+  /**
+   * Games
+   */
+  games: Array<PublicGame>
+  /**
+   * Same Round
+   */
+  same_round: Array<PublicMatch>
+  /**
+   * Appeal Deadline
+   */
+  appeal_deadline: string | null
+  /**
+   * Updated At
+   */
+  updated_at: string
+}
+
+/**
  * PublicPodium
  *
  * 名次；從缺為 None。
@@ -531,6 +649,20 @@ export type PublicSchool = {
  * PublicTeamRef
  */
 export type PublicTeamRef = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+}
+
+/**
+ * PublicTournamentRef
+ */
+export type PublicTournamentRef = {
   /**
    * Id
    */
@@ -1443,3 +1575,39 @@ export type competitionReadPublicBracketResponses = {
 
 export type competitionReadPublicBracketResponse =
   competitionReadPublicBracketResponses[keyof competitionReadPublicBracketResponses]
+
+export type competitionReadPublicMatchData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}"
+}
+
+export type competitionReadPublicMatchErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadPublicMatchError =
+  competitionReadPublicMatchErrors[keyof competitionReadPublicMatchErrors]
+
+export type competitionReadPublicMatchResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicMatchDetail
+}
+
+export type competitionReadPublicMatchResponse =
+  competitionReadPublicMatchResponses[keyof competitionReadPublicMatchResponses]

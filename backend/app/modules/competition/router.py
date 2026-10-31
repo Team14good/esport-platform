@@ -7,7 +7,11 @@ from fastapi import APIRouter, status
 from app.core.db import SessionDep
 from app.core.errors import BusinessError
 from app.modules.competition import service
-from app.modules.competition.models import BracketRead, PublicBracket
+from app.modules.competition.models import (
+    BracketRead,
+    PublicBracket,
+    PublicMatchDetail,
+)
 from app.modules.identity.deps import Organizer
 
 router = APIRouter(tags=["competition"])
@@ -32,3 +36,13 @@ def read_public_bracket(session: SessionDep, tournament_id: uuid.UUID) -> Public
             "BRACKET_NOT_FOUND", "這場賽事還沒有對戰表。", status_code=404
         )
     return bracket
+
+
+@router.get("/tournaments/{tournament_id}/matches/{match_id}")
+def read_public_match(
+    session: SessionDep, tournament_id: uuid.UUID, match_id: uuid.UUID
+) -> PublicMatchDetail:
+    """公開單場（不需登入）；賽事或場次不存在、未抽籤、場次不屬於該賽事都回 404 `MATCH_NOT_FOUND`。"""
+    return service.get_public_match(
+        session, tournament_id=tournament_id, match_id=match_id
+    )

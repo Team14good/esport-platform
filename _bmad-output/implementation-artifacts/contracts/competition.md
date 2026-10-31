@@ -65,6 +65,27 @@ class PublicPodium(BaseModel):   # 5.5 新增：名次，從缺為 null
     runner_up: PublicTeamRef | None
     third_place: PublicTeamRef | None
 
+class PublicGame(BaseModel):     # 5.8：已登錄的一局；逐局資料表（5.3 第二階段）建立前 games 一律為 []
+    game_no: int                  # 1 起算
+    winner_side: Literal["a", "b"]
+    score_a: int | None           # rounds 型態的回合數；win_loss 為 null
+    score_b: int | None
+
+class PublicTournamentRef(BaseModel):
+    id: UUID
+    name: str
+
+class PublicMatchDetail(PublicMatch):   # 5.8：公開單場（A 的 S4 場次頁）；欄位名稱與 A 的 match-types.ts 一致
+    tournament: PublicTournamentRef
+    game_name: str                # 遊戲名稱快照
+    best_of: int                  # 本輪 BO（`bo_for_round`）
+    score_type: ScoreType         # "win_loss" | "rounds"
+    round_name: str               # 季軍賽為「季軍賽」，其餘同 PublicBracket.round_names
+    games: list[PublicGame]
+    same_round: list[PublicMatch] # 同輪其他場次（不含自己），依 slot_no、季軍賽在最後；季軍賽與決賽互相列出
+    appeal_deadline: datetime | None   # 只在申訴期、申訴中有值，其他狀態 null
+    updated_at: datetime          # 這場與同輪其他場次 updated_at 的最大值
+
 class PublicBracket(BaseModel):
     tournament_id: UUID
     rounds: int
@@ -79,6 +100,7 @@ class PublicBracket(BaseModel):
 | 方法與路徑 | 權限 | 回傳 |
 | --- | --- | --- |
 | `GET /api/v1/tournaments/{tournament_id}/bracket` | 公開 | `PublicBracket`；尚未抽籤回 404 `BRACKET_NOT_FOUND` |
+| `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}` | 公開 | `PublicMatchDetail`（5.8）；賽事不存在、尚未抽籤、場次不存在、場次不屬於該賽事，一律 404 `MATCH_NOT_FOUND`（回應 `{"detail":{"code":"MATCH_NOT_FOUND","message":"找不到這個場次。"}}`；尚未抽籤也回這個碼而非 `BRACKET_NOT_FOUND`，不透露是哪一種）。`same_round` 的項目是一般 `PublicMatch`，不含單場的延伸欄位；`games` 依 `game_no` 遞增（5.3 前固定為 `[]`） |
 | `POST /api/v1/tournaments/{tournament_id}/draw` | 該賽事主辦方 | 201 `BracketRead` |
 
 抽籤的錯誤碼（4.1）：`NOT_ENOUGH_TEAMS` 409（正取不足 2 隊）、`BRACKET_ALREADY_DRAWN` 409（已有對戰表，優先於狀態檢查）、`TOURNAMENT_NOT_DRAWABLE` 409（狀態不是 `open`、`closed`）、`TOURNAMENT_START_PASSED` 409（`start_at <= now`）、`TOURNAMENT_OWNER_REQUIRED` 403、`ORGANIZER_REQUIRED` 403、`TOURNAMENT_NOT_FOUND` 404、`REGISTRATION_UNAVAILABLE` 503（registration 尚未提供抽籤用函式）。場次相關：`MATCH_NOT_FOUND` 404、`MATCH_INVALID_TRANSITION` 409、`MATCH_TEAMS_NOT_SET` 409（`start_forfeit_clock` 用在兩隊未確定的場次）。
