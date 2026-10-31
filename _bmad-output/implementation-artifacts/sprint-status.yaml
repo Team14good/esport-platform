@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 10-29-2026 00:20
+last_updated: 10-30-2026 14:34
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -49,9 +49,9 @@ development_status:
   1-8-平台管理員審核主辦方申請: backlog  # 負責：A
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-平台管理員維護遊戲設定與學校清單: backlog  # 負責：B
-  2-2-主辦方建立賽事: backlog  # 負責：B
+  epic-2: in-progress
+  2-1-平台管理員維護遊戲設定與學校清單: in-progress  # 負責：B；第一階段（後端）完成，第二階段（S36 畫面）待 1.8
+  2-2-主辦方建立賽事: in-progress  # 負責：B；第一階段（後端）完成，第二階段（S25～S27 畫面）待 1.8
   2-3-分輪設定-bo-數: backlog  # 擱置（期中後）
   2-4-公開賽事列表與賽事頁: backlog  # 負責：B
   2-5-抽籤前修改賽事: backlog  # 擱置（期中後）
@@ -75,7 +75,7 @@ development_status:
   epic-3-retrospective: optional
 
   epic-4: in-progress
-  4-1-主辦方提前抽籤並產生對戰表: in-progress  # 負責：D；第一階段（bracket.py 純函式）完成，第二階段待 2.2、3.x
+  4-1-主辦方提前抽籤並產生對戰表: in-progress  # 負責：D；第一階段（bracket.py）完成；第二階段後端（資料表、抽籤 service 與 API）完成，待 C 的 registration 函式與 S27 畫面
   4-2-報名截止時自動抽籤: backlog  # 擱置（期中後）
   4-3-排定與修改場次時間: in-progress  # 負責：D；第一階段（schedule.py 純函式）完成，第二階段待 2.2、4.1
   4-4-指派裁判到場次: backlog  # 負責：D
@@ -85,12 +85,12 @@ development_status:
   epic-4-retrospective: optional
 
   epic-5: in-progress
-  5-1-場次頁與隊長報到: in-progress  # 負責：D；第一階段（checkin.py 純函式）完成，第二階段待 2.2、4.1
+  5-1-場次頁與隊長報到: in-progress  # 負責：D；第一階段（checkin.py、CheckInPanel）完成；第二階段後端（報到 API、賽事開始 worker）完成，待 C 的 is_captain 與 A 的 S4 接上
   5-2-逾時判棄權: backlog  # 負責：A
   5-3-裁判逐局登錄比分: in-progress  # 負責：D；第一階段（scoring.py 純函式，含 5.4 規則）完成，第二階段待 2.2、4.1
   5-4-送出系列結果: backlog  # 負責：D；系列結果與送出條件已在 5.3 的 scoring.py
-  5-5-申訴期滿自動確認與一般晉級: in-progress  # 負責：D；第一階段（progression.py 純函式，含 5.6 規則）完成，第二階段待 2.2、4.1
-  5-6-季軍賽-雙方棄權與賽事結束: backlog  # 負責：D；推進與名次規則已在 5.5 的 progression.py
+  5-5-申訴期滿自動確認與一般晉級: in-progress  # 負責：D；第一階段（progression.py）完成；第二階段（確認、晉級、申訴期滿自動確認、賽事結束）後端完成
+  5-6-季軍賽-雙方棄權與賽事結束: in-progress  # 負責：D；規則在 progression.py，寫入資料庫與賽事結束在 5.5 第二階段完成，待 S2／S3 顯示名次
   5-7-勝隊上傳結算截圖: backlog  # 擱置（期中後）
   5-8-場次頁與對戰樹結果標示: backlog  # 負責：A
   epic-5-retrospective: optional

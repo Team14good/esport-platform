@@ -7,8 +7,10 @@
 from sqlmodel import Session
 
 from app.core import events
+from app.modules.competition import service as competition_service
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.email import EmailSender, SmtpEmailSender
+from app.modules.tournaments import service as tournaments_service
 from app.worker import Job
 
 
@@ -30,4 +32,25 @@ def make_send_email_job(sender: EmailSender) -> Job:
     return send_pending_email
 
 
-JOBS: list[Job] = [dispatch_outbox, make_send_email_job(SmtpEmailSender())]
+def open_registrations(session: Session) -> bool:
+    """把一筆報名開始已到的「尚未開放」賽事轉為開放報名（操作者為系統）。"""
+    return tournaments_service.open_due_registration(session)
+
+
+def start_due_tournaments(session: Session) -> bool:
+    """把一場報到開放已到的「賽程已公布」賽事轉為進行中（操作者為系統）。"""
+    return competition_service.start_due_tournament(session)
+
+
+def confirm_expired_appeals(session: Session) -> bool:
+    """確認一場申訴期滿的場次並推進晉級（操作者為系統）。"""
+    return competition_service.auto_confirm_expired(session)
+
+
+JOBS: list[Job] = [
+    open_registrations,
+    start_due_tournaments,
+    confirm_expired_appeals,
+    dispatch_outbox,
+    make_send_email_job(SmtpEmailSender()),
+]
