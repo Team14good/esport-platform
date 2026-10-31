@@ -248,7 +248,6 @@ describe("Check-in panel", () => {
   it("兩隊未確定（隊長）：面板停用，按鈕停用並以「對手確定後才能報到」說明", () => {
     renderPanel({ ownSide: "a", teamsPending: true, reason: "teams_pending" })
 
-    expect(screen.getByRole("list")).toHaveAttribute("aria-disabled", "true")
     const button = screen.getByRole("button", { name: "報到" })
     expect(button).toBeDisabled()
     expect(button).toHaveAccessibleDescription("對手確定後才能報到")
@@ -258,7 +257,6 @@ describe("Check-in panel", () => {
   it("兩隊未確定（觀眾）：未定的一側寫「待定」，同樣看到面板停用與說明", () => {
     renderPanel({ teams: { a: KRAKEN, b: null }, teamsPending: true })
 
-    expect(screen.getByRole("list")).toHaveAttribute("aria-disabled", "true")
     const items = screen.getAllByRole("listitem")
     expect(items[0]).toHaveTextContent("成大 Kraken")
     expect(items[0]).toHaveTextContent("未報到")
@@ -268,8 +266,8 @@ describe("Check-in panel", () => {
     expect(screen.queryByRole("button")).toBeNull()
   })
 
-  it("兩隊都確定：清單沒有標示停用", () => {
-    renderPanel({ ownSide: "a" })
+  it("清單不帶 aria-disabled（list 角色不支援，停用改由按鈕與說明文字表達）", () => {
+    renderPanel({ ownSide: "a", teamsPending: true, reason: "teams_pending" })
 
     expect(screen.getByRole("list")).not.toHaveAttribute("aria-disabled")
   })

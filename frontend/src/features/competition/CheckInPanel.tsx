@@ -149,7 +149,6 @@ export function CheckInPanel({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <ul
-          aria-disabled={panelDisabled ? "true" : undefined}
           className={cn(
             "grid gap-4 sm:grid-cols-2",
             // 兩隊尚未確定：整個面板停用
