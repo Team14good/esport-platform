@@ -87,3 +87,15 @@
 - 問題與修正：AI 發現擱置 4.2 後，原版 4.1 只能在報名截止前抽籤，流程會卡住，於是放寬；也發現 CONTRIBUTING 原本的 6.3 規則與架構 AD-7 不一致，已更正
 - 成熟度：L4（AI 做影響分析並找出流程卡點，人做取捨）
 - 證據：`_bmad-output/planning-artifacts/sprint-change-proposal-2026-10-28.md`、commit `5aa5e0e`、`50a3bdc`
+
+### 2026-10-30｜設計、程式／程式生成｜Story 7.1 第一階段：示範資料腳本骨架與示範帳號
+
+- Story／範圍：7.1 第一階段（分支 `story/7-1`，PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（spec → 實作子代理 → 主對話驗收）
+- 怎麼用：AI 先查出上游 tournaments、registration、competition 的 service 在 main 上還是空的，建議只做第一階段（共用種子腳本骨架＋示範帳號），寫 spec 後由子代理依 spec 實作
+- AI 產出：`backend/app/demo_data/` 套件（3 個檔案，含各模組新增步驟的擴充說明）、identity 新增 `ensure_demo_account`、`find_account_id_by_email`；設定 `DEMO_PASSWORD`、`DEMO_EMAIL_DOMAIN` 與 README 示範帳號表；6 個測試（涵蓋 spec I/O 表四種情境）
+- 人做了什麼：決定先做第一階段、從 `origin/main` 開分支；決定 Email 用單一網域變數、示範帳號屬「國立中央大學」、保留超過 1,600 tokens 的 spec；依個人設定跳過 Story 內的多代理審查，最後統一 code review
+- 驗證：在全新 volume 的另一個 compose 專案驗證：主辦方帳號登入成功、`/accounts/me` 的 `email_verified`、`is_organizer` 為 true；帶密碼重啟後 `account` 表維持 5 筆並記錄略過；不帶 `DEMO_PASSWORD` 重啟時只略過示範資料。`scripts/test.sh` 259 passed、總覆蓋率 95%，`scripts/lint.sh` 全數通過
+- 問題與修正：(1) 子代理新增了 spec 沒列的公開函式 `find_account_id_by_email`，主對話讀 diff 時發現；因帳號已存在時仍要把 id 交給後續步驟，保留並記在 spec 的 Implementation Notes。(2) 子代理改了測試檔格式後沒有重跑測試，主對話重跑才確認通過。(3) 主對話第一次驗證直接啟動使用者本機的 compose，因為本機資料庫已套用 main 上沒有的 1.7 遷移（`c7e2a4d9b8f1`），backend 起不來，還和驗證專案搶連接埠；改為停掉使用者的 compose，用獨立的 compose 專案驗證，沒有動到使用者的資料庫
+- 成熟度：L3（AI 依 spec 產出並自行驗證，人在 checkpoint 決策；這次沒跑多代理審查）
+- 證據：`_bmad-output/implementation-artifacts/spec-7-1-demo-seed-data.md`；commit 未建立
