@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 10-28-2026 16:30
+last_updated: 10-31-2026 14:14
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -45,8 +45,8 @@ development_status:
   1-4-登入-登出-帳號資料與身分切換器: done
   1-5-忘記與重設密碼: done
   1-6-通知中心: backlog  # 擱置（期中後）
-  1-7-申請成為主辦方: backlog  # 負責：A
-  1-8-平台管理員審核主辦方申請: backlog  # 負責：A
+  1-7-申請成為主辦方: review  # 負責：A
+  1-8-平台管理員審核主辦方申請: review  # 負責：A
   epic-1-retrospective: optional
 
   epic-2: backlog
@@ -74,17 +74,17 @@ development_status:
   3-11-隊員異動與解散隊伍: backlog  # 擱置（期中後）
   epic-3-retrospective: optional
 
-  epic-4: backlog
+  epic-4: in-progress
   4-1-主辦方提前抽籤並產生對戰表: backlog  # 負責：D
   4-2-報名截止時自動抽籤: backlog  # 擱置（期中後）
   4-3-排定與修改場次時間: backlog  # 負責：D
   4-4-指派裁判到場次: backlog  # 負責：D
   4-5-抽籤後退賽與候補遞補: backlog  # 擱置（期中後）
-  4-6-視覺化對戰樹: backlog  # 負責：A
+  4-6-視覺化對戰樹: in-progress  # 負責：A
   4-7-對戰樹隊伍搜尋與晉級路徑: backlog  # 擱置（期中後）
   epic-4-retrospective: optional
 
-  epic-5: backlog
+  epic-5: in-progress
   5-1-場次頁與隊長報到: backlog  # 負責：D
   5-2-逾時判棄權: backlog  # 負責：A
   5-3-裁判逐局登錄比分: backlog  # 負責：D
@@ -92,7 +92,7 @@ development_status:
   5-5-申訴期滿自動確認與一般晉級: backlog  # 負責：D
   5-6-季軍賽-雙方棄權與賽事結束: backlog  # 負責：D
   5-7-勝隊上傳結算截圖: backlog  # 擱置（期中後）
-  5-8-場次頁與對戰樹結果標示: backlog  # 負責：A
+  5-8-場次頁與對戰樹結果標示: in-progress  # 負責：A
   epic-5-retrospective: optional
 
   epic-6: backlog
@@ -103,8 +103,8 @@ development_status:
   6-5-查證檢舉與取消資格: backlog  # 負責：B
   epic-6-retrospective: optional
 
-  epic-7: backlog
+  epic-7: in-progress
   7-1-一鍵載入示範資料: backlog  # 負責：A
-  7-2-端對端演練-兩款遊戲的完整賽事: backlog  # 負責：A
+  7-2-端對端演練-兩款遊戲的完整賽事: in-progress  # 負責：A
   7-3-測試覆蓋率與測試報告素材: backlog  # 負責：A
   epic-7-retrospective: optional

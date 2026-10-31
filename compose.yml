@@ -1,4 +1,5 @@
-# 本機開發用的唯一 compose 檔（AD-17）：db、backend、worker、frontend、mailpit 五個服務。
+# 本機開發用的唯一 compose 檔（AD-17）：db、backend、worker、frontend、mailpit 五個服務，
+# 另有只在 --profile e2e 時使用的端對端測試服務 e2e。
 # 設定一律從根目錄 .env 讀取（由 .env.example 複製）。
 services:
 
@@ -127,6 +128,41 @@ services:
     image: axllent/mailpit:v1.31.6
     ports:
       - "127.0.0.1:8025:8025"
+
+  e2e:
+    # 端對端測試（Playwright）：只在 --profile e2e 時使用，平常的 docker compose up 不會啟動。
+    # 執行：docker compose --profile e2e run --rm e2e（說明見 README〈測試與檢查〉）
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.e2e
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+      worker:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    environment:
+      # 瀏覽器照常使用 localhost:5173／localhost:8000：globalSetup 在容器內把這兩個埠轉到
+      # frontend／backend，前端的 VITE_API_URL 與後端的 CORS 都不必修改。
+      PLAYWRIGHT_BASE_URL: http://localhost:5173
+      E2E_API_URL: http://localhost:8000
+      E2E_PROXY: 5173=frontend:5173,8000=backend:8000
+      MAILPIT_URL: http://mailpit:8025
+      FIRST_ADMIN_EMAIL: ${FIRST_ADMIN_EMAIL:?Variable not set}
+      FIRST_ADMIN_PASSWORD: ${FIRST_ADMIN_PASSWORD:?Variable not set}
+    # Playwright 建議：Chromium 需要較大的共享記憶體，並由 init 轉送訊號
+    ipc: host
+    init: true
+    volumes:
+      # 測試與設定直接掛載，改測試不必重新 build；報告寫回主機
+      - ./frontend/tests:/app/frontend/tests:ro
+      - ./frontend/playwright.config.ts:/app/frontend/playwright.config.ts:ro
+      - ./frontend/playwright-report:/app/frontend/playwright-report
+      - ./frontend/test-results:/app/frontend/test-results
 
 volumes:
   app-db-data:
