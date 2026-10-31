@@ -22,13 +22,22 @@ from app.core.security import (
 from app.modules.identity import repository
 from app.modules.identity.models import (
     EMAIL_MAX_LENGTH,
+    PAGE_SIZE,
     PASSWORD_MAX_LENGTH,
     AccessToken,
     Account,
     AccountRead,
     AccountToken,
+    AdminOrganizerApplication,
+    ApplicationStatus,
     Identity,
     IdentityKey,
+    OrganizerApplication,
+    OrganizerApplicationApproved,
+    OrganizerApplicationPage,
+    OrganizerApplicationRead,
+    OrganizerApplicationRejected,
+    OrganizerApplicationSubmitted,
     PasswordResetRequested,
     ProfileUpdate,
     PublicSchool,
@@ -423,11 +432,18 @@ def get_current_account(session: Session, token: str) -> AccountRead:
 def list_identities(session: Session, account: AccountRead) -> list[Identity]:  # noqa: ARG001
     """身分切換器的身分清單，只依帳號資料產生；切換身分不改變權限。
 
-    之後的 Story 在這裡加入「我的隊伍」「裁判」「主辦方後台」（會用到 session 查詢）。
+    順序依 UX-DR8：瀏覽賽事、主辦方後台、平台管理。之後的 Story 在這裡加入
+    「我的隊伍」「裁判」（會用到 session 查詢）。
     """
     identities = [
         Identity(key=IdentityKey.BROWSE, label="瀏覽賽事", home_path="/"),
     ]
+    if account.is_organizer:
+        identities.append(
+            Identity(
+                key=IdentityKey.ORGANIZER, label="主辦方後台", home_path="/organizer"
+            )
+        )
     if account.is_platform_admin:
         identities.append(
             Identity(
@@ -485,3 +501,242 @@ def update_profile(
         )
         session.flush()
     return AccountRead.model_validate(account, from_attributes=True)
+
+
+# ---------------------------------------------------------------- 主辦方申請
+
+
+def _application_pending() -> BusinessError:
+    return BusinessError(
+        "APPLICATION_PENDING", "你已有一筆待審核的主辦方申請。", status_code=409
+    )
+
+
+def _application_read(
+    session: Session, application: OrganizerApplication
+) -> OrganizerApplicationRead:
+    school = repository.get_school(session, application.school_id)
+    assert school is not None  # 外鍵保證學校存在
+    return OrganizerApplicationRead(
+        id=application.id,
+        club_name=application.club_name,
+        school_id=application.school_id,
+        school_name=school.name,
+        status=application.status,
+        reject_reason=application.reject_reason,
+        created_at=application.created_at,
+    )
+
+
+def submit_organizer_application(
+    session: Session, *, account_id: uuid.UUID, club_name: str, school_id: uuid.UUID
+) -> OrganizerApplicationRead:
+    """送出主辦方申請（Email 是否已驗證由 router 的 `VerifiedAccount` 檢查）。
+
+    先鎖帳號再檢查：已是主辦方拋 `ALREADY_ORGANIZER`、已有待審核拋
+    `APPLICATION_PENDING`、學校不存在拋 `SCHOOL_NOT_FOUND`（欄位錯誤）。
+    申請、操作紀錄與 `OrganizerApplicationSubmitted` 在同一個交易寫入。
+    """
+    account = repository.get_account(session, account_id, for_update=True)
+    if account is None:
+        raise authentication_required()
+    if account.is_organizer:
+        raise BusinessError("ALREADY_ORGANIZER", "你已經是主辦方。", status_code=409)
+    if repository.get_pending_application(session, account.id) is not None:
+        raise _application_pending()
+    if repository.get_school(session, school_id) is None:
+        raise _school_not_found()
+
+    application = OrganizerApplication(
+        account_id=account.id,
+        club_name=club_name.strip(),
+        school_id=school_id,
+        status=ApplicationStatus.PENDING,
+        created_at=clock.now(),
+    )
+    try:
+        repository.add_organizer_application(session, application)
+    except repository.DuplicatePendingApplicationError:
+        # 帳號鎖之外的寫入路徑同時新增了一筆待審核：交給部分唯一索引擋下
+        raise _application_pending()
+
+    audit.record(
+        session,
+        actor_id=account.id,
+        tournament_id=None,
+        action="organizer_application.submitted",
+        entity_type="organizer_application",
+        entity_id=application.id,
+        before=None,
+        after={
+            "club_name": application.club_name,
+            "school_id": application.school_id,
+            "status": application.status,
+        },
+    )
+    events.publish(
+        session, OrganizerApplicationSubmitted(application_id=application.id)
+    )
+    return _application_read(session, application)
+
+
+def get_my_organizer_application(
+    session: Session, account_id: uuid.UUID
+) -> OrganizerApplicationRead | None:
+    """帳號最新的一筆主辦方申請；從沒申請過時回傳 None。"""
+    application = repository.get_latest_application(session, account_id)
+    if application is None:
+        return None
+    return _application_read(session, application)
+
+
+# ---------------------------------------------------------------- 審核主辦方申請
+
+
+def _application_not_found() -> BusinessError:
+    return BusinessError(
+        "APPLICATION_NOT_FOUND", "找不到這筆主辦方申請。", status_code=404
+    )
+
+
+def _admin_application_read(
+    application: OrganizerApplication, applicant: Account, school_name: str
+) -> AdminOrganizerApplication:
+    return AdminOrganizerApplication(
+        id=application.id,
+        club_name=application.club_name,
+        school_id=application.school_id,
+        school_name=school_name,
+        status=application.status,
+        reject_reason=application.reject_reason,
+        created_at=application.created_at,
+        applicant_display_name=applicant.display_name,
+        applicant_email=applicant.email,
+    )
+
+
+def _transition_application(
+    application: OrganizerApplication,
+    to: ApplicationStatus,
+    *,
+    reason: str | None = None,
+) -> None:
+    """主辦方申請唯一的狀態轉換（AD-11）：只允許 pending → approved | rejected。
+
+    呼叫端要先以 `for_update` 鎖住申請；不是待審核時拋 409 `APPLICATION_NOT_PENDING`。
+    """
+    if to not in (ApplicationStatus.APPROVED, ApplicationStatus.REJECTED):
+        raise ValueError(f"organizer application cannot transition to {to}")
+    if application.status != ApplicationStatus.PENDING:
+        raise BusinessError(
+            "APPLICATION_NOT_PENDING", "這筆申請已經審核過了。", status_code=409
+        )
+    application.status = to
+    application.reject_reason = reason if to == ApplicationStatus.REJECTED else None
+
+
+def list_organizer_applications(
+    session: Session, *, status: ApplicationStatus | None, page: int
+) -> OrganizerApplicationPage:
+    """S35 審核清單：依送出時間由舊到新，每頁 `PAGE_SIZE` 筆；`status` 為 None 表示全部。
+
+    `page` 從 1 開始（router 檢查 ≥ 1）；超過總頁數時 `items` 為空、`total` 照實。
+    """
+    rows = repository.list_applications(
+        session, status, offset=(page - 1) * PAGE_SIZE, limit=PAGE_SIZE
+    )
+    return OrganizerApplicationPage(
+        items=[
+            _admin_application_read(application, applicant, school.name)
+            for application, applicant, school in rows
+        ],
+        total=repository.count_applications(session, status),
+        page=page,
+        page_size=PAGE_SIZE,
+    )
+
+
+def _lock_application(
+    session: Session, application_id: uuid.UUID
+) -> OrganizerApplication:
+    application = repository.get_application(session, application_id, for_update=True)
+    if application is None:
+        raise _application_not_found()
+    return application
+
+
+def _school_name(session: Session, school_id: uuid.UUID) -> str:
+    school = repository.get_school(session, school_id)
+    assert school is not None  # 外鍵保證學校存在
+    return school.name
+
+
+def approve_organizer_application(
+    session: Session, *, admin_id: uuid.UUID, application_id: uuid.UUID
+) -> AdminOrganizerApplication:
+    """核准主辦方申請（平台管理員由 router 的 `PlatformAdmin` 檢查）。
+
+    先鎖申請再鎖帳號：同時審核同一筆時，後到的在鎖釋放後看到已審核，拋 409。
+    申請改為 approved、帳號 `is_organizer = true`、操作紀錄與
+    `OrganizerApplicationApproved` 在同一個交易寫入。
+    """
+    application = _lock_application(session, application_id)
+    _transition_application(application, ApplicationStatus.APPROVED)
+    account = repository.get_account(session, application.account_id, for_update=True)
+    assert account is not None  # 外鍵保證帳號存在
+    account.is_organizer = True
+    session.add(application)
+    session.add(account)
+    audit.record(
+        session,
+        actor_id=admin_id,
+        tournament_id=None,
+        action="organizer_application.approved",
+        entity_type="organizer_application",
+        entity_id=application.id,
+        before={"status": ApplicationStatus.PENDING},
+        after={
+            "status": application.status,
+            "reject_reason": None,
+            "account_id": account.id,
+            "is_organizer": True,
+        },
+    )
+    events.publish(session, OrganizerApplicationApproved(application_id=application.id))
+    return _admin_application_read(
+        application, account, _school_name(session, application.school_id)
+    )
+
+
+def reject_organizer_application(
+    session: Session, *, admin_id: uuid.UUID, application_id: uuid.UUID, reason: str
+) -> AdminOrganizerApplication:
+    """退回主辦方申請並寫入原因（去除前後空白後 1～200 字，由 schema 檢查）。
+
+    申請人可以修改後重送，重送一律建立新的一筆，這筆退回紀錄保留。
+    申請、操作紀錄與 `OrganizerApplicationRejected` 在同一個交易寫入。
+    """
+    application = _lock_application(session, application_id)
+    _transition_application(
+        application, ApplicationStatus.REJECTED, reason=reason.strip()
+    )
+    session.add(application)
+    audit.record(
+        session,
+        actor_id=admin_id,
+        tournament_id=None,
+        action="organizer_application.rejected",
+        entity_type="organizer_application",
+        entity_id=application.id,
+        before={"status": ApplicationStatus.PENDING},
+        after={
+            "status": application.status,
+            "reject_reason": application.reject_reason,
+        },
+    )
+    events.publish(session, OrganizerApplicationRejected(application_id=application.id))
+    applicant = repository.get_account(session, application.account_id)
+    assert applicant is not None  # 外鍵保證帳號存在
+    return _admin_application_read(
+        application, applicant, _school_name(session, application.school_id)
+    )

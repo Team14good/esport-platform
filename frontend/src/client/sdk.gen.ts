@@ -3,11 +3,17 @@
 import type { Client, Options as Options2, TDataShape } from "./client"
 import { client } from "./client.gen"
 import type {
+  identityApproveOrganizerApplicationData,
+  identityApproveOrganizerApplicationErrors,
+  identityApproveOrganizerApplicationResponses,
   identityCheckPasswordResetLinkData,
   identityCheckPasswordResetLinkErrors,
   identityCheckPasswordResetLinkResponses,
   identityListCurrentIdentitiesData,
   identityListCurrentIdentitiesResponses,
+  identityListOrganizerApplicationsData,
+  identityListOrganizerApplicationsErrors,
+  identityListOrganizerApplicationsResponses,
   identityListSchoolsData,
   identityListSchoolsResponses,
   identityLoginData,
@@ -15,9 +21,14 @@ import type {
   identityLoginResponses,
   identityReadCurrentAccountData,
   identityReadCurrentAccountResponses,
+  identityReadCurrentOrganizerApplicationData,
+  identityReadCurrentOrganizerApplicationResponses,
   identityRegisterData,
   identityRegisterErrors,
   identityRegisterResponses,
+  identityRejectOrganizerApplicationData,
+  identityRejectOrganizerApplicationErrors,
+  identityRejectOrganizerApplicationResponses,
   identityRequestPasswordResetEmailData,
   identityRequestPasswordResetEmailErrors,
   identityRequestPasswordResetEmailResponses,
@@ -27,6 +38,9 @@ import type {
   identityResetPasswordData,
   identityResetPasswordErrors,
   identityResetPasswordResponses,
+  identitySubmitOrganizerApplicationData,
+  identitySubmitOrganizerApplicationErrors,
+  identitySubmitOrganizerApplicationResponses,
   identityUpdateCurrentAccountData,
   identityUpdateCurrentAccountErrors,
   identityUpdateCurrentAccountResponses,
@@ -317,6 +331,119 @@ export class IdentityService {
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/accounts/me/identities",
       ...options,
+    })
+  }
+
+  /**
+   * Submit Organizer Application
+   *
+   * 送出主辦方申請（需已驗證 Email）；同一帳號同時只能有一筆待審核。
+   */
+  public static submitOrganizerApplication<ThrowOnError extends boolean = true>(
+    options: Options<identitySubmitOrganizerApplicationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identitySubmitOrganizerApplicationResponses,
+      identitySubmitOrganizerApplicationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer-applications",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Read Current Organizer Application
+   *
+   * 目前帳號最新的一筆主辦方申請；從沒申請過時回傳 null。未驗證 Email 也能讀。
+   */
+  public static readCurrentOrganizerApplication<
+    ThrowOnError extends boolean = true,
+  >(
+    options?: Options<
+      identityReadCurrentOrganizerApplicationData,
+      ThrowOnError
+    >,
+  ) {
+    return (options?.client ?? client).get<
+      identityReadCurrentOrganizerApplicationResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/accounts/me/organizer-application",
+      ...options,
+    })
+  }
+
+  /**
+   * List Organizer Applications
+   *
+   * 主辦方申請清單（平台管理員）：依送出時間由舊到新、每頁 20 筆；`status` 省略表示全部。
+   */
+  public static listOrganizerApplications<ThrowOnError extends boolean = true>(
+    options?: Options<identityListOrganizerApplicationsData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      identityListOrganizerApplicationsResponses,
+      identityListOrganizerApplicationsErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/admin/organizer-applications",
+      ...options,
+    })
+  }
+
+  /**
+   * Approve Organizer Application
+   *
+   * 核准主辦方申請：申請人立即成為主辦方。已審核過回 409 `APPLICATION_NOT_PENDING`。
+   */
+  public static approveOrganizerApplication<
+    ThrowOnError extends boolean = true,
+  >(options: Options<identityApproveOrganizerApplicationData, ThrowOnError>) {
+    return (options.client ?? client).post<
+      identityApproveOrganizerApplicationResponses,
+      identityApproveOrganizerApplicationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/admin/organizer-applications/{application_id}/approval",
+      ...options,
+    })
+  }
+
+  /**
+   * Reject Organizer Application
+   *
+   * 退回主辦方申請（必填原因）；申請人可以修改後重送。已審核過回 409。
+   */
+  public static rejectOrganizerApplication<ThrowOnError extends boolean = true>(
+    options: Options<identityRejectOrganizerApplicationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      identityRejectOrganizerApplicationResponses,
+      identityRejectOrganizerApplicationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/admin/organizer-applications/{application_id}/rejection",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 }

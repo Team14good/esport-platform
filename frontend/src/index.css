@@ -193,6 +193,23 @@
   --sidebar-primary-foreground: var(--primary-foreground);
 }
 
+/*
+ * 輪詢更新提示（DESIGN.md update-flash）：有變動的場次卡底色以 muted 淡入淡出一次、1.5 秒、不發光。
+ * 只寫中間那一格，起點與終點沿用元素自己的底色；使用者偏好減少動態時不做。
+ */
+@keyframes update-flash {
+  50% {
+    background-color: var(--muted);
+  }
+}
+
+@utility update-flash {
+  animation: update-flash 1.5s ease-in-out 1;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
