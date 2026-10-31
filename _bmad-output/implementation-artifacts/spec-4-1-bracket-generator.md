@@ -76,7 +76,7 @@ context:
 
 - 實作子代理自訂：輪空對裡隊伍坐上方座位；洗牌後先排第一輪、再依 plan 順序排輪空隊伍（spec 未規定，結果只取決於洗牌）。
 - 新增 `AssignedMatch`、`MatchSource` 兩個 frozen dataclass，`PlannedMatch` 以 `bye_a`／`bye_b` 標示輪空直接入座的一方。
-- 介面約定（PR #3）同步改用 `bye_side` 與「4 強」。
+- 介面約定（PR #3）同步改用 `bye_side` 與「4 強」；2026-10-31 使用者決定改為 `bye_a`／`bye_b`，確定不會有隊伍時 `source_*` 為 null（見 spec-4-1-draw-backend 的 Spec Change Log）。
 - spec 初稿漏了本節、Spec Change Log 與 Review Triage Log 三個範本區段，審查時補回。
 - 驗證（2026-10-29，審查修正後）：`scripts/test.sh` 全部 399 個測試通過；`bracket.py` 分支覆蓋率 100%（48 個分支）；`scripts/lint.sh` 通過。
 - 突變測試：把 `_bit_reverse_order(quarter)` 換成 `list(range(quarter))` → 39 個測試失敗（含 `test_14_bye_pairs_exact`）；把季軍賽 `source_b` 改成 `semis[0]` → 62 個測試失敗。兩者在審查修正前都不會失敗。
