@@ -18,6 +18,8 @@ class MatchRead(BaseModel):
     code: str                     # 顯示用編號 "M3"：依輪次、同輪由上到下，輪空不佔編號
     team_a_id: UUID | None        # 未確定時為 None
     team_b_id: UUID | None
+    bye_a: bool                   # 4.1 新增：a 方由輪空直接進入本場
+    bye_b: bool                   # 4.1 新增：b 方由輪空直接進入本場（輪空多於 P÷4 時兩方都可能是）
     referee_account_id: UUID | None
     scheduled_at: datetime
     status: MatchStatus
@@ -28,6 +30,7 @@ class MatchRead(BaseModel):
     forfeit_deadline: datetime | None   # 兩隊都確定才有值
     appeal_deadline: datetime | None
     next_match_id: UUID | None
+    loser_next_match_id: UUID | None    # 4.1 新增：只有準決賽有，指向季軍賽
 
 class BracketRead(BaseModel):
     id: UUID
@@ -35,6 +38,7 @@ class BracketRead(BaseModel):
     size: int                     # P
     rounds: int
     drawn_at: datetime
+    delayed_rounds: list[int]     # 4.1 新增：因最小間隔大於每輪間隔而被順延的輪次（S27 提示）
     matches: list[MatchRead]
 
 class PublicMatch(BaseModel):    # 公開 API 用（AD-19）：不含 Email、學校、截圖鍵值
@@ -69,7 +73,9 @@ class PublicBracket(BaseModel):
 | 方法與路徑 | 權限 | 回傳 |
 | --- | --- | --- |
 | `GET /api/v1/tournaments/{tournament_id}/bracket` | 公開 | `PublicBracket`；尚未抽籤回 404 `BRACKET_NOT_FOUND` |
-| `POST /api/v1/tournaments/{tournament_id}/draw` | 該賽事主辦方 | `BracketRead` |
+| `POST /api/v1/tournaments/{tournament_id}/draw` | 該賽事主辦方 | 201 `BracketRead` |
+
+抽籤的錯誤碼（4.1）：`NOT_ENOUGH_TEAMS` 409（正取不足 2 隊）、`BRACKET_ALREADY_DRAWN` 409（已有對戰表，優先於狀態檢查）、`TOURNAMENT_NOT_DRAWABLE` 409（狀態不是 `open`、`closed`）、`TOURNAMENT_START_PASSED` 409（`start_at <= now`）、`TOURNAMENT_OWNER_REQUIRED` 403、`ORGANIZER_REQUIRED` 403、`TOURNAMENT_NOT_FOUND` 404、`REGISTRATION_UNAVAILABLE` 503（registration 尚未提供抽籤用函式）。場次相關：`MATCH_NOT_FOUND` 404、`MATCH_INVALID_TRANSITION` 409、`MATCH_TEAMS_NOT_SET` 409（`start_forfeit_clock` 用在兩隊未確定的場次）。
 
 ### 公開函式
 
@@ -88,7 +94,7 @@ class PublicBracket(BaseModel):
 | `advance(session, *, match) -> None` | B（6.2 更正後、6.5） | 勝隊進下一場、準決賽敗隊進季軍賽；對手確定不會有隊伍時自動 walkover，季軍賽必要時轉為已取消 | 5.5 |
 | `confirm_walkover(session, *, match) -> None` | B（6.5） | 一方確定不會有隊伍時以 walkover 確認並推進 | 5.5 |
 
-申訴相關的 `mark_appealed`、`uphold_result`、`correct_result`、`replay_match`：設計文件放在 MatchService，epic 6 由 disputes 呼叫。**提議比照 6.6 的 `disqualify`，由 B 寫在 competition 新增的檔案，`service.py` 只新增這幾個公開函式，D 審查。** 請 B 確認。
+申訴相關的 `mark_appealed`、`uphold_result`、`correct_result`、`replay_match`：設計文件放在 MatchService，epic 6 由 disputes 呼叫。**比照 6.6 的 `disqualify`，由 B 寫在 competition 新增的檔案，`service.py` 只新增這幾個公開函式，D 審查。**（B 已確認，2026-10-30）
 
 ### 事件（`core.events.publish`，期中只發不通知）
 
@@ -111,28 +117,32 @@ class PublicBracket(BaseModel):
 | --- | --- | --- |
 | `get_tournament(session, *, tournament_id) -> TournamentRead` | 4.1、4.3、4.4、5.x | 下表欄位 |
 | `lock_tournament(session, *, tournament_id) -> TournamentRead` | 4.1、4.3、4.4、5.5 | `SELECT … FOR UPDATE` 賽事列 |
-| `transition_tournament(session, *, tournament_id, to, actor) -> None` | 4.1（→ published）、5.x（→ ongoing、finished） | 非法轉換拋錯 |
+| `transition_tournament(session, *, tournament_id, to, actor_id) -> TournamentRead` | 4.1（→ published）、5.x（→ ongoing、finished） | 非法轉換拋錯 |
 | `is_referee(session, *, tournament_id, account_id) -> bool` | 4.4 | 已接受邀請 |
 | ★ `list_referees(session, *, tournament_id) -> list[RefereeRead]` | 4.4 的 S30 選單 | `RefereeRead {account_id, display_name}` |
 | `bo_for_round(session, *, tournament_id, round_no) -> int` | 4.3、5.3、5.4 | 期中一律回賽事的 BO |
 
-`TournamentRead` 需要的欄位（名稱依 D 文件的 Tournament 類別）：
+`TournamentRead` 需要的欄位（完整定義與其他函式見 [tournaments.md](tournaments.md)）：
 
-`id`, `organizer_id`, `name`, `status`, `mode`, `capacity`, `registration_end`, `start_at`, `round_interval_minutes`, `forfeit_minutes`, `appeal_minutes`, `bo`, `game_minutes_per_game`（遊戲快照的每局預估時間）, `score_type`
+`id`, `organizer_id`, `name`, `status`, `mode`, `capacity`, `registration_end`, `start_at`, `round_interval_minutes`, `forfeit_minutes`, `appeal_minutes`, `bo`, `game_minutes`（遊戲快照的每局預估時間）, `score_type`
 
 ### registration（C）
 
 | 函式 | 用在 | 說明 |
 | --- | --- | --- |
 | ★ `list_accepted_teams(session, *, tournament_id) -> list[TeamRead]` | 4.1 | 正取隊伍 |
-| ★ `finalize_for_draw(session, *, tournament_id, actor) -> None` | 4.1 | 開放報名中提前抽籤時呼叫：仍在優先期就先做優先期分配，再做截止補位（`fill_at_deadline`）。分配規則留在 C，competition 只呼叫這一個 |
-| ★ `mark_drawn(session, *, tournament_id, team_ids, actor) -> None` | 4.1 | 正取 → 已參賽 |
+| ★ `finalize_for_draw(session, *, tournament_id, actor_id) -> None` | 4.1 | 開放報名中提前抽籤時呼叫：仍在優先期就先做優先期分配，再做截止補位（`fill_at_deadline`）。分配規則留在 C，competition 只呼叫這一個 |
+| ★ `mark_drawn(session, *, tournament_id, team_ids, actor_id) -> None` | 4.1 | 正取 → 已參賽 |
 | `is_member(session, *, team_id, account_id) -> bool` | 4.4（裁判不能是參賽隊員） | |
 | ★ `is_captain(session, *, team_id, account_id) -> bool` | 5.1 報到 | |
 | ★ `get_team_names(session, *, team_ids) -> dict[UUID, str]` | 4.1 公開對戰樹 | 一次查多隊，避免 N+1 |
 
+`actor_id` 比照 tournaments 的 `transition_tournament`（4.1 由 `actor` 改名）。`list_accepted_teams` 回傳的 `TeamRead` competition 只讀 `id`。
+
+**registration_port（4.1）**：competition 對上面 4 個 ★ 抽籤函式的呼叫全部經過 `competition/registration_port.py`，在呼叫當下才到 `app.modules.registration.service` 以名稱查找；函式不存在時拋 503 `REGISTRATION_UNAVAILABLE`（`BusinessError` 只接受 4xx，port 內的子類別建立後改為 503）。C 照上表名稱與關鍵字參數合併後，competition 不必修改。
+
 ## 三、待確認
 
-1. 申訴相關函式由誰實作（見〈一〉最後一段），請 B 回覆。
+1. ~~申訴相關函式由誰實作~~：B 實作、D 審查（B 已確認，2026-10-30）。
 2. `finalize_for_draw` 合併優先期分配與截止補位，請 C 確認可行。
-3. `TournamentRead` 的欄位名稱以 B 實作為準，B 定案後直接改這份。
+3. ~~`TournamentRead` 的欄位名稱~~：以 [tournaments.md](tournaments.md) 為準，每局預估時間改名為 `game_minutes`（2026-10-30）。
