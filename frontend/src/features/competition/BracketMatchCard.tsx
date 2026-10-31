@@ -60,9 +60,15 @@ function rowView(match: PublicMatch, side: BracketSide): RowView {
   const wins = side === "a" ? match.wins_a : match.wins_b
   const { outcome, winner_id: winnerId, status } = match
 
+  const bye = side === "a" ? match.bye_a : match.bye_b
+  // 確定不會有隊伍的位置：約定是 source 為 null；已確認的 walkover 空缺方即使還帶著 source 也算（保險）
+  const empty =
+    team === null &&
+    (source === null || (status === "confirmed" && outcome === "walkover"))
+
   const marks: RowMark[] = []
-  // 由輪空進入本輪的一方，或確定不會有隊伍的位置（沒有隊伍也沒有來源）
-  if (match.bye_side === side || (team === null && source === null)) {
+  // 由輪空進入本輪的一方，或確定不會有隊伍的位置
+  if (bye || empty) {
     marks.push({ label: "輪空", tone: "default" })
   }
   const isLoser = team !== null && winnerId !== null && team.id !== winnerId
@@ -84,7 +90,7 @@ function rowView(match: PublicMatch, side: BracketSide): RowView {
     confirmed && team !== null && (outcome === "double_forfeit" || isLoser)
 
   return {
-    name: team?.name ?? source ?? EMPTY_TEAM_TEXT,
+    name: team?.name ?? (empty ? EMPTY_TEAM_TEXT : source) ?? EMPTY_TEAM_TEXT,
     pending: team === null || status === "voided",
     marks,
     score: showScore ? String(wins) : "",

@@ -64,7 +64,7 @@ context:
 
 ## Code Map
 
-- `contracts/competition.md` -- `PublicBracket`、`PublicMatch`（`code`、`round_no`、`slot_no`、`is_third_place`、`team_a/b`、`source_a/b`、`bye_side`、`status`、`outcome`、`winner_id`、`wins_a/b`、`scheduled_at`）、`updated_at`。D 的分支 `origin/story/5-5:backend/app/modules/competition/models.py`：`MatchStatus` = scheduled／live／appeal_window／appealed／confirmed／voided；`MatchOutcome` = played／forfeit／double_forfeit／walkover／disqualified。
+- `contracts/competition.md` -- `PublicBracket`、`PublicMatch`（`code`、`round_no`、`slot_no`、`is_third_place`、`team_a/b`、`source_a/b`、`bye_a/b`（原為 `bye_side`，見 Review Triage Log）、`status`、`outcome`、`winner_id`、`wins_a/b`、`scheduled_at`）、`updated_at`。D 的分支 `origin/story/5-5:backend/app/modules/competition/models.py`：`MatchStatus` = scheduled／live／appeal_window／appealed／confirmed／voided；`MatchOutcome` = played／forfeit／double_forfeit／walkover／disqualified。
 - `origin/story/5-1:frontend/src/features/competition/match-time.ts` -- D 寫好的 `formatMatchDateTime`（「10/18（日）13:00」）與 `formatClock`（HH:mm）。本 Story 要用：**照抄成完全相同的檔案**（`git show origin/story/5-1:frontend/src/features/competition/match-time.ts`），兩邊合併時內容一致才不會衝突；不要修改它。D 的 `CheckInPanel.tsx` 是「第一階段元件用自己的型別、註明之後改用 client」的寫法參考。
 - `_bmad-output/planning-artifacts/ux-designs/ux-se-final-project-2026-10-14/` -- `DESIGN.md:142-146`（`bracket-row` 字級）、`:162-165`（尺寸）、`:190-227`（卡片、列、mark tag、update-flash token）、`:396-398`、`:427-440`（場次徽章 tone）、`:463-474`（場次卡各狀態）；`EXPERIENCE.md:266-279`（場次狀態）、`:405-442`（對戰樹）、`:24`（輪詢）。`mockups/key-s3-bracket.html` 的桌機 32 隊畫面：絕對定位的卡片＋一個 SVG 畫連接線（直角折線，前後各 14px，`muted-foreground` 55%、寬 1.5），欄的 x 為 0、228、456、684、912。文件與示意圖衝突時以文件為準。
 - `frontend/src/index.css` -- `--spacing-bracket-*`（:73-76）、`--text-bracket-row*`（:56-58）、`--radius-xs`（:61）、`--text-overline*`、`status-*`（:119-124）；**沒有** `update-flash` 與任何 `@keyframes`，要新增。
@@ -107,9 +107,21 @@ context:
 
 ## Review Triage Log
 
+**2026-10-31 D 審查（`1578024..25b3eff`）**
+
+D 確認欄位、列舉、`slot_no`、季軍賽的放法與 `bracket.py`、約定一致，3、6、7 隊的連接線與輪空對位正確。約定由 D 修改，前端跟著調整：
+
+- [已修正] 兩方都輪空的場次：輪空多於 P÷4 時（5 隊、9～11 隊、17～23 隊），第二輪會有兩方都來自輪空的場次，`bye_side` 只能標一方。`bracket-types.ts` 改成 `bye_a: boolean`、`bye_b: boolean`（4.1 第二階段的 API 照這個出），假資料、`rowView`、`diffBracketMatches` 跟著改。
+- [已修正] 確定沒有隊伍的一方：已確認的 walkover 空缺方原本會顯示「M14 勝者」灰字配「已確認」，看起來像待定；假資料把 source 清成 null，剛好遮住。約定會寫明「確定不會有隊伍時 `source_*` 為 null」；前端另加保險：`status === "confirmed" && outcome === "walkover" && team === null` 也顯示「—」＋「輪空」。
+- [已修正，建議] 404 `BRACKET_NOT_FOUND` 原本會計入連續失敗，尚未抽籤的頁面 15 秒後跳「連線中斷」。新增 `BracketNotFoundError`（第二階段的 `queryFn` 收到 404 時拋出），不計失敗、照常輪詢，回傳 `notFound`；404 之後的失敗從 0 開始算。
+- [已修正，建議] 補測試：5、9 隊的版面（兩方輪空、沒有連接線）、兩方輪空的卡片、walkover 空缺方仍帶來源的卡片。
+- [不處理，記下] 9 隊時第一輪只有一張卡，上方空白約 600px：符合 spec，畫面是否調整留給之後討論。
+- **Decisions 第 60 行（凍結區）仍寫 `bye_side`**：凍結區只有人能改，請使用者改成 `bye_a`／`bye_b`。
+- 驗證（重建 frontend 後）：單元測試 29 個檔案、285 個通過（新增 7 個）；typecheck、biome（132 個檔案）、build 通過；改動的檔案都是 LF。
+
 ## Design Notes
 
-**場次卡**：寬 200px，`background` 底、1px `border`、`rounded-md`；標頭在卡片上方一行 `overline`：`code` ＋「 · 」＋ `formatMatchDateTime(scheduled_at)`（只在 `scheduled`），其他狀態接 Status badge：`live` 進行中（live、脈動點）、`appeal_window` 申訴期（appeal）、`appealed` 申訴中（appeal、脈動點）、`confirmed` 已確認（confirmed）、`voided` 已取消（muted）。季軍賽標頭用「季軍賽」取代 `code`。兩列各高 32px、中間 1px 分隔、`bracket-row` 字級；右側等寬比分欄。隊伍為 null 時：有 `source_*` 就顯示它（muted），沒有就顯示「—」＋「輪空」。`bye_side` 那一方帶「輪空」。`forfeit` 時非勝方帶「棄權」、`double_forfeit` 兩方都帶；`disqualified` 時非勝方帶「取消資格」（destructive）；這三種都不顯示比分。
+**場次卡**：寬 200px，`background` 底、1px `border`、`rounded-md`；標頭在卡片上方一行 `overline`：`code` ＋「 · 」＋ `formatMatchDateTime(scheduled_at)`（只在 `scheduled`），其他狀態接 Status badge：`live` 進行中（live、脈動點）、`appeal_window` 申訴期（appeal）、`appealed` 申訴中（appeal、脈動點）、`confirmed` 已確認（confirmed）、`voided` 已取消（muted）。季軍賽標頭用「季軍賽」取代 `code`。兩列各高 32px、中間 1px 分隔、`bracket-row` 字級；右側等寬比分欄。隊伍為 null 時：有 `source_*` 就顯示它（muted），沒有就顯示「—」＋「輪空」；已確認的 `walkover` 空缺方即使還有 `source_*` 也顯示「—」＋「輪空」。`bye_a`／`bye_b` 為 true 的一方帶「輪空」，兩方可以同時為 true。`forfeit` 時非勝方帶「棄權」、`double_forfeit` 兩方都帶；`disqualified` 時非勝方帶「取消資格」（destructive）；這三種都不顯示比分。
 
 **Bracket mark tag**：1px `currentColor` 外框、`rounded-xs`、`caption` 字級、`px-1`；預設 `muted-foreground`。
 
