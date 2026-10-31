@@ -3,6 +3,12 @@
 import type { Client, Options as Options2, TDataShape } from "./client"
 import { client } from "./client.gen"
 import type {
+  competitionDrawData,
+  competitionDrawErrors,
+  competitionDrawResponses,
+  competitionReadPublicBracketData,
+  competitionReadPublicBracketErrors,
+  competitionReadPublicBracketResponses,
   identityCheckPasswordResetLinkData,
   identityCheckPasswordResetLinkErrors,
   identityCheckPasswordResetLinkResponses,
@@ -565,6 +571,47 @@ export class TournamentsService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/organizer/tournaments/{tournament_id}",
+      ...options,
+    })
+  }
+}
+
+export class CompetitionService {
+  /**
+   * Draw
+   *
+   * 抽籤並公布賽程；只限該賽事主辦方，只能抽一次。
+   */
+  public static draw<ThrowOnError extends boolean = true>(
+    options: Options<competitionDrawData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      competitionDrawResponses,
+      competitionDrawErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/draw",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Public Bracket
+   *
+   * 公開對戰樹（不需登入）；尚未抽籤回 404 `BRACKET_NOT_FOUND`。
+   */
+  public static readPublicBracket<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadPublicBracketData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadPublicBracketResponses,
+      competitionReadPublicBracketErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/tournaments/{tournament_id}/bracket",
       ...options,
     })
   }
