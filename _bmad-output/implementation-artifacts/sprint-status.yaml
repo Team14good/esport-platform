@@ -74,23 +74,23 @@ development_status:
   3-11-隊員異動與解散隊伍: backlog  # 擱置（期中後）
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-主辦方提前抽籤並產生對戰表: backlog  # 負責：D
+  epic-4: in-progress
+  4-1-主辦方提前抽籤並產生對戰表: in-progress  # 負責：D；第一階段（bracket.py 純函式）完成，第二階段待 2.2、3.x
   4-2-報名截止時自動抽籤: backlog  # 擱置（期中後）
-  4-3-排定與修改場次時間: backlog  # 負責：D
+  4-3-排定與修改場次時間: in-progress  # 負責：D；第一階段（schedule.py 純函式）完成，第二階段待 2.2、4.1
   4-4-指派裁判到場次: backlog  # 負責：D
   4-5-抽籤後退賽與候補遞補: backlog  # 擱置（期中後）
   4-6-視覺化對戰樹: backlog  # 負責：A
   4-7-對戰樹隊伍搜尋與晉級路徑: backlog  # 擱置（期中後）
   epic-4-retrospective: optional
 
-  epic-5: backlog
-  5-1-場次頁與隊長報到: backlog  # 負責：D
+  epic-5: in-progress
+  5-1-場次頁與隊長報到: in-progress  # 負責：D；第一階段（checkin.py 純函式）完成，第二階段待 2.2、4.1
   5-2-逾時判棄權: backlog  # 負責：A
-  5-3-裁判逐局登錄比分: backlog  # 負責：D
-  5-4-送出系列結果: backlog  # 負責：D
-  5-5-申訴期滿自動確認與一般晉級: backlog  # 負責：D
-  5-6-季軍賽-雙方棄權與賽事結束: backlog  # 負責：D
+  5-3-裁判逐局登錄比分: in-progress  # 負責：D；第一階段（scoring.py 純函式，含 5.4 規則）完成，第二階段待 2.2、4.1
+  5-4-送出系列結果: backlog  # 負責：D；系列結果與送出條件已在 5.3 的 scoring.py
+  5-5-申訴期滿自動確認與一般晉級: in-progress  # 負責：D；第一階段（progression.py 純函式，含 5.6 規則）完成，第二階段待 2.2、4.1
+  5-6-季軍賽-雙方棄權與賽事結束: backlog  # 負責：D；推進與名次規則已在 5.5 的 progression.py
   5-7-勝隊上傳結算截圖: backlog  # 擱置（期中後）
   5-8-場次頁與對戰樹結果標示: backlog  # 負責：A
   epic-5-retrospective: optional
