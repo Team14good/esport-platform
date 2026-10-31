@@ -45,9 +45,9 @@ class PublicMatch(BaseModel):    # 公開 API 用（AD-19）：不含 Email、�
     is_third_place: bool
     team_a: PublicTeamRef | None  # {id, name}
     team_b: PublicTeamRef | None
-    source_a: str | None          # 待定時的說明，例如 "M4 勝者"、"M29 敗者"
+    source_a: str | None          # 待定時的說明，例如 "M4 勝者"、"M29 敗者"（由 competition/bracket.py 產生）
     source_b: str | None
-    is_bye: bool                  # 由輪空進入本輪的一方，前端標「輪空」
+    bye_side: Literal["a", "b"] | None  # 由輪空直接進入本輪的一方，前端標「輪空」
     scheduled_at: datetime
     status: MatchStatus
     outcome: MatchOutcome | None
@@ -58,7 +58,7 @@ class PublicMatch(BaseModel):    # 公開 API 用（AD-19）：不含 Email、�
 class PublicBracket(BaseModel):
     tournament_id: UUID
     rounds: int
-    round_names: list[str]        # ["16 強", "8 強", "準決賽", "決賽"]
+    round_names: list[str]        # ["16 強", "8 強", "4 強", "決賽"]（EXPERIENCE.md 用語）
     matches: list[PublicMatch]
     updated_at: datetime          # 前端判斷是否有變動（update-flash）
 ```
