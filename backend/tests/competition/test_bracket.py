@@ -81,6 +81,7 @@ def test_structure_invariants(n) -> None:
     for m in pl.matches:
         if m.is_third_place:
             assert m is pl.matches[-1] and m.next_code is None
+            assert m.round_no == pl.rounds and m.slot_no == 2
             semis = [x.code for x in pl.matches if x.round_no == pl.rounds - 1]
             assert m.source_a == bracket.MatchSource(semis[0], "loser")
             assert m.source_b == bracket.MatchSource(semis[1], "loser")
