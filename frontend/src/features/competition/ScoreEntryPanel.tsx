@@ -133,12 +133,14 @@ export function ScoreEntryPanel({
     if (submission) setEditing(null)
   }, [submission])
 
-  // 局或系列結果更新後，舊的錯誤訊息已不適用
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 依 props 變化清除
+  // 局或系列結果的內容變了，舊的錯誤訊息才不適用；輪詢每次都會傳入新物件，
+  // 只比對參考會讓伺服器回的錯誤在下一次輪詢就消失，所以比對內容
+  const dataKey = JSON.stringify([games, series])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依內容變化清除
   useEffect(() => {
     setRowError(null)
     setSubmitError(null)
-  }, [games, series])
+  }, [dataKey])
 
   const readOnly = submission !== null
   const nextGameNo = games.length + 1

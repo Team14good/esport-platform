@@ -287,6 +287,38 @@ describe("S24 Score entry panel：修改與刪除", () => {
     expect(screen.queryByRole("alert")).toBeNull()
   })
 
+  it("重新取得內容相同的局與系列結果時，列內錯誤保留；內容改變才清除", async () => {
+    const user = userEvent.setup()
+    const onRecord = vi.fn<ScoreEntryPanelProps["onRecord"]>(
+      async () => "redundant_games",
+    )
+    const panel = renderPanel({ ...props3, onRecord })
+
+    await user.click(within(gameRow(2)).getByRole("button", { name: "修改" }))
+    await user.clear(scoreBox(2, A))
+    await user.type(scoreBox(2, A), "14")
+    await user.click(within(gameRow(2)).getByRole("button", { name: "登錄" }))
+    expect(await screen.findByRole("alert")).toBeInTheDocument()
+
+    // 輪詢：新陣列、新物件，內容相同
+    act(() =>
+      panel.update({
+        games: panel.games.map((g) => ({ ...g })),
+        series: { ...panel.series },
+      }),
+    )
+    expect(screen.getByRole("alert")).toBeInTheDocument()
+
+    // 內容改變（少了最後一局）
+    act(() =>
+      panel.update({
+        games: panel.games.slice(0, -1),
+        series: { ...panel.series, winner: null, canSubmit: false },
+      }),
+    )
+    expect(screen.queryByRole("alert")).toBeNull()
+  })
+
   it.each([
     ["tie", "不能平手"],
     ["invalid_score", "比分格式不正確"],
@@ -693,7 +725,7 @@ describe("S24 Score entry panel：審查後補強", () => {
     expect(gameRow(2)).toHaveTextContent("9:13")
   })
 
-  it("games 或 series 更新：清掉舊的列內錯誤與送出錯誤", async () => {
+  it("games 或 series 的內容改變：清掉舊的列內錯誤與送出錯誤", async () => {
     const user = userEvent.setup()
     const panel = renderPanel({
       games: ROUNDS_3,
@@ -704,8 +736,9 @@ describe("S24 Score entry panel：審查後補強", () => {
     await user.click(within(gameRow(3)).getByRole("button", { name: "刪除" }))
     expect(await screen.findByRole("alert")).toBeInTheDocument()
 
-    panel.update({ games: [...ROUNDS_3] })
+    panel.update({ games: ROUNDS_3.slice(0, 2) })
     expect(screen.queryByRole("alert")).toBeNull()
+    panel.update({ games: ROUNDS_3 })
 
     const dialog = await openSubmitDialog(user)
     await user.click(
@@ -715,7 +748,7 @@ describe("S24 Score entry panel：審查後補強", () => {
       "任一隊拿到 2 勝後才能送出",
     )
 
-    panel.update({ series: { ...DECIDED } })
+    panel.update({ series: { ...DECIDED, winsB: DECIDED.winsB + 1 } })
     expect(screen.queryByRole("alert")).toBeNull()
   })
 
