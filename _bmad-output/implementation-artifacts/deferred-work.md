@@ -59,9 +59,3 @@
   (1) 公開單場 API 的提議形狀（見上方 5.8 第一階段一項）要多一個 `appeal_deadline`（ISO，申訴期、申訴中才有值，其他狀態為 null），對應 `frontend/src/features/competition/match-types.ts` 的 `PublicMatchDetail.appeal_deadline`；
   (2) B 的 Countdown（2.4，`appeal` 變體，帶進度條）做好後，由 S4 路由 `frontend/src/routes/tournaments/$tournamentId/matches/$matchId.tsx` 把它傳給 `MatchSpectatorView` 的 `appealCountdown`，`MatchAppealWindow` 不重做倒數；
   (3) 到期後要顯示「已截止 · 系統處理中」（EXPERIENCE.md〈倒數與時間〉到期行為），由 Countdown 負責；`MatchAppealWindow` 目前不讀裝置時鐘、不判斷是否到期。
-
-## Deferred from: Story 5.8 D 審查（2026-10-31）
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-match-page-results.md`
-  summary: 已確認的 walkover 場次，空缺的一方會顯示來源說明（例如「M5 敗者」），而不是「—」加輪空標記。
-  evidence: D 審查 5.8 第 2 點，與 PR #13 審查第 2 點同一件事。約定會改成「確定沒有隊伍時 `source_*` 為 null」，`bye_side` 改為 `bye_a`、`bye_b`。約定合併後改 `frontend/src/features/competition/match-status.ts` 的 `sideView()`（目前用 `bye_side === side` 與 `team === null && source === null` 判斷輪空）、`bracket-types.ts` 與假資料，並補 walkover 空缺方的測試。

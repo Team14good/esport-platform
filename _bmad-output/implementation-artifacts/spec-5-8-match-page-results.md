@@ -197,7 +197,7 @@ context:
   - 修正：`BracketMatchCard.tsx` 新增 `matchCardAccessibleName()`，連結帶 `aria-label`，包成連結時 article 不帶 `aria-label`。
   - 名稱格式（AI 依 D 的範例與畫面內容訂的預設，使用者未另外指定）：`{M3 或 季軍賽}，{待開打時的時間}，{A 隊名（標記）} 對 {B 隊名（標記）}，{有比分時的「2 比 1」}，{狀態}`，例如「M3，清大 Hydra 對 交大 Nova，2 比 1，已確認」。
   - 測試改用 `toHaveAccessibleName(...)`，補上已確認、季軍賽＋棄權兩種名稱。
-- [延後，等約定] 已確認 walkover 的空缺方顯示「M5 敗者」：等 PR #13 把「確定沒有隊伍時 `source_*` 為 null」與 `bye_a`／`bye_b` 定進約定後一起改，已記進 `deferred-work.md`。
+- [已修正，隨 4.6 合併] 已確認 walkover 的空缺方顯示「M5 敗者」：4.6 依 D 的審查改成 `bye_a`／`bye_b` 並加上 walkover 空缺方的保險。2026-10-31 把 `story/4-6` 合併進來時，改套用在共用的 `match-status.ts` `sideView()`，場次卡與 Score display 都適用；`deferred-work.md` 的對應項目已刪除。
 - [已修正] S4 第一次載入就失敗（不是 404）時停在 Skeleton，要連續失敗 3 次才出現橫幅：路由在 `connectionLost` 或 `error` 有值時就顯示 `ConnectionLostBanner`，Skeleton 保留、輪詢照常重試。新增 `match-route-error.test.tsx`。
 - [已修正] `isMatchScoreChanged` 只比狀態與系列勝場：加比 `outcome`、`winner_id` 與各局（`game_no`、`winner_side`、`score_a/b`），6.x 更正結果時也會 flash。`use-match-polling.test.tsx` 補兩個案例。
 - [PR 說明] 這個分支帶了 5.2 的 commit `03a09c1`（`MatchAppealWindow`），開 PR 時在說明註明。

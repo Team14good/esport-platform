@@ -224,3 +224,22 @@
   - 修正後改用 `toHaveAccessibleName`，直接驗證讀螢幕軟體聽到的整句
 - 成熟度：L3（人審查找出問題，AI 修正並自動驗證）
 - 證據：`_bmad-output/implementation-artifacts/spec-5-8-match-page-results.md` 的 Review Triage Log；尚未 commit
+### 2026-10-31｜程式、測試／依審查修正｜Story 4.6：依 D 的審查改成 bye_a／bye_b、walkover 空缺方與 404 輪詢
+
+- Story／範圍：4.6（`story/4-6`）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：把 D 的審查意見貼給 AI，AI 先讀被指出的型別、假資料、場次卡與輪詢 hook 確認問題，再修正並補測試，重建 frontend 後跑全部檢查
+- AI 產出：
+  - `bracket-types.ts` 的 `bye_side` 改成 `bye_a`、`bye_b`，假資料、場次卡、逐場比較跟著改
+  - 場次卡：已確認的 walkover 空缺方即使還帶著來源也顯示「—」＋「輪空」
+  - `useBracketPolling`：新增 `BracketNotFoundError`，404 不計入連續失敗、照常輪詢，回傳 `notFound`
+  - 測試：5、9 隊版面各 1 個、場次卡 3 個、輪詢 2 個
+  - spec 的 Review Triage Log 與 Design Notes
+- 人做了什麼：D 審查並找出兩方輪空與 walkover 空缺方的問題、決定改約定；使用者決定交給 AI 修
+- 驗證：前端單元測試 29 個檔案、285 個通過（新增 7 個）；typecheck、biome、build 通過；改動的檔案都是 LF
+- 問題與修正：
+  - 10/29 實作時 AI 照當時的約定用 `bye_side`，假資料產生器其實已經算出兩方都輪空（`byeA`、`byeB`），卻用 `byeA ? "a" : byeB ? "b" : null` 丟掉 b 方；測試用的隊數（2、3、4、8、13、16、32）都不會出現兩方輪空，所以沒抓到。D 用 9 隊推算第二輪才發現
+  - 假資料在 walkover 後把下一場的 source 清成 null，剛好讓「確定沒有隊伍」的畫面正確，遮住了 API 若保留 source 時會顯示成待定的問題
+  - 這次的修正改了 4.6 的檔案，但 `story/5-8` 已經把同一段邏輯搬到 `match-status.ts`，合併 `story/4-6` 進 `story/5-8` 時要手動解衝突
+- 成熟度：L3（人審查找出問題，AI 修正並自動驗證）
+- 證據：`_bmad-output/implementation-artifacts/spec-4-6-bracket-tree-view.md` 的 Review Triage Log；尚未 commit

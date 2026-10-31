@@ -288,7 +288,8 @@ export function createBracketFixture({
       team_b: null,
       source_a: plan.sourceA && `${plan.sourceA.code} ${plan.sourceA.kind}`,
       source_b: plan.sourceB && `${plan.sourceB.code} ${plan.sourceB.kind}`,
-      bye_side: plan.byeA ? "a" : plan.byeB ? "b" : null,
+      bye_a: plan.byeA,
+      bye_b: plan.byeB,
       scheduled_at: new Date(
         FIRST_ROUND_AT + (plan.roundNo - 1) * ROUND_INTERVAL_MS,
       ).toISOString(),
