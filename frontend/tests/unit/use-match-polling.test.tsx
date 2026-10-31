@@ -12,6 +12,7 @@ import { MatchSpectatorView } from "@/features/competition/MatchSpectatorView"
 import { MatchNotFoundError } from "@/features/competition/match-source"
 import type { PublicMatchDetail } from "@/features/competition/match-types"
 import {
+  isMatchScoreChanged,
   MATCH_POLL_INTERVAL_MS,
   useMatchPolling,
 } from "@/features/competition/use-match-polling"
@@ -193,6 +194,48 @@ describe("場次輪詢", () => {
 
     expect(result.current.notFound).toBe(false)
     expect(result.current.error).toBeInstanceOf(Error)
+  })
+})
+
+describe("比分變動的判斷", () => {
+  const CONFIRMED_2_0 = matchDetail({
+    ...LIVE_2_0,
+    status: "confirmed",
+    outcome: "played",
+    winner_id: "team-a",
+  })
+
+  it("更正結果時只改結果、勝隊或某一局比分，也算變動", () => {
+    expect(
+      isMatchScoreChanged(CONFIRMED_2_0, {
+        ...CONFIRMED_2_0,
+        outcome: "disqualified",
+      }),
+    ).toBe(true)
+    expect(
+      isMatchScoreChanged(CONFIRMED_2_0, {
+        ...CONFIRMED_2_0,
+        winner_id: "team-b",
+      }),
+    ).toBe(true)
+    expect(
+      isMatchScoreChanged(CONFIRMED_2_0, {
+        ...CONFIRMED_2_0,
+        games: [
+          CONFIRMED_2_0.games[0],
+          { ...CONFIRMED_2_0.games[1], score_b: 9 },
+        ],
+      }),
+    ).toBe(true)
+  })
+
+  it("各局內容相同但是不同的物件：不算變動", () => {
+    expect(
+      isMatchScoreChanged(CONFIRMED_2_0, {
+        ...CONFIRMED_2_0,
+        games: CONFIRMED_2_0.games.map((game) => ({ ...game })),
+      }),
+    ).toBe(false)
   })
 })
 

@@ -204,3 +204,23 @@
 - 問題與修正：子代理沒有用 grid area，因為兩欄會共用列高，左欄會撐出空白，改用 `display: contents`。它也指出手機寬度時 DOM 順序和畫面順序不一致，Epic 6 加「提出申訴」按鈕時要再確認焦點順序，已寫進 Implementation Notes
 - 成熟度：L3（AI 依 UX 文件產出並自動驗證，人做範圍取捨；這次沒有多審查者）
 - 證據：`_bmad-output/implementation-artifacts/spec-5-2-appeal-window-display.md`、`frontend/src/features/competition/MatchAppealWindow.tsx`；尚未 commit
+
+### 2026-10-31｜程式、測試／依審查修正｜Story 5.8：依 D 的審查修正場次卡可及名稱、首次載入失敗與 flash 判斷
+
+- Story／範圍：5.8（`story/5-8`）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：把 D 的審查意見貼給 AI。AI 先讀被指出的程式與測試，確認問題成立，再修正、補測試，最後重建容器跑全部檢查
+- AI 產出：
+  - `BracketMatchCard.tsx`：新增 `matchCardAccessibleName()`，連結帶完整名稱，article 包成連結時不帶 `aria-label`
+  - S4 路由：第一次載入就失敗時直接顯示連線中斷橫幅
+  - `isMatchScoreChanged` 加比結果、勝隊與各局
+  - 測試：`bracket-match-card` 改用 `toHaveAccessibleName` 並補 2 個案例，`use-match-polling` 補 2 個，新增 `match-route-error.test.tsx`
+  - spec 的 Review Triage Log、`deferred-work.md` 一項（walkover 空缺方，等 PR #13 的約定）
+- 人做了什麼：D 審查並找出問題；使用者決定把審查意見交給 AI 修
+- 驗證：前端單元測試 39 個檔案、371 個通過（新增 4 個）；typecheck、biome（157 個檔案）通過；改動的檔案都是 LF
+- 問題與修正：
+  - 10/30 實作時 AI 在 Implementation Notes 寫「article 的 `aria-label` 不變，所以連結的可及名稱包含標頭與隊名」，這是錯的：依 accname 規則，article 的 `aria-label` 會取代內容，連結名稱只剩「M3」
+  - 當時的測試用 `toHaveTextContent` 檢查文字，不是檢查可及名稱，所以沒抓到；當時也略過 code review。這次由 D 人工審查發現
+  - 修正後改用 `toHaveAccessibleName`，直接驗證讀螢幕軟體聽到的整句
+- 成熟度：L3（人審查找出問題，AI 修正並自動驗證）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-8-match-page-results.md` 的 Review Triage Log；尚未 commit

@@ -46,16 +46,18 @@ function MatchPage({
   tournamentId: string
   matchId: string
 }) {
-  const { detail, changed, connectionLost, lastUpdatedAt, notFound } =
+  const { detail, changed, connectionLost, lastUpdatedAt, notFound, error } =
     useMatchPolling({
       queryKey: ["match", tournamentId, matchId],
       queryFn: () => fetchMatchDetail({ tournamentId, matchId }),
     })
 
   if (notFound) return <NotFoundPage />
+  // 第一次載入就失敗（不是 404）時沒有舊畫面可保留，不等連續失敗 3 次，直接顯示橫幅並繼續重試
+  const showBanner = connectionLost || error != null
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      {connectionLost && <ConnectionLostBanner lastUpdatedAt={lastUpdatedAt} />}
+      {showBanner && <ConnectionLostBanner lastUpdatedAt={lastUpdatedAt} />}
       {detail ? (
         <MatchSpectatorView detail={detail} changed={changed} />
       ) : (

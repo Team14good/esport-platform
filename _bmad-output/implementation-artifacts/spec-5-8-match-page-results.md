@@ -172,7 +172,7 @@ context:
 - **勝敗樣式的共用**：除了徽章對照與集合，`BracketMatchCard` 的隊伍列邏輯（名稱、輪空／棄權／取消資格標記、只在已確認套勝敗）也抽成 `match-status.ts` 的 `sideView()`，場次卡與 Score display 共用；場次卡只多加比分欄，4.6 的測試全部照舊通過。
 - **各局的勝敗顏色不受「申訴期不套樣式」限制**：Decisions 的限制針對系列勝負（暗示晉級）；每一局的結果在登錄時就確定，所以各局列表一律用 `foreground`／`status-eliminated`，與 `mockups/key-s4-match.html` (c)（申訴期）一致。`win_loss` 的中間欄留空，不寫「:」。
 - **Score display 的敗方比分數字**也用 `status-eliminated`（mockup `.score .l`），一樣只在已確認時套用；名稱不加刪除線（DESIGN.md 只有場次卡寫刪除線）。
-- **場次卡連結**：有 `matchHref` 時外層是 TanStack `Link`（`group`、`focus-visible:outline-2`），裡面的 `<article aria-label>` 不變，所以連結的可及名稱包含標頭與隊名；定位用的 `className`／`style` 移到連結上。typecheck 接受 `to` 為一般字串。
+- **場次卡連結**：有 `matchHref` 時外層是 TanStack `Link`（`group`、`focus-visible:outline-2`），連結自己帶 `aria-label`（`matchCardAccessibleName()`，見 Review Triage Log），裡面的 article 不再帶 `aria-label`；定位用的 `className`／`style` 移到連結上。typecheck 接受 `to` 為一般字串。
 - **返回連結用一般 `<a>`**：S3 路由不存在，TanStack `Link` 只接受已註冊的路由；S3 完成後改為 `Link`（已寫進 deferred-work）。
 - **頁面標題**：輪詢不經過 router，所以路由另有 `loader` 呼叫一次 `fetchMatchDetail`，只回傳標題給 `head`；找不到或失敗時標題是「FLOW」。
 - **換場次時重新掛載**：S4 以 `tournamentId/matchId` 當 key，點同輪其他場次時不沿用上一場的資料（`keepPreviousData`）與 flash 狀態。
@@ -190,6 +190,19 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+**2026-10-31 D 審查（`story/4-6...story/5-8`）**
+
+- [已修正，擋合併] 場次卡連結的可及名稱只剩「M3」。原本的 Implementation Notes 以為連結會讀到 article 的內容，但 accname 規則下 article 的 `aria-label` 會取代內容；測試用 `toHaveTextContent` 檢查，抓不到。
+  - 修正：`BracketMatchCard.tsx` 新增 `matchCardAccessibleName()`，連結帶 `aria-label`，包成連結時 article 不帶 `aria-label`。
+  - 名稱格式（AI 依 D 的範例與畫面內容訂的預設，使用者未另外指定）：`{M3 或 季軍賽}，{待開打時的時間}，{A 隊名（標記）} 對 {B 隊名（標記）}，{有比分時的「2 比 1」}，{狀態}`，例如「M3，清大 Hydra 對 交大 Nova，2 比 1，已確認」。
+  - 測試改用 `toHaveAccessibleName(...)`，補上已確認、季軍賽＋棄權兩種名稱。
+- [延後，等約定] 已確認 walkover 的空缺方顯示「M5 敗者」：等 PR #13 把「確定沒有隊伍時 `source_*` 為 null」與 `bye_a`／`bye_b` 定進約定後一起改，已記進 `deferred-work.md`。
+- [已修正] S4 第一次載入就失敗（不是 404）時停在 Skeleton，要連續失敗 3 次才出現橫幅：路由在 `connectionLost` 或 `error` 有值時就顯示 `ConnectionLostBanner`，Skeleton 保留、輪詢照常重試。新增 `match-route-error.test.tsx`。
+- [已修正] `isMatchScoreChanged` 只比狀態與系列勝場：加比 `outcome`、`winner_id` 與各局（`game_no`、`winner_side`、`score_a/b`），6.x 更正結果時也會 flash。`use-match-polling.test.tsx` 補兩個案例。
+- [PR 說明] 這個分支帶了 5.2 的 commit `03a09c1`（`MatchAppealWindow`），開 PR 時在說明註明。
+- [不需處理] `PublicMatchDetail` 的提議形狀與 `scoring.py` 一致，D 會在 5.x 第二階段補進約定。
+- 驗證（重建容器後）：單元測試 39 個檔案、371 個通過（新增 4 個測試、1 個檔案）；typecheck、biome（157 個檔案）通過；改動的檔案都是 LF。
 
 ## Verification
 
