@@ -204,3 +204,15 @@
 - 問題與修正：子代理沒有用 grid area，因為兩欄會共用列高，左欄會撐出空白，改用 `display: contents`。它也指出手機寬度時 DOM 順序和畫面順序不一致，Epic 6 加「提出申訴」按鈕時要再確認焦點順序，已寫進 Implementation Notes
 - 成熟度：L3（AI 依 UX 文件產出並自動驗證，人做範圍取捨；這次沒有多審查者）
 - 證據：`_bmad-output/implementation-artifacts/spec-5-2-appeal-window-display.md`、`frontend/src/features/competition/MatchAppealWindow.tsx`；尚未 commit
+
+### 2026-10-31｜測試／測試個案產生｜Story 7.2 第一階段：端對端演練框架、身分流程與觀眾檢視
+
+- Story／範圍：7.2 第一階段（分支 `story/7-2`，以 `story/5-8` 為基礎，PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（調查子代理 → spec → 實作子代理 → 主對話複驗）
+- 怎麼用：使用者授權「等其他人的部分直接接假資料、有問題直接選 AI 最推薦的」；AI 自行決定分支基礎、執行方式與待辦步驟的寫法並記在 spec 的 Decisions
+- AI 產出：compose 的 `e2e` 服務與 `frontend/Dockerfile.e2e`（Playwright＋Bun，容器內 TCP 轉發）；`frontend/tests/e2e/` 共 10 個檔案：2 個可執行的情境（註冊→Mailpit 驗證→申請主辦方→管理員核准；觀眾瀏覽對戰樹假資料與場次頁），桌機與 375 px 各跑一次，自動記錄 API 回應時間並判定 1 秒；完整賽事流程依三款遊戲設定假資料產生 38 個 `test.fixme`，以 tag 標註 Story 與 FR
+- 人做了什麼：只給授權與範圍原則；分支、執行方式、假資料內容等決定由 AI 依建議選項做出
+- 驗證：主對話在全新資料庫的 compose 專案連跑 2 次，都是 4 passed、76 skipped；API 最慢約 175 ms（子代理從報告取得）；typecheck、biome、前端單元測試 367 個、build 皆通過
+- 問題與修正：(1) 子代理第一次執行時，橫向捲軸檢查把開發模式的 TanStack Router Devtools 面板誤判成捲動區，改為略過開發工具元素。(2) 報告目錄是主機掛載點，Playwright 刪不掉，舊截圖持續累積，改在容器進入點先清空。(3) 子代理在使用者本機的 compose 上執行 e2e，讓開發資料庫多了 `e2e-` 開頭的測試帳號；主對話檢查容器狀態時發現，改用獨立的 compose 專案複驗並告知使用者。(4) 這次沒跑多代理審查（依使用者設定最後統一 code review）
+- 成熟度：L3（AI 依 spec 產出並自動驗證；人只給授權原則，決策由 AI 依建議選項做出）
+- 證據：`_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill.md`；commit 未建立
