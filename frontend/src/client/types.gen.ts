@@ -135,6 +135,51 @@ export type BracketRead = {
 }
 
 /**
+ * CheckInRead
+ */
+export type CheckInRead = {
+  /**
+   * Match Id
+   */
+  match_id: string
+  /**
+   * Team Id
+   */
+  team_id: string
+  /**
+   * At
+   */
+  at: string
+}
+
+/**
+ * CheckInStatus
+ *
+ * 登入者對某場次的報到狀態（S4 Check-in panel 用，和報到 API 同一套檢查）。
+ */
+export type CheckInStatus = {
+  /**
+   * Side
+   */
+  side: "a" | "b" | null
+  /**
+   * Reason
+   */
+  reason:
+    | "teams_pending"
+    | "already_checked_in"
+    | "too_early"
+    | "closed"
+    | "not_checkable"
+    | "not_captain"
+    | null
+  /**
+   * Opens At
+   */
+  opens_at: string
+}
+
+/**
  * EmailVerificationCreate
  */
 export type EmailVerificationCreate = {
@@ -618,6 +663,14 @@ export type PublicMatchDetail = {
    * Updated At
    */
   updated_at: string
+  /**
+   * Check In A At
+   */
+  check_in_a_at?: string | null
+  /**
+   * Check In B At
+   */
+  check_in_b_at?: string | null
 }
 
 /**
@@ -1611,3 +1664,75 @@ export type competitionReadPublicMatchResponses = {
 
 export type competitionReadPublicMatchResponse =
   competitionReadPublicMatchResponses[keyof competitionReadPublicMatchResponses]
+
+export type competitionReadCheckInStatusData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in"
+}
+
+export type competitionReadCheckInStatusErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadCheckInStatusError =
+  competitionReadCheckInStatusErrors[keyof competitionReadCheckInStatusErrors]
+
+export type competitionReadCheckInStatusResponses = {
+  /**
+   * Successful Response
+   */
+  200: CheckInStatus
+}
+
+export type competitionReadCheckInStatusResponse =
+  competitionReadCheckInStatusResponses[keyof competitionReadCheckInStatusResponses]
+
+export type competitionCheckInData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in"
+}
+
+export type competitionCheckInErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionCheckInError =
+  competitionCheckInErrors[keyof competitionCheckInErrors]
+
+export type competitionCheckInResponses = {
+  /**
+   * Successful Response
+   */
+  201: CheckInRead
+}
+
+export type competitionCheckInResponse =
+  competitionCheckInResponses[keyof competitionCheckInResponses]

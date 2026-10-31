@@ -54,6 +54,11 @@ class Bracket(SQLModel, table=True):
     # 抽籤時的正取隊數；公開對戰樹以它重建 `bracket.plan`（待定列字串）
     team_count: int
     drawn_at: datetime = Field(sa_type=DateTime(timezone=True))
+    # worker 處理過「賽事開始」的時間（轉為進行中，或賽事已不是賽程已公布而略過）；
+    # 標記後不再被選為候選，避免 competition 直接查 tournament 表
+    start_handled_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
 
 
 class Match(SQLModel, table=True):
@@ -110,6 +115,22 @@ class Match(SQLModel, table=True):
     )
 
 
+class CheckIn(SQLModel, table=True):
+    """隊長報到紀錄；一隊一場只能報到一次、不能取消，唯一鍵是併發的最後防線。"""
+
+    __tablename__ = "check_in"
+    __table_args__ = (
+        UniqueConstraint("match_id", "team_id", name="uq_check_in_match_team"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    match_id: uuid.UUID = Field(foreign_key="match.id")
+    # 隊伍屬 registration，不建跨模組外鍵
+    team_id: uuid.UUID
+    account_id: uuid.UUID = Field(foreign_key="account.id")
+    at: datetime = Field(sa_type=DateTime(timezone=True))
+
+
 # ---------------------------------------------------------------- 事件
 
 
@@ -133,7 +154,42 @@ class MatchOpponentsDecided(Event):
     match_id: uuid.UUID
 
 
+class TeamCheckedIn(Event):
+    """一隊完成報到；`both_checked_in` 表示這場兩隊都已報到。"""
+
+    match_id: uuid.UUID
+    team_id: uuid.UUID
+    both_checked_in: bool
+
+
 # ---------------------------------------------------------------- API schema
+
+
+class CheckInRead(BaseModel):
+    match_id: uuid.UUID
+    team_id: uuid.UUID
+    at: datetime
+
+
+CheckInStatusReason = Literal[
+    "teams_pending",
+    "already_checked_in",
+    "too_early",
+    "closed",
+    "not_checkable",
+    "not_captain",
+]
+
+
+class CheckInStatus(BaseModel):
+    """登入者對某場次的報到狀態（S4 Check-in panel 用，和報到 API 同一套檢查）。"""
+
+    # 登入者是 a 或 b 隊的隊長；不是隊長、或兩隊未確定時為 None
+    side: Literal["a", "b"] | None
+    # None 代表現在可以報到；否則是 `CheckInPanel` 吃的原因代碼
+    reason: CheckInStatusReason | None
+    # 報到開放時間
+    opens_at: datetime
 
 
 class MatchRead(BaseModel):
@@ -251,3 +307,6 @@ class PublicMatchDetail(PublicMatch):
     appeal_deadline: datetime | None
     # 這場與同輪其他場次 updated_at 的最大值
     updated_at: datetime
+    # 兩隊的報到時間（公開）；未報到或該方未確定為 None
+    check_in_a_at: datetime | None = None
+    check_in_b_at: datetime | None = None

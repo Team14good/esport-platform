@@ -3,9 +3,15 @@
 import type { Client, Options as Options2, TDataShape } from "./client"
 import { client } from "./client.gen"
 import type {
+  competitionCheckInData,
+  competitionCheckInErrors,
+  competitionCheckInResponses,
   competitionDrawData,
   competitionDrawErrors,
   competitionDrawResponses,
+  competitionReadCheckInStatusData,
+  competitionReadCheckInStatusErrors,
+  competitionReadCheckInStatusResponses,
   competitionReadPublicBracketData,
   competitionReadPublicBracketErrors,
   competitionReadPublicBracketResponses,
@@ -634,6 +640,46 @@ export class CompetitionService {
     >({
       responseType: "json",
       url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Check In Status
+   *
+   * 登入者的報到狀態：所屬一方與不能報到的原因（None 代表可報到）。
+   */
+  public static readCheckInStatus<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadCheckInStatusData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadCheckInStatusResponses,
+      competitionReadCheckInStatusErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in",
+      ...options,
+    })
+  }
+
+  /**
+   * Check In
+   *
+   * 隊長為本隊報到（隊伍由登入者是哪一隊的隊長推得，請求不帶隊伍）。
+   */
+  public static checkIn<ThrowOnError extends boolean = true>(
+    options: Options<competitionCheckInData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      competitionCheckInResponses,
+      competitionCheckInErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in",
       ...options,
     })
   }

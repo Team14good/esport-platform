@@ -52,6 +52,9 @@ DETAIL_KEYS = {
     "same_round",
     "appeal_deadline",
     "updated_at",
+    # 5.1：兩隊的報到時間
+    "check_in_a_at",
+    "check_in_b_at",
 }
 
 

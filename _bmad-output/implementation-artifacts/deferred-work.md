@@ -71,3 +71,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-panel.md`
   summary: （中）前端單元測試在容器冷啟動時不穩定：`login`、`signup`、`account`、`auth`、`forgot-password` 等走路由的舊測試，在 frontend 容器裡第一次執行會有 4～32 個因等不到元素（預設 1 秒）失敗，同一個容器第二次執行全部通過。CI 若遇到機器忙碌也可能偶發失敗。
   evidence: 2026-10-29 在沒有任何前端改動的分支（story/5-5）上重現：第一次 14 failed／162，第二次 162 passed；與本 Story 的新測試無關。可能的修法：路由測試的 `findBy*` 加長 timeout，或在 `vitest.config.ts` 設 `testTimeout`／預先載入路由，修好後以冷啟動連跑多次確認。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （中）6.2「重新比賽」把場次從申訴中轉回待開打時，舊的報到紀錄還在，會讓重賽回 `ALREADY_CHECKED_IN`，且兩隊都有紀錄時 `list_forfeit_due` 永遠不會選到它（未驗證，若為真屬 medium）。
+  evidence: 2026-11-01 5.1 第二階段審查（Edge Case Hunter）。FR-31 規定重新比賽要清除報到紀錄、依新時間重新起算棄權期限。6.2 實作時需要 competition 提供清除報到紀錄的公開函式（由 D 新增），並在轉回待開打後呼叫 `start_forfeit_clock`。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （低）報到只鎖場次、讀賽事狀態不加鎖；2.6 做取消賽事時，取消與報到同時發生可能寫入一筆已取消賽事的報到紀錄。
+  evidence: 2026-11-01 5.1 第二階段審查（Blind Hunter、Edge Case Hunter）。期中不能取消賽事（2.6 擱置），所以目前不會發生。2.6 實作時改成先 `lock_tournament` 再 `lock_match`（AD-6 順序），或由取消流程鎖住所有場次。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
+  evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。

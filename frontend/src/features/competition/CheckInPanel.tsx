@@ -13,6 +13,8 @@ export type CheckInReason =
   | "already_checked_in"
   | "too_early"
   | "closed"
+  | "not_checkable"
+  | "not_captain"
 
 export type CheckInSide = "a" | "b"
 
@@ -55,6 +57,10 @@ function reasonText(reason: CheckInReason, opensAt: string): string | null {
       return `${formatMatchDateTime(opensAt)} 起可報到`
     case "closed":
       return "已截止"
+    // 場次不在待開打、或登入者不是隊長：沿用預設說明
+    case "not_checkable":
+    case "not_captain":
+      return UNKNOWN_REASON_TEXT
     // 兩隊未確定的說明放在兩隊下方，所有人都看得到
     case "teams_pending":
     case "already_checked_in":

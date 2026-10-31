@@ -78,3 +78,8 @@ def get_team_names(
     if not team_ids:
         return {}
     return dict(_lookup("get_team_names")(session, team_ids=list(team_ids)))
+
+
+def is_captain(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) -> bool:
+    """帳號是不是該隊的隊長（報到用）；registration 尚未提供時拋 503。"""
+    return bool(_lookup("is_captain")(session, team_id=team_id, account_id=account_id))
