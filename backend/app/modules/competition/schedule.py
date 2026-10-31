@@ -141,6 +141,8 @@ def reschedule_window(
     最早＝max(現在, 前一輪場次最晚的預定時間＋該輪最小間隔)；第一輪沒有
     前一輪（feeder_times 為空）。最晚＝下一場預定時間－本場最小間隔；
     決賽與季軍賽 next_match_at 為 None，沒有上限。
+    準決賽的兩隊之後分別去決賽與季軍賽，呼叫端要傳入兩場中較早的那一場，
+    否則準決賽可能被改到季軍賽開始之後才結束。
     """
     _check_minutes(own_min_gap=own_min_gap, feeder_min_gap=feeder_min_gap)
     earliest = _utc(now)

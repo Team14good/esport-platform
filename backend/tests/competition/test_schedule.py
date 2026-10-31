@@ -150,13 +150,29 @@ def test_reschedule_before_feeder() -> None:
     kw: dict[str, Any] = {
         "now": t(10),
         "next_match_at": None,
-        "own_min_gap": 85,
+        # 本場與前一輪的最小間隔不同（例如本場 BO5、前一輪 BO3），最早時間只看前一輪的
+        "own_min_gap": 165,
         "feeder_times": [t(11), t(11, 30)],
         "feeder_min_gap": 85,
     }
     assert check_reschedule(t(12, 54), **kw) == "before_feeder"
     assert check_reschedule(t(12, 55), **kw) is None
     assert reschedule_window(**kw).earliest == t(12, 55)
+
+
+def test_reschedule_window_single_instant() -> None:
+    """最早剛好等於最晚：範圍只有一個時間點，不算空，而且那個時間點可以。"""
+    kw: dict[str, Any] = {
+        "now": t(10),
+        "next_match_at": t(12),
+        "own_min_gap": 120,
+        "feeder_times": (),
+        "feeder_min_gap": 0,
+    }
+    window = reschedule_window(**kw)
+    assert window == RescheduleWindow(t(10), t(10)) and not window.is_empty
+    assert check_reschedule(t(10), **kw) is None
+    assert check_reschedule(t(10, 1), **kw) == "after_next_match"
 
 
 def test_reschedule_empty_window() -> None:
