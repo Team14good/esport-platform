@@ -144,3 +144,27 @@
 - 問題與修正：第 1 輪的 Verification Gap 審查代理指出，性質測試只檢查「發出起算訊號時兩隊都在」，沒檢查「該發的都有發」；若程式漏掉連鎖輪空後湊齊的場次，測試仍全綠，那場比賽就永遠不會自動判棄權。重做時改成比對「新湊齊的場次集合＝起算訊號集合」
 - 成熟度：L5（用性質測試、mutation 與獨立審查代理檢驗測試本身）
 - 證據：PR #6、`spec-5-5-progression-rules.md` 的 Verification 結果
+
+### 2026-10-31｜程式／後端實作｜Story 5.5、5.6 第二階段：確認結果、晉級推進、申訴期滿自動確認與賽事結束
+
+- Story／範圍：Story 5.5、5.6（第二階段），分支 `story/5-5-confirm`（疊在 4.1 第二階段 #19 上）
+- 工具：Claude Code（Opus 5.5）、BMAD `bmad-build`、實作子代理、3 個平行審查子代理
+- 怎麼用：AI 寫 spec、人核准；子代理把第一階段 `progression.py` 算出的變更寫進資料庫，加上 worker 工作
+- AI 產出：`confirm_match`、`advance`、`confirm_walkover`、`auto_confirm_expired`、`get_podium`；`Match.confirmed_at` 遷移與索引；`MatchResultConfirmed`、`MatchOpponentsDecided` 事件；公開對戰樹加名次；2、3、8、13 隊從抽籤到賽事結束的整合測試
+- 人做了什麼：核准 spec
+- 驗證：容器內全套 907 個測試通過，lint 通過，competition 分支覆蓋率 99%；突變檢查（不套用起算棄權期限、拿掉期限條件）各有 6 個測試失敗
+- 問題與修正：子代理把「待開打的場次能不能 `confirm_match`」當成待確認問題，其實 spec 已寫明要擋，主代理直接答覆。審查抓到兩個測試全綠卻存在的問題：(1) 申訴期滿但沒有結果的場次會永遠排在最前面，worker 每輪都卡在它，原本的測試用 monkeypatch 只回一次候選而遮住問題；(2) 呼叫端照約定先鎖場次、`advance` 才鎖賽事，和 worker 的加鎖順序相反，可能死結。兩者都改掉並補上用真查詢的測試
+- 成熟度：L4（spec → 子代理實作 → 多代理審查 → 修正）
+- 證據：`spec-5-5-confirm-advance.md` 的 Review Triage Log（15 項）與 Implementation Notes
+
+### 2026-10-31｜審查回應｜回應 A 對 #5～#8 的審查並修正
+
+- Story／範圍：PR #5（4.3）、#6（5.5）、#7（5.1）、#8（5.3）第一階段
+- 工具：Claude Code（Opus 5.5）、容器內的測試與突變檢查
+- 怎麼用：逐條查證 A 的審查意見，能直接修的就修並證明測試抓得到
+- AI 產出：#5 補兩個測試並註明準決賽改時間要考慮季軍賽（記入 deferred-work）；#7 拿掉 list 上不被支援的 `aria-disabled`；#8 把列內錯誤改成依內容清除，避免第二階段輪詢時錯誤訊息消失
+- 人做了什麼：無（授權 AI 處理）
+- 驗證：A 指出改錯也不會失敗的兩處，補測試後在容器裡實際改錯，各有 1 個測試失敗；score-entry-panel 46 個、check-in-panel 20 個測試通過，build 通過
+- 問題與修正：A 發現第一階段的測試有盲點：兩個最小間隔在測試裡剛好都是 85 分，把其中一個換成另一個測試仍全過。這是 AI 寫測試時用了相同數值造成的，說明測試資料要刻意讓不同參數取不同值
+- 成熟度：L4（人審查加上 AI 查證與突變驗證）
+- 證據：PR #5～#8 的留言與 commit

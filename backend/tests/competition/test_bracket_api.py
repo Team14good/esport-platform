@@ -73,8 +73,10 @@ def test_owner_draws_and_public_bracket_is_visible(
         "rounds",
         "round_names",
         "matches",
+        "podium",
         "updated_at",
     }
+    assert data["podium"] is None
     assert data["round_names"] == ["8 強", "4 強", "決賽"]
     assert datetime.fromisoformat(data["updated_at"]) == datetime(
         2026, 10, 18, 11, 0, tzinfo=UTC

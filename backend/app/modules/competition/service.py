@@ -1,7 +1,9 @@
 """competition 的業務規則、資源層級權限、狀態轉換、操作紀錄與事件；不得 commit 或 rollback。"""
 
+import logging
 import secrets
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlmodel import Session
@@ -9,25 +11,38 @@ from sqlmodel import Session
 from app.core import audit, authz, clock, events
 from app.core.errors import BusinessError
 from app.modules.competition import bracket as bracket_rules
-from app.modules.competition import registration_port, repository
+from app.modules.competition import progression, registration_port, repository
 from app.modules.competition import schedule as schedule_rules
 from app.modules.competition.models import (
     Bracket,
     BracketDrawn,
     BracketRead,
     Match,
+    MatchOpponentsDecided,
     MatchOutcome,
     MatchRead,
+    MatchResultConfirmed,
     MatchStatus,
     PublicBracket,
     PublicMatch,
+    PublicPodium,
     PublicTeamRef,
 )
 from app.modules.tournaments import service as tournaments_service
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
 
+logger = logging.getLogger(__name__)
+
 # 可以抽籤的賽事狀態：開放報名中（提前抽籤）、報名截止
 _DRAWABLE = frozenset({TournamentStatus.OPEN, TournamentStatus.CLOSED})
+
+# 賽事已結束或已取消：worker 不再自動確認（AD-7）
+_ENDED = frozenset({TournamentStatus.FINISHED, TournamentStatus.CANCELLED})
+
+# `confirm_match` 只接受已開打的場次；待開打直接確認只走輪空（`confirm_walkover`、`advance`）
+_CONFIRMABLE = frozenset(
+    {MatchStatus.LIVE, MatchStatus.APPEAL_WINDOW, MatchStatus.APPEALED}
+)
 
 # 場次狀態的合法轉換（PRD〈場次狀態〉）
 _MATCH_TRANSITIONS: dict[MatchStatus, frozenset[MatchStatus]] = {
@@ -91,6 +106,53 @@ def _round_starts(
 
 def _delayed_rounds(starts: list[schedule_rules.RoundStart]) -> list[int]:
     return [start.round_no for start in starts if start.is_delayed]
+
+
+def _states(matches: list[Match]) -> dict[str, progression.MatchState[uuid.UUID]]:
+    """以場次資料組出 `progression` 用的狀態（以場次編號為鍵）。"""
+    return {
+        match.code: progression.MatchState(
+            team_a=match.team_a_id,
+            team_b=match.team_b_id,
+            status=MatchStatus(match.status),
+            outcome=MatchOutcome(match.outcome) if match.outcome is not None else None,
+            winner=match.winner_id,
+        )
+        for match in matches
+    }
+
+
+def _finished_podium(
+    session: Session,
+    tournament_id: uuid.UUID,
+    plan: bracket_rules.BracketPlan,
+    matches: list[Match],
+) -> progression.Podium[uuid.UUID] | None:
+    """賽事已結束時的名次；未結束、或場次資料不自洽（記錄日誌）時回 None。"""
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=tournament_id
+    )
+    if tournament.status != TournamentStatus.FINISHED:
+        return None
+    try:
+        return progression.podium(plan, _states(matches))
+    except ValueError:
+        # 公開頁面不因資料不自洽而 500；名次先不顯示，等人工修正
+        logger.exception("Inconsistent bracket for tournament %s", tournament_id)
+        return None
+
+
+def _public_podium(
+    result: progression.Podium[uuid.UUID] | None,
+    team_ref: Callable[[uuid.UUID | None], PublicTeamRef | None],
+) -> PublicPodium | None:
+    if result is None:
+        return None
+    return PublicPodium(
+        champion=team_ref(result.champion),
+        runner_up=team_ref(result.runner_up),
+        third_place=team_ref(result.third_place),
+    )
 
 
 def _match_to_read(match: Match) -> MatchRead:
@@ -310,8 +372,42 @@ def get_public_bracket(
             for r in range(1, bracket.rounds + 1)
         ],
         matches=public_matches,
+        podium=_public_podium(
+            _finished_podium(session, tournament_id, plan, matches), team_ref
+        ),
         updated_at=updated_at,
     )
+
+
+def get_podium(session: Session, *, tournament_id: uuid.UUID) -> PublicPodium | None:
+    """名次（冠、亞、季，從缺為 None）；尚未抽籤或賽事不是已結束時回 None。
+
+    名次取自 `progression.podium`：決賽已確認，且季軍賽已確認、已取消或不存在。
+    """
+    bracket = repository.get_bracket_by_tournament(session, tournament_id)
+    if bracket is None:
+        return None
+    matches = repository.list_matches(session, bracket.id)
+    result = _finished_podium(
+        session, tournament_id, bracket_rules.plan(bracket.team_count), matches
+    )
+    if result is None:
+        return None
+    team_ids = sorted(
+        {
+            team_id
+            for team_id in (result.champion, result.runner_up, result.third_place)
+            if team_id is not None
+        }
+    )
+    names = registration_port.get_team_names(session, team_ids=team_ids)
+
+    def team_ref(team_id: uuid.UUID | None) -> PublicTeamRef | None:
+        if team_id is None:
+            return None
+        return PublicTeamRef(id=team_id, name=names.get(team_id, "未知隊伍"))
+
+    return _public_podium(result, team_ref)
 
 
 def get_match(session: Session, *, match_id: uuid.UUID) -> MatchRead:
@@ -382,3 +478,245 @@ def start_forfeit_clock(session: Session, *, match: Match) -> None:
         forfeit_minutes=tournament.forfeit_minutes,
     )
     repository.set_forfeit_deadline(session, match, deadline, now)
+
+
+# ---------------------------------------------------------------- 確認結果與晉級
+
+
+def _confirm(
+    session: Session,
+    *,
+    match: Match,
+    outcome: MatchOutcome,
+    winner_id: uuid.UUID | None,
+    actor_id: uuid.UUID | None,
+) -> None:
+    """轉為已確認、寫入結果與 `confirmed_at`、操作紀錄與事件；不推進。
+
+    先檢查轉換：不允許時拋 409 `MATCH_INVALID_TRANSITION`，不改任何資料。
+    """
+    before = MatchStatus(match.status)
+    transition_match(session, match=match, to=MatchStatus.CONFIRMED)
+    repository.set_match_result(
+        session,
+        match,
+        outcome=outcome,
+        winner_id=winner_id,
+        confirmed_at=clock.now(),
+    )
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=match.tournament_id,
+        action="match.confirmed",
+        entity_type="match",
+        entity_id=match.id,
+        before={"status": before.value},
+        after={
+            "status": MatchStatus.CONFIRMED.value,
+            "outcome": outcome.value,
+            "winner_id": winner_id,
+        },
+    )
+    events.publish(
+        session, MatchResultConfirmed(match_id=match.id, winner_id=winner_id)
+    )
+
+
+def confirm_match(
+    session: Session,
+    *,
+    match: Match,
+    outcome: MatchOutcome,
+    winner_id: uuid.UUID | None,
+    actor_id: uuid.UUID | None,
+) -> None:
+    """寫入結果、轉為已確認、寫 `confirmed_at`，接著呼叫 `advance`。
+
+    呼叫端要先 `lock_tournament`、再以 `lock_match` 取得 `match`（AD-6）；這裡在寫入前
+    也會鎖一次賽事（同一交易內不會等待）。`actor_id=None` 表示系統。只接受進行中、
+    申訴期、申訴中的場次；待開打、已確認、已取消拋 409 `MATCH_INVALID_TRANSITION`，
+    不改任何資料。全部在呼叫端的交易內完成。
+    """
+    tournaments_service.lock_tournament(session, tournament_id=match.tournament_id)
+    if MatchStatus(match.status) not in _CONFIRMABLE:
+        raise BusinessError(
+            "MATCH_INVALID_TRANSITION",
+            "場次目前的狀態不能進行這個操作。",
+            status_code=409,
+        )
+    _confirm(
+        session, match=match, outcome=outcome, winner_id=winner_id, actor_id=actor_id
+    )
+    advance(session, match=match)
+
+
+def confirm_walkover(session: Session, *, match: Match) -> None:
+    """一方確定不會有隊伍時以 `walkover` 確認並推進（操作者為系統）。
+
+    呼叫端要先 `lock_tournament`、再以 `lock_match` 取得 `match`（AD-6）；這裡在寫入前
+    也會鎖一次賽事。勝隊為場上唯一的隊伍；兩方都沒有隊伍時無勝隊。兩隊都在時拋 409
+    `MATCH_INVALID_TRANSITION`，不改任何資料。
+    """
+    tournaments_service.lock_tournament(session, tournament_id=match.tournament_id)
+    if match.team_a_id is not None and match.team_b_id is not None:
+        raise BusinessError(
+            "MATCH_INVALID_TRANSITION",
+            "場次目前的狀態不能進行這個操作。",
+            status_code=409,
+        )
+    winner_id = match.team_a_id if match.team_a_id is not None else match.team_b_id
+    _confirm(
+        session,
+        match=match,
+        outcome=MatchOutcome.WALKOVER,
+        winner_id=winner_id,
+        actor_id=None,
+    )
+    advance(session, match=match)
+
+
+def advance(session: Session, *, match: Match) -> None:
+    """`match`（已確認）之後的晉級：依 `progression.advance` 的變更依序寫入。
+
+    鎖的順序（AD-6）：先鎖賽事，再依 id 遞增鎖住這個對戰表的全部場次，以鎖住後的
+    最新值組狀態（呼叫前對場次的修改必須已 flush）。連鎖的輪空確認、季軍賽取消、
+    起算棄權期限與賽事結束都在呼叫端的同一個交易內完成；這些後續變更的操作者為系統。
+    重複呼叫不會重複填位或起算；賽事已結束時不再轉換狀態或寫名次。
+    `match` 尚未確認時 `progression` 拋 `ValueError`（呼叫端的程式錯誤）。
+    """
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=match.tournament_id
+    )
+    matches = repository.lock_bracket_matches(session, match.bracket_id)
+    bracket = repository.get_bracket(session, match.bracket_id)
+    assert bracket is not None  # 場次的外鍵保證對戰表存在
+    plan = bracket_rules.plan(bracket.team_count)
+    by_code = {row.code: row for row in matches}
+    changes = progression.advance(plan, _states(matches), match.code)
+    for change in changes:
+        match change:
+            case progression.FillSlot(code=code, side=side, team=team):
+                repository.set_match_team(
+                    session, by_code[code], side, team, clock.now()
+                )
+            case progression.ConfirmWalkover(code=code, winner=winner):
+                _confirm(
+                    session,
+                    match=by_code[code],
+                    outcome=MatchOutcome.WALKOVER,
+                    winner_id=winner,
+                    actor_id=None,
+                )
+            case progression.VoidMatch(code=code):
+                _void(session, match=by_code[code])
+            case progression.StartForfeitClock(code=code):
+                target = by_code[code]
+                start_forfeit_clock(session, match=target)
+                events.publish(session, MatchOpponentsDecided(match_id=target.id))
+            case progression.TournamentFinished(podium=result):
+                _finish(session, tournament=tournament, result=result)
+
+
+def _void(session: Session, *, match: Match) -> None:
+    """季軍賽轉為已取消（FR-21）；已排入的隊伍留在原位。"""
+    before = MatchStatus(match.status)
+    transition_match(session, match=match, to=MatchStatus.VOIDED)
+    repository.clear_match_result(session, match, clock.now())
+    audit.record(
+        session,
+        actor_id=None,
+        tournament_id=match.tournament_id,
+        action="match.voided",
+        entity_type="match",
+        entity_id=match.id,
+        before={"status": before.value},
+        after={"status": MatchStatus.VOIDED.value},
+    )
+
+
+def _finish(
+    session: Session,
+    *,
+    tournament: TournamentRead,
+    result: progression.Podium[uuid.UUID],
+) -> None:
+    """賽事轉為已結束並記錄名次。
+
+    只處理已公布、進行中的賽事；已結束（progression 可能重複回傳）或已取消時不做任何事。
+    """
+    if tournament.status not in (TournamentStatus.PUBLISHED, TournamentStatus.ONGOING):
+        return
+    if tournament.status == TournamentStatus.PUBLISHED:
+        tournaments_service.transition_tournament(
+            session,
+            tournament_id=tournament.id,
+            to=TournamentStatus.ONGOING,
+            actor_id=None,
+        )
+    tournaments_service.transition_tournament(
+        session,
+        tournament_id=tournament.id,
+        to=TournamentStatus.FINISHED,
+        actor_id=None,
+    )
+    audit.record(
+        session,
+        actor_id=None,
+        tournament_id=tournament.id,
+        action="tournament.podium",
+        entity_type="tournament",
+        entity_id=tournament.id,
+        before=None,
+        after={
+            "champion": result.champion,
+            "runner_up": result.runner_up,
+            "third_place": result.third_place,
+        },
+    )
+
+
+def auto_confirm_expired(session: Session) -> bool:
+    """worker 用：確認一場申訴期滿（申訴期、`appeal_deadline <= now`）的場次並推進。
+
+    沿用場次上已寫入的 `outcome`、`winner_id`，操作者為系統。先找候選，略過已結束或
+    已取消賽事的場次（AD-7）；鎖住賽事與場次後重新檢查，已被處理過就不做任何事。
+    回傳是否找到候選（找到就可能還有下一筆）。
+    """
+    now = clock.now()
+    skipped: set[uuid.UUID] = set()
+    while True:
+        match_id = repository.find_expired_appeal_id(
+            session, now, exclude_tournaments=skipped
+        )
+        if match_id is None:
+            return False
+        candidate = repository.get_match(session, match_id)
+        assert candidate is not None  # 剛查到的 id
+        status = tournaments_service.get_tournament(
+            session, tournament_id=candidate.tournament_id
+        ).status
+        if status not in _ENDED:
+            break
+        skipped.add(candidate.tournament_id)
+
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=candidate.tournament_id
+    )
+    match = lock_match(session, match_id=match_id)
+    if (
+        tournament.status in _ENDED
+        or match.status != MatchStatus.APPEAL_WINDOW
+        or match.appeal_deadline is None
+        or match.appeal_deadline > now
+        or match.outcome is None
+    ):
+        return True
+    confirm_match(
+        session,
+        match=match,
+        outcome=MatchOutcome(match.outcome),
+        winner_id=match.winner_id,
+        actor_id=None,
+    )
+    return True

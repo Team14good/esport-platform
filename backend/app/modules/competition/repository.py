@@ -1,12 +1,13 @@
 """competition 擁有的資料表的查詢與加鎖；不做業務判斷、不碰其他模組的資料表。"""
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
+from typing import Literal
 
 from sqlmodel import Session, col, or_, select
 
-from app.modules.competition.models import Bracket, Match, MatchStatus
+from app.modules.competition.models import Bracket, Match, MatchOutcome, MatchStatus
 
 
 def add_bracket(session: Session, bracket: Bracket, matches: Sequence[Match]) -> None:
@@ -27,6 +28,10 @@ def get_bracket_by_tournament(
 ) -> Bracket | None:
     statement = select(Bracket).where(Bracket.tournament_id == tournament_id)
     return session.exec(statement).first()
+
+
+def get_bracket(session: Session, bracket_id: uuid.UUID) -> Bracket | None:
+    return session.get(Bracket, bracket_id)
 
 
 def list_matches(session: Session, bracket_id: uuid.UUID) -> list[Match]:
@@ -78,6 +83,83 @@ def set_forfeit_deadline(
     session: Session, match: Match, deadline: datetime, at: datetime
 ) -> None:
     match.forfeit_deadline = deadline
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def lock_bracket_matches(session: Session, bracket_id: uuid.UUID) -> list[Match]:
+    """依 id 遞增 `SELECT … FOR UPDATE` 鎖住對戰表的全部場次（AD-6），回傳最新值。"""
+    statement = (
+        select(Match)
+        .where(Match.bracket_id == bracket_id)
+        .order_by(col(Match.id))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return list(session.exec(statement))
+
+
+def find_expired_appeal_id(
+    session: Session,
+    now: datetime,
+    *,
+    exclude_tournaments: Collection[uuid.UUID] = (),
+) -> uuid.UUID | None:
+    """一場申訴期、`appeal_deadline <= now`、已有 outcome 的場次 id（期限早的先）；沒有回 None。
+
+    沒有 outcome 的場次無法確認，排除掉，以免一直被選中而擋住後面的場次。
+    """
+    statement = select(Match.id).where(
+        Match.status == MatchStatus.APPEAL_WINDOW,
+        col(Match.appeal_deadline) <= now,
+        col(Match.outcome).is_not(None),
+    )
+    if exclude_tournaments:
+        statement = statement.where(
+            col(Match.tournament_id).not_in(list(exclude_tournaments))
+        )
+    statement = statement.order_by(col(Match.appeal_deadline), col(Match.id)).limit(1)
+    return session.exec(statement).first()
+
+
+def set_match_result(
+    session: Session,
+    match: Match,
+    *,
+    outcome: MatchOutcome,
+    winner_id: uuid.UUID | None,
+    confirmed_at: datetime,
+) -> None:
+    match.outcome = outcome
+    match.winner_id = winner_id
+    match.confirmed_at = confirmed_at
+    match.updated_at = confirmed_at
+    session.add(match)
+    session.flush()
+
+
+def set_match_team(
+    session: Session,
+    match: Match,
+    side: Literal["a", "b"],
+    team_id: uuid.UUID,
+    at: datetime,
+) -> None:
+    if side == "a":
+        match.team_a_id = team_id
+    else:
+        match.team_b_id = team_id
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def clear_match_result(session: Session, match: Match, at: datetime) -> None:
+    """清除結果、勝隊與棄權期限（季軍賽取消時用）。"""
+    match.outcome = None
+    match.winner_id = None
+    match.forfeit_deadline = None
     match.updated_at = at
     session.add(match)
     session.flush()

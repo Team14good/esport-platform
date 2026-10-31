@@ -2,7 +2,7 @@
 title: 'Story 5.5、5.6（第二階段）：確認結果、晉級推進、申訴期滿自動確認與賽事結束'
 type: 'feature'
 created: '2026-10-31'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'f83895594672f0eb43600e9e80de23fdb5f83f93'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -79,12 +79,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `competition/models.py` 與新遷移 -- `Match.confirmed_at`（可為空）；`PublicPodium`（`champion`、`runner_up`、`third_place`）與 `PublicBracket.podium`；事件 `MatchResultConfirmed`、`MatchOpponentsDecided`
-- [ ] `competition/repository.py` -- 依 id 遞增鎖住對戰表全部場次；找下一場申訴期滿的場次 id
-- [ ] `competition/service.py` -- `confirm_match`、`advance`、`confirm_walkover`、`auto_confirm_expired`、`get_podium`；`get_public_bracket` 帶入名次
-- [ ] `backend/app/worker/jobs.py` -- 新增 `confirm_expired_appeals` 並加進 `JOBS`
-- [ ] `backend/tests/competition/test_confirm_advance.py`、`backend/tests/worker/` 對應測試 -- I/O 矩陣每一列；2、3、8、13 隊從抽籤一路確認到賽事結束的整合測試
-- [ ] `contracts/competition.md` -- 補 `auto_confirm_expired`、`get_podium`、`PublicBracket.podium`、兩個事件
+- [x] `competition/models.py` 與新遷移 -- `Match.confirmed_at`（可為空）；`PublicPodium`（`champion`、`runner_up`、`third_place`）與 `PublicBracket.podium`；事件 `MatchResultConfirmed`、`MatchOpponentsDecided`
+- [x] `competition/repository.py` -- 依 id 遞增鎖住對戰表全部場次；找下一場申訴期滿的場次 id
+- [x] `competition/service.py` -- `confirm_match`、`advance`、`confirm_walkover`、`auto_confirm_expired`、`get_podium`；`get_public_bracket` 帶入名次
+- [x] `backend/app/worker/jobs.py` -- 新增 `confirm_expired_appeals` 並加進 `JOBS`
+- [x] `backend/tests/competition/test_confirm_advance.py`、`backend/tests/worker/` 對應測試 -- I/O 矩陣每一列；2、3、8、13 隊從抽籤一路確認到賽事結束的整合測試
+- [x] `contracts/competition.md` -- 補 `auto_confirm_expired`、`get_podium`、`PublicBracket.podium`、兩個事件
 
 **Acceptance Criteria:**
 - Given 抽籤後的 2、3、8、13 隊賽事，when 依序讓每場以正常完賽進入申訴期並讓 worker 在期滿後處理，then 每一場都在期滿後才確認，勝隊只在確認後出現在下一場，最後賽事為 `finished`，名次與 `progression.podium` 一致。
@@ -100,6 +100,69 @@ context:
 
 ## Implementation Notes
 
+### spec 沒寫、實作時的決定
+
+- `advance` 的鎖：先 `lock_tournament`，再以一條 `SELECT … ORDER BY id FOR UPDATE`（`populate_existing`）鎖住整個對戰表的場次。worker 的 `auto_confirm_expired` 先鎖賽事、再 `lock_match` 鎖候選場次重新檢查，之後 `confirm_match` → `advance` 依 id 鎖其餘場次；持有的候選列不照 id 順序，但任何遵守 AD-6 的交易都要先拿賽事鎖，所以不會互鎖。
+- 呼叫 `advance` 前對場次的修改必須已 flush（`populate_existing` 會以資料庫值覆蓋 identity map）；repository 的寫入都會 flush，6.5 換隊時也要經 repository 寫入。
+- `confirm_match` 先呼叫 `transition_match` 檢查轉換，再寫 outcome、勝隊、`confirmed_at`，非法時不改任何資料。
+- 連鎖的輪空確認同樣寫 `confirmed_at`、`match.confirmed` 操作紀錄與 `MatchResultConfirmed` 事件（「每場確認」），但不再呼叫 `advance`（`progression.advance` 已在同一次呼叫內推完）。
+- 季軍賽取消另記一筆 `match.voided` 操作紀錄（before/after 狀態）；spec 只列了 `match.confirmed`、`tournament.podium`，取消也是狀態變更，所以補上。
+- 操作者：觸發的那場用呼叫端給的 `actor_id`；連鎖的輪空確認、季軍賽取消、賽事狀態轉換與 `tournament.podium` 一律為系統（`None`），因為 `advance(session, *, match)` 沒有操作者參數。
+- `match.confirmed` 的內容：before `{"status": 原狀態}`，after `{"status": "confirmed", "outcome", "winner_id"}`；`tournament.podium` 的 after 為 `{"champion", "runner_up", "third_place"}`（隊伍 id，從缺為 null）。
+- `MatchResultConfirmed.winner_id` 可為 null（雙方棄權、兩方都沒有隊伍的輪空）。
+- `MatchOpponentsDecided` 依 `progression` 的 `StartForfeitClock` 發出（兩者條件相同：本次填位後兩隊湊齊）。
+- `confirm_walkover(session, *, match)` 照 contract 不帶操作者（系統）；勝隊為場上唯一的隊伍，兩方都沒有時無勝隊；兩隊都在時拋 409 `MATCH_INVALID_TRANSITION`（沿用既有錯誤碼，不新增）。
+- `advance` 對尚未確認的場次讓 `progression` 的 `ValueError` 直接拋出（呼叫端程式錯誤，不是使用者能觸發的情境）。
+- `get_podium(session, *, tournament_id) -> PublicPodium | None`：spec 沒定簽名，回傳與 `PublicBracket.podium` 相同的公開 schema；名次直接取 `progression.podium`（未結束為 None），不另外看賽事狀態。
+- `auto_confirm_expired` 找候選時跳過已取消／已結束賽事的場次（記下賽事 id、以 `NOT IN` 重查），避免同一場永遠被選中而擋住其他場；鎖住後若賽事已結束、場次不在申訴期、期限未到或沒有 outcome，就不做任何事並回 True。repository 不讀 tournament 資料表，賽事狀態經 `tournaments_service.get_tournament` 取得。
+- worker 工作 `confirm_expired_appeals` 排在 `open_registrations` 之後、`dispatch_outbox` 之前，同一輪就能分派確認產生的事件；`tests/worker/test_email_pipeline.py` 的工作順序測試隨之更新。
+- `MatchRead` 沒有加 `confirmed_at`（spec 沒要求，避免改動 API）；`PublicBracket.podium` 是 spec 要求的 API 變更，已重新產生 `frontend/src/client`（CI 會檢查一致）。
+
+### 已確認的決定（協調者 2026-10-31 回覆）
+
+- `confirm_match` 只接受 `live`、`appeal_window`、`appealed`；`scheduled`、`confirmed`、`voided` 在寫入前拋 409 `MATCH_INVALID_TRANSITION`，不改任何資料（照 I/O 矩陣）。轉換表保留 scheduled → confirmed，給輪空確認用：`confirm_walkover` 與 `advance` 內的 `ConfirmWalkover` 直接走內部的 `_confirm`，不經 `confirm_match`。5.2 判棄權是 scheduled → appeal_window，不經 `confirm_match`。
+- 賽事已取消時，其他模組直接呼叫 `confirm_match` 不擋，維持現狀（取消賽事不在期中範圍）；若觸發賽事結束，`transition_tournament` 會拋 409 `TOURNAMENT_INVALID_TRANSITION`。
+
+### 審查後修正（協調者 2026-10-31）
+
+- `find_expired_appeal_id` 加上 `outcome IS NOT NULL`：沒有 outcome 的申訴期場次不再被一直選中而擋住後面的場次（以真正的 finder 測試）。
+- `confirm_match`、`confirm_walkover` 開頭先 `lock_tournament`，避免呼叫端先鎖場次、`advance` 才鎖賽事的順序反轉；docstring 與 contract 寫明呼叫端要先 `lock_tournament` 再 `lock_match`。
+- `_finish` 只處理 `published`、`ongoing` 的賽事（已取消不再拋 409）；`get_podium` 與 `PublicBracket.podium` 只在賽事為 `finished` 時回傳名次。
+- `get_public_bracket` 計算名次遇到不自洽的場次（`ValueError`）時記錄日誌、名次為 null，公開頁面不 500。
+- 遷移 a3d5e7f9b1c4 與模型加上 `match (status, appeal_deadline)` 索引 `ix_match_status_appeal_deadline`。
+- `set_match_team` 的 `side` 型別改為 `Literal["a", "b"]`；季軍賽取消時一併清除 `forfeit_deadline`。
+- 重跑 `tests/competition`、`tests/worker`、`tests/test_migrations.py`：460 passed；`service.py` 分支覆蓋率 99%（221 行、72 分支，只缺 617->597），`repository.py` 100%；lint 通過。
+
+### 驗證
+
+- 全部測試（`bash scripts/test.sh`，掛載 worktree 的 app、tests、scripts）：899 passed（本分支 HEAD 基準 861，`--collect-only`；新增 38 個），後端整體行覆蓋率 97%；`tests/test_migrations.py` 通過。加上 `confirm_match` 來源狀態檢查後重跑 `tests/competition`、`tests/worker`：455 passed。
+- `bash scripts/lint.sh`（mypy、ty、ruff check、ruff format --check）：通過。
+- 分支覆蓋率（`coverage run --branch --source=app/modules/competition -m pytest tests/competition`）：competition 全體 99%，`service.py` 99%（加上 `confirm_match` 來源狀態檢查後 208 行、70 分支，只缺 `auto_confirm_expired` 迴圈的一條分支 588->568），`repository.py` 100%。
+- 突變測試（在 scratchpad 副本上修改，跑 `test_confirm_advance.py` 與 worker 測試）：
+  - (a) `advance` 不套用 `StartForfeitClock`：6 個失敗（3、8、13 隊整合測試、兩個湊齊測試、重複推進測試）。
+  - (b1) repository 拿掉 `appeal_deadline <= now`：6 個失敗（4 個整合測試、期限未到、沒有期限）。
+  - (b2) 鎖住後的重新檢查拿掉 `appeal_deadline > now`：一開始沒有測試失敗（repository 已過濾，重新檢查沒被測到）；補上「候選期限其實未到」的測試後 1 個失敗。
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+第 1 輪（2026-10-31）：Blind Hunter 10 項、Edge Case Hunter 10 項、Verification Gap 0 個缺口＋3 項其他發現。
+
+| # | 來源 | 發現 | 判定 | 證據 | 處置 |
+|---|------|------|------|------|------|
+| 1 | BH、EC | 申訴期滿但 `outcome` 為空的場次永遠是最早的候選，worker 每輪都卡在它 | high | 查詢沒過濾 `outcome`；鎖住後重新檢查失敗仍回 True，下次又選到同一場；現有測試用 monkeypatch 只回一次，遮住問題 | patch：查詢加 `outcome IS NOT NULL`，補「壞場次後面還有一場」的真查詢測試 |
+| 2 | BH、EC、VG | 呼叫端照約定先 `lock_match` 再 `confirm_match`，`advance` 才鎖賽事，和 worker 的「先賽事後場次」順序相反，可能死結 | medium | AD-6 要求先鎖賽事；`confirm_match` docstring 與約定只寫 `lock_match`；測試輔助函式也沒鎖賽事 | patch：`confirm_match`／`confirm_walkover` 一開始先 `lock_tournament`，約定與 docstring 寫明呼叫端要先鎖賽事再鎖場次 |
+| 3 | BH、EC、VG | 賽事已取消時決賽確定，`_finish` 轉 `finished` 拋 409；名次也不看賽事狀態 | low | `_finish` 只略過 `finished`；`get_podium` 只看場次 | patch：`_finish` 只處理 `published`／`ongoing`；名次只在賽事 `finished` 時回傳 |
+| 4 | EC、VG | 公開對戰樹現在會跑 `progression.podium` 的一致性檢查，資料不一致時整頁 500 | low | 改動前公開對戰樹不做這個檢查 | patch：名次計算失敗時記錄日誌、名次為 null，對戰樹照常回傳 |
+| 5 | BH | worker 查詢沒有索引 | low | 每輪都查 `status`＋`appeal_deadline`；加索引是直接修正 | patch：`(status, appeal_deadline)` 索引 |
+| 6 | BH | `set_match_team(side: str)` 非 `"a"` 一律寫 b 方 | low | 型別可以直接收窄 | patch：`Literal["a","b"]` |
+| 7 | BH | 季軍賽取消時沒清 `forfeit_deadline` | low | 目前靠 `list_forfeit_due` 只查待開打才沒出事 | patch：取消時一併清除 |
+| 8 | EC | 某一場每次都拋錯時，worker 那一輪就停在它 | low | 只有資料不一致才會發生，會大聲失敗並記錄日誌；逐場吞錯要加 savepoint | 駁回 |
+| 9 | BH、EC | `confirm_match` 不檢查 outcome 與勝隊是否一致 | low | 呼叫端是 5.2、6.2 的 service，錯了 progression 會拋 ValueError、整筆回滾 | 駁回（大聲失敗） |
+| 10 | EC | 已取消賽事上直接呼叫 `confirm_match` 仍會填位 | low | 期中不能取消賽事；使用者同意維持現狀（見 Implementation Notes） | 駁回 |
+| 11 | EC | `confirm_walkover` 不檢查空缺方是否真的確定不會有隊伍 | maybe-false | 約定由 6.5 在確定時才呼叫；若為真屬 medium | defer |
+| 12 | EC、BH | 6.2 更正已結束或季軍賽已開打的場次時，`VoidMatch`、名次、賽事狀態的處理未定 | maybe-false | 6.2 尚未實作；若為真屬 medium | defer |
+| 13 | EC | 填位後沒檢查裁判衝突 | false | spec 的 Never 明列留給 4.4 | 駁回 |
+| 14 | BH | 賽事結束沒有事件 | low | spec 沒要求；`transition_tournament` 已寫操作紀錄 | 駁回 |
+| 15 | BH | 沒有非空名次的 HTTP 測試、遷移沒測、docstring 寫 5.6 | false | VG 確認 `test_confirm_advance.py` 有公開 `podium` JSON 測試；`test_migrations.py` 比對遷移；spec 標題就是 5.5、5.6 | 駁回 |

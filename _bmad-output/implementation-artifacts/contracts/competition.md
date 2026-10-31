@@ -60,11 +60,17 @@ class PublicMatch(BaseModel):    # 公開 API 用（AD-19）：不含 Email、�
     wins_a: int
     wins_b: int
 
+class PublicPodium(BaseModel):   # 5.5 新增：名次，從缺為 null
+    champion: PublicTeamRef | None
+    runner_up: PublicTeamRef | None
+    third_place: PublicTeamRef | None
+
 class PublicBracket(BaseModel):
     tournament_id: UUID
     rounds: int
     round_names: list[str]        # ["16 強", "8 強", "4 強", "決賽"]（EXPERIENCE.md 用語）
     matches: list[PublicMatch]
+    podium: PublicPodium | None   # 5.5 新增：賽事為 finished 才有，否則 null（場次資料不自洽時也為 null 並記錄日誌）
     updated_at: datetime          # 前端判斷是否有變動（update-flash）
 ```
 
@@ -90,9 +96,11 @@ class PublicBracket(BaseModel):
 | `start_forfeit_clock(session, *, match) -> None` | 同上 | 唯一設定 `forfeit_deadline` 的入口 | 4.1 |
 | `list_forfeit_due(session, *, now) -> list[UUID]` | A（5.2 worker） | 待開打、`forfeit_deadline <= now` 的場次 id | 5.1 |
 | `list_check_ins(session, *, match_id) -> list[CheckInRead]` | A（5.2） | `CheckInRead {match_id, team_id, at}` | 5.1 |
-| `confirm_match(session, *, match, outcome, winner_id, actor) -> None` | A（5.2）、B（6.2） | 寫入結果、轉為已確認、寫 `confirmed_at`，接著呼叫 `advance` | 5.5 |
-| `advance(session, *, match) -> None` | B（6.2 更正後、6.5） | 勝隊進下一場、準決賽敗隊進季軍賽；對手確定不會有隊伍時自動 walkover，季軍賽必要時轉為已取消 | 5.5 |
-| `confirm_walkover(session, *, match) -> None` | B（6.5） | 一方確定不會有隊伍時以 walkover 確認並推進 | 5.5 |
+| `confirm_match(session, *, match, outcome: MatchOutcome, winner_id: UUID \| None, actor_id: UUID \| None) -> None` | A（5.2）、B（6.2） | 呼叫端先 `lock_tournament` 再 `lock_match` 取得 `match`（AD-6；函式開頭也會鎖賽事）；只接受 `live`、`appeal_window`、`appealed` 的場次；寫入結果、轉為已確認、寫 `confirmed_at`，接著呼叫 `advance`。`actor_id=None` 表示系統。`scheduled`、`confirmed`、`voided` 拋 `MATCH_INVALID_TRANSITION` 409，不改任何資料（待開打直接確認只走輪空：`confirm_walkover` 與 `advance` 內的連鎖輪空；5.2 判棄權是 scheduled → appeal_window，不經 `confirm_match`）（5.5 由 `actor` 改名 `actor_id`） | 5.5 |
+| `advance(session, *, match) -> None` | B（6.2 更正後、6.5） | `match` 必須已確認（否則 `ValueError`）。先鎖賽事、再依 id 遞增鎖住整個對戰表的場次；勝隊進下一場、準決賽敗隊進季軍賽；對手確定不會有隊伍時自動 walkover，季軍賽必要時轉為已取消；兩隊湊齊時起算棄權期限並發 `MatchOpponentsDecided`；決賽與季軍賽都定案時賽事轉為 `finished`（`published` 先轉 `ongoing`）並記 `tournament.podium`。後續變更的操作者為系統；重複呼叫沒有副作用。呼叫前對場次的修改必須已 flush | 5.5 |
+| `confirm_walkover(session, *, match) -> None` | B（6.5） | 呼叫端先 `lock_tournament` 再 `lock_match` 取得 `match`（AD-6；函式開頭也會鎖賽事）；一方確定不會有隊伍時以 walkover 確認並推進（操作者為系統）；勝隊為場上唯一的隊伍，兩方都沒有時無勝隊；兩隊都在時拋 `MATCH_INVALID_TRANSITION` 409 | 5.5 |
+| `auto_confirm_expired(session) -> bool` | worker（`confirm_expired_appeals`） | 確認一場申訴期、`appeal_deadline <= now` 的場次（沿用已寫入的 outcome、勝隊，操作者為系統）並推進；略過已取消或已結束賽事的場次；回傳是否找到候選 | 5.5 |
+| `get_podium(session, *, tournament_id) -> PublicPodium \| None` | A（5.8、7.1） | 名次；尚未抽籤或賽事不是 `finished` 回 None | 5.5 |
 
 申訴相關的 `mark_appealed`、`uphold_result`、`correct_result`、`replay_match`：設計文件放在 MatchService，epic 6 由 disputes 呼叫。**比照 6.6 的 `disqualify`，由 B 寫在 competition 新增的檔案，`service.py` 只新增這幾個公開函式，D 審查。**（B 已確認，2026-10-30）
 
@@ -105,7 +113,8 @@ class PublicBracket(BaseModel):
 | `RefereeAssigned` | `match_id`, `referee_account_id` | 4.4 指派或改派 |
 | `RefereeUnassigned` | `match_id`, `referee_account_id` | 4.4 收回、5.5 填位後衝突 |
 | `MatchResultSubmitted` | `match_id` | 5.4 |
-| `MatchResultConfirmed` | `match_id`, `winner_id` | 5.5 |
+| `MatchResultConfirmed` | `match_id`, `winner_id`（雙方棄權、無隊伍的輪空為 null） | 5.5 每場確認（含輪空確認） |
+| `MatchOpponentsDecided` | `match_id` | 5.5 晉級填位後該場兩隊都確定（通知兩隊隊長下一場對手） |
 
 ## 二、competition 需要的上游介面（提議，請 B、C 確認）
 
