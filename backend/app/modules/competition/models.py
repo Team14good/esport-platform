@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 from pydantic import Field as PydanticField
 from sqlalchemy import DateTime, Index, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
@@ -194,6 +194,13 @@ class TeamCheckedIn(Event):
     match_id: uuid.UUID
     team_id: uuid.UUID
     both_checked_in: bool
+
+
+class MatchRescheduled(Event):
+    """主辦方修改了場次的預定時間（4.3）。"""
+
+    match_id: uuid.UUID
+    scheduled_at: datetime
 
 
 # ---------------------------------------------------------------- API schema
@@ -404,3 +411,57 @@ class ScoreEntryState(BaseModel):
     # 送出者的顯示名稱與送出時間；尚未送出為 None
     submitted_by_name: str | None = None
     submitted_at: datetime | None = None
+
+
+# ---------------------------------------------------------------- 修改場次時間（4.3）
+
+
+class RescheduleIn(BaseModel):
+    """修改場次時間的請求；新時間必須帶時區，否則 422。"""
+
+    scheduled_at: AwareDatetime
+
+
+# 不能修改的原因，與修改 API 的錯誤碼一一對應：
+# tournament_not_reschedulable -> TOURNAMENT_NOT_RESCHEDULABLE、
+# match_not_reschedulable、forfeit_due -> MATCH_NOT_RESCHEDULABLE、
+# already_checked_in -> MATCH_ALREADY_CHECKED_IN、no_valid_time -> RESCHEDULE_NO_VALID_TIME
+RescheduleBlockReason = Literal[
+    "tournament_not_reschedulable",
+    "match_not_reschedulable",
+    "forfeit_due",
+    "already_checked_in",
+    "no_valid_time",
+]
+
+
+class RescheduleInfo(BaseModel):
+    """某場次現在能不能改時間，以及 S30 時間選擇器可開放的範圍（含邊界）。"""
+
+    can_reschedule: bool
+    # 能改為 None
+    reason: RescheduleBlockReason | None
+    # 允許範圍；因狀態不能改時為 None，沒有可選時間（no_valid_time）時仍附上
+    earliest: datetime | None
+    # 沒有上限（決賽、季軍賽）為 None
+    latest: datetime | None
+
+
+class ManagedMatch(BaseModel):
+    """S30 場次列表的一列（只給主辦方）。"""
+
+    id: uuid.UUID
+    code: str
+    round_no: int
+    slot_no: int
+    is_third_place: bool
+    team_a: PublicTeamRef | None
+    team_b: PublicTeamRef | None
+    # 待定時的說明，與公開對戰樹相同
+    source_a: str | None
+    source_b: str | None
+    scheduled_at: datetime
+    status: MatchStatus
+    # 指派的裁判帳號 id（4.4 前為 None）
+    referee_account_id: uuid.UUID | None
+    reschedule: RescheduleInfo

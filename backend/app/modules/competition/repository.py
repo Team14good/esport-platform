@@ -42,13 +42,20 @@ def get_bracket(session: Session, bracket_id: uuid.UUID) -> Bracket | None:
     return session.get(Bracket, bracket_id)
 
 
-def list_matches(session: Session, bracket_id: uuid.UUID) -> list[Match]:
-    """依輪次、季軍賽排在決賽之後、由上到下排序。"""
+def list_matches(
+    session: Session, bracket_id: uuid.UUID, *, fresh: bool = False
+) -> list[Match]:
+    """依輪次、季軍賽排在決賽之後、由上到下排序。
+
+    `fresh` 為 True 時以資料庫最新值覆蓋 identity map（不加鎖；已鎖賽事後讀相鄰場次用）。
+    """
     statement = (
         select(Match)
         .where(Match.bracket_id == bracket_id)
         .order_by(col(Match.round_no), col(Match.is_third_place), col(Match.slot_no))
     )
+    if fresh:
+        statement = statement.execution_options(populate_existing=True)
     return list(session.exec(statement))
 
 
@@ -91,6 +98,15 @@ def set_forfeit_deadline(
     session: Session, match: Match, deadline: datetime, at: datetime
 ) -> None:
     match.forfeit_deadline = deadline
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def set_scheduled_at(
+    session: Session, match: Match, scheduled_at: datetime, at: datetime
+) -> None:
+    match.scheduled_at = scheduled_at
     match.updated_at = at
     session.add(match)
     session.flush()
