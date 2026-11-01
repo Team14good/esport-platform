@@ -12,6 +12,7 @@ from app.modules.competition.models import (
     Bracket,
     CheckIn,
     Match,
+    MatchGame,
     MatchOutcome,
     MatchStatus,
 )
@@ -235,4 +236,76 @@ def find_unstarted_bracket_id(
 def mark_start_handled(session: Session, bracket: Bracket, at: datetime) -> None:
     bracket.start_handled_at = at
     session.add(bracket)
+    session.flush()
+
+
+# ---------------------------------------------------------------- 逐局比分（5.3、5.4）
+
+
+def list_games(session: Session, match_id: uuid.UUID) -> list[MatchGame]:
+    """依局號排序。"""
+    statement = (
+        select(MatchGame)
+        .where(MatchGame.match_id == match_id)
+        .order_by(col(MatchGame.game_no))
+    )
+    return list(session.exec(statement))
+
+
+def add_game(session: Session, game: MatchGame) -> None:
+    session.add(game)
+    session.flush()
+
+
+def update_game(
+    session: Session,
+    game: MatchGame,
+    *,
+    winner_side: str,
+    score_a: int | None,
+    score_b: int | None,
+    recorded_by: uuid.UUID,
+    recorded_at: datetime,
+) -> None:
+    game.winner_side = winner_side
+    game.score_a = score_a
+    game.score_b = score_b
+    game.recorded_by = recorded_by
+    game.recorded_at = recorded_at
+    session.add(game)
+    session.flush()
+
+
+def delete_game(session: Session, game: MatchGame) -> None:
+    session.delete(game)
+    session.flush()
+
+
+def set_match_wins(
+    session: Session, match: Match, wins_a: int, wins_b: int, at: datetime
+) -> None:
+    match.wins_a = wins_a
+    match.wins_b = wins_b
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def set_match_submission(
+    session: Session,
+    match: Match,
+    *,
+    winner_id: uuid.UUID,
+    submitted_by: uuid.UUID,
+    submitted_at: datetime,
+    appeal_deadline: datetime,
+) -> None:
+    """寫入送出的系列結果（`outcome = played`）；不寫 `confirmed_at`。"""
+    match.outcome = MatchOutcome.PLAYED
+    match.winner_id = winner_id
+    match.submitted_by = submitted_by
+    match.submitted_at = submitted_at
+    match.appeal_deadline = appeal_deadline
+    match.updated_at = submitted_at
+    session.add(match)
     session.flush()
