@@ -42,6 +42,7 @@ from app.modules.competition.models import (
     PublicPodium,
     PublicTeamRef,
     PublicTournamentRef,
+    ReplayCleared,
     RescheduleBlockReason,
     RescheduleInfo,
     ScoreEntryReason,
@@ -562,6 +563,40 @@ def start_forfeit_clock(session: Session, *, match: Match) -> None:
         forfeit_minutes=tournament.forfeit_minutes,
     )
     repository.set_forfeit_deadline(session, match, deadline, now)
+
+
+def clear_for_replay(session: Session, *, match: Match) -> ReplayCleared:
+    """重新比賽前清除該場的報到紀錄、逐局比分與結果欄位（6.2，B 的 `replay_match` 呼叫）。
+
+    呼叫端先 `lock_tournament`（AD-6）；這裡再 `lock_match` 取最新值，以鎖住後的
+    狀態判斷，只接受申訴中，其他狀態拋 409 `MATCH_INVALID_TRANSITION`、不改資料。
+    不轉換狀態、不改 `scheduled_at`（棄權期限等欄位會歸零），也不寫操作紀錄或事件，
+    由 `replay_match` 依情境一次寫入。整個重賽流程（清除、`transition_match`、
+    新 `scheduled_at`、`start_forfeit_clock`、操作紀錄與事件）必須在同一個交易內。
+    回傳清除前的內容。
+    """
+    match = lock_match(session, match_id=match.id)
+    if MatchStatus(match.status) != MatchStatus.APPEALED:
+        raise BusinessError(
+            "MATCH_INVALID_TRANSITION",
+            "場次目前的狀態不能進行這個操作。",
+            status_code=409,
+        )
+    cleared = ReplayCleared(
+        check_ins=list_check_ins(session, match_id=match.id),
+        games=[_public_game(g) for g in repository.list_games(session, match.id)],
+        outcome=MatchOutcome(match.outcome) if match.outcome is not None else None,
+        winner_id=match.winner_id,
+        wins_a=match.wins_a,
+        wins_b=match.wins_b,
+        submitted_by=match.submitted_by,
+        submitted_at=match.submitted_at,
+        appeal_deadline=match.appeal_deadline,
+        confirmed_at=match.confirmed_at,
+        forfeit_deadline=match.forfeit_deadline,
+    )
+    repository.clear_for_replay(session, match, clock.now())
+    return cleared
 
 
 # ---------------------------------------------------------------- 確認結果與晉級

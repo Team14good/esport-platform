@@ -76,20 +76,12 @@
   evidence: 2026-10-29 在沒有任何前端改動的分支（story/5-5）上重現：第一次 14 failed／162，第二次 162 passed；與本 Story 的新測試無關。可能的修法：路由測試的 `findBy*` 加長 timeout，或在 `vitest.config.ts` 設 `testTimeout`／預先載入路由，修好後以冷啟動連跑多次確認。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
-  summary: （中）6.2「重新比賽」把場次從申訴中轉回待開打時，舊的報到紀錄還在，會讓重賽回 `ALREADY_CHECKED_IN`，且兩隊都有紀錄時 `list_forfeit_due` 永遠不會選到它（未驗證，若為真屬 medium）。
-  evidence: 2026-11-01 5.1 第二階段審查（Edge Case Hunter）。FR-31 規定重新比賽要清除報到紀錄、依新時間重新起算棄權期限。6.2 實作時需要 competition 提供清除報到紀錄的公開函式（由 D 新增），並在轉回待開打後呼叫 `start_forfeit_clock`。
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
   summary: （低）報到只鎖場次、讀賽事狀態不加鎖；2.6 做取消賽事時，取消與報到同時發生可能寫入一筆已取消賽事的報到紀錄。
   evidence: 2026-11-01 5.1 第二階段審查（Blind Hunter、Edge Case Hunter）。期中不能取消賽事（2.6 擱置），所以目前不會發生。2.6 實作時改成先 `lock_tournament` 再 `lock_match`（AD-6 順序），或由取消流程鎖住所有場次。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
   summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
   evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
-  summary: （中）6.2「重新比賽」把場次轉回待開打時，要清掉該場的 `match_game`，並把 `wins_a`、`wins_b`、`outcome`、`winner_id`、`submitted_by`、`submitted_at`、`appeal_deadline`、`confirmed_at` 歸零；否則重賽的第一局會被當成覆寫或 `SERIES_DECIDED`。
-  evidence: 2026-11-01 5.3 第二階段。`match_game` 只有 competition 能寫；6.2 實作時需要 D 在 competition 提供清除逐局比分的公開函式（與報到紀錄的清除一起）。
-
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: 4.4 指派裁判後，S4 的記分者判斷要接上：`ScoreEntryState.is_scorer` 已依 `Match.referee_account_id`（有指派時只有該裁判、未指派時為主辦方）判斷，但目前沒有任何流程會寫入 `referee_account_id`。
   evidence: 2026-11-01 5.3 第二階段。兩條路都已有測試（直接寫入 `referee_account_id` 模擬指派）。4.4 實作指派、改派、5.5 填位後取消指派時，確認 S4 面板隨之顯示或隱藏，並補一條經指派 API 的端對端測試。
@@ -104,3 +96,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-reschedule-backend.md`
   summary: S30 場次管理頁面與修改時間的 `Dialog`（時間選擇器只開放 `RescheduleInfo` 的 earliest～latest）還沒做，等 B 的主辦方版面合併後再做；後端 `GET /tournaments/{id}/manage/matches` 與 `PATCH /tournaments/{id}/matches/{match_id}/schedule` 已完成。列表的範圍是 GET 當下算的（最早隨時間前進、相鄰場次改時間也會變），對話框遇到任何 409 `RESCHEDULE_*` 都要重抓列表（錯誤訊息帶有當下的允許範圍）。
   evidence: 2026-11-01 使用者決定先做後端。前端 client 重新產生後即有 `ManagedMatch`、`RescheduleInfo`、`RescheduleIn`。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-replay-clear-helper.md`
+  summary: 6.2 `replay_match`（B）要呼叫 `clear_for_replay` 並串完整重賽流程，目前尚未實作。
+  evidence: 呼叫順序：`lock_tournament` → `clear_for_replay` → `transition_match` 回待開打 → 寫入新 `scheduled_at` → `start_forfeit_clock` → 操作紀錄 → 事件；全部在同一個交易內。操作紀錄的變更前內容用 `ReplayCleared`（報到、各局、結果、勝隊、勝局數與各期限）。
