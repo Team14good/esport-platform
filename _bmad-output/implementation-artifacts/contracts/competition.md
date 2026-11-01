@@ -124,6 +124,32 @@ class ScoreEntryState(BaseModel):  # 5.3：S4 Score entry panel 的讀取結果�
     submitted_at: datetime | None
     # is_scorer 為 false 時其他欄位一律是空值（reason null、games []、series null），不洩漏送出者
 
+class RescheduleIn(BaseModel):   # 4.3：PATCH .../schedule 的請求內容
+    scheduled_at: datetime        # 必須帶時區，否則 422
+
+class RescheduleInfo(BaseModel): # 4.3：某場次現在能不能改時間與 S30 時間選擇器的範圍
+    can_reschedule: bool
+    reason: Literal["tournament_not_reschedulable", "match_not_reschedulable",
+                    "forfeit_due", "already_checked_in", "no_valid_time"] | None
+                                 # 與修改 API 錯誤碼一一對應：TOURNAMENT_NOT_RESCHEDULABLE、MATCH_NOT_RESCHEDULABLE（`match_not_reschedulable` 與 `forfeit_due` 共用）、MATCH_ALREADY_CHECKED_IN、RESCHEDULE_NO_VALID_TIME；可改為 null
+    earliest: datetime | None     # 允許範圍（含邊界）；因狀態不能改時為 null，no_valid_time 時仍附上
+    latest: datetime | None       # 決賽、季軍賽沒有上限為 null
+
+class ManagedMatch(BaseModel):   # 4.3：S30 場次列表的一列（只給主辦方）
+    id: UUID
+    code: str
+    round_no: int
+    slot_no: int
+    is_third_place: bool
+    team_a: PublicTeamRef | None  # 與公開對戰樹相同
+    team_b: PublicTeamRef | None
+    source_a: str | None          # 待定說明，例如 "M4 勝者"
+    source_b: str | None
+    scheduled_at: datetime
+    status: MatchStatus
+    referee_account_id: UUID | None   # 4.4 前為 null
+    reschedule: RescheduleInfo
+
 class PublicBracket(BaseModel):
     tournament_id: UUID
     rounds: int
@@ -140,12 +166,16 @@ class PublicBracket(BaseModel):
 | `GET /api/v1/tournaments/{tournament_id}/bracket` | 公開 | `PublicBracket`；尚未抽籤回 404 `BRACKET_NOT_FOUND` |
 | `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}` | 公開 | `PublicMatchDetail`（5.8）；賽事不存在、尚未抽籤、場次不存在、場次不屬於該賽事，一律 404 `MATCH_NOT_FOUND`（回應 `{"detail":{"code":"MATCH_NOT_FOUND","message":"找不到這個場次。"}}`；尚未抽籤也回這個碼而非 `BRACKET_NOT_FOUND`，不透露是哪一種）。`same_round` 的項目是一般 `PublicMatch`，不含單場的延伸欄位；`games` 依 `game_no` 遞增列出已登錄的局（5.3 第二階段起；不含登錄者，送出者也不出現在公開 API） |
 | `POST /api/v1/tournaments/{tournament_id}/draw` | 該賽事主辦方 | 201 `BracketRead` |
+| `GET /api/v1/tournaments/{tournament_id}/manage/matches` | 該賽事主辦方 | `list[ManagedMatch]`（4.3，S30）；依輪次、季軍賽在決賽之後；尚未抽籤 404 `BRACKET_NOT_FOUND`、賽事不存在 404 `TOURNAMENT_NOT_FOUND`、非主辦方 403 `TOURNAMENT_OWNER_REQUIRED`（一般帳號 403 `ORGANIZER_REQUIRED`） |
+| `PATCH /api/v1/tournaments/{tournament_id}/matches/{match_id}/schedule` | 該賽事主辦方 | 200 `MatchRead`（4.3）；body `RescheduleIn`；範圍與列表的 `RescheduleInfo` 同一套計算（`schedule.reschedule_window`／`check_reschedule`） |
 | `POST /api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in` | 登入者（須為該場兩隊之一的隊長） | 201 `CheckInRead`（5.1）；隊伍由登入者是哪一隊的隊長推得，請求不帶內容；一隊一場一次、不能取消 |
 | `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in` | 登入者 | `CheckInStatus`（5.1）；場次不存在或不屬於該賽事回 404 `MATCH_NOT_FOUND` |
 | `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}/score-entry` | 登入者 | `ScoreEntryState`（5.3）；不是記分者時 `is_scorer=false`、其他欄位空；場次不存在或不屬於該賽事回 404 `MATCH_NOT_FOUND` |
 | `PUT /api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}` | 記分者 | 200 `ScoreEntryState`（5.3）；body `GameScoreIn`；局號＝目前局數＋1 為新增、≤ 目前局數為覆寫；第一局登錄時場次由待開打轉為進行中 |
 | `DELETE /api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}` | 記分者 | 200 `ScoreEntryState`（5.3）；只能刪最後一局；刪到沒有任何局時場次維持進行中 |
 | `POST /api/v1/tournaments/{tournament_id}/matches/{match_id}/submit` | 記分者 | 200 `ScoreEntryState`（5.4）；寫 `outcome=played`、勝隊、送出者與時間、`appeal_deadline`＝現在＋申訴時限，轉為申訴期並發 `MatchResultSubmitted`；不寫 `confirmed_at`、勝隊不晉級（5.5 申訴期滿才確認並推進） |
+
+修改場次時間的錯誤碼（4.3，依檢查順序）：`Organizer` 依賴最先執行（未登入 401、非主辦方帳號 403 `ORGANIZER_REQUIRED`，早於所有 404）→ `TOURNAMENT_NOT_FOUND`／`MATCH_NOT_FOUND` 404（場次不屬於網址上的賽事也是 `MATCH_NOT_FOUND`）→ `lock_tournament`、`lock_match` → `TOURNAMENT_OWNER_REQUIRED` 403 → `TOURNAMENT_NOT_RESCHEDULABLE` 409（賽事不是賽程已公布或進行中）→ `MATCH_NOT_RESCHEDULABLE` 409（場次不是待開打，或棄權期限已過、無人報到而等待判棄權；列表原因代碼分別為 `match_not_reschedulable`、`forfeit_due`）→ `MATCH_ALREADY_CHECKED_IN` 409（任一隊已報到）→ 範圍（皆 409，訊息附台北時間的允許範圍，例如「可選 10/26（一）12:55～14:35。」，無上限只寫起點；最早可選時間＝現在進位到整分＋30 分鐘（`checkin.CHECK_IN_LEAD`），列表與修改 API 用同一個值，所以最早在這個時間之前一律 `RESCHEDULE_BEFORE_NOW`）：`RESCHEDULE_BEFORE_NOW`、`RESCHEDULE_BEFORE_FEEDER`、`RESCHEDULE_AFTER_NEXT_MATCH`、`RESCHEDULE_NO_VALID_TIME`；沒有時區 422；未登入 401。下一場＝勝隊去的場次，準決賽取決賽與季軍賽中較早的一場；前一輪場次＝勝隊或敗隊會進入本場的場次。新時間與原時間相同時回傳目前的 `MatchRead`、不寫入任何東西（不寫紀錄、不發事件）；新時間一律轉 UTC 儲存與回傳。成功：寫入 `scheduled_at`、`updated_at`，兩隊都已確定的場次經 `start_forfeit_clock` 重算棄權期限，寫操作紀錄 `match.rescheduled`（`before`、`after` 各含 `scheduled_at`、`forfeit_deadline`），發 `MatchRescheduled`；任何拒絕都不改時間、棄權期限、操作紀錄與事件。
 
 抽籤的錯誤碼（4.1）：`NOT_ENOUGH_TEAMS` 409（正取不足 2 隊）、`BRACKET_ALREADY_DRAWN` 409（已有對戰表，優先於狀態檢查）、`TOURNAMENT_NOT_DRAWABLE` 409（狀態不是 `open`、`closed`）、`TOURNAMENT_START_PASSED` 409（`start_at <= now`）、`TOURNAMENT_OWNER_REQUIRED` 403、`ORGANIZER_REQUIRED` 403、`TOURNAMENT_NOT_FOUND` 404、`REGISTRATION_UNAVAILABLE` 503（registration 尚未提供抽籤用函式）。報到的錯誤碼（5.1，檢查順序；`REGISTRATION_UNAVAILABLE` 503 在判斷隊長身分時才發生，所以排在 `CAPTAIN_REQUIRED` 之前，兩隊未確定或場次不可報到時不會觸發）：`MATCH_NOT_FOUND` 404（場次不存在或不屬於網址上的賽事）、`MATCH_NOT_CHECKABLE` 409（賽事不是賽程已公布或進行中，或場次不是待開打）、`MATCH_TEAMS_PENDING` 409（兩隊未確定）、`CAPTAIN_REQUIRED` 403（不是兩隊任一隊的隊長）、`ALREADY_CHECKED_IN` 409、`CHECK_IN_NOT_OPEN` 409（訊息為台北時間的絕對時間，例如「10/18（六）19:00 起可報到。」，跨年才加年份、不標時區）、`CHECK_IN_CLOSED` 409（現在 >= `forfeit_deadline`）；兩隊已確定卻沒有 `forfeit_deadline`、或期限不晚於開放時間（資料不一致）回 `MATCH_NOT_CHECKABLE`（狀態查詢為 `not_checkable`），不會是 500；併發重複報到撞唯一鍵一樣回 `ALREADY_CHECKED_IN`；狀態查詢的小寫原因代碼與 API 錯誤碼一一對應（`teams_pending`→`MATCH_TEAMS_PENDING`、`already_checked_in`→`ALREADY_CHECKED_IN`、`too_early`→`CHECK_IN_NOT_OPEN`、`closed`→`CHECK_IN_CLOSED`、`not_checkable`→`MATCH_NOT_CHECKABLE`、`not_captain`→`CAPTAIN_REQUIRED`）、`REGISTRATION_UNAVAILABLE` 503（registration 尚未提供 `is_captain`）；未登入 401。報到成功寫操作紀錄 `match.checked_in` 並發 `TeamCheckedIn`。賽事開始 worker（`start_due_tournaments`）：賽程已公布且最早場次的報到開放時間（`checkin.tournament_starts_at`）已到，轉為進行中（操作者為系統），以 `bracket.start_handled_at` 標記已處理；賽事不是賽程已公布（已進行、已取消、已結束）只標記略過。`start_due_tournament` 回傳 True 代表處理了一個對戰表（轉為進行中或標記略過），worker 會再呼叫；沒有候選、或鎖住後發現還沒到開始時間（期間被改期）回傳 False。兩隊都報到後期限已過的場次維持待開打，由 5.3 裁判登錄第一局推進為進行中（5.2 不會判棄權）。比分登錄、刪除、送出的錯誤碼（5.3、5.4，依檢查順序；任何拒絕都不改局、場次與操作紀錄）：`MATCH_NOT_FOUND` 404（場次不存在或不屬於網址上的賽事）→ 鎖住場次（`lock_match`）→ `TOURNAMENT_NOT_ACCEPTING_SCORES` 409（tournaments `ensure_accepting_scores`：賽事不是賽程已公布或進行中；狀態查詢為 `not_accepting_scores`）→ `SCORER_REQUIRED` 403（不是記分者）→ `RESULT_ALREADY_SUBMITTED` 409（申訴期、申訴中、已確認；`result_submitted`）、`MATCH_NOT_RECORDABLE` 409（已取消；`not_recordable`）→ `MATCH_TEAMS_PENDING` 409（`teams_pending`）、`CHECK_IN_INCOMPLETE` 409（兩隊未都報到；`check_in_incomplete`）→ 比分規則（`scoring.py`，皆 409）：`SCORE_TIE`、`SCORE_INVALID`、`SERIES_DECIDED`、`REDUNDANT_GAMES`、`INVALID_GAME_NO`、`NOT_LAST_GAME`；送出時未達門檻 `SERIES_NOT_DECIDED`（訊息「任一隊拿到 {N} 勝後才能送出。」），有多餘的局 `REDUNDANT_GAMES`；未登入 401；回合數超出 0–99 回 422。每次登錄或刪除後依 `scoring.series` 重算 `wins_a`、`wins_b` 並更新 `updated_at`。操作紀錄：`match.game_recorded`（`before` 為覆寫前的局、新增時為 null；`after` 含新的局與勝局數）、`match.game_deleted`（`before` 為被刪的局）、`match.result_submitted`。同時兩個登錄請求經 `lock_match` 串行，後到的新增會變成覆寫；`(match_id, game_no)` 唯一鍵是最後防線。場次相關：`MATCH_NOT_FOUND` 404、`MATCH_INVALID_TRANSITION` 409、`MATCH_TEAMS_NOT_SET` 409（`start_forfeit_clock` 用在兩隊未確定的場次）。
 

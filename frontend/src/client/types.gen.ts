@@ -315,6 +315,54 @@ export type Identity = {
 export type IdentityKey = "browse" | "platform_admin"
 
 /**
+ * ManagedMatch
+ *
+ * S30 場次列表的一列（只給主辦方）。
+ */
+export type ManagedMatch = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Code
+   */
+  code: string
+  /**
+   * Round No
+   */
+  round_no: number
+  /**
+   * Slot No
+   */
+  slot_no: number
+  /**
+   * Is Third Place
+   */
+  is_third_place: boolean
+  team_a: PublicTeamRef | null
+  team_b: PublicTeamRef | null
+  /**
+   * Source A
+   */
+  source_a: string | null
+  /**
+   * Source B
+   */
+  source_b: string | null
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+  status: MatchStatus
+  /**
+   * Referee Account Id
+   */
+  referee_account_id: string | null
+  reschedule: RescheduleInfo
+}
+
+/**
  * MatchOutcome
  *
  * 場次結果類型：正常完賽、一方棄權、雙方棄權、輪空、取消資格判負。
@@ -801,6 +849,48 @@ export type RegisteredAccount = {
    * Email Verified
    */
   email_verified: boolean
+}
+
+/**
+ * RescheduleIn
+ *
+ * 修改場次時間的請求；新時間必須帶時區，否則 422。
+ */
+export type RescheduleIn = {
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+}
+
+/**
+ * RescheduleInfo
+ *
+ * 某場次現在能不能改時間，以及 S30 時間選擇器可開放的範圍（含邊界）。
+ */
+export type RescheduleInfo = {
+  /**
+   * Can Reschedule
+   */
+  can_reschedule: boolean
+  /**
+   * Reason
+   */
+  reason:
+    | "tournament_not_reschedulable"
+    | "match_not_reschedulable"
+    | "forfeit_due"
+    | "already_checked_in"
+    | "no_valid_time"
+    | null
+  /**
+   * Earliest
+   */
+  earliest: string | null
+  /**
+   * Latest
+   */
+  latest: string | null
 }
 
 /**
@@ -1980,3 +2070,73 @@ export type competitionSubmitResultResponses = {
 
 export type competitionSubmitResultResponse =
   competitionSubmitResultResponses[keyof competitionSubmitResultResponses]
+
+export type competitionListManagedMatchesData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/manage/matches"
+}
+
+export type competitionListManagedMatchesErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionListManagedMatchesError =
+  competitionListManagedMatchesErrors[keyof competitionListManagedMatchesErrors]
+
+export type competitionListManagedMatchesResponses = {
+  /**
+   * Response Competition-List Managed Matches
+   *
+   * Successful Response
+   */
+  200: Array<ManagedMatch>
+}
+
+export type competitionListManagedMatchesResponse =
+  competitionListManagedMatchesResponses[keyof competitionListManagedMatchesResponses]
+
+export type competitionRescheduleMatchData = {
+  body: RescheduleIn
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/schedule"
+}
+
+export type competitionRescheduleMatchErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionRescheduleMatchError =
+  competitionRescheduleMatchErrors[keyof competitionRescheduleMatchErrors]
+
+export type competitionRescheduleMatchResponses = {
+  /**
+   * Successful Response
+   */
+  200: MatchRead
+}
+
+export type competitionRescheduleMatchResponse =
+  competitionRescheduleMatchResponses[keyof competitionRescheduleMatchResponses]

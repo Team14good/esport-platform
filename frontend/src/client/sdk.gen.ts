@@ -12,6 +12,9 @@ import type {
   competitionDrawData,
   competitionDrawErrors,
   competitionDrawResponses,
+  competitionListManagedMatchesData,
+  competitionListManagedMatchesErrors,
+  competitionListManagedMatchesResponses,
   competitionReadCheckInStatusData,
   competitionReadCheckInStatusErrors,
   competitionReadCheckInStatusResponses,
@@ -27,6 +30,9 @@ import type {
   competitionRecordGameData,
   competitionRecordGameErrors,
   competitionRecordGameResponses,
+  competitionRescheduleMatchData,
+  competitionRescheduleMatchErrors,
+  competitionRescheduleMatchResponses,
   competitionSubmitResultData,
   competitionSubmitResultErrors,
   competitionSubmitResultResponses,
@@ -777,6 +783,50 @@ export class CompetitionService {
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/submit",
       ...options,
+    })
+  }
+
+  /**
+   * List Managed Matches
+   *
+   * S30 場次列表：每場附上能不能改時間與可選範圍；只限該賽事主辦方，尚未抽籤回 404 `BRACKET_NOT_FOUND`。
+   */
+  public static listManagedMatches<ThrowOnError extends boolean = true>(
+    options: Options<competitionListManagedMatchesData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionListManagedMatchesResponses,
+      competitionListManagedMatchesErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/manage/matches",
+      ...options,
+    })
+  }
+
+  /**
+   * Reschedule Match
+   *
+   * 修改待開打場次的預定時間；只限該賽事主辦方。
+   */
+  public static rescheduleMatch<ThrowOnError extends boolean = true>(
+    options: Options<competitionRescheduleMatchData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).patch<
+      competitionRescheduleMatchResponses,
+      competitionRescheduleMatchErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/schedule",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 }

@@ -86,10 +86,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
   summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
   evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-schedule-rules.md`
-  summary: 4.3 第二階段的改時間 service 呼叫 `reschedule_window`／`check_reschedule` 時，準決賽的 `next_match_at` 要傳決賽與季軍賽中較早的那一場。
-  evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
-
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: （中）6.2「重新比賽」把場次轉回待開打時，要清掉該場的 `match_game`，並把 `wins_a`、`wins_b`、`outcome`、`winner_id`、`submitted_by`、`submitted_at`、`appeal_deadline`、`confirmed_at` 歸零；否則重賽的第一局會被當成覆寫或 `SERIES_DECIDED`。
   evidence: 2026-11-01 5.3 第二階段。`match_game` 只有 competition 能寫；6.2 實作時需要 D 在 competition 提供清除逐局比分的公開函式（與報到紀錄的清除一起）。
@@ -104,3 +100,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
   evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-reschedule-backend.md`
+  summary: S30 場次管理頁面與修改時間的 `Dialog`（時間選擇器只開放 `RescheduleInfo` 的 earliest～latest）還沒做，等 B 的主辦方版面合併後再做；後端 `GET /tournaments/{id}/manage/matches` 與 `PATCH /tournaments/{id}/matches/{match_id}/schedule` 已完成。列表的範圍是 GET 當下算的（最早隨時間前進、相鄰場次改時間也會變），對話框遇到任何 409 `RESCHEDULE_*` 都要重抓列表（錯誤訊息帶有當下的允許範圍）。
+  evidence: 2026-11-01 使用者決定先做後端。前端 client 重新產生後即有 `ManagedMatch`、`RescheduleInfo`、`RescheduleIn`。

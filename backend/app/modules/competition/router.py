@@ -12,8 +12,11 @@ from app.modules.competition.models import (
     CheckInRead,
     CheckInStatus,
     GameScoreIn,
+    ManagedMatch,
+    MatchRead,
     PublicBracket,
     PublicMatchDetail,
+    RescheduleIn,
     ScoreEntryState,
 )
 from app.modules.identity.deps import CurrentAccount, Organizer
@@ -148,6 +151,36 @@ def submit_result(
     """送出系列結果，場次進入申訴期；之後只能經申訴更正。只限記分者。"""
     result = service.submit_result(
         session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
+    )
+    session.commit()
+    return result
+
+
+@router.get("/tournaments/{tournament_id}/manage/matches")
+def list_managed_matches(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> list[ManagedMatch]:
+    """S30 場次列表：每場附上能不能改時間與可選範圍；只限該賽事主辦方，尚未抽籤回 404 `BRACKET_NOT_FOUND`。"""
+    return service.list_managed_matches(
+        session, tournament_id=tournament_id, actor_id=organizer.id
+    )
+
+
+@router.patch("/tournaments/{tournament_id}/matches/{match_id}/schedule")
+def reschedule_match(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    body: RescheduleIn,
+) -> MatchRead:
+    """修改待開打場次的預定時間；只限該賽事主辦方。"""
+    result = service.reschedule_match(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        actor_id=organizer.id,
+        scheduled_at=body.scheduled_at,
     )
     session.commit()
     return result
