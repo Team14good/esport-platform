@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 10-29-2026 00:20
+last_updated: 11-01-2026 12:00
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -60,13 +60,13 @@ development_status:
   2-8-主辦方查閱操作紀錄: backlog  # 擱置（期中後）
   epic-2-retrospective: optional
 
-  epic-3: backlog
+  epic-3: in-progress
   3-1-建立隊伍與邀請隊員: backlog  # 負責：C
   3-2-選手填寫參賽資料: backlog  # 負責：C
   3-3-送出報名與鎖定名單: backlog  # 負責：C
-  3-4-優先期結束自動分配: backlog  # 負責：C
-  3-5-先搶期即時分配: backlog  # 負責：C
-  3-6-報名截止與截止補位: backlog  # 負責：C
+  3-4-優先期結束自動分配: in-progress  # 負責：C；第一階段（allocation.py 純函式，含 3.5、3.6 規則）完成，第二階段待 2.2、3.1～3.3
+  3-5-先搶期即時分配: backlog  # 負責：C；規則已在 3.4 的 allocation.py
+  3-6-報名截止與截止補位: backlog  # 負責：C；規則已在 3.4 的 allocation.py
   3-7-抽籤前撤回報名: backlog  # 擱置（期中後）
   3-8-主辦方檢視段位截圖與退回報名: backlog  # 擱置（期中後）
   3-9-公開正取名單與取消賽事通知: backlog  # 擱置（期中後）
