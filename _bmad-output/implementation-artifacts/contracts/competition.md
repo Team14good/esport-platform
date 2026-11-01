@@ -65,7 +65,7 @@ class PublicPodium(BaseModel):   # 5.5 新增：名次，從缺為 null
     runner_up: PublicTeamRef | None
     third_place: PublicTeamRef | None
 
-class PublicGame(BaseModel):     # 5.8：已登錄的一局；逐局資料表（5.3 第二階段）建立前 games 一律為 []
+class PublicGame(BaseModel):     # 5.8：已登錄的一局（5.3 第二階段起取自 match_game 表）；不含登錄者
     game_no: int                  # 1 起算
     winner_side: Literal["a", "b"]
     score_a: int | None           # rounds 型態的回合數；win_loss 為 null
@@ -100,6 +100,30 @@ class CheckInStatus(BaseModel):  # 5.1：登入者對某場次的報到狀態，
                                  # null 代表現在可報到；小寫代碼就是 CheckInPanel 吃的 CheckInReason（前端已補 not_checkable、not_captain）
     opens_at: datetime           # 報到開放時間（預定開始 − 30 分鐘）
 
+class GameScoreIn(BaseModel):    # 5.3：PUT .../games/{game_no} 的請求內容（避開 tournaments 的 GameIn，以免 OpenAPI 重名）
+    winner_side: Literal["a", "b"] | None = None   # win_loss 只給這個
+    score_a: int | None = None    # rounds 只給 score_a、score_b；嚴格整數 0–99，超出或型別不符回 422
+    score_b: int | None = None    # 欄位與賽事的 score_type 不符（例如 win_loss 給數字）回 409 SCORE_INVALID
+
+class SeriesRead(BaseModel):     # 5.3：scoring.series 的結果
+    wins_a: int
+    wins_b: int
+    winner: Literal["a", "b"] | None   # 達到勝局門檻的一方；未達或有多餘的局為 null
+    can_submit: bool
+    wins_needed: int              # 勝局門檻＝（BO＋1）÷ 2
+    reason: Literal["not_decided", "redundant_games"] | None   # 不能送出的原因；能送出為 null
+
+class ScoreEntryState(BaseModel):  # 5.3：S4 Score entry panel 的讀取結果；寫入 API 也回傳最新的這個
+    is_scorer: bool               # 登入者是不是記分者：有指派裁判時只有該裁判，未指派時為賽事主辦方
+    reason: Literal["not_accepting_scores", "result_submitted", "not_recordable",
+                    "teams_pending", "check_in_incomplete"] | None
+                                 # 現在不能登錄的原因（與寫入 API 的錯誤碼一一對應，見下方）；null 代表可以登錄
+    games: list[PublicGame]       # 依 game_no 遞增
+    series: SeriesRead | None
+    submitted_by_name: str | None # 送出者顯示名稱；尚未送出為 null（公開 API 不出現送出者）
+    submitted_at: datetime | None
+    # is_scorer 為 false 時其他欄位一律是空值（reason null、games []、series null），不洩漏送出者
+
 class PublicBracket(BaseModel):
     tournament_id: UUID
     rounds: int
@@ -114,12 +138,16 @@ class PublicBracket(BaseModel):
 | 方法與路徑 | 權限 | 回傳 |
 | --- | --- | --- |
 | `GET /api/v1/tournaments/{tournament_id}/bracket` | 公開 | `PublicBracket`；尚未抽籤回 404 `BRACKET_NOT_FOUND` |
-| `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}` | 公開 | `PublicMatchDetail`（5.8）；賽事不存在、尚未抽籤、場次不存在、場次不屬於該賽事，一律 404 `MATCH_NOT_FOUND`（回應 `{"detail":{"code":"MATCH_NOT_FOUND","message":"找不到這個場次。"}}`；尚未抽籤也回這個碼而非 `BRACKET_NOT_FOUND`，不透露是哪一種）。`same_round` 的項目是一般 `PublicMatch`，不含單場的延伸欄位；`games` 依 `game_no` 遞增（5.3 前固定為 `[]`） |
+| `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}` | 公開 | `PublicMatchDetail`（5.8）；賽事不存在、尚未抽籤、場次不存在、場次不屬於該賽事，一律 404 `MATCH_NOT_FOUND`（回應 `{"detail":{"code":"MATCH_NOT_FOUND","message":"找不到這個場次。"}}`；尚未抽籤也回這個碼而非 `BRACKET_NOT_FOUND`，不透露是哪一種）。`same_round` 的項目是一般 `PublicMatch`，不含單場的延伸欄位；`games` 依 `game_no` 遞增列出已登錄的局（5.3 第二階段起；不含登錄者，送出者也不出現在公開 API） |
 | `POST /api/v1/tournaments/{tournament_id}/draw` | 該賽事主辦方 | 201 `BracketRead` |
 | `POST /api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in` | 登入者（須為該場兩隊之一的隊長） | 201 `CheckInRead`（5.1）；隊伍由登入者是哪一隊的隊長推得，請求不帶內容；一隊一場一次、不能取消 |
 | `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in` | 登入者 | `CheckInStatus`（5.1）；場次不存在或不屬於該賽事回 404 `MATCH_NOT_FOUND` |
+| `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}/score-entry` | 登入者 | `ScoreEntryState`（5.3）；不是記分者時 `is_scorer=false`、其他欄位空；場次不存在或不屬於該賽事回 404 `MATCH_NOT_FOUND` |
+| `PUT /api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}` | 記分者 | 200 `ScoreEntryState`（5.3）；body `GameScoreIn`；局號＝目前局數＋1 為新增、≤ 目前局數為覆寫；第一局登錄時場次由待開打轉為進行中 |
+| `DELETE /api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}` | 記分者 | 200 `ScoreEntryState`（5.3）；只能刪最後一局；刪到沒有任何局時場次維持進行中 |
+| `POST /api/v1/tournaments/{tournament_id}/matches/{match_id}/submit` | 記分者 | 200 `ScoreEntryState`（5.4）；寫 `outcome=played`、勝隊、送出者與時間、`appeal_deadline`＝現在＋申訴時限，轉為申訴期並發 `MatchResultSubmitted`；不寫 `confirmed_at`、勝隊不晉級（5.5 申訴期滿才確認並推進） |
 
-抽籤的錯誤碼（4.1）：`NOT_ENOUGH_TEAMS` 409（正取不足 2 隊）、`BRACKET_ALREADY_DRAWN` 409（已有對戰表，優先於狀態檢查）、`TOURNAMENT_NOT_DRAWABLE` 409（狀態不是 `open`、`closed`）、`TOURNAMENT_START_PASSED` 409（`start_at <= now`）、`TOURNAMENT_OWNER_REQUIRED` 403、`ORGANIZER_REQUIRED` 403、`TOURNAMENT_NOT_FOUND` 404、`REGISTRATION_UNAVAILABLE` 503（registration 尚未提供抽籤用函式）。報到的錯誤碼（5.1，檢查順序；`REGISTRATION_UNAVAILABLE` 503 在判斷隊長身分時才發生，所以排在 `CAPTAIN_REQUIRED` 之前，兩隊未確定或場次不可報到時不會觸發）：`MATCH_NOT_FOUND` 404（場次不存在或不屬於網址上的賽事）、`MATCH_NOT_CHECKABLE` 409（賽事不是賽程已公布或進行中，或場次不是待開打）、`MATCH_TEAMS_PENDING` 409（兩隊未確定）、`CAPTAIN_REQUIRED` 403（不是兩隊任一隊的隊長）、`ALREADY_CHECKED_IN` 409、`CHECK_IN_NOT_OPEN` 409（訊息為台北時間的絕對時間，例如「10/18（六）19:00 起可報到。」，跨年才加年份、不標時區）、`CHECK_IN_CLOSED` 409（現在 >= `forfeit_deadline`）；兩隊已確定卻沒有 `forfeit_deadline`、或期限不晚於開放時間（資料不一致）回 `MATCH_NOT_CHECKABLE`（狀態查詢為 `not_checkable`），不會是 500；併發重複報到撞唯一鍵一樣回 `ALREADY_CHECKED_IN`；狀態查詢的小寫原因代碼與 API 錯誤碼一一對應（`teams_pending`→`MATCH_TEAMS_PENDING`、`already_checked_in`→`ALREADY_CHECKED_IN`、`too_early`→`CHECK_IN_NOT_OPEN`、`closed`→`CHECK_IN_CLOSED`、`not_checkable`→`MATCH_NOT_CHECKABLE`、`not_captain`→`CAPTAIN_REQUIRED`）、`REGISTRATION_UNAVAILABLE` 503（registration 尚未提供 `is_captain`）；未登入 401。報到成功寫操作紀錄 `match.checked_in` 並發 `TeamCheckedIn`。賽事開始 worker（`start_due_tournaments`）：賽程已公布且最早場次的報到開放時間（`checkin.tournament_starts_at`）已到，轉為進行中（操作者為系統），以 `bracket.start_handled_at` 標記已處理；賽事不是賽程已公布（已進行、已取消、已結束）只標記略過。`start_due_tournament` 回傳 True 代表處理了一個對戰表（轉為進行中或標記略過），worker 會再呼叫；沒有候選、或鎖住後發現還沒到開始時間（期間被改期）回傳 False。兩隊都報到後期限已過的場次維持待開打，由 5.3 裁判登錄第一局推進為進行中（5.2 不會判棄權）。場次相關：`MATCH_NOT_FOUND` 404、`MATCH_INVALID_TRANSITION` 409、`MATCH_TEAMS_NOT_SET` 409（`start_forfeit_clock` 用在兩隊未確定的場次）。
+抽籤的錯誤碼（4.1）：`NOT_ENOUGH_TEAMS` 409（正取不足 2 隊）、`BRACKET_ALREADY_DRAWN` 409（已有對戰表，優先於狀態檢查）、`TOURNAMENT_NOT_DRAWABLE` 409（狀態不是 `open`、`closed`）、`TOURNAMENT_START_PASSED` 409（`start_at <= now`）、`TOURNAMENT_OWNER_REQUIRED` 403、`ORGANIZER_REQUIRED` 403、`TOURNAMENT_NOT_FOUND` 404、`REGISTRATION_UNAVAILABLE` 503（registration 尚未提供抽籤用函式）。報到的錯誤碼（5.1，檢查順序；`REGISTRATION_UNAVAILABLE` 503 在判斷隊長身分時才發生，所以排在 `CAPTAIN_REQUIRED` 之前，兩隊未確定或場次不可報到時不會觸發）：`MATCH_NOT_FOUND` 404（場次不存在或不屬於網址上的賽事）、`MATCH_NOT_CHECKABLE` 409（賽事不是賽程已公布或進行中，或場次不是待開打）、`MATCH_TEAMS_PENDING` 409（兩隊未確定）、`CAPTAIN_REQUIRED` 403（不是兩隊任一隊的隊長）、`ALREADY_CHECKED_IN` 409、`CHECK_IN_NOT_OPEN` 409（訊息為台北時間的絕對時間，例如「10/18（六）19:00 起可報到。」，跨年才加年份、不標時區）、`CHECK_IN_CLOSED` 409（現在 >= `forfeit_deadline`）；兩隊已確定卻沒有 `forfeit_deadline`、或期限不晚於開放時間（資料不一致）回 `MATCH_NOT_CHECKABLE`（狀態查詢為 `not_checkable`），不會是 500；併發重複報到撞唯一鍵一樣回 `ALREADY_CHECKED_IN`；狀態查詢的小寫原因代碼與 API 錯誤碼一一對應（`teams_pending`→`MATCH_TEAMS_PENDING`、`already_checked_in`→`ALREADY_CHECKED_IN`、`too_early`→`CHECK_IN_NOT_OPEN`、`closed`→`CHECK_IN_CLOSED`、`not_checkable`→`MATCH_NOT_CHECKABLE`、`not_captain`→`CAPTAIN_REQUIRED`）、`REGISTRATION_UNAVAILABLE` 503（registration 尚未提供 `is_captain`）；未登入 401。報到成功寫操作紀錄 `match.checked_in` 並發 `TeamCheckedIn`。賽事開始 worker（`start_due_tournaments`）：賽程已公布且最早場次的報到開放時間（`checkin.tournament_starts_at`）已到，轉為進行中（操作者為系統），以 `bracket.start_handled_at` 標記已處理；賽事不是賽程已公布（已進行、已取消、已結束）只標記略過。`start_due_tournament` 回傳 True 代表處理了一個對戰表（轉為進行中或標記略過），worker 會再呼叫；沒有候選、或鎖住後發現還沒到開始時間（期間被改期）回傳 False。兩隊都報到後期限已過的場次維持待開打，由 5.3 裁判登錄第一局推進為進行中（5.2 不會判棄權）。比分登錄、刪除、送出的錯誤碼（5.3、5.4，依檢查順序；任何拒絕都不改局、場次與操作紀錄）：`MATCH_NOT_FOUND` 404（場次不存在或不屬於網址上的賽事）→ 鎖住場次（`lock_match`）→ `TOURNAMENT_NOT_ACCEPTING_SCORES` 409（tournaments `ensure_accepting_scores`：賽事不是賽程已公布或進行中；狀態查詢為 `not_accepting_scores`）→ `SCORER_REQUIRED` 403（不是記分者）→ `RESULT_ALREADY_SUBMITTED` 409（申訴期、申訴中、已確認；`result_submitted`）、`MATCH_NOT_RECORDABLE` 409（已取消；`not_recordable`）→ `MATCH_TEAMS_PENDING` 409（`teams_pending`）、`CHECK_IN_INCOMPLETE` 409（兩隊未都報到；`check_in_incomplete`）→ 比分規則（`scoring.py`，皆 409）：`SCORE_TIE`、`SCORE_INVALID`、`SERIES_DECIDED`、`REDUNDANT_GAMES`、`INVALID_GAME_NO`、`NOT_LAST_GAME`；送出時未達門檻 `SERIES_NOT_DECIDED`（訊息「任一隊拿到 {N} 勝後才能送出。」），有多餘的局 `REDUNDANT_GAMES`；未登入 401；回合數超出 0–99 回 422。每次登錄或刪除後依 `scoring.series` 重算 `wins_a`、`wins_b` 並更新 `updated_at`。操作紀錄：`match.game_recorded`（`before` 為覆寫前的局、新增時為 null；`after` 含新的局與勝局數）、`match.game_deleted`（`before` 為被刪的局）、`match.result_submitted`。同時兩個登錄請求經 `lock_match` 串行，後到的新增會變成覆寫；`(match_id, game_no)` 唯一鍵是最後防線。場次相關：`MATCH_NOT_FOUND` 404、`MATCH_INVALID_TRANSITION` 409、`MATCH_TEAMS_NOT_SET` 409（`start_forfeit_clock` 用在兩隊未確定的場次）。
 
 ### 公開函式
 
@@ -139,6 +167,7 @@ class PublicBracket(BaseModel):
 | `advance(session, *, match) -> None` | B（6.2 更正後、6.5） | `match` 必須已確認（否則 `ValueError`）。先鎖賽事、再依 id 遞增鎖住整個對戰表的場次；勝隊進下一場、準決賽敗隊進季軍賽；對手確定不會有隊伍時自動 walkover，季軍賽必要時轉為已取消；兩隊湊齊時起算棄權期限並發 `MatchOpponentsDecided`；決賽與季軍賽都定案時賽事轉為 `finished`（`published` 先轉 `ongoing`）並記 `tournament.podium`。後續變更的操作者為系統；重複呼叫沒有副作用。呼叫前對場次的修改必須已 flush | 5.5 |
 | `confirm_walkover(session, *, match) -> None` | B（6.5） | 呼叫端先 `lock_tournament` 再 `lock_match` 取得 `match`（AD-6；函式開頭也會鎖賽事）；一方確定不會有隊伍時以 walkover 確認並推進（操作者為系統）；勝隊為場上唯一的隊伍，兩方都沒有時無勝隊；兩隊都在時拋 `MATCH_INVALID_TRANSITION` 409 | 5.5 |
 | `auto_confirm_expired(session) -> bool` | worker（`confirm_expired_appeals`） | 確認一場申訴期、`appeal_deadline <= now` 的場次（沿用已寫入的 outcome、勝隊，操作者為系統）並推進；略過已取消或已結束賽事的場次；回傳是否找到候選 | 5.5 |
+| `record_game(session, *, tournament_id, match_id, account_id, game_no, data: GameScoreIn) -> ScoreEntryState`、`delete_game(..., game_no)`、`submit_result(...)`、`get_score_entry(...)` | router | 比分登錄、刪除最後一局、送出系列結果與 S4 讀取；規則一律交給 `scoring.py` | 5.3、5.4 |
 | `get_podium(session, *, tournament_id) -> PublicPodium \| None` | A（5.8、7.1） | 名次；尚未抽籤或賽事不是 `finished` 回 None | 5.5 |
 
 申訴相關的 `mark_appealed`、`uphold_result`、`correct_result`、`replay_match`：設計文件放在 MatchService，epic 6 由 disputes 呼叫。**比照 6.6 的 `disqualify`，由 B 寫在 competition 新增的檔案，`service.py` 只新增這幾個公開函式，D 審查。**（B 已確認，2026-10-30）
@@ -151,7 +180,7 @@ class PublicBracket(BaseModel):
 | `MatchRescheduled` | `match_id`, `scheduled_at` | 4.3 修改時間 |
 | `RefereeAssigned` | `match_id`, `referee_account_id` | 4.4 指派或改派 |
 | `RefereeUnassigned` | `match_id`, `referee_account_id` | 4.4 收回、5.5 填位後衝突 |
-| `MatchResultSubmitted` | `match_id` | 5.4 |
+| `MatchResultSubmitted` | `match_id` | 5.4 記分者送出系列結果 |
 | `MatchResultConfirmed` | `match_id`, `winner_id`（雙方棄權、無隊伍的輪空為 null） | 5.5 每場確認（含輪空確認） |
 | `MatchOpponentsDecided` | `match_id` | 5.5 晉級填位後該場兩隊都確定（通知兩隊隊長下一場對手） |
 | `TeamCheckedIn` | `match_id`, `team_id`, `both_checked_in` | 5.1 一隊報到成功；目前沒有消費者（通知在之後的 Story） |
