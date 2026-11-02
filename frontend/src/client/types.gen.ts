@@ -149,6 +149,40 @@ export type AdminOrganizerApplication = {
 export type ApplicationStatus = "pending" | "approved" | "rejected"
 
 /**
+ * BracketRead
+ */
+export type BracketRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Tournament Id
+   */
+  tournament_id: string
+  /**
+   * Size
+   */
+  size: number
+  /**
+   * Rounds
+   */
+  rounds: number
+  /**
+   * Drawn At
+   */
+  drawn_at: string
+  /**
+   * Delayed Rounds
+   */
+  delayed_rounds: Array<number>
+  /**
+   * Matches
+   */
+  matches: Array<MatchRead>
+}
+
+/**
  * EmailVerificationCreate
  */
 export type EmailVerificationCreate = {
@@ -259,6 +293,115 @@ export type Identity = {
  * 身分切換器的身分；之後的 Story 會加入我的隊伍、裁判。
  */
 export type IdentityKey = "browse" | "organizer" | "platform_admin"
+
+/**
+ * MatchOutcome
+ *
+ * 場次結果類型：正常完賽、一方棄權、雙方棄權、輪空、取消資格判負。
+ */
+export type MatchOutcome =
+  | "played"
+  | "forfeit"
+  | "double_forfeit"
+  | "walkover"
+  | "disqualified"
+
+/**
+ * MatchRead
+ */
+export type MatchRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Tournament Id
+   */
+  tournament_id: string
+  /**
+   * Round No
+   */
+  round_no: number
+  /**
+   * Slot No
+   */
+  slot_no: number
+  /**
+   * Is Third Place
+   */
+  is_third_place: boolean
+  /**
+   * Code
+   */
+  code: string
+  /**
+   * Team A Id
+   */
+  team_a_id: string | null
+  /**
+   * Team B Id
+   */
+  team_b_id: string | null
+  /**
+   * Bye A
+   */
+  bye_a: boolean
+  /**
+   * Bye B
+   */
+  bye_b: boolean
+  /**
+   * Referee Account Id
+   */
+  referee_account_id: string | null
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+  status: MatchStatus
+  outcome: MatchOutcome | null
+  /**
+   * Winner Id
+   */
+  winner_id: string | null
+  /**
+   * Wins A
+   */
+  wins_a: number
+  /**
+   * Wins B
+   */
+  wins_b: number
+  /**
+   * Forfeit Deadline
+   */
+  forfeit_deadline: string | null
+  /**
+   * Appeal Deadline
+   */
+  appeal_deadline: string | null
+  /**
+   * Next Match Id
+   */
+  next_match_id: string | null
+  /**
+   * Loser Next Match Id
+   */
+  loser_next_match_id: string | null
+}
+
+/**
+ * MatchStatus
+ *
+ * 場次狀態：待開打、進行中、申訴期、申訴中、已確認、已取消（AD-11）。
+ */
+export type MatchStatus =
+  | "scheduled"
+  | "live"
+  | "appeal_window"
+  | "appealed"
+  | "confirmed"
+  | "voided"
 
 /**
  * OrganizerApplicationCreate
@@ -404,9 +547,113 @@ export type ProfileUpdate = {
 }
 
 /**
+ * PublicBracket
+ */
+export type PublicBracket = {
+  /**
+   * Tournament Id
+   */
+  tournament_id: string
+  /**
+   * Rounds
+   */
+  rounds: number
+  /**
+   * Round Names
+   */
+  round_names: Array<string>
+  /**
+   * Matches
+   */
+  matches: Array<PublicMatch>
+  /**
+   * Updated At
+   */
+  updated_at: string
+}
+
+/**
+ * PublicMatch
+ *
+ * 公開 API 用（AD-19）：不含 Email、學校、截圖鍵值。
+ */
+export type PublicMatch = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Code
+   */
+  code: string
+  /**
+   * Round No
+   */
+  round_no: number
+  /**
+   * Slot No
+   */
+  slot_no: number
+  /**
+   * Is Third Place
+   */
+  is_third_place: boolean
+  team_a: PublicTeamRef | null
+  team_b: PublicTeamRef | null
+  /**
+   * Source A
+   */
+  source_a: string | null
+  /**
+   * Source B
+   */
+  source_b: string | null
+  /**
+   * Bye A
+   */
+  bye_a: boolean
+  /**
+   * Bye B
+   */
+  bye_b: boolean
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+  status: MatchStatus
+  outcome: MatchOutcome | null
+  /**
+   * Winner Id
+   */
+  winner_id: string | null
+  /**
+   * Wins A
+   */
+  wins_a: number
+  /**
+   * Wins B
+   */
+  wins_b: number
+}
+
+/**
  * PublicSchool
  */
 export type PublicSchool = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+}
+
+/**
+ * PublicTeamRef
+ */
+export type PublicTeamRef = {
   /**
    * Id
    */
@@ -1501,3 +1748,67 @@ export type tournamentsReadMyTournamentResponses = {
 
 export type tournamentsReadMyTournamentResponse =
   tournamentsReadMyTournamentResponses[keyof tournamentsReadMyTournamentResponses]
+
+export type competitionDrawData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/draw"
+}
+
+export type competitionDrawErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionDrawError =
+  competitionDrawErrors[keyof competitionDrawErrors]
+
+export type competitionDrawResponses = {
+  /**
+   * Successful Response
+   */
+  201: BracketRead
+}
+
+export type competitionDrawResponse =
+  competitionDrawResponses[keyof competitionDrawResponses]
+
+export type competitionReadPublicBracketData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/bracket"
+}
+
+export type competitionReadPublicBracketErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadPublicBracketError =
+  competitionReadPublicBracketErrors[keyof competitionReadPublicBracketErrors]
+
+export type competitionReadPublicBracketResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicBracket
+}
+
+export type competitionReadPublicBracketResponse =
+  competitionReadPublicBracketResponses[keyof competitionReadPublicBracketResponses]
