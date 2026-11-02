@@ -16,7 +16,8 @@ export function publicMatch(overrides: Partial<PublicMatch> = {}): PublicMatch {
     team_b: TEAM_B,
     source_a: null,
     source_b: null,
-    bye_side: null,
+    bye_a: false,
+    bye_b: false,
     // 台北時間 2026/10/18（日）13:00
     scheduled_at: "2026-10-18T05:00:00Z",
     status: "scheduled",

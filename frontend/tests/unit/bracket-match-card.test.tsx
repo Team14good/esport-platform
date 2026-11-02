@@ -31,7 +31,8 @@ function match(overrides: Partial<PublicMatch> = {}): PublicMatch {
     team_b: TEAM_B,
     source_a: null,
     source_b: null,
-    bye_side: null,
+    bye_a: false,
+    bye_b: false,
     // 台北時間 2026/10/18（日）13:00
     scheduled_at: "2026-10-18T05:00:00Z",
     status: "scheduled",
@@ -258,9 +259,9 @@ describe("對戰樹場次卡", () => {
     expect(scoreOf(rowB)).toBe("")
   })
 
-  it("輪空：bye_side 那一方帶「輪空」，標記為 muted-foreground 外框標籤", () => {
+  it("輪空：bye_a 那一方帶「輪空」，標記為 muted-foreground 外框標籤", () => {
     const { rowA, rowB } = renderCard(
-      match({ team_b: null, source_b: "M1 勝者", bye_side: "a" }),
+      match({ team_b: null, source_b: "M1 勝者", bye_a: true }),
     )
 
     expect(marksOf(rowA)).toEqual(["輪空"])
@@ -288,6 +289,40 @@ describe("對戰樹場次卡", () => {
     expect(rowA).not.toHaveAttribute("data-eliminated")
     expect(rowB).toHaveAttribute("data-winner")
     expect(scoreOf(rowB)).toBe("")
+  })
+
+  it("兩方都由輪空進入（例如 9 隊的第二輪）：兩列都帶「輪空」", () => {
+    const { rowA, rowB } = renderCard(match({ bye_a: true, bye_b: true }))
+
+    expect(nameOf(rowA)).toHaveTextContent(TEAM_A.name)
+    expect(nameOf(rowB)).toHaveTextContent(TEAM_B.name)
+    expect(marksOf(rowA)).toEqual(["輪空"])
+    expect(marksOf(rowB)).toEqual(["輪空"])
+  })
+
+  it("已確認的 walkover 空缺方還帶著來源說明：仍顯示「—」＋「輪空」，不像待定", () => {
+    const { rowA, rowB } = renderCard(
+      match({
+        status: "confirmed",
+        outcome: "walkover",
+        team_b: null,
+        source_b: "M14 勝者",
+        winner_id: TEAM_A.id,
+      }),
+    )
+
+    expect(nameOf(rowB)).toHaveTextContent("—")
+    expect(screen.queryByText("M14 勝者")).toBeNull()
+    expect(marksOf(rowB)).toEqual(["輪空"])
+    expect(rowA).toHaveAttribute("data-winner")
+  })
+
+  it("還沒確認的場次：沒有隊伍但有來源時照常顯示來源（待定）", () => {
+    const { rowB } = renderCard(match({ team_b: null, source_b: "M14 勝者" }))
+
+    expect(nameOf(rowB)).toHaveTextContent("M14 勝者")
+    expect(rowB).toHaveAttribute("data-pending")
+    expect(marksOf(rowB)).toEqual([])
   })
 
   it("季軍賽已取消：徽章「已取消」（muted-foreground）、兩列灰色、沒有比分", () => {
@@ -322,6 +357,15 @@ describe("對戰樹場次卡", () => {
 })
 
 describe("場次卡連到 S4", () => {
+  beforeEach(() => {
+    // formatMatchDateTime 與今天不同年時會加年份；只假 Date，router 仍用真的計時器
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-17T00:00:00Z"))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("提供 matchHref 時整張卡是連結，可用鍵盤 focus、focus 時有外框", async () => {
     await renderInRouter(
       <BracketMatchCard
@@ -335,11 +379,51 @@ describe("場次卡連到 S4", () => {
     expect(link).toHaveAttribute("href", "/tournaments/t1/matches/match-M3")
     // 定位樣式移到外層連結，卡片內容不變
     expect(link).toHaveClass("absolute", "focus-visible:outline-2")
-    expect(within(link).getByRole("article")).toHaveAccessibleName("M3")
-    expect(link).toHaveTextContent(TEAM_A.name)
+    // 連結內的 article 沒有自己的名稱，讀螢幕軟體聽到的是整句
+    expect(link).toHaveAccessibleName(
+      `M3，10/18（日）13:00，${TEAM_A.name} 對 ${TEAM_B.name}，待開打`,
+    )
+    expect(within(link).getByRole("article")).not.toHaveAttribute("aria-label")
 
     link.focus()
     expect(link).toHaveFocus()
+  })
+
+  it("連結的可及名稱：已確認含比分；輪空、棄權等標記接在隊名後；季軍賽用「季軍賽」", async () => {
+    const href = (id: string) => `/tournaments/t1/matches/${id}`
+    const { unmount } = await renderInRouter(
+      <BracketMatchCard
+        match={match({
+          code: "M3",
+          status: "confirmed",
+          outcome: "played",
+          winner_id: TEAM_A.id,
+          wins_a: 2,
+          wins_b: 1,
+        })}
+        matchHref={href}
+      />,
+    )
+    expect(await screen.findByRole("link")).toHaveAccessibleName(
+      `M3，${TEAM_A.name} 對 ${TEAM_B.name}，2 比 1，已確認`,
+    )
+    unmount()
+
+    await renderInRouter(
+      <BracketMatchCard
+        match={match({
+          code: "M9",
+          is_third_place: true,
+          status: "confirmed",
+          outcome: "forfeit",
+          winner_id: TEAM_A.id,
+        })}
+        matchHref={href}
+      />,
+    )
+    expect(await screen.findByRole("link")).toHaveAccessibleName(
+      `季軍賽，${TEAM_A.name} 對 ${TEAM_B.name}（棄權），已確認`,
+    )
   })
 
   it("沒有 matchHref 時維持原本的樣子，沒有連結", () => {
@@ -358,7 +442,7 @@ describe("場次卡連到 S4", () => {
       />,
     )
 
-    const card = await screen.findByRole("article", { name: "M3" })
+    const card = await screen.findByRole("link", { name: /^M3，/ })
     fireEvent.click(card)
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(

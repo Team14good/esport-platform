@@ -17,7 +17,28 @@ import { useConsecutiveFailures } from "./use-consecutive-failures"
 export const MATCH_POLL_INTERVAL_MS = BRACKET_POLL_INTERVAL_MS
 export const MATCH_CONNECTION_LOST_AFTER = BRACKET_CONNECTION_LOST_AFTER
 
-/** 比分或狀態有變動：Score display flash 一次 */
+function isSameGames(
+  previous: PublicMatchDetail["games"],
+  next: PublicMatchDetail["games"],
+): boolean {
+  return (
+    previous.length === next.length &&
+    previous.every((game, i) => {
+      const other = next[i]
+      return (
+        game.game_no === other.game_no &&
+        game.winner_side === other.winner_side &&
+        game.score_a === other.score_a &&
+        game.score_b === other.score_b
+      )
+    })
+  )
+}
+
+/**
+ * 比分或狀態有變動：Score display flash 一次。
+ * 除了系列勝場，也比結果、勝隊與各局：6.x 更正結果時可能只改其中一項。
+ */
 export function isMatchScoreChanged(
   previous: PublicMatchDetail,
   next: PublicMatchDetail,
@@ -25,7 +46,10 @@ export function isMatchScoreChanged(
   return (
     previous.status !== next.status ||
     previous.wins_a !== next.wins_a ||
-    previous.wins_b !== next.wins_b
+    previous.wins_b !== next.wins_b ||
+    previous.outcome !== next.outcome ||
+    previous.winner_id !== next.winner_id ||
+    !isSameGames(previous.games, next.games)
   )
 }
 

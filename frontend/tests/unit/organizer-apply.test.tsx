@@ -196,6 +196,61 @@ describe("S15 主辦方申請", () => {
     ).toBeTruthy()
   })
 
+  it("另一個分頁已送出（409 APPLICATION_PENDING）：重抓申請後換成唯讀摘要", async () => {
+    const user = userEvent.setup()
+    mockSchools()
+    // 第一次讀到沒有申請；送出失敗後重抓，讀到另一個分頁送出的申請
+    const read = mockApplication(null)
+    read.mockResolvedValueOnce(NO_APPLICATION)
+    read.mockResolvedValue({ data: PENDING } as ReadApplicationResult)
+    signInAs({ account: { ...ACCOUNT, school_id: "school-ntu" } })
+    vi.spyOn(IdentityService, "submitOrganizerApplication").mockRejectedValue(
+      httpError(409, {
+        detail: {
+          code: "APPLICATION_PENDING",
+          message: "你已有一筆待審核的主辦方申請。",
+        },
+      }),
+    )
+    renderApp("/organizer/apply")
+
+    await user.type(await screen.findByLabelText("社團名稱"), "電競社")
+    await screen.findByText("國立臺灣大學")
+    await user.click(screen.getByRole("button", { name: "送出申請" }))
+
+    expect(await screen.findByText(PENDING_SUMMARY_TEXT)).toBeInTheDocument()
+    expect(screen.getByText("待審核")).toHaveAttribute("data-tone", "appeal")
+    expect(screen.queryByRole("button", { name: "送出申請" })).toBeNull()
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it("已在別處成為主辦方（409 ALREADY_ORGANIZER）：重抓帳號後顯示「你已經是主辦方。」", async () => {
+    const user = userEvent.setup()
+    mockSchools()
+    mockApplication(null)
+    const { readAccount } = signInAs({
+      account: { ...ACCOUNT, school_id: "school-ntu" },
+    })
+    vi.spyOn(IdentityService, "submitOrganizerApplication").mockRejectedValue(
+      httpError(409, {
+        detail: { code: "ALREADY_ORGANIZER", message: "你已經是主辦方。" },
+      }),
+    )
+    renderApp("/organizer/apply")
+
+    await user.type(await screen.findByLabelText("社團名稱"), "電競社")
+    await screen.findByText("國立臺灣大學")
+    readAccount.mockResolvedValue({
+      data: { ...ACCOUNT, school_id: "school-ntu", is_organizer: true },
+    } as Awaited<ReturnType<typeof IdentityService.readCurrentAccount>>)
+    await user.click(screen.getByRole("button", { name: "送出申請" }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "送出申請" })).toBeNull(),
+    )
+    expect(screen.getByText(ALREADY_ORGANIZER_TEXT)).toBeInTheDocument()
+  })
+
   it.each([
     ["社團名稱空白", "   ", "請輸入社團名稱"],
     ["社團名稱超過 50 字", "社".repeat(51), "社團名稱最多 50 個字"],

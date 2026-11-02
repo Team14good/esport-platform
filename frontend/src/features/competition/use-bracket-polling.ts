@@ -15,6 +15,17 @@ export const BRACKET_CONNECTION_LOST_AFTER = 3
 
 const NO_CHANGES: ReadonlySet<string> = new Set()
 
+/**
+ * 對戰樹不存在（404 `BRACKET_NOT_FOUND`，例如尚未抽籤）。第二階段的 queryFn 收到 404 時拋出它：
+ * 不算連線失敗，照常輪詢，抽籤後就會出現。
+ */
+export class BracketNotFoundError extends Error {
+  constructor() {
+    super("BRACKET_NOT_FOUND")
+    this.name = "BracketNotFoundError"
+  }
+}
+
 function sameTeam(a: PublicMatch["team_a"], b: PublicMatch["team_a"]) {
   return a?.id === b?.id && a?.name === b?.name
 }
@@ -31,7 +42,8 @@ function sameMatch(a: PublicMatch, b: PublicMatch): boolean {
     a.scheduled_at === b.scheduled_at &&
     a.source_a === b.source_a &&
     a.source_b === b.source_b &&
-    a.bye_side === b.bye_side
+    a.bye_a === b.bye_a &&
+    a.bye_b === b.bye_b
   )
 }
 
@@ -68,7 +80,9 @@ export type BracketPollingResult = {
   lastUpdatedAt: Date | null
   /** 第一次載入、還沒有任何資料 */
   isLoading: boolean
-  /** 第一次載入就失敗（沒有舊資料可顯示）時的錯誤 */
+  /** 對戰樹不存在（BracketNotFoundError），而且沒有資料可顯示 */
+  notFound: boolean
+  /** 第一次載入就失敗（沒有舊資料可顯示）、且不是對戰樹不存在時的錯誤 */
   error: unknown
 }
 
@@ -114,10 +128,14 @@ export function useBracketPolling({
     setSnapshot({ data, changed })
   }
 
+  // 收到「對戰樹不存在」不算連線失敗，連續失敗也歸零
   const consecutiveFailures = useConsecutiveFailures(
     dataUpdatedAt,
     errorUpdateCount,
+    query.error instanceof BracketNotFoundError,
   )
+  const firstLoadError = data === undefined ? query.error : null
+  const notFound = firstLoadError instanceof BracketNotFoundError
 
   return {
     bracket: data,
@@ -125,6 +143,7 @@ export function useBracketPolling({
     connectionLost: consecutiveFailures >= BRACKET_CONNECTION_LOST_AFTER,
     lastUpdatedAt: dataUpdatedAt > 0 ? new Date(dataUpdatedAt) : null,
     isLoading: query.isPending,
-    error: data === undefined ? query.error : null,
+    notFound,
+    error: notFound ? null : firstLoadError,
   }
 }

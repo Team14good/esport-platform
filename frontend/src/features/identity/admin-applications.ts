@@ -36,10 +36,16 @@ export function parseFilter(value: unknown): ApplicationFilter | undefined {
   return match && match.value !== DEFAULT_FILTER ? match.value : undefined
 }
 
-/** 解析網址的 `page`：不是大於 1 的整數時當成第 1 頁，網址上不留預設值。 */
+// 與後端 `MAX_PAGE` 相同；超過時後端回 422
+export const MAX_PAGE = 100_000
+
+/** 解析網址的 `page`：不是 2～`MAX_PAGE` 的整數時當成第 1 頁，網址上不留預設值。 */
 export function parsePage(value: unknown): number | undefined {
   const page = typeof value === "string" ? Number(value) : value
-  return typeof page === "number" && Number.isInteger(page) && page > 1
+  return typeof page === "number" &&
+    Number.isInteger(page) &&
+    page > 1 &&
+    page <= MAX_PAGE
     ? page
     : undefined
 }

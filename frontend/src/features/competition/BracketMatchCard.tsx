@@ -24,6 +24,29 @@ function rowView(match: PublicMatch, side: BracketSide): RowView {
   }
 }
 
+function sideName(view: SideView) {
+  return view.marks.length > 0
+    ? `${view.name}（${view.marks.map((mark) => mark.label).join("、")}）`
+    : view.name
+}
+
+/**
+ * 整張卡是連結時的可及名稱：連結內的 article 若有 aria-label 會取代卡片內容，
+ * 所以把畫面上的標頭、隊名、標記、比分與狀態組成一句，例如「M3，清大 Hydra 對 交大 Nova，2 比 1，已確認」。
+ */
+export function matchCardAccessibleName(match: PublicMatch): string {
+  const scheduled = match.status === "scheduled"
+  return [
+    matchLabel(match),
+    scheduled ? formatMatchDateTime(match.scheduled_at) : "",
+    `${sideName(sideView(match, "a"))} 對 ${sideName(sideView(match, "b"))}`,
+    hasScore(match) ? `${match.wins_a} 比 ${match.wins_b}` : "",
+    MATCH_STATUS_BADGES[match.status].label,
+  ]
+    .filter(Boolean)
+    .join("，")
+}
+
 function TeamRow({ view, side }: { view: RowView; side: BracketSide }) {
   return (
     <div
@@ -94,7 +117,8 @@ export function BracketMatchCard({
 
   const card = (
     <article
-      aria-label={label}
+      // 包成連結時名稱改由外層連結提供，否則 article 的名稱會蓋掉卡片內容
+      aria-label={href === undefined ? label : undefined}
       data-slot="bracket-match-card"
       data-match-id={match.id}
       data-status={match.status}
@@ -135,6 +159,7 @@ export function BracketMatchCard({
   return (
     <Link
       to={href}
+      aria-label={matchCardAccessibleName(match)}
       data-slot="bracket-match-link"
       className={cn(
         "group block w-bracket-column-min rounded-md focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",

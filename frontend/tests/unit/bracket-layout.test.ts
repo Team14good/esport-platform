@@ -95,11 +95,64 @@ describe("對戰樹版面計算", () => {
     const layout = layoutBracket(createBracketFixture({ teamCount: 13 }))
     const m6 = cardOf(layout, "M6")
 
-    expect(m6.match.bye_side).toBe("a")
+    expect(m6.match.bye_a).toBe(true)
+    expect(m6.match.bye_b).toBe(false)
     // 只有 M1（第 2 格）接到 M6
     expect(layout.connectors.find((c) => c.id === m6.match.id)?.d).toBe(
       "M200 137.5 H214 V95 H228",
     )
+  })
+
+  it("9 隊：第一輪只有 M1；第二輪 4 場有 3 場兩方都輪空，這 3 場沒有連接線", () => {
+    const layout = layoutBracket(createBracketFixture({ teamCount: 9 }))
+
+    expect(layout.columns.map((c) => c.name)).toEqual([
+      "16 強",
+      "8 強",
+      "4 強",
+      "決賽",
+    ])
+    const firstRound = layout.cards.filter((c) => c.match.round_no === 1)
+    expect(firstRound.map((c) => [c.match.code, c.match.slot_no])).toEqual([
+      ["M1", 8],
+    ])
+    const secondRound = layout.cards.filter((c) => c.match.round_no === 2)
+    expect(
+      secondRound.map((c) => [c.match.code, c.match.bye_a, c.match.bye_b]),
+    ).toEqual([
+      ["M2", true, true],
+      ["M3", true, true],
+      ["M4", true, true],
+      ["M5", true, false],
+    ])
+    for (const code of ["M2", "M3", "M4"]) {
+      const card = cardOf(layout, code)
+      expect(
+        layout.connectors.find((c) => c.id === card.match.id),
+      ).toBeUndefined()
+    }
+    // M5 只有 b 方接到 M1
+    const m5 = cardOf(layout, "M5")
+    expect(m5.match.source_b).toBe("M1 勝者")
+    expect(layout.connectors.filter((c) => c.id === m5.match.id)).toHaveLength(
+      1,
+    )
+  })
+
+  it("5 隊：第二輪 M2 兩方都輪空、M3 一方輪空接 M1", () => {
+    const layout = layoutBracket(createBracketFixture({ teamCount: 5 }))
+
+    expect(layout.columns.map((c) => c.name)).toEqual(["8 強", "4 強", "決賽"])
+    expect(
+      layout.cards
+        .filter((c) => c.match.round_no === 1)
+        .map((c) => c.match.code),
+    ).toEqual(["M1"])
+    const m2 = cardOf(layout, "M2").match
+    const m3 = cardOf(layout, "M3").match
+    expect([m2.bye_a, m2.bye_b]).toEqual([true, true])
+    expect([m3.bye_a, m3.bye_b, m3.source_b]).toEqual([true, false, "M1 勝者"])
+    expect(layout.connectors.find((c) => c.id === m2.id)).toBeUndefined()
   })
 
   it.each([2, 3])("%i 隊：沒有季軍賽", (teamCount) => {

@@ -79,9 +79,15 @@ export function sideView(match: PublicMatch, side: BracketSide): SideView {
   const source = side === "a" ? match.source_a : match.source_b
   const { outcome, winner_id: winnerId, status } = match
 
+  const bye = side === "a" ? match.bye_a : match.bye_b
+  // 確定不會有隊伍的位置：約定是 source 為 null；已確認的 walkover 空缺方即使還帶著 source 也算（保險）
+  const empty =
+    team === null &&
+    (source === null || (status === "confirmed" && outcome === "walkover"))
+
   const marks: SideMark[] = []
-  // 由輪空進入本輪的一方，或確定不會有隊伍的位置（沒有隊伍也沒有來源）
-  if (match.bye_side === side || (team === null && source === null)) {
+  // 由輪空進入本輪的一方，或確定不會有隊伍的位置
+  if (bye || empty) {
     marks.push({ label: "輪空", tone: "default" })
   }
   const isLoser = team !== null && winnerId !== null && team.id !== winnerId
@@ -95,7 +101,7 @@ export function sideView(match: PublicMatch, side: BracketSide): SideView {
   // 勝隊與淘汰樣式只在「已確認」套用：申訴期內結果未確認、不顯示晉級
   const confirmed = status === "confirmed"
   return {
-    name: team?.name ?? source ?? EMPTY_TEAM_TEXT,
+    name: team?.name ?? (empty ? EMPTY_TEAM_TEXT : source) ?? EMPTY_TEAM_TEXT,
     pending: team === null || status === "voided",
     marks,
     winner: confirmed && team !== null && team.id === winnerId,

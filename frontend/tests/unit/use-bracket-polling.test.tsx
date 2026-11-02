@@ -15,6 +15,7 @@ import {
 import type { PublicBracket } from "@/features/competition/bracket-types"
 import {
   BRACKET_POLL_INTERVAL_MS,
+  BracketNotFoundError,
   diffBracketMatches,
   useBracketPolling,
 } from "@/features/competition/use-bracket-polling"
@@ -144,6 +145,50 @@ describe("對戰樹輪詢", () => {
     await advance(BRACKET_POLL_INTERVAL_MS * 5)
     expect(queryFn).toHaveBeenCalledTimes(6)
     expect(result.current.connectionLost).toBe(false)
+    await advance(BRACKET_POLL_INTERVAL_MS)
+    expect(result.current.connectionLost).toBe(true)
+  })
+
+  it("對戰樹不存在（404，例如尚未抽籤）：notFound，不算連線失敗，照常輪詢到抽籤後出現", async () => {
+    const bracket = createBracketFixture({ teamCount: 8 })
+    const notFound = () => Promise.reject(new BracketNotFoundError())
+    const queryFn = vi
+      .fn<() => Promise<PublicBracket>>()
+      .mockImplementationOnce(notFound)
+      .mockImplementationOnce(notFound)
+      .mockImplementationOnce(notFound)
+      .mockImplementationOnce(notFound)
+      .mockResolvedValue(bracket)
+    const { result } = renderPolling(queryFn)
+    await advance(0)
+
+    expect(result.current.notFound).toBe(true)
+    expect(result.current.error).toBeNull()
+    await advance(BRACKET_POLL_INTERVAL_MS * 3)
+    expect(queryFn).toHaveBeenCalledTimes(4)
+    expect(result.current.connectionLost).toBe(false)
+    expect(result.current.notFound).toBe(true)
+
+    await advance(BRACKET_POLL_INTERVAL_MS)
+    expect(result.current.bracket).toEqual(bracket)
+    expect(result.current.notFound).toBe(false)
+  })
+
+  it("404 之後的連線失敗從 0 開始算", async () => {
+    const fail = () => Promise.reject(new Error("network"))
+    const queryFn = vi
+      .fn<() => Promise<PublicBracket>>()
+      .mockImplementationOnce(() => Promise.reject(new BracketNotFoundError()))
+      .mockImplementationOnce(() => Promise.reject(new BracketNotFoundError()))
+      .mockImplementation(fail)
+    const { result } = renderPolling(queryFn)
+    await advance(0)
+
+    await advance(BRACKET_POLL_INTERVAL_MS * 3)
+    // 404 兩次＋失敗兩次：還沒到 3 次
+    expect(result.current.connectionLost).toBe(false)
+    expect(result.current.notFound).toBe(false)
+    expect(result.current.error).toBeInstanceOf(Error)
     await advance(BRACKET_POLL_INTERVAL_MS)
     expect(result.current.connectionLost).toBe(true)
   })

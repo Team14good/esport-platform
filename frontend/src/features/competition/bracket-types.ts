@@ -40,8 +40,9 @@ export type PublicMatch = {
   /** 待定時的說明，例如「M4 勝者」「M29 敗者」 */
   source_a: string | null
   source_b: string | null
-  /** 由輪空直接進入本輪的一方 */
-  bye_side: BracketSide | null
+  /** 該方由輪空直接進入本輪；第二輪可能兩方都是（例如 9 隊時第二輪 4 場有 3 場） */
+  bye_a: boolean
+  bye_b: boolean
   /** ISO 時間 */
   scheduled_at: string
   status: MatchStatus
