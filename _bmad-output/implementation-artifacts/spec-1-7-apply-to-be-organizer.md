@@ -106,6 +106,10 @@ context:
 
 ## Review Triage Log
 
+- 2026-11-02 PR #10 人工審查（輕微，不擋合併）：
+  - 修正：開兩個分頁時，一頁送出後另一頁再送出會拿到 409 `APPLICATION_PENDING`，畫面卻停在表單。`OrganizerApplyPage` 的 `onError` 改為：遇到 `APPLICATION_PENDING` 重抓申請查詢，遇到 `ALREADY_ORGANIZER` 重抓整組 `ME_QUERY_KEY`（帳號、身分清單、申請）。重抓前表單頂部仍顯示 Alert（符合 I/O Matrix），重抓後換成唯讀摘要或「你已經是主辦方。」。補兩個單元測試，未修改前兩個都會失敗。
+  - 不改：完全沒送 `school_id` 時，回的是 pydantic 的英文訊息。這是全站共通的問題，`deferred-work.md` 已有「在 core 加 `RequestValidationError` handler」的項目；只為這個欄位改成選填，會讓產生的 client 型別變成可省略，反而比較差。
+
 ## Design Notes
 
 **API**：
