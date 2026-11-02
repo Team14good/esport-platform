@@ -6,7 +6,7 @@
 參賽資料欄位（3.2）與送出快照欄位（3.3）由之後的 Story 加入。
 
 Revision ID: c5d2e8a4f913
-Revises: e4b8c1d2a6f7
+Revises: f7a3c9e1b5d2
 Create Date: 2026-10-30 12:00:00.000000
 
 """
@@ -17,7 +17,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = "c5d2e8a4f913"
-down_revision = "e4b8c1d2a6f7"
+down_revision = "f7a3c9e1b5d2"
 branch_labels = None
 depends_on = None
 
