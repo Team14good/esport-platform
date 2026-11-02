@@ -100,3 +100,7 @@ context: []
 ## Spec Change Log
 
 ## Review Triage Log
+
+- 2026-11-02 PR #18 D 的審查（核准，建議不擋合併），兩項都修正：
+  - 示範資料失敗會讓 backend 起不來：平台管理員在 S36 把「國立中央大學」改名後，才補上 `DEMO_PASSWORD` 再重啟，`ensure_demo_account` 拋 `LookupError`，`prestart.sh` 的 `set -e` 會讓 backend 容器不斷重啟。`initial_data.init()` 改為接住示範資料的任何錯誤，以 `logger.exception` 記錄後略過；整段在同一個交易，失敗時一筆示範資料都不寫入，第一個平台管理員不受影響。補兩個測試（改名後啟動、後面步驟失敗時全部回滾），修改前兩個都會失敗。
+  - 找學校改用 repository 既有的 `get_school_by_name`，不再全掃學校清單比對名稱。
