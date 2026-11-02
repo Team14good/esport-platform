@@ -49,6 +49,7 @@
 - 問題與修正：AI 對照各方需求時發現名稱不一致：D 的約定把每局預估時間叫 `game_minutes_per_game`，2.1 已實作的 `GameTitle` 與設計文件叫 `game_minutes`，統一為後者並改 D 的文件；也找到 A 的 5.2 分支已假設 `lock_tournament` 回傳 `status` 與 `appeal_minutes`，納入 `TournamentRead`
 - 成熟度：L3（AI 依既有規格彙整並提出介面，人做決策，組員審查）
 - 證據：`_bmad-output/implementation-artifacts/contracts/tournaments.md`
+
 ### 2026-10-30｜需求／設計｜Story 2.2 spec：建立賽事的後端
 
 - Story／範圍：2.2（PR #15）；附帶回寫 Story 2.1 第一階段的 commit `d4227cd`
