@@ -49,3 +49,27 @@
 - 問題與修正：三個審查者共提出 23 項（合併重複後 15 項），修正 7 項（併發測試清理不完整、barrier 例外被吞掉、說明誤寫「每次測試重建」、孤兒資料測試沒確認是外鍵擋下、非開放狀態只測部分等），延後 1 項（A 的 admin-applications 測試偶發失敗），其餘查證後駁回。主流程給子代理的修正指示寫錯：要求「該隊加入紀錄恰好 2 筆」，但併發前已有 3 名隊員加入，實際是 5 筆；子代理執行時發現並改成只算同時加入的 5 人
 - 成熟度：L4（固定流程，子代理實作、多個獨立審查者加自動測試，人只在 checkpoint 決策）
 - 證據：_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md（Review Triage Log）；deferred-work.md；merge commit 1494bc2；收尾的 commit 未記錄（尚未 commit）
+
+### 2026-11-02｜測試／瀏覽器實測｜Story 3.1 PR 檢查清單：瀏覽器與 375 px
+
+- Story／範圍：3.1（分支 story/3-1，PR #23）
+- 工具：Claude Code（Opus 5.5）＋ Playwright（容器內的 Chromium）
+- 怎麼用：AI 先修好本機開發資料庫的遷移版本，再寫腳本經 API 準備資料（遊戲、主辦方、開放報名的賽事、6 個帳號），用 Playwright 在桌機與 375 px 寬度走過 S17、S19、S12、身分切換器，逐項斷言並截圖，主流程再看截圖確認版面
+- AI 產出：實測腳本與截圖；42 項檢查全部通過（含 375 px 每頁沒有水平捲動、複製連結 Toast、額滿後連結失效）
+- 人做了什麼：要求在送審前完成 PR 檢查清單的瀏覽器實測與 375 px 檢查
+- 驗證：42/42 通過；人工查看 6 張截圖（S17 額滿、S17 有邀請連結、S19 未登入、S12、身分切換器、S17 桌機）
+- 問題與修正：AI 寫在 #23 說明的資料庫指示有誤（只寫 downgrade 再 upgrade），實際執行時 Alembic 找不到 tournament 表才發現：舊版 story/3-1 的資料庫沒跑過 2.1、1.7、2.2 的遷移，要先 stamp 回 1.5 再升級；腳本第一次執行時連結名稱寫錯（「登入」應為「登入帳號」）而中斷；準備資料時發現中文 email 的驗證信寄不出去，已記進 deferred-work 給 A
+- 成熟度：L3（AI 自動化實測與截圖，人決定要做哪些檢查）
+- 證據：PR #23 檢查清單；deferred-work.md；commit 未記錄（尚未 commit）
+
+### 2026-11-03｜程式／程式生成｜Story 3.1 收尾之二：S2 的「建立隊伍」入口
+
+- Story／範圍：3.1（分支 story/3-1，PR #23）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理、三個審查子代理）＋ Playwright
+- 怎麼用：AI 實測時發現 B 的 2.4 spec 寫明建隊入口由 3.1 接上，但 #23 說明與 deferred-work 寫成由 B 接，提出給人決定；再以 bmad-build 產生 spec、由子代理實作、三個審查子代理審 diff，最後用 Playwright 在瀏覽器實測
+- AI 產出：新元件 CreateTeamEntry（未登入不顯示、未驗證停用並說明、本賽事主辦方不顯示、已有隊伍改顯示隊伍卡片）、掛到 S2 總覽、15 個單元測試
+- 人做了什麼：決定在 #23 接上入口；決定主辦方由前端判斷後不顯示、已有隊伍時改顯示隊伍卡片；核准 spec；要求把 sprint 狀態改成 done
+- 驗證：前端 typecheck、biome 通過，單元測試 542 個中 540 個通過（2 個是 A、D 檔案的已知偶發逾時，另一次執行全過）；Playwright 實測 S2 共 26 項全部通過（含 375 px 與實際建隊導向 S17）
+- 問題與修正：三個審查者共提出 21 項（合併重複後 14 項），修正 1 組（補主辦方賽事載入中、帳號載入中與失敗、卡片優先於主辦方判斷共 4 個測試；子代理逐一改壞程式確認測試會失敗），其餘查證後駁回；其中「後端沒有擋主辦方建隊」經查 `_ensure_can_join` 已有檢查且實測被拒，判為誤報。實測腳本少了結束程式的呼叫，跑完後掛住約 50 分鐘才由主流程發現並停止
+- 成熟度：L4（固定流程，子代理實作、多個獨立審查者加自動測試與瀏覽器實測，人只在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md（Review Triage Log）；commit 未記錄（尚未 commit）

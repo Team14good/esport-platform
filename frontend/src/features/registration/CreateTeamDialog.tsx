@@ -119,7 +119,8 @@ function CreateTeamForm({ tournamentId }: { tournamentId: string }) {
 
 /**
  * S16 建立隊伍：「建立隊伍」按鈕＋`Dialog`。送出成功後導向該隊 S17。
- * Email 未驗證時按鈕停用並說明原因；入口（S2）由 Story 2.4 放上。
+ * Email 未驗證時按鈕停用並說明原因。S2 的入口是 `CreateTeamEntry`（開放報名時，
+ * 依登入、主辦方身分與是否已有隊伍決定是否顯示）。
  */
 export function CreateTeamDialog({ tournamentId }: { tournamentId: string }) {
   const [open, setOpen] = useState(false)

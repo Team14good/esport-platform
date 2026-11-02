@@ -41,12 +41,6 @@
   summary: `tests/test_migrations.py` 只開 `compare_type`，沒有比對 server default；遷移檔與模型的 `server_default` 不一致（例如 `account.credentials_version` 的 `"0"` 被刪掉或改值）時測試照樣通過。測試資料庫每次從空表升級，也測不到「既有帳號升級後拿到 0」（低；若遷移檔被改錯，為 medium：有資料的資料庫升級失敗，或舊登入全部失效）。
   evidence: 2026-10-28 Story 1.5 第二輪 Code Review（Verification Gap）。比對設定自 Story 1.1 起就是如此，不是本 Story 造成。處理時在 `MigrationContext.configure` 加 `"compare_server_default": True`，先跑一次確認其他既有欄位沒有誤報；要完整守住資料升級，另寫一支「升到上一版、插入帳號、再升到 head」的測試。
 
-## Deferred from: spec-3-1-create-team-and-invite-members.md (2026-10-30)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-and-invite-members.md`
-  summary: Story 2.4 建立 S2 時，要把 `CreateTeamDialog`（`frontend/src/features/registration/CreateTeamDialog.tsx`）放上 S2 的「建立隊伍」（主辦方與自訂賽事不顯示），並確認 S19「回到賽事頁」的 `/tournaments/{id}` 連結可用；在此之前畫面上沒有建隊入口，回賽事頁連結會到找不到頁面。
-  evidence: 3.1 第 1 輪 Code Review（Edge Case Hunter、Blind Hunter）。依 3.1 Decisions 刻意只做 Dialog 元件，S2 屬 B 的 2.4。
-
 ## Deferred from: spec-3-1-tournament-integration.md (2026-11-02)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`
@@ -131,6 +125,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: S2 總覽「開放報名」時要顯示「已正取隊數／名額」（EXPERIENCE.md 狀態表），2.4 只顯示名額；需要 registration 提供正取隊數的公開函式。
   evidence: 2026-11-02 Story 2.4 第二輪審查（Blind Hunter）。spec 的 Never 明定不做；由 C 的 3.x 提供計數後，在 S2 總覽補上。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
-  summary: S2「開放報名」時啟用的「建立隊伍」按鈕與 3.1 的 `CreateTeamDialog` 尚未接上；2.4 只做「尚未開放」時停用的按鈕。
-  evidence: 2026-11-02 Story 2.4 第二輪審查（Blind Hunter）。spec 的 Never 明定由 C 的 3.1 在 S2 總覽掛上對話框（3.1 spec 第 39 行同樣記載）。
+
+## Deferred from: spec-3-1-create-team-entry.md (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md`
+  summary: A 的 identity：註冊時 email 的 @ 前面含中文（例如 `主辦方@example.com`）會被接受，但驗證信寄不出去，帳號無法完成驗證（low，未確認是否要擋）。
+  evidence: 2026-11-02 3.1 瀏覽器實測準備資料時發現，worker 記錄 `Email delivery ... failed (attempt 1): UnicodeEncodeError: 'ascii' codec can't encode characters`；改用英文 email 後正常。不是本 Story 造成。處理方式二擇一：註冊時以 422 擋下非 ASCII 的本地部分，或寄信時啟用 SMTPUTF8。
