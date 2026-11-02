@@ -196,7 +196,7 @@ describe("API client 設定", () => {
 
   it("API 回 401 AUTHENTICATION_REQUIRED：清除 token，導向 S6 並帶 redirect", async () => {
     const { router, queryClient } = setup("/?x=1")
-    await screen.findByRole("heading", { name: "FLOW" })
+    await screen.findByRole("heading", { level: 1, name: "賽事" })
     const eject = configureApiClient(router, queryClient)
     const adapter = stubAdapter((config) =>
       jsonResponse(config, 401, {
@@ -299,7 +299,7 @@ describe("API 回 401 的處理", () => {
   it("未登入時寫入被拒（401）：導向 S6 並帶 redirect，不顯示「登入已過期」", async () => {
     const toastError = vi.spyOn(toast, "error")
     const { router, handle } = setup("/")
-    await screen.findByRole("heading", { name: "FLOW" })
+    await screen.findByRole("heading", { level: 1, name: "賽事" })
 
     await expect(handle(AUTH_REQUIRED)).rejects.toBe(AUTH_REQUIRED)
 
