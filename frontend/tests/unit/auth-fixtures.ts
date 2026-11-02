@@ -5,7 +5,7 @@ import {
   type AccountRead,
   type Identity,
   IdentityService,
-  UtilsService,
+  TournamentsService,
 } from "@/client"
 import { RouteErrorPage } from "@/components/layout/ErrorPage"
 import { ACCESS_TOKEN_STORAGE_KEY } from "@/features/identity/auth"
@@ -19,7 +19,9 @@ type ListIdentitiesResult = Awaited<
   ReturnType<typeof IdentityService.listCurrentIdentities>
 >
 type LoginResult = Awaited<ReturnType<typeof IdentityService.login>>
-type HealthCheckResult = Awaited<ReturnType<typeof UtilsService.healthCheck>>
+type ListTournamentsResult = Awaited<
+  ReturnType<typeof TournamentsService.listPublicTournaments>
+>
 
 export const BROWSE: Identity = {
   key: "browse",
@@ -77,10 +79,12 @@ export function mockLoginSuccess(accessToken = "token-new") {
 
 /** 以完整路由樹渲染某個網址，回傳 router（可檢查導向結果）。 */
 export function renderApp(url: string) {
-  // S1 會呼叫健康檢查；導向到 S1 的測試不需要真的連線
-  vi.spyOn(UtilsService, "healthCheck").mockResolvedValue({
-    data: true,
-  } as HealthCheckResult)
+  // S1 會抓公開賽事列表；導向到 S1 的測試不需要真的連線（測試已自行 mock 時不覆蓋）
+  if (!vi.isMockFunction(TournamentsService.listPublicTournaments)) {
+    vi.spyOn(TournamentsService, "listPublicTournaments").mockResolvedValue({
+      data: [],
+    } as unknown as ListTournamentsResult)
+  }
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: [url] }),
