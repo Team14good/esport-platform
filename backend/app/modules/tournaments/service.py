@@ -1,12 +1,13 @@
 """tournaments 的業務規則、資源層級權限、狀態轉換、操作紀錄與事件；不得 commit 或 rollback。"""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlmodel import Session
 
 from app.core import audit, clock
-from app.core.errors import BusinessError
+from app.core.errors import BusinessError, FieldError
 from app.modules.tournaments import repository
 from app.modules.tournaments.models import (
     GameIn,
@@ -14,6 +15,11 @@ from app.modules.tournaments.models import (
     GameTitle,
     RankTier,
     RankTierRead,
+    Tournament,
+    TournamentCreate,
+    TournamentMode,
+    TournamentRead,
+    TournamentStatus,
 )
 
 # 遊戲本身的欄位（段位表另外處理）
@@ -181,3 +187,311 @@ def update_game(
         after=after,
     )
     return get_game(session, game_id=game.id)
+
+
+# ---------------------------------------------------------------- 賽事
+# 遊戲相關的值在建立時複製進 game_snapshot，之後只讀快照（AD-12）。
+
+# 允許的狀態轉換（contracts/tournaments.md〈三〉）
+_TRANSITIONS: dict[TournamentStatus, frozenset[TournamentStatus]] = {
+    TournamentStatus.UPCOMING: frozenset(
+        {TournamentStatus.OPEN, TournamentStatus.CANCELLED}
+    ),
+    TournamentStatus.OPEN: frozenset(
+        {
+            TournamentStatus.CLOSED,
+            TournamentStatus.PUBLISHED,
+            TournamentStatus.CANCELLED,
+        }
+    ),
+    TournamentStatus.CLOSED: frozenset(
+        {
+            TournamentStatus.OPEN,
+            TournamentStatus.PUBLISHED,
+            TournamentStatus.CANCELLED,
+        }
+    ),
+    TournamentStatus.PUBLISHED: frozenset(
+        {TournamentStatus.ONGOING, TournamentStatus.CANCELLED}
+    ),
+    TournamentStatus.ONGOING: frozenset(
+        {TournamentStatus.FINISHED, TournamentStatus.CANCELLED}
+    ),
+    TournamentStatus.FINISHED: frozenset(),
+    TournamentStatus.CANCELLED: frozenset(),
+}
+
+_SCORING_STATUSES = frozenset({TournamentStatus.PUBLISHED, TournamentStatus.ONGOING})
+
+
+def _tournament_not_found() -> BusinessError:
+    return BusinessError("TOURNAMENT_NOT_FOUND", "找不到這場賽事。", status_code=404)
+
+
+def _field_error(field: str, code: str, message: str) -> FieldError:
+    return FieldError(code, message, loc=("body", field))
+
+
+def _tournament_to_read(tournament: Tournament) -> TournamentRead:
+    snapshot = tournament.game_snapshot
+    return TournamentRead(
+        id=tournament.id,
+        organizer_id=tournament.organizer_id,
+        name=tournament.name,
+        status=tournament.status,
+        mode=tournament.mode,
+        capacity=tournament.capacity,
+        registration_start=tournament.registration_start,
+        priority_end=tournament.priority_end,
+        registration_end=tournament.registration_end,
+        start_at=tournament.start_at,
+        round_interval_minutes=tournament.round_interval_minutes,
+        forfeit_minutes=tournament.forfeit_minutes,
+        appeal_minutes=tournament.appeal_minutes,
+        livestream_url=tournament.livestream_url,
+        game_id=tournament.game_id,
+        game_name=snapshot["game_name"],
+        starters=snapshot["starters"],
+        substitutes=snapshot["substitutes"],
+        bo=snapshot["bo"],
+        game_minutes=snapshot["game_minutes"],
+        score_type=snapshot["score_type"],
+        rank_tiers=[RankTierRead.model_validate(t) for t in snapshot["rank_tiers"]],
+    )
+
+
+def min_round_interval(
+    *, forfeit_minutes: int, bo: int, game_minutes: int, appeal_minutes: int
+) -> int:
+    """每輪間隔的下限：棄權時限＋BO × 每局預估時間＋申訴期（分鐘）。"""
+    return forfeit_minutes + bo * game_minutes + appeal_minutes
+
+
+def _validate_schedule(
+    data: TournamentCreate, *, bo: int, game_minutes: int, now: datetime
+) -> None:
+    """要對照現在時間或遊戲設定的欄位檢查；違反時拋 422 並指向欄位。"""
+    if data.start_at <= now:
+        raise _field_error("start_at", "START_AT_PASSED", "開賽時間必須晚於現在")
+    if data.registration_end > data.start_at:
+        raise _field_error(
+            "registration_end",
+            "REGISTRATION_END_AFTER_START",
+            "報名截止不能晚於開賽時間",
+        )
+    if data.registration_end <= now:
+        raise _field_error(
+            "registration_end", "REGISTRATION_END_PASSED", "報名截止必須晚於現在"
+        )
+    if data.registration_start >= data.registration_end:
+        raise _field_error(
+            "registration_start",
+            "REGISTRATION_START_NOT_BEFORE_END",
+            "報名開始必須早於報名截止",
+        )
+    # 以時間長度比較，避免極大的優先期在相加時溢位
+    if timedelta(hours=data.priority_hours) > (
+        data.registration_end - data.registration_start
+    ):
+        raise _field_error(
+            "priority_hours",
+            "PRIORITY_END_AFTER_REGISTRATION_END",
+            "優先期結束（報名開始＋優先期）不能晚於報名截止",
+        )
+    minimum = min_round_interval(
+        forfeit_minutes=data.forfeit_minutes,
+        bo=bo,
+        game_minutes=game_minutes,
+        appeal_minutes=data.appeal_minutes,
+    )
+    if data.round_interval_minutes < minimum:
+        raise _field_error(
+            "round_interval_minutes",
+            "ROUND_INTERVAL_TOO_SHORT",
+            f"每輪間隔至少 {minimum} 分鐘",
+        )
+
+
+def create_tournament(
+    session: Session, *, organizer_id: uuid.UUID, data: TournamentCreate
+) -> TournamentRead:
+    """建立賽事（期中一律校園賽）並複製遊戲快照；寫 `tournament.created`。
+
+    遊戲不存在拋 404 `GAME_NOT_FOUND`；欄位不合法拋 422（`FieldError`，指向欄位）。
+    報名開始已到時狀態為 `open`，否則為 `upcoming`（由 worker 到時開放）。
+    """
+    # 以 FOR SHARE 鎖住遊戲列：修改遊戲（FOR UPDATE）要等本交易結束，遊戲欄位與
+    # 段位表因此取自同一個版本；多個主辦方同時以同一款遊戲建立賽事則不互相等待
+    game_row = repository.get_game(session, data.game_id, for_share=True)
+    if game_row is None:
+        raise _game_not_found()
+    game = _to_read(game_row, repository.list_rank_tiers(session, [game_row.id]))
+
+    starters = data.starters if data.starters is not None else game.starters
+    substitutes = data.substitutes if data.substitutes is not None else game.substitutes
+    bo = data.bo if data.bo is not None else game.default_bo
+    now = clock.now()
+    _validate_schedule(data, bo=bo, game_minutes=game.game_minutes, now=now)
+
+    registration_start = data.registration_start.astimezone(UTC)
+    tournament = Tournament(
+        organizer_id=organizer_id,
+        game_id=game.id,
+        name=data.name,
+        status=(
+            TournamentStatus.OPEN
+            if registration_start <= now
+            else TournamentStatus.UPCOMING
+        ),
+        mode=TournamentMode.CAMPUS,
+        capacity=data.capacity,
+        registration_start=registration_start,
+        priority_end=registration_start + timedelta(hours=data.priority_hours),
+        registration_end=data.registration_end.astimezone(UTC),
+        start_at=data.start_at.astimezone(UTC),
+        round_interval_minutes=data.round_interval_minutes,
+        forfeit_minutes=data.forfeit_minutes,
+        appeal_minutes=data.appeal_minutes,
+        livestream_url=data.livestream_url,
+        game_snapshot={
+            "game_name": game.name,
+            "starters": starters,
+            "substitutes": substitutes,
+            "bo": bo,
+            "game_minutes": game.game_minutes,
+            "score_type": game.score_type.value,
+            "rank_tiers": [tier.model_dump() for tier in game.rank_tiers],
+        },
+        created_at=now,
+        updated_at=now,
+    )
+    repository.add_tournament(session, tournament)
+
+    created = _tournament_to_read(tournament)
+    audit.record(
+        session,
+        actor_id=organizer_id,
+        tournament_id=tournament.id,
+        action="tournament.created",
+        entity_type="tournament",
+        entity_id=tournament.id,
+        before=None,
+        after=created.model_dump(exclude={"id"}),
+    )
+    return created
+
+
+def get_tournament(session: Session, *, tournament_id: uuid.UUID) -> TournamentRead:
+    """讀取賽事；不存在拋 404 `TOURNAMENT_NOT_FOUND`。"""
+    tournament = repository.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise _tournament_not_found()
+    return _tournament_to_read(tournament)
+
+
+def lock_tournament(session: Session, *, tournament_id: uuid.UUID) -> TournamentRead:
+    """`SELECT ... FOR UPDATE` 鎖住賽事列並回傳最新值；鎖賽事的唯一入口（AD-6）。
+
+    同時要鎖場次等其他資料時，先鎖賽事。不存在拋 404 `TOURNAMENT_NOT_FOUND`。
+    """
+    tournament = repository.get_tournament(session, tournament_id, for_update=True)
+    if tournament is None:
+        raise _tournament_not_found()
+    return _tournament_to_read(tournament)
+
+
+def list_organizer_tournaments(
+    session: Session, *, organizer_id: uuid.UUID
+) -> list[TournamentRead]:
+    """某主辦方建立的賽事，新建立的在前。"""
+    return [
+        _tournament_to_read(tournament)
+        for tournament in repository.list_tournaments_by_organizer(
+            session, organizer_id
+        )
+    ]
+
+
+def transition_tournament(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    to: TournamentStatus,
+    actor_id: uuid.UUID | None,
+) -> TournamentRead:
+    """改變賽事狀態的唯一入口（AD-11）；寫 `tournament.status_changed`。
+
+    呼叫前應先 `lock_tournament`（這裡也會再鎖一次，同一交易內不會等待）。
+    不允許的轉換拋 409 `TOURNAMENT_INVALID_TRANSITION`；`actor_id=None` 表示系統。
+    """
+    tournament = repository.get_tournament(session, tournament_id, for_update=True)
+    if tournament is None:
+        raise _tournament_not_found()
+    current = TournamentStatus(tournament.status)
+    if to not in _TRANSITIONS[current]:
+        raise BusinessError(
+            "TOURNAMENT_INVALID_TRANSITION",
+            "賽事目前的狀態不能進行這個操作。",
+            status_code=409,
+        )
+    repository.set_tournament_status(session, tournament, to, clock.now())
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=tournament.id,
+        action="tournament.status_changed",
+        entity_type="tournament",
+        entity_id=tournament.id,
+        before={"status": current.value},
+        after={"status": to.value},
+    )
+    return _tournament_to_read(tournament)
+
+
+def ensure_accepting_registrations(tournament: TournamentRead) -> None:
+    """賽事開放報名中；否則拋 409 `REGISTRATION_CLOSED`。只看狀態，不碰資料庫。"""
+    if tournament.status != TournamentStatus.OPEN:
+        raise BusinessError(
+            "REGISTRATION_CLOSED", "這場賽事目前不開放報名。", status_code=409
+        )
+
+
+def ensure_accepting_scores(tournament: TournamentRead) -> None:
+    """賽程已公布或進行中；否則拋 409 `TOURNAMENT_NOT_ACCEPTING_SCORES`。不碰資料庫。"""
+    if tournament.status not in _SCORING_STATUSES:
+        raise BusinessError(
+            "TOURNAMENT_NOT_ACCEPTING_SCORES",
+            "這場賽事目前不接受比分回報。",
+            status_code=409,
+        )
+
+
+def bo_for_round(session: Session, *, tournament_id: uuid.UUID, round_no: int) -> int:
+    """某一輪（從 1 起算）的 BO；期中不做分輪 BO（2.3），一律回傳賽事的 BO。"""
+    if round_no < 1:
+        raise ValueError(f"round_no must start from 1: {round_no}")
+    return get_tournament(session, tournament_id=tournament_id).bo
+
+
+def open_due_registration(session: Session) -> bool:
+    """worker 用：把一筆報名開始已到的 `upcoming` 賽事轉為 `open`（操作者為系統）。
+
+    先找到候選、鎖住後重新檢查；已被其他 worker 處理過就不做任何事。
+    回傳是否找到候選（找到就可能還有下一筆）。
+    """
+    now = clock.now()
+    tournament_id = repository.find_due_upcoming_id(session, now)
+    if tournament_id is None:
+        return False
+    tournament = lock_tournament(session, tournament_id=tournament_id)
+    if (
+        tournament.status == TournamentStatus.UPCOMING
+        and tournament.registration_start <= now
+    ):
+        transition_tournament(
+            session,
+            tournament_id=tournament_id,
+            to=TournamentStatus.OPEN,
+            actor_id=None,
+        )
+    return True
