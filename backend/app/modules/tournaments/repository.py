@@ -162,6 +162,14 @@ def list_tournaments_by_organizer(
     return list(session.exec(statement))
 
 
+def list_tournaments(session: Session) -> list[Tournament]:
+    """所有賽事，依開賽時間排序（呈現順序由前端依狀態分組決定）。"""
+    statement = select(Tournament).order_by(
+        col(Tournament.start_at), col(Tournament.id)
+    )
+    return list(session.exec(statement))
+
+
 def find_due_upcoming_id(session: Session, now: datetime) -> uuid.UUID | None:
     """一筆尚未開放、報名開始已到的賽事 id（最早到期的優先）；不加鎖。"""
     statement = (
