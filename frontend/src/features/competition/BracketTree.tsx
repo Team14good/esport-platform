@@ -26,6 +26,8 @@ type BracketTreeProps = {
   bracket: PublicBracket
   /** 輪詢時有變動的場次，各 flash 一次（useBracketPolling 的 changedMatchIds） */
   changedMatchIds?: ReadonlySet<string>
+  /** 有提供時每張場次卡整張可點，連到該場 S4 */
+  matchHref?: (matchId: string) => string
   className?: string
 }
 
@@ -36,6 +38,7 @@ type BracketTreeProps = {
 export function BracketTree({
   bracket,
   changedMatchIds = NO_CHANGES,
+  matchHref,
   className,
 }: BracketTreeProps) {
   const layout = useMemo(() => layoutBracket(bracket), [bracket])
@@ -93,6 +96,7 @@ export function BracketTree({
                 key={flash ? `${match.id}:${generation}` : match.id}
                 match={match}
                 flash={flash}
+                matchHref={matchHref}
                 className="absolute"
                 style={{ left: x, top: y }}
               />

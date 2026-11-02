@@ -88,6 +88,54 @@
 - 成熟度：L4（AI 做影響分析並找出流程卡點，人做取捨）
 - 證據：`_bmad-output/planning-artifacts/sprint-change-proposal-2026-10-28.md`、commit `5aa5e0e`、`50a3bdc`
 
+### 2026-10-30｜需求、設計／spec｜Story 5.2 第一階段：逾時判棄權規則的 spec
+
+- Story／範圍：5.2（第一階段）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：輸入「/bmad-build 5.2 不要讓我選 全部選你推薦的」。AI 讀了 epic 5 context、competition 介面約定，以及 D 在 `story/5-1`、`5-3`、`5-5` 的規則檔，寫出 spec，並自己選定所有推薦選項
+- AI 產出：`spec-5-2-forfeit-rules.md`，內容包括 14 列 I/O 矩陣、3 條驗收條件，以及 4 項 Decisions。Decisions 寫明只做第一階段、申訴期從判定時間起算、哪些情況算呼叫端錯誤、不做 code review
+- 人做了什麼：事先授權 AI 選推薦選項，沒有在 checkpoint 停下來，也沒有逐項確認
+- 驗證：spec 依 READY FOR DEVELOPMENT 標準自我檢查；介面名稱（`list_forfeit_due`、`lock_match`、`transition_match`）與 `contracts/competition.md` 一致
+- 問題與修正：AI 起初考慮讓申訴期從棄權期限起算，這樣判定結果不受 worker 執行時間影響。後來查到 PRD FR-30 寫「判棄權時起算」，改成從判定時間起算，worker 延遲時兩隊仍有完整的申訴期
+- 成熟度：L3（AI 依既有規格與組員的寫法產出 spec，人只事先授權採用推薦選項）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-2-forfeit-rules.md`
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.2 第一階段：判棄權純函式與測試
+
+- Story／範圍：5.2（第一階段）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：子代理只讀 spec 實作。主對話讀 diff，逐項確認每列 I/O 矩陣都有對應的測試，重建 backend image 後重跑全部檢查
+- AI 產出：
+  - `competition/forfeit.py`：`ForfeitVerdict`、`judge_forfeit`、`appeal_deadline`，共 101 行
+  - `tests/competition/test_forfeit.py`：38 個測試，包含 5000 組固定種子的隨機輸入，以及 import 與「不讀時鐘」的 AST 檢查
+  - `deferred-work.md`：新增第二階段的範圍
+- 人做了什麼：依先前的決定，略過 code review
+- 驗證：後端 291 passed，其中新增 38 個；`forfeit.py` 分支覆蓋率 100%（42 行、24 個分支）；lint（mypy、ty、ruff）通過；新檔都是 LF
+- 問題與修正：
+  - 子代理的隨機測試最初在迴圈裡用閉包，被 ruff B023 擋下，改成 kwargs dict
+  - 子代理為了測試而重建 backend 時，發現開發資料庫已被 `story/1-7` 的遷移 `c7e2a4d9b8f1` 升級過，在 `story/5-2` 分支上 backend 起不來。測試用的是獨立的 `_test` 資料庫，所以不受影響；這個問題記在 spec 的 Implementation Notes
+- 成熟度：L3（AI 依 spec 產出並自動驗證，但這次沒有多審查者）
+- 證據：`backend/app/modules/competition/forfeit.py`、`backend/tests/competition/test_forfeit.py`；尚未 commit
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.2 第二階段：判棄權 worker 工作（依約定介面、以假 service 測試）
+
+- Story／範圍：5.2（第二階段）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：
+  - 上游的 D、B 函式還沒合併。AI 提出兩種做法：等合併，或是依 `contracts/competition.md` 的約定介面先寫完。人選了後者。
+  - AI 寫 spec：用 `ForfeitPorts` 注入 D、B 的函式，人在 checkpoint 核准。
+  - 子代理照 spec 實作，主對話讀程式碼驗收。
+- AI 產出：
+  - `competition/forfeit_job.py`：`MatchForfeited` 事件、`ForfeitPorts` 介面、`forfeit_next_due`、`make_forfeit_job`。處理流程是先鎖賽事、再鎖場次，重新判定後寫入結果，轉為申訴期，寫操作紀錄（system），最後發事件。
+  - `tests/competition/test_forfeit_job.py`：13 個測試，用假的 ports 搭配真的 session，涵蓋 `run_once` 的一輪與失敗回滾。
+  - `deferred-work.md` 新增一項：合併後要寫的轉接層與註冊方式。
+- 人做了什麼：選擇用假 service 先寫完；核准 spec；選擇 S4 申訴期先只顯示截止時間，倒數的位置留給之後放倒數元件。略過了 code review。
+- 驗證：後端 304 passed，其中新增 13 個；`forfeit_job.py` 分支覆蓋率 100%；lint 通過。
+- 問題與修正：
+  - 子代理照 spec 寫，但留下一個風險：只要有一場資料不合法、判定時拋出 `ValueError`，那一場每輪都會排在最前面，後面所有到期的場次都判不到。子代理在報告裡自己指出了這一點。主對話驗收時判斷這屬於 bug，改成記錄日誌後略過那一場，並補了測試。
+  - 子代理讓模組 import 了 `app.worker`，模組和 worker 之間的依賴方向反了。主對話改成在檔案裡自己定義型別。
+- 成熟度：L3（AI 依規格產出並自動驗證，人做範圍取捨；這次沒有多審查者）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-2-forfeit-job.md`、`backend/app/modules/competition/forfeit_job.py`；尚未 commit
 ### 2026-10-29｜程式、測試／Story 1.7｜以 bmad-build 實作「申請成為主辦方」（S15、Status badge）
 
 - Story／範圍：1.7
@@ -148,6 +196,82 @@
 - 成熟度：L3（AI 依 spec 實作並自動驗證，未經多審查者）
 - 證據：spec 同上；尚未 commit
 
+### 2026-10-30｜需求、設計／spec｜Story 5.8：場次頁觀眾檢視的 spec
+
+- Story／範圍：5.8
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Explore 子代理整理 UX）
+- 怎麼用：`/bmad-build 5.8`。子代理先整理 S4 的 UX 規定，涵蓋 EXPERIENCE、DESIGN、mockup 與 contract；AI 依此寫 spec，再把文件沒定義的地方列成問題讓人選
+- AI 產出：`spec-5-8-match-page-results.md`，包含 16 列 I/O 矩陣、7 項 Decisions、12 個工作項目。這份 spec 也提議了公開單場 API 的形狀 `PublicMatchDetail`，要請 D 補進 contract
+- 人做了什麼：回答 4 個問題：
+  - 範圍：相依的 Story 還沒做的部分先用假資料，把 5.8 完整做出來
+  - 申訴期只在已確認後才套用勝敗樣式
+  - 沒有比分時顯示隊名＋「—」＋標記
+  - `win_loss` 型態寫「勝／負」
+- 驗證：子代理確認 contract 沒有定義公開的單場 API，也沒有各局的形狀，列為第二階段要補的項目
+- 問題與修正：AI 原本規劃只做元件，S4 路由留到之後。使用者要求用假資料把 5.8 做完整，於是改成建立正式的 S4 路由與「場次卡點了進入 S4」，資料改由同一個資料來源函式取得，正式 build 時顯示 404
+- 成熟度：L3（AI 依 UX 文件產出 spec，並找出文件沒有定義的地方交給人決定）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-8-match-page-results.md`
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.8：S4 路由、觀眾檢視元件與單場輪詢
+
+- Story／範圍：5.8
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：子代理只讀 spec 實作；主對話讀 diff，逐列檢查 I/O 矩陣，重建 frontend 後重跑全部檢查
+- AI 產出：
+  - 新增 11 個原始檔：S4 路由、4 個區塊元件與組合元件、`match-status`、`match-source`、`use-match-polling` 等
+  - 修改 4 個檔案：場次卡可點、抽出共用的狀態對照與失敗計數
+  - `/dev/match` 預覽頁
+  - 新增 8 個測試檔，`bracket-match-card` 測試補上連結的案例
+- 人做了什麼：在 checkpoint 核准 spec；略過 code review
+- 驗證：
+  - 前端單元測試 37 個檔案、354 個通過，新增 76 個
+  - build、typecheck、biome 都通過
+  - 正式 build 的 `dist/assets` 不含假資料
+  - 後端 310 passed
+  - 子代理用瀏覽器量過：1280px 兩欄，375px 單欄、沒有橫向捲軸
+- 問題與修正：
+  - S3 路由還不存在，TanStack `Link` 過不了型別檢查，返回連結先改成一般的 `<a>`，記在 `deferred-work.md`
+  - 子代理把「申訴期不套勝敗樣式」解讀成只限系列比分，各局列表照樣套用勝敗樣式，這點寫在 Implementation Notes 給人確認
+  - 實作途中 Docker Desktop 停止，人提出後由 AI 重新啟動並重建容器
+- 成熟度：L3（AI 依 spec 產出並自動驗證，這次沒有多審查者）
+- 證據：`frontend/src/features/competition/`、`frontend/src/routes/tournaments/$tournamentId/matches/$matchId.tsx`；尚未 commit
+
+### 2026-10-30｜程式、測試／程式生成｜Story 5.2：S4 申訴期區塊（截止時間＋倒數插槽）
+
+- Story／範圍：5.2（S4 部分，在 `story/5-8` 實作）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：Countdown 元件是 B 的 2.4，還沒做。AI 提出三個選項，人選了「先顯示截止時間，再留一個倒數插槽」。AI 依 EXPERIENCE.md〈場次頁（S4）〉寫 spec，交給子代理實作，主對話讀 diff 驗收
+- AI 產出：
+  - 新增 `MatchAppealWindow.tsx`
+  - `PublicMatchDetail` 加上 `appeal_deadline`，假資料一併補上
+  - `MatchSpectatorView` 重排：`< lg` 用 `display: contents` 加 `order`，把申訴期排在比分與各局之間；`≥ lg` 放在右欄最上方。每個區塊只渲染一次
+  - 13 個測試
+  - `deferred-work.md` 新增一項
+- 人做了什麼：選擇插槽做法，不重做 B 的元件
+- 驗證：前端 38 個測試檔、367 個測試通過，新增 13 個；build、typecheck、biome 都通過；子代理在瀏覽器量過 1280px 與 375px 的位置，沒有橫向捲軸
+- 問題與修正：子代理沒有用 grid area，因為兩欄會共用列高，左欄會撐出空白，改用 `display: contents`。它也指出手機寬度時 DOM 順序和畫面順序不一致，Epic 6 加「提出申訴」按鈕時要再確認焦點順序，已寫進 Implementation Notes
+- 成熟度：L3（AI 依 UX 文件產出並自動驗證，人做範圍取捨；這次沒有多審查者）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-2-appeal-window-display.md`、`frontend/src/features/competition/MatchAppealWindow.tsx`；尚未 commit
+
+### 2026-10-31｜程式、測試／依審查修正｜Story 5.8：依 D 的審查修正場次卡可及名稱、首次載入失敗與 flash 判斷
+
+- Story／範圍：5.8（`story/5-8`）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：把 D 的審查意見貼給 AI。AI 先讀被指出的程式與測試，確認問題成立，再修正、補測試，最後重建容器跑全部檢查
+- AI 產出：
+  - `BracketMatchCard.tsx`：新增 `matchCardAccessibleName()`，連結帶完整名稱，article 包成連結時不帶 `aria-label`
+  - S4 路由：第一次載入就失敗時直接顯示連線中斷橫幅
+  - `isMatchScoreChanged` 加比結果、勝隊與各局
+  - 測試：`bracket-match-card` 改用 `toHaveAccessibleName` 並補 2 個案例，`use-match-polling` 補 2 個，新增 `match-route-error.test.tsx`
+  - spec 的 Review Triage Log、`deferred-work.md` 一項（walkover 空缺方，等 PR #13 的約定）
+- 人做了什麼：D 審查並找出問題；使用者決定把審查意見交給 AI 修
+- 驗證：前端單元測試 39 個檔案、371 個通過（新增 4 個）；typecheck、biome（157 個檔案）通過；改動的檔案都是 LF
+- 問題與修正：
+  - 10/30 實作時 AI 在 Implementation Notes 寫「article 的 `aria-label` 不變，所以連結的可及名稱包含標頭與隊名」，這是錯的：依 accname 規則，article 的 `aria-label` 會取代內容，連結名稱只剩「M3」
+  - 當時的測試用 `toHaveTextContent` 檢查文字，不是檢查可及名稱，所以沒抓到；當時也略過 code review。這次由 D 人工審查發現
+  - 修正後改用 `toHaveAccessibleName`，直接驗證讀螢幕軟體聽到的整句
+- 成熟度：L3（人審查找出問題，AI 修正並自動驗證）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-8-match-page-results.md` 的 Review Triage Log；尚未 commit
 ### 2026-10-31｜程式、測試／依審查修正｜Story 4.6：依 D 的審查改成 bye_a／bye_b、walkover 空缺方與 404 輪詢
 
 - Story／範圍：4.6（`story/4-6`）
