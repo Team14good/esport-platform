@@ -19,6 +19,9 @@ type ReadApplicationResult = Awaited<
   ReturnType<typeof IdentityService.readCurrentOrganizerApplication>
 >
 type ListSchoolsResult = Awaited<ReturnType<typeof IdentityService.listSchools>>
+type ListApplicationsResult = Awaited<
+  ReturnType<typeof IdentityService.listOrganizerApplications>
+>
 
 vi.mock("@tanstack/react-router-devtools", () => ({
   TanStackRouterDevtools: () => null,
@@ -180,7 +183,13 @@ describe("身分切換器", () => {
 
   it("切換身分：記住身分並前往該身分首頁，目前身分隨之改變", async () => {
     const user = userEvent.setup()
-    signInAs({ identities: [BROWSE, PLATFORM_ADMIN] })
+    signInAs({
+      account: { ...ACCOUNT, is_platform_admin: true },
+      identities: [BROWSE, PLATFORM_ADMIN],
+    })
+    vi.spyOn(IdentityService, "listOrganizerApplications").mockResolvedValue({
+      data: { items: [], total: 0, page: 1, page_size: 20 },
+    } as unknown as ListApplicationsResult)
     const router = renderApp("/")
 
     const menu = await openSwitcher(user)
@@ -192,8 +201,9 @@ describe("身分切換器", () => {
     expect(window.localStorage.getItem(LAST_IDENTITY_STORAGE_KEY)).toBe(
       "platform_admin",
     )
-    // 平台管理頁在 Story 1.8 才建立：先顯示 S38 404
-    expect(await screen.findByText("找不到這個頁面。")).toBeInTheDocument()
+    expect(
+      await screen.findByRole("heading", { name: "主辦方申請" }),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "切換身分（目前：平台管理）" }),
     ).toBeInTheDocument()
