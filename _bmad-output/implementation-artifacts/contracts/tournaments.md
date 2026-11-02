@@ -50,11 +50,25 @@ class TournamentRead(BaseModel):
 class RefereeRead(BaseModel):
     account_id: UUID
     display_name: str
+
+class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API 用（AD-19）
+    id: UUID
+    name: str
+    status: TournamentStatus
+    game_name: str
+    capacity: int                    # 正取名額
+    registration_start: datetime
+    priority_end: datetime
+    registration_end: datetime
+    start_at: datetime               # 開賽時間（第 1 輪）
+    round_interval_minutes: int
+    livestream_url: str | None
 ```
 
 - 列舉沿用 `models.py` 既有的 `ScoreType`、`TournamentMode`、`TournamentStatus`。
 - 時間一律帶時區（UTC）。
-- 不登入就能呼叫的公開 API 用另外的 `Public*` schema（2.4 定義），不含 `organizer_id`、Email 與學校（AD-19）。
+- 不登入就能呼叫的公開 API 用另外的 `Public*` schema（2.4 定義的 `PublicTournament`），不含 `organizer_id`、Email 與學校（AD-19）。
+- 公開 API（2.4，不需登入）：`GET /tournaments` 回傳所有賽事的 `list[PublicTournament]`，依開賽時間排序；`GET /tournaments/{tournament_id}` 回傳 `PublicTournament`，不存在 404 `TOURNAMENT_NOT_FOUND`，id 格式錯誤 422。
 
 ## 二、公開函式
 
@@ -62,6 +76,8 @@ class RefereeRead(BaseModel):
 | --- | --- | --- | --- |
 | `get_game(session, *, game_id) -> GameRead` | tournaments 內部（2.2）、A（7.1 示範資料） | 不存在拋 `GAME_NOT_FOUND` 404 | 2.1 |
 | `get_tournament(session, *, tournament_id) -> TournamentRead` | C（3.x）、D（4.x、5.x）、A（5.2、5.8）、B（6.x） | 不存在拋 `TOURNAMENT_NOT_FOUND` 404 | 2.2 |
+| `list_public_tournaments(session) -> list[PublicTournament]` | tournaments 的公開路由（2.4 S1） | 所有賽事的公開資料，依開賽時間排序；不需登入 | 2.4 |
+| `get_public_tournament(session, *, tournament_id) -> PublicTournament` | tournaments 的公開路由（2.4 S2） | 一場賽事的公開資料；不存在拋 `TOURNAMENT_NOT_FOUND` 404 | 2.4 |
 | `lock_tournament(session, *, tournament_id) -> TournamentRead` | C（改名單、名額、分配前）、D（4.1、4.3、4.4、5.5）、A（5.2） | `SELECT … FOR UPDATE` 賽事列，回傳鎖定後的最新值；這是鎖賽事的唯一入口（AD-6）。同時要鎖場次時，先鎖賽事 | 2.2 |
 | `transition_tournament(session, *, tournament_id, to, actor_id) -> TournamentRead` | 見〈三〉 | 唯一改賽事狀態的入口（AD-11）；呼叫前要先 `lock_tournament`。非法轉換拋 `TOURNAMENT_INVALID_TRANSITION` 409。寫操作紀錄 `tournament.status_changed`；`actor_id=None` 表示系統（worker） | 2.2 |
 | `ensure_accepting_registrations(tournament: TournamentRead) -> None` | C（3.1～3.6） | 狀態不是 `open` 時拋 `REGISTRATION_CLOSED` 409。只看狀態：報名截止由 worker 轉成 `closed` | 2.2 |
