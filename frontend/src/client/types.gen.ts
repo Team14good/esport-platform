@@ -101,6 +101,54 @@ export type AccountRead = {
 }
 
 /**
+ * AdminOrganizerApplication
+ *
+ * S35 審核清單的一筆：另帶申請人的顯示名稱與 Email。
+ */
+export type AdminOrganizerApplication = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Club Name
+   */
+  club_name: string
+  /**
+   * School Id
+   */
+  school_id: string
+  /**
+   * School Name
+   */
+  school_name: string
+  status: ApplicationStatus
+  /**
+   * Reject Reason
+   */
+  reject_reason: string | null
+  /**
+   * Created At
+   */
+  created_at: string
+  /**
+   * Applicant Display Name
+   */
+  applicant_display_name: string
+  /**
+   * Applicant Email
+   */
+  applicant_email: string
+}
+
+/**
+ * ApplicationStatus
+ *
+ * 主辦方申請（OrganizerApplication）的狀態：待審核、核准、退回。
+ */
+export type ApplicationStatus = "pending" | "approved" | "rejected"
+
+/**
  * EmailVerificationCreate
  */
 export type EmailVerificationCreate = {
@@ -108,6 +156,76 @@ export type EmailVerificationCreate = {
    * Token
    */
   token: string
+}
+
+/**
+ * GameIn
+ *
+ * 新增或修改遊戲（修改為整份替換，含段位表）。
+ */
+export type GameIn = {
+  /**
+   * Name
+   */
+  name: string
+  /**
+   * Starters
+   */
+  starters: number
+  /**
+   * Substitutes
+   */
+  substitutes: number
+  /**
+   * Default Bo
+   */
+  default_bo: number
+  /**
+   * Game Minutes
+   */
+  game_minutes: number
+  score_type: ScoreType
+  /**
+   * Rank Tiers
+   */
+  rank_tiers: Array<RankTierIn>
+}
+
+/**
+ * GameRead
+ *
+ * 遊戲設定；段位依積分由高到低（同分依名稱）排列。
+ */
+export type GameRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+  /**
+   * Starters
+   */
+  starters: number
+  /**
+   * Substitutes
+   */
+  substitutes: number
+  /**
+   * Default Bo
+   */
+  default_bo: number
+  /**
+   * Game Minutes
+   */
+  game_minutes: number
+  score_type: ScoreType
+  /**
+   * Rank Tiers
+   */
+  rank_tiers: Array<RankTierRead>
 }
 
 /**
@@ -138,9 +256,96 @@ export type Identity = {
 /**
  * IdentityKey
  *
- * 身分切換器的身分；之後的 Story 會加入我的隊伍、裁判、主辦方後台。
+ * 身分切換器的身分；之後的 Story 會加入我的隊伍、裁判。
  */
-export type IdentityKey = "browse" | "platform_admin"
+export type IdentityKey = "browse" | "organizer" | "platform_admin"
+
+/**
+ * OrganizerApplicationCreate
+ *
+ * S15 送出主辦方申請：社團名稱與學校（只能從學校清單選擇）。
+ */
+export type OrganizerApplicationCreate = {
+  /**
+   * Club Name
+   */
+  club_name: string
+  /**
+   * School Id
+   */
+  school_id: string
+}
+
+/**
+ * OrganizerApplicationPage
+ *
+ * 主辦方申請的分頁結果（全專案第一個分頁 API，之後的列表沿用同一格式）。
+ *
+ * `page` 超過總頁數時 `items` 為空、`total` 照實。
+ */
+export type OrganizerApplicationPage = {
+  /**
+   * Items
+   */
+  items: Array<AdminOrganizerApplication>
+  /**
+   * Total
+   */
+  total: number
+  /**
+   * Page
+   */
+  page: number
+  /**
+   * Page Size
+   */
+  page_size: number
+}
+
+/**
+ * OrganizerApplicationRead
+ *
+ * 主辦方申請；帶學校名稱，S15 與審核清單不必再對照學校清單。
+ */
+export type OrganizerApplicationRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Club Name
+   */
+  club_name: string
+  /**
+   * School Id
+   */
+  school_id: string
+  /**
+   * School Name
+   */
+  school_name: string
+  status: ApplicationStatus
+  /**
+   * Reject Reason
+   */
+  reject_reason: string | null
+  /**
+   * Created At
+   */
+  created_at: string
+}
+
+/**
+ * OrganizerApplicationRejection
+ *
+ * S35 退回主辦方申請：退回原因必填，去除前後空白後 1～200 字。
+ */
+export type OrganizerApplicationRejection = {
+  /**
+   * Reason
+   */
+  reason: string
+}
 
 /**
  * PasswordResetCheck
@@ -213,6 +418,83 @@ export type PublicSchool = {
 }
 
 /**
+ * PublicTournament
+ *
+ * 不需登入的公開 API 回傳的賽事（AD-19）：不含主辦方帳號、Email 與學校。
+ */
+export type PublicTournament = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+  status: TournamentStatus
+  /**
+   * Game Name
+   */
+  game_name: string
+  /**
+   * Capacity
+   */
+  capacity: number
+  /**
+   * Registration Start
+   */
+  registration_start: string
+  /**
+   * Priority End
+   */
+  priority_end: string
+  /**
+   * Registration End
+   */
+  registration_end: string
+  /**
+   * Start At
+   */
+  start_at: string
+  /**
+   * Round Interval Minutes
+   */
+  round_interval_minutes: number
+  /**
+   * Livestream Url
+   */
+  livestream_url: string | null
+}
+
+/**
+ * RankTierIn
+ */
+export type RankTierIn = {
+  /**
+   * Name
+   */
+  name: string
+  /**
+   * Score
+   */
+  score: number
+}
+
+/**
+ * RankTierRead
+ */
+export type RankTierRead = {
+  /**
+   * Name
+   */
+  name: string
+  /**
+   * Score
+   */
+  score: number
+}
+
+/**
  * RegisteredAccount
  */
 export type RegisteredAccount = {
@@ -237,6 +519,200 @@ export type RegisteredAccount = {
    */
   email_verified: boolean
 }
+
+/**
+ * SchoolIn
+ *
+ * 平台管理員新增學校或修正學校名稱（名稱去除前後空白後儲存）。
+ */
+export type SchoolIn = {
+  /**
+   * Name
+   */
+  name: string
+}
+
+/**
+ * ScoreType
+ *
+ * 比分型態（AD-18）。
+ */
+export type ScoreType = "win_loss" | "rounds"
+
+/**
+ * TournamentCreate
+ *
+ * 建立賽事。時間必須帶時區；先發、替補、BO 未填時帶入遊戲的值。
+ *
+ * 期中一律為校園賽，不接受模式欄位。要對照遊戲或現在時間的檢查（日期順序、
+ * 優先期、每輪間隔）由 service 進行，錯誤同樣是 422 並指向欄位。
+ */
+export type TournamentCreate = {
+  /**
+   * Name
+   */
+  name: string
+  /**
+   * Game Id
+   */
+  game_id: string
+  /**
+   * Capacity
+   */
+  capacity: number
+  /**
+   * Registration Start
+   */
+  registration_start: string
+  /**
+   * Registration End
+   */
+  registration_end: string
+  /**
+   * Priority Hours
+   */
+  priority_hours?: number
+  /**
+   * Start At
+   */
+  start_at: string
+  /**
+   * Round Interval Minutes
+   */
+  round_interval_minutes: number
+  /**
+   * Forfeit Minutes
+   */
+  forfeit_minutes?: number
+  /**
+   * Appeal Minutes
+   */
+  appeal_minutes?: number
+  /**
+   * Starters
+   */
+  starters?: number | null
+  /**
+   * Substitutes
+   */
+  substitutes?: number | null
+  /**
+   * Bo
+   */
+  bo?: number | null
+  /**
+   * Livestream Url
+   */
+  livestream_url?: string | null
+}
+
+/**
+ * TournamentMode
+ *
+ * 賽事模式（AD-20）：校園賽、自訂。
+ */
+export type TournamentMode = "campus" | "custom"
+
+/**
+ * TournamentRead
+ *
+ * 賽事；遊戲相關欄位（`game_name` 以下）來自建立時的快照（AD-12）。
+ */
+export type TournamentRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Organizer Id
+   */
+  organizer_id: string
+  /**
+   * Name
+   */
+  name: string
+  status: TournamentStatus
+  mode: TournamentMode
+  /**
+   * Capacity
+   */
+  capacity: number
+  /**
+   * Registration Start
+   */
+  registration_start: string
+  /**
+   * Priority End
+   */
+  priority_end: string
+  /**
+   * Registration End
+   */
+  registration_end: string
+  /**
+   * Start At
+   */
+  start_at: string
+  /**
+   * Round Interval Minutes
+   */
+  round_interval_minutes: number
+  /**
+   * Forfeit Minutes
+   */
+  forfeit_minutes: number
+  /**
+   * Appeal Minutes
+   */
+  appeal_minutes: number
+  /**
+   * Livestream Url
+   */
+  livestream_url: string | null
+  /**
+   * Game Id
+   */
+  game_id: string
+  /**
+   * Game Name
+   */
+  game_name: string
+  /**
+   * Starters
+   */
+  starters: number
+  /**
+   * Substitutes
+   */
+  substitutes: number
+  /**
+   * Bo
+   */
+  bo: number
+  /**
+   * Game Minutes
+   */
+  game_minutes: number
+  score_type: ScoreType
+  /**
+   * Rank Tiers
+   */
+  rank_tiers: Array<RankTierRead>
+}
+
+/**
+ * TournamentStatus
+ *
+ * 賽事狀態：尚未開放、開放報名、報名截止、賽程已公布、進行中、已結束、已取消。
+ */
+export type TournamentStatus =
+  | "upcoming"
+  | "open"
+  | "closed"
+  | "published"
+  | "ongoing"
+  | "finished"
+  | "cancelled"
 
 /**
  * ValidationError
@@ -317,6 +793,65 @@ export type identityListSchoolsResponses = {
 
 export type identityListSchoolsResponse =
   identityListSchoolsResponses[keyof identityListSchoolsResponses]
+
+export type identityCreateSchoolData = {
+  body: SchoolIn
+  path?: never
+  query?: never
+  url: "/api/v1/admin/schools"
+}
+
+export type identityCreateSchoolErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityCreateSchoolError =
+  identityCreateSchoolErrors[keyof identityCreateSchoolErrors]
+
+export type identityCreateSchoolResponses = {
+  /**
+   * Successful Response
+   */
+  201: PublicSchool
+}
+
+export type identityCreateSchoolResponse =
+  identityCreateSchoolResponses[keyof identityCreateSchoolResponses]
+
+export type identityRenameSchoolData = {
+  body: SchoolIn
+  path: {
+    /**
+     * School Id
+     */
+    school_id: string
+  }
+  query?: never
+  url: "/api/v1/admin/schools/{school_id}"
+}
+
+export type identityRenameSchoolErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityRenameSchoolError =
+  identityRenameSchoolErrors[keyof identityRenameSchoolErrors]
+
+export type identityRenameSchoolResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicSchool
+}
+
+export type identityRenameSchoolResponse =
+  identityRenameSchoolResponses[keyof identityRenameSchoolResponses]
 
 export type identityRegisterData = {
   body: AccountCreate
@@ -562,3 +1097,407 @@ export type identityListCurrentIdentitiesResponses = {
 
 export type identityListCurrentIdentitiesResponse =
   identityListCurrentIdentitiesResponses[keyof identityListCurrentIdentitiesResponses]
+
+export type identitySubmitOrganizerApplicationData = {
+  body: OrganizerApplicationCreate
+  path?: never
+  query?: never
+  url: "/api/v1/organizer-applications"
+}
+
+export type identitySubmitOrganizerApplicationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identitySubmitOrganizerApplicationError =
+  identitySubmitOrganizerApplicationErrors[keyof identitySubmitOrganizerApplicationErrors]
+
+export type identitySubmitOrganizerApplicationResponses = {
+  /**
+   * Successful Response
+   */
+  201: OrganizerApplicationRead
+}
+
+export type identitySubmitOrganizerApplicationResponse =
+  identitySubmitOrganizerApplicationResponses[keyof identitySubmitOrganizerApplicationResponses]
+
+export type identityReadCurrentOrganizerApplicationData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/accounts/me/organizer-application"
+}
+
+export type identityReadCurrentOrganizerApplicationResponses = {
+  /**
+   * Response Identity-Read Current Organizer Application
+   *
+   * Successful Response
+   */
+  200: OrganizerApplicationRead | null
+}
+
+export type identityReadCurrentOrganizerApplicationResponse =
+  identityReadCurrentOrganizerApplicationResponses[keyof identityReadCurrentOrganizerApplicationResponses]
+
+export type identityListOrganizerApplicationsData = {
+  body?: never
+  path?: never
+  query?: {
+    /**
+     * Status
+     */
+    status?: ApplicationStatus | null
+    /**
+     * Page
+     */
+    page?: number
+  }
+  url: "/api/v1/admin/organizer-applications"
+}
+
+export type identityListOrganizerApplicationsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityListOrganizerApplicationsError =
+  identityListOrganizerApplicationsErrors[keyof identityListOrganizerApplicationsErrors]
+
+export type identityListOrganizerApplicationsResponses = {
+  /**
+   * Successful Response
+   */
+  200: OrganizerApplicationPage
+}
+
+export type identityListOrganizerApplicationsResponse =
+  identityListOrganizerApplicationsResponses[keyof identityListOrganizerApplicationsResponses]
+
+export type identityApproveOrganizerApplicationData = {
+  body?: never
+  path: {
+    /**
+     * Application Id
+     */
+    application_id: string
+  }
+  query?: never
+  url: "/api/v1/admin/organizer-applications/{application_id}/approval"
+}
+
+export type identityApproveOrganizerApplicationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityApproveOrganizerApplicationError =
+  identityApproveOrganizerApplicationErrors[keyof identityApproveOrganizerApplicationErrors]
+
+export type identityApproveOrganizerApplicationResponses = {
+  /**
+   * Successful Response
+   */
+  200: AdminOrganizerApplication
+}
+
+export type identityApproveOrganizerApplicationResponse =
+  identityApproveOrganizerApplicationResponses[keyof identityApproveOrganizerApplicationResponses]
+
+export type identityRejectOrganizerApplicationData = {
+  body: OrganizerApplicationRejection
+  path: {
+    /**
+     * Application Id
+     */
+    application_id: string
+  }
+  query?: never
+  url: "/api/v1/admin/organizer-applications/{application_id}/rejection"
+}
+
+export type identityRejectOrganizerApplicationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type identityRejectOrganizerApplicationError =
+  identityRejectOrganizerApplicationErrors[keyof identityRejectOrganizerApplicationErrors]
+
+export type identityRejectOrganizerApplicationResponses = {
+  /**
+   * Successful Response
+   */
+  200: AdminOrganizerApplication
+}
+
+export type identityRejectOrganizerApplicationResponse =
+  identityRejectOrganizerApplicationResponses[keyof identityRejectOrganizerApplicationResponses]
+
+export type tournamentsListGamesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/admin/games"
+}
+
+export type tournamentsListGamesResponses = {
+  /**
+   * Response Tournaments-List Games
+   *
+   * Successful Response
+   */
+  200: Array<GameRead>
+}
+
+export type tournamentsListGamesResponse =
+  tournamentsListGamesResponses[keyof tournamentsListGamesResponses]
+
+export type tournamentsCreateGameData = {
+  body: GameIn
+  path?: never
+  query?: never
+  url: "/api/v1/admin/games"
+}
+
+export type tournamentsCreateGameErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsCreateGameError =
+  tournamentsCreateGameErrors[keyof tournamentsCreateGameErrors]
+
+export type tournamentsCreateGameResponses = {
+  /**
+   * Successful Response
+   */
+  201: GameRead
+}
+
+export type tournamentsCreateGameResponse =
+  tournamentsCreateGameResponses[keyof tournamentsCreateGameResponses]
+
+export type tournamentsReadGameData = {
+  body?: never
+  path: {
+    /**
+     * Game Id
+     */
+    game_id: string
+  }
+  query?: never
+  url: "/api/v1/admin/games/{game_id}"
+}
+
+export type tournamentsReadGameErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsReadGameError =
+  tournamentsReadGameErrors[keyof tournamentsReadGameErrors]
+
+export type tournamentsReadGameResponses = {
+  /**
+   * Successful Response
+   */
+  200: GameRead
+}
+
+export type tournamentsReadGameResponse =
+  tournamentsReadGameResponses[keyof tournamentsReadGameResponses]
+
+export type tournamentsUpdateGameData = {
+  body: GameIn
+  path: {
+    /**
+     * Game Id
+     */
+    game_id: string
+  }
+  query?: never
+  url: "/api/v1/admin/games/{game_id}"
+}
+
+export type tournamentsUpdateGameErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsUpdateGameError =
+  tournamentsUpdateGameErrors[keyof tournamentsUpdateGameErrors]
+
+export type tournamentsUpdateGameResponses = {
+  /**
+   * Successful Response
+   */
+  200: GameRead
+}
+
+export type tournamentsUpdateGameResponse =
+  tournamentsUpdateGameResponses[keyof tournamentsUpdateGameResponses]
+
+export type tournamentsListPublicTournamentsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/tournaments"
+}
+
+export type tournamentsListPublicTournamentsResponses = {
+  /**
+   * Response Tournaments-List Public Tournaments
+   *
+   * Successful Response
+   */
+  200: Array<PublicTournament>
+}
+
+export type tournamentsListPublicTournamentsResponse =
+  tournamentsListPublicTournamentsResponses[keyof tournamentsListPublicTournamentsResponses]
+
+export type tournamentsReadPublicTournamentData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}"
+}
+
+export type tournamentsReadPublicTournamentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsReadPublicTournamentError =
+  tournamentsReadPublicTournamentErrors[keyof tournamentsReadPublicTournamentErrors]
+
+export type tournamentsReadPublicTournamentResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicTournament
+}
+
+export type tournamentsReadPublicTournamentResponse =
+  tournamentsReadPublicTournamentResponses[keyof tournamentsReadPublicTournamentResponses]
+
+export type tournamentsListGamesForOrganizerData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/games"
+}
+
+export type tournamentsListGamesForOrganizerResponses = {
+  /**
+   * Response Tournaments-List Games For Organizer
+   *
+   * Successful Response
+   */
+  200: Array<GameRead>
+}
+
+export type tournamentsListGamesForOrganizerResponse =
+  tournamentsListGamesForOrganizerResponses[keyof tournamentsListGamesForOrganizerResponses]
+
+export type tournamentsListMyTournamentsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/organizer/tournaments"
+}
+
+export type tournamentsListMyTournamentsResponses = {
+  /**
+   * Response Tournaments-List My Tournaments
+   *
+   * Successful Response
+   */
+  200: Array<TournamentRead>
+}
+
+export type tournamentsListMyTournamentsResponse =
+  tournamentsListMyTournamentsResponses[keyof tournamentsListMyTournamentsResponses]
+
+export type tournamentsCreateTournamentData = {
+  body: TournamentCreate
+  path?: never
+  query?: never
+  url: "/api/v1/organizer/tournaments"
+}
+
+export type tournamentsCreateTournamentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsCreateTournamentError =
+  tournamentsCreateTournamentErrors[keyof tournamentsCreateTournamentErrors]
+
+export type tournamentsCreateTournamentResponses = {
+  /**
+   * Successful Response
+   */
+  201: TournamentRead
+}
+
+export type tournamentsCreateTournamentResponse =
+  tournamentsCreateTournamentResponses[keyof tournamentsCreateTournamentResponses]
+
+export type tournamentsReadMyTournamentData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}"
+}
+
+export type tournamentsReadMyTournamentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsReadMyTournamentError =
+  tournamentsReadMyTournamentErrors[keyof tournamentsReadMyTournamentErrors]
+
+export type tournamentsReadMyTournamentResponses = {
+  /**
+   * Successful Response
+   */
+  200: TournamentRead
+}
+
+export type tournamentsReadMyTournamentResponse =
+  tournamentsReadMyTournamentResponses[keyof tournamentsReadMyTournamentResponses]

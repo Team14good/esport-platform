@@ -1,6 +1,7 @@
 import { useRouter } from "@tanstack/react-router"
 import {
   ChevronDownIcon,
+  ClipboardPenLineIcon,
   LayoutGridIcon,
   LogOutIcon,
   UserRoundCogIcon,
@@ -29,7 +30,8 @@ import { cn } from "@/lib/utils"
 
 /**
  * 頂欄右側的身分切換器（`DropdownMenu`）：列出後端給的身分，目前身分以 2px brand 左條
- * 標示；另有「全部身分」（S11），底部「帳號資料」「登出」。`< sm` 時 trigger 只顯示圖示。
+ * 標示；另有「全部身分」（S11），底部「申請成為主辦方」（S15，主辦方不顯示）、
+ * 「帳號資料」「登出」。`< sm` 時 trigger 只顯示圖示。
  */
 export function IdentitySwitcher() {
   const router = useRouter()
@@ -115,6 +117,14 @@ export function IdentitySwitcher() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        {account.data && !account.data.is_organizer && (
+          <DropdownMenuItem
+            onSelect={() => router.navigate({ to: "/organizer/apply" })}
+          >
+            <ClipboardPenLineIcon aria-hidden="true" />
+            申請成為主辦方
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={() => router.navigate({ to: "/account" })}>
           <UserRoundCogIcon aria-hidden="true" />
           帳號資料
