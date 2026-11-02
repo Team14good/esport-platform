@@ -51,7 +51,7 @@ development_status:
 
   epic-2: in-progress
   2-1-平台管理員維護遊戲設定與學校清單: in-progress  # 負責：B；第一階段（後端）完成，第二階段（S36 畫面）待 1.8
-  2-2-主辦方建立賽事: backlog  # 負責：B
+  2-2-主辦方建立賽事: in-progress  # 負責：B；第一階段（後端）完成，第二階段（S25～S27 畫面）待 1.8
   2-3-分輪設定-bo-數: backlog  # 擱置（期中後）
   2-4-公開賽事列表與賽事頁: backlog  # 負責：B
   2-5-抽籤前修改賽事: backlog  # 擱置（期中後）

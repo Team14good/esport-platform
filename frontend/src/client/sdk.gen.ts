@@ -42,11 +42,21 @@ import type {
   tournamentsCreateGameData,
   tournamentsCreateGameErrors,
   tournamentsCreateGameResponses,
+  tournamentsCreateTournamentData,
+  tournamentsCreateTournamentErrors,
+  tournamentsCreateTournamentResponses,
   tournamentsListGamesData,
+  tournamentsListGamesForOrganizerData,
+  tournamentsListGamesForOrganizerResponses,
   tournamentsListGamesResponses,
+  tournamentsListMyTournamentsData,
+  tournamentsListMyTournamentsResponses,
   tournamentsReadGameData,
   tournamentsReadGameErrors,
   tournamentsReadGameResponses,
+  tournamentsReadMyTournamentData,
+  tournamentsReadMyTournamentErrors,
+  tournamentsReadMyTournamentResponses,
   tournamentsUpdateGameData,
   tournamentsUpdateGameErrors,
   tournamentsUpdateGameResponses,
@@ -472,6 +482,90 @@ export class TournamentsService {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * List Games For Organizer
+   *
+   * 主辦方建立賽事時可選的遊戲（依名稱排序）；只限主辦方。
+   */
+  public static listGamesForOrganizer<ThrowOnError extends boolean = true>(
+    options?: Options<tournamentsListGamesForOrganizerData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      tournamentsListGamesForOrganizerResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/games",
+      ...options,
+    })
+  }
+
+  /**
+   * List My Tournaments
+   *
+   * 目前主辦方建立的賽事，新建立的在前。
+   */
+  public static listMyTournaments<ThrowOnError extends boolean = true>(
+    options?: Options<tournamentsListMyTournamentsData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      tournamentsListMyTournamentsResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments",
+      ...options,
+    })
+  }
+
+  /**
+   * Create Tournament
+   *
+   * 建立賽事；遊戲不存在回 404 `GAME_NOT_FOUND`，欄位不合法回 422。
+   */
+  public static createTournament<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsCreateTournamentData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      tournamentsCreateTournamentResponses,
+      tournamentsCreateTournamentErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Read My Tournament
+   *
+   * 主辦方自己的賽事；不存在回 404，別人的賽事回 403 `TOURNAMENT_OWNER_REQUIRED`。
+   */
+  public static readMyTournament<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsReadMyTournamentData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      tournamentsReadMyTournamentResponses,
+      tournamentsReadMyTournamentErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}",
+      ...options,
     })
   }
 }

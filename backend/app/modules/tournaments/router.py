@@ -4,10 +4,16 @@ import uuid
 
 from fastapi import APIRouter, status
 
+from app.core import authz
 from app.core.db import SessionDep
-from app.modules.identity.deps import PlatformAdmin
+from app.modules.identity.deps import Organizer, PlatformAdmin
 from app.modules.tournaments import service
-from app.modules.tournaments.models import GameIn, GameRead
+from app.modules.tournaments.models import (
+    GameIn,
+    GameRead,
+    TournamentCreate,
+    TournamentRead,
+)
 
 router = APIRouter(tags=["tournaments"])
 
@@ -42,3 +48,44 @@ def update_game(
     game = service.update_game(session, actor_id=admin.id, game_id=game_id, data=body)
     session.commit()
     return game
+
+
+# ---------------------------------------------------------------- 主辦方
+
+
+@router.get("/games")
+def list_games_for_organizer(
+    session: SessionDep, _organizer: Organizer
+) -> list[GameRead]:
+    """主辦方建立賽事時可選的遊戲（依名稱排序）；只限主辦方。"""
+    return service.list_games(session)
+
+
+@router.post("/organizer/tournaments", status_code=status.HTTP_201_CREATED)
+def create_tournament(
+    session: SessionDep, organizer: Organizer, body: TournamentCreate
+) -> TournamentRead:
+    """建立賽事；遊戲不存在回 404 `GAME_NOT_FOUND`，欄位不合法回 422。"""
+    tournament = service.create_tournament(
+        session, organizer_id=organizer.id, data=body
+    )
+    session.commit()
+    return tournament
+
+
+@router.get("/organizer/tournaments")
+def list_my_tournaments(
+    session: SessionDep, organizer: Organizer
+) -> list[TournamentRead]:
+    """目前主辦方建立的賽事，新建立的在前。"""
+    return service.list_organizer_tournaments(session, organizer_id=organizer.id)
+
+
+@router.get("/organizer/tournaments/{tournament_id}")
+def read_my_tournament(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> TournamentRead:
+    """主辦方自己的賽事；不存在回 404，別人的賽事回 403 `TOURNAMENT_OWNER_REQUIRED`。"""
+    tournament = service.get_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, organizer.id)
+    return tournament
