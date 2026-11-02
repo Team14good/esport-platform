@@ -37,6 +37,9 @@ services:
       FRONTEND_HOST: ${FRONTEND_HOST:-http://localhost:5173}
       FIRST_ADMIN_EMAIL: ${FIRST_ADMIN_EMAIL:?Variable not set}
       FIRST_ADMIN_PASSWORD: ${FIRST_ADMIN_PASSWORD:?Variable not set}
+      # 示範資料：沒有設定 DEMO_PASSWORD（舊的 .env）時略過，只建立第一個平台管理員
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      DEMO_EMAIL_DOMAIN: ${DEMO_EMAIL_DOMAIN:-example.com}
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-20}
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
@@ -48,7 +51,7 @@ services:
       EMAILS_FROM_NAME: ${EMAILS_FROM_NAME:-FLOW}
       # 容器內一律連 db 服務；.env 的 DATABASE_URL 只給在主機上執行的工具使用。
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Variable not set}@db:5432/${POSTGRES_DB:-app}
-    # 先跑遷移並建立首位平台管理員，再啟動開發伺服器。
+    # 先跑遷移、建立首位平台管理員與示範資料，再啟動開發伺服器。
     command: ["bash", "-c", "bash scripts/prestart.sh && exec fastapi dev --host 0.0.0.0 --port 8000"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check"]
