@@ -4,7 +4,7 @@
 audit_log.tournament_id 加上外鍵到 tournament.id。
 
 Revision ID: e4b8c1d2a6f7
-Revises: c2a7d4e9f1b3
+Revises: c7e2a4d9b8f1
 Create Date: 2026-10-30 15:00:00.000000
 
 """
@@ -16,7 +16,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "e4b8c1d2a6f7"
-down_revision = "c2a7d4e9f1b3"
+down_revision = "c7e2a4d9b8f1"
 branch_labels = None
 depends_on = None
 
