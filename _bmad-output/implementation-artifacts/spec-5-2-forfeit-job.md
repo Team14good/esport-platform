@@ -142,6 +142,14 @@ context:
   - 重跑結果：`scripts/test.sh` 304 passed；`forfeit_job.py` 分支覆蓋率 100%（69 行、4 個分支）；lint 通過。
 - 依使用者的決定，沒有跑 code review。
 
+- **D 對三個確認事項的回覆（2026-11-02，對照 PR #19 核對過）**：
+  - 轉接層的簽名都對得上：`lock_match(session, *, match_id) -> Match`（回傳資料列，寫入隨交易 commit）、`transition_match(session, *, match, to)`、`get_match(session, *, match_id) -> MatchRead`（有 `tournament_id`）在 #19；B 的 `lock_tournament(session, *, tournament_id) -> TournamentRead` 也在 #19。`list_forfeit_due(session, *, now) -> list[UUID]`、`list_check_ins(session, *, match_id) -> list[CheckInRead]` 在 5.1 第二階段提供，名稱不變。
+  - 轉換表已允許「待開打 → 申訴期」：#19 的 `_MATCH_TRANSITIONS[SCHEDULED]` 含 `APPEAL_WINDOW`，由 `test_match_transitions.py` 固定。
+  - `list_forfeit_due` 會排除兩隊都已報到的場次，條件改為「待開打、`forfeit_deadline <= now`、且已報到隊數少於 2」，D 會一起更新 `contracts/competition.md`。所以「略過的場次的鎖會留到交易結束」只剩清單取得後到鎖住前狀態改變的少數情況。工作照 D 的建議保留鎖住後的重新判斷，程式邏輯不改。
+  - 寫入 `outcome`、`winner_id`、`appeal_deadline` 沒問題；`wins_a`、`wins_b` 維持 0，S4 用 `outcome` 判斷顯示「棄權」。
+  - 申訴期滿後的自動確認是 5.5 的 `auto_confirm_expired`（`confirm_match` → `advance`），判棄權的場次也走同一條路，5.2 不必處理。
+  - 這次只更新 `forfeit_job.py` 的檔頭與 `ForfeitPorts.list_forfeit_due` 的 docstring、測試假實作的說明。`deferred-work.md` 依規則不改既有項目，其中「確認轉換表」「請 D 評估 `list_forfeit_due`」兩點已由上述回覆解決，等轉接層寫完、整個項目處理完時一起刪除。
+
 ## Spec Change Log
 
 ## Review Triage Log

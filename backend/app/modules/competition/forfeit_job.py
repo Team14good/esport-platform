@@ -6,7 +6,9 @@
 負責，這裡不 commit 也不 rollback（AD-5）。
 
 用到的 D（competition）與 B（tournaments）函式尚未合併，所以透過 `ForfeitPorts`
-注入，不直接 import。合併後要寫的轉接層，各方法對應如下：
+注入，不直接 import。`get_match`、`lock_match`、`transition_match`、`lock_tournament`
+在 D 的 4.1 第二階段（PR #19）；`list_forfeit_due`、`list_check_ins` 在 5.1 第二階段。
+合併後要寫的轉接層，各方法對應如下（D 已於 2026-11-02 確認簽名相同）：
 
 - `list_forfeit_due` → competition `service.list_forfeit_due(session, now=now)`
 - `get_tournament_id` → competition `service.get_match(session, match_id=...)` 的
@@ -19,7 +21,7 @@
   每筆的 `team_id`
 - `transition_to_appeal_window` → competition
   `service.transition_match(session, match=match, to=MatchStatus.APPEAL_WINDOW)`；
-  D 的轉換表要允許「待開打 → 申訴期」
+  D 的轉換表已允許「待開打 → 申訴期」（`test_match_transitions.py` 固定）
 
 轉接層寫好後，把 `make_forfeit_job(轉接層)` 加進 `app/worker/jobs.py` 的 `JOBS`。
 """
@@ -114,7 +116,11 @@ class ForfeitPorts(Protocol):
     """工作用到的 D、B 函式；合併後由轉接層對應到真的 service（見檔頭）。"""
 
     def list_forfeit_due(self, session: Session, *, now: datetime) -> Sequence[UUID]:
-        """待開打且 `forfeit_deadline <= now` 的場次 id，依處理順序排列。"""
+        """待開打、`forfeit_deadline <= now`、且已報到隊數少於 2 的場次 id，依處理順序排列。
+
+        清單不加鎖，取得後到鎖住前狀態仍可能改變（例如另一隊剛完成報到），所以工作
+        鎖住後仍會重新判斷。
+        """
 
     def get_tournament_id(self, session: Session, *, match_id: UUID) -> UUID:
         """場次所屬的賽事 id（不加鎖，只用來決定先鎖哪個賽事）。"""

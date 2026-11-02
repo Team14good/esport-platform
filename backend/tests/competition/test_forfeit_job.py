@@ -56,8 +56,8 @@ class FakePorts:
     """假的 D、B 函式。
 
     `lock_match` 回傳複本，`transition_to_appeal_window` 成功時才存回，所以轉換失敗
-    （交易回滾）時記憶體中的場次不變。`list_forfeit_due` 只看期限、不看狀態，
-    模擬清單仍列出已判過或略過的場次。
+    （交易回滾）時記憶體中的場次不變。`list_forfeit_due` 只看期限、不看狀態與報到，
+    模擬清單取得後到鎖住前狀態改變（已判過、另一隊剛報到），用來測鎖住後的重新判斷。
     """
 
     tournaments: dict[UUID, TournamentForfeitInfo] = field(default_factory=dict)
