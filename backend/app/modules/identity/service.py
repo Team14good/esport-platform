@@ -42,6 +42,7 @@ from app.modules.identity.models import (
     ProfileUpdate,
     PublicSchool,
     RegisteredAccount,
+    School,
     TokenPurpose,
     VerificationEmailRequested,
     normalize_email,
@@ -91,6 +92,66 @@ def list_schools(session: Session) -> list[PublicSchool]:
         PublicSchool.model_validate(school, from_attributes=True)
         for school in repository.list_schools(session)
     ]
+
+
+def _school_name_taken() -> BusinessError:
+    return BusinessError("SCHOOL_NAME_TAKEN", "已經有同名的學校。", status_code=409)
+
+
+def create_school(session: Session, *, actor_id: uuid.UUID, name: str) -> PublicSchool:
+    """平台管理員新增學校；名稱重複拋 409 `SCHOOL_NAME_TAKEN`，寫 `school.created`。"""
+    if repository.get_school_by_name(session, name) is not None:
+        raise _school_name_taken()
+    school = School(name=name, created_at=clock.now())
+    try:
+        repository.save_school(session, school, name=name)
+    except repository.DuplicateSchoolNameError:
+        # 兩個請求同時新增同名學校：後到的撞到唯一索引
+        raise _school_name_taken() from None
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=None,
+        action="school.created",
+        entity_type="school",
+        entity_id=school.id,
+        before=None,
+        after={"name": school.name},
+    )
+    return PublicSchool.model_validate(school, from_attributes=True)
+
+
+def rename_school(
+    session: Session, *, actor_id: uuid.UUID, school_id: uuid.UUID, name: str
+) -> PublicSchool:
+    """平台管理員修正學校名稱；帳號以 `school_id` 關聯，改名不影響既有帳號。
+
+    不存在拋 404 `SCHOOL_NOT_FOUND`；與其他學校同名拋 409 `SCHOOL_NAME_TAKEN`；
+    名稱有變動時才寫 `school.renamed`。
+    """
+    school = repository.get_school_for_update(session, school_id)
+    if school is None:
+        raise BusinessError("SCHOOL_NOT_FOUND", "找不到這間學校。", status_code=404)
+    if school.name != name:
+        same_name = repository.get_school_by_name(session, name)
+        if same_name is not None and same_name.id != school.id:
+            raise _school_name_taken()
+        old_name = school.name
+        try:
+            repository.save_school(session, school, name=name)
+        except repository.DuplicateSchoolNameError:
+            raise _school_name_taken() from None
+        audit.record(
+            session,
+            actor_id=actor_id,
+            tournament_id=None,
+            action="school.renamed",
+            entity_type="school",
+            entity_id=school.id,
+            before={"name": old_name},
+            after={"name": name},
+        )
+    return PublicSchool.model_validate(school, from_attributes=True)
 
 
 def get_account_contact(
@@ -656,12 +717,19 @@ def list_organizer_applications(
     )
 
 
-def _lock_application(
-    session: Session, application_id: uuid.UUID
+def _lock_application_for_review(
+    session: Session, application_id: uuid.UUID, *, admin_id: uuid.UUID
 ) -> OrganizerApplication:
+    """鎖住要審核的申請；管理員不能審核自己的申請（403 `CANNOT_REVIEW_OWN_APPLICATION`）。"""
     application = repository.get_application(session, application_id, for_update=True)
     if application is None:
         raise _application_not_found()
+    if application.account_id == admin_id:
+        raise BusinessError(
+            "CANNOT_REVIEW_OWN_APPLICATION",
+            "不能審核自己的申請，請由其他平台管理員審核。",
+            status_code=403,
+        )
     return application
 
 
@@ -680,7 +748,9 @@ def approve_organizer_application(
     申請改為 approved、帳號 `is_organizer = true`、操作紀錄與
     `OrganizerApplicationApproved` 在同一個交易寫入。
     """
-    application = _lock_application(session, application_id)
+    application = _lock_application_for_review(
+        session, application_id, admin_id=admin_id
+    )
     _transition_application(application, ApplicationStatus.APPROVED)
     account = repository.get_account(session, application.account_id, for_update=True)
     assert account is not None  # 外鍵保證帳號存在
@@ -716,7 +786,9 @@ def reject_organizer_application(
     申請人可以修改後重送，重送一律建立新的一筆，這筆退回紀錄保留。
     申請、操作紀錄與 `OrganizerApplicationRejected` 在同一個交易寫入。
     """
-    application = _lock_application(session, application_id)
+    application = _lock_application_for_review(
+        session, application_id, admin_id=admin_id
+    )
     _transition_application(
         application, ApplicationStatus.REJECTED, reason=reason.strip()
     )

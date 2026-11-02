@@ -4,7 +4,7 @@
 但待審核（status = 'pending'）同時只能有一筆：以 account_id 的部分唯一索引保底。
 
 Revision ID: c7e2a4d9b8f1
-Revises: 9e5b3f1a7c42
+Revises: c2a7d4e9f1b3
 Create Date: 2026-10-29 10:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = "c7e2a4d9b8f1"
-down_revision = "9e5b3f1a7c42"
+down_revision = "c2a7d4e9f1b3"
 branch_labels = None
 depends_on = None
 

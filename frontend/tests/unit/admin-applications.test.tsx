@@ -15,6 +15,7 @@ import {
 } from "@/features/identity/AdminApplicationsPage"
 import {
   APPROVED_TOAST_TEXT,
+  MAX_PAGE,
   parseFilter,
   parsePage,
   REJECTED_TOAST_TEXT,
@@ -95,6 +96,9 @@ describe("S35 網址參數", () => {
     expect(parsePage("2")).toBe(2)
     expect(parsePage(1)).toBeUndefined()
     expect(parsePage(0)).toBeUndefined()
+    expect(parsePage(MAX_PAGE)).toBe(MAX_PAGE)
+    expect(parsePage(MAX_PAGE + 1)).toBeUndefined()
+    expect(parsePage("1e30")).toBeUndefined()
     expect(parsePage(1.5)).toBeUndefined()
     expect(parsePage("abc")).toBeUndefined()
   })

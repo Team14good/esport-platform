@@ -39,6 +39,8 @@ CLUB_NAME_MAX_LENGTH = 50
 REJECT_REASON_MAX_LENGTH = 200
 # 分頁 API 每頁固定筆數（全專案的列表沿用）
 PAGE_SIZE = 20
+# 頁碼上限：極大的頁碼會讓 OFFSET 超出 bigint 而回 500，改在 API 回 422
+MAX_PAGE = 100_000
 REDIRECT_MAX_LENGTH = 2000
 # 同一帳號同時只能有一筆待審核申請的部分唯一索引（repository 以名稱辨識違反）
 PENDING_APPLICATION_INDEX = "ix_organizer_application_pending_account_id"
@@ -290,6 +292,28 @@ RejectReasonField = Annotated[
 class PublicSchool(BaseModel):
     id: uuid.UUID
     name: str
+
+
+SCHOOL_NAME_MAX_LENGTH = 255
+
+
+def _validate_school_name(value: str) -> str:
+    name = value.strip()
+    if not name:
+        raise PydanticCustomError("school_name_required", "請輸入學校名稱")
+    if len(name) > SCHOOL_NAME_MAX_LENGTH:
+        raise PydanticCustomError(
+            "school_name_too_long", f"學校名稱最多 {SCHOOL_NAME_MAX_LENGTH} 個字"
+        )
+    return name
+
+
+class SchoolIn(BaseModel):
+    """平台管理員新增學校或修正學校名稱（名稱去除前後空白後儲存）。"""
+
+    name: Annotated[
+        str, BeforeValidator(_require_str), AfterValidator(_validate_school_name)
+    ]
 
 
 class AccountCreate(BaseModel):
