@@ -399,3 +399,21 @@ class TournamentRead(BaseModel):
     score_type: ScoreType
     # 段位對照表快照，積分由高到低
     rank_tiers: list[RankTierRead]
+
+
+class PublicTournament(BaseModel):
+    """不需登入的公開 API 回傳的賽事（AD-19）：不含主辦方帳號、Email 與學校。"""
+
+    id: uuid.UUID
+    name: str
+    status: TournamentStatus
+    game_name: str
+    # 正取名額
+    capacity: int
+    registration_start: datetime
+    priority_end: datetime
+    registration_end: datetime
+    # 開賽時間（第 1 輪）
+    start_at: datetime
+    round_interval_minutes: int
+    livestream_url: str | None

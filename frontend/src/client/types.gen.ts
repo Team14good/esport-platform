@@ -848,6 +848,55 @@ export type PublicTeamRef = {
 }
 
 /**
+ * PublicTournament
+ *
+ * 不需登入的公開 API 回傳的賽事（AD-19）：不含主辦方帳號、Email 與學校。
+ */
+export type PublicTournament = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+  status: TournamentStatus
+  /**
+   * Game Name
+   */
+  game_name: string
+  /**
+   * Capacity
+   */
+  capacity: number
+  /**
+   * Registration Start
+   */
+  registration_start: string
+  /**
+   * Priority End
+   */
+  priority_end: string
+  /**
+   * Registration End
+   */
+  registration_end: string
+  /**
+   * Start At
+   */
+  start_at: string
+  /**
+   * Round Interval Minutes
+   */
+  round_interval_minutes: number
+  /**
+   * Livestream Url
+   */
+  livestream_url: string | null
+}
+
+/**
  * PublicTournamentRef
  */
 export type PublicTournamentRef = {
@@ -1748,6 +1797,57 @@ export type tournamentsUpdateGameResponses = {
 
 export type tournamentsUpdateGameResponse =
   tournamentsUpdateGameResponses[keyof tournamentsUpdateGameResponses]
+
+export type tournamentsListPublicTournamentsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/tournaments"
+}
+
+export type tournamentsListPublicTournamentsResponses = {
+  /**
+   * Response Tournaments-List Public Tournaments
+   *
+   * Successful Response
+   */
+  200: Array<PublicTournament>
+}
+
+export type tournamentsListPublicTournamentsResponse =
+  tournamentsListPublicTournamentsResponses[keyof tournamentsListPublicTournamentsResponses]
+
+export type tournamentsReadPublicTournamentData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}"
+}
+
+export type tournamentsReadPublicTournamentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsReadPublicTournamentError =
+  tournamentsReadPublicTournamentErrors[keyof tournamentsReadPublicTournamentErrors]
+
+export type tournamentsReadPublicTournamentResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicTournament
+}
+
+export type tournamentsReadPublicTournamentResponse =
+  tournamentsReadPublicTournamentResponses[keyof tournamentsReadPublicTournamentResponses]
 
 export type tournamentsListGamesForOrganizerData = {
   body?: never
