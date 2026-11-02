@@ -6,7 +6,7 @@ tournament_id 暫不加外鍵：tournament 表由 Story 2.2 建立，合併後�
 參賽資料欄位（3.2）與送出快照欄位（3.3）由之後的 Story 加入。
 
 Revision ID: c5d2e8a4f913
-Revises: 9e5b3f1a7c42
+Revises: e4b8c1d2a6f7
 Create Date: 2026-10-30 12:00:00.000000
 
 """
@@ -17,7 +17,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = "c5d2e8a4f913"
-down_revision = "9e5b3f1a7c42"
+down_revision = "e4b8c1d2a6f7"
 branch_labels = None
 depends_on = None
 
