@@ -33,7 +33,7 @@ import {
 } from "@/lib/api-error"
 import { formatDateTime } from "@/lib/datetime"
 import { notifySuccess } from "@/lib/feedback"
-import { useCurrentAccount } from "./auth"
+import { ME_QUERY_KEY, useCurrentAccount } from "./auth"
 import {
   APPLICATION_STATUS_BADGES,
   organizerApplicationQueryOptions,
@@ -48,6 +48,8 @@ export const CLUB_NAME_MAX_LENGTH = 50
 export const APPLICATION_SUBMITTED_TEXT = "已送出主辦方申請。"
 export const PENDING_SUMMARY_TEXT = "平台管理員審核後，結果會顯示在這裡。"
 export const ALREADY_ORGANIZER_TEXT = "你已經是主辦方。"
+const APPLICATION_PENDING = "APPLICATION_PENDING"
+const ALREADY_ORGANIZER = "ALREADY_ORGANIZER"
 
 // 與後端相同的規則；伺服器的 422 仍會寫回對應欄位
 const applicationSchema = z.object({
@@ -94,7 +96,20 @@ function ApplicationForm({ account }: { account: AccountRead }) {
       )
       notifySuccess(APPLICATION_SUBMITTED_TEXT)
     },
-    onError: (error) => setFormError(applyFieldErrors(form, error)),
+    onError: (error) => {
+      setFormError(applyFieldErrors(form, error))
+      // 另一個分頁已送出申請或已成為主辦方：重抓後畫面會換成摘要或「你已經是主辦方。」
+      const parsed = parseApiError(error)
+      if (parsed.kind !== "business") return
+      if (parsed.code === APPLICATION_PENDING) {
+        queryClient.invalidateQueries({
+          queryKey: organizerApplicationQueryOptions().queryKey,
+        })
+      } else if (parsed.code === ALREADY_ORGANIZER) {
+        // 帳號、身分清單與申請都可能變了，整組重抓
+        queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY })
+      }
+    },
   })
 
   return (
