@@ -56,6 +56,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md`
   summary: 段位截圖原始檔名的欄位名、長度上限與清理規則（路徑分隔字元、控制字元）未定。
   evidence: 2026-10-30 Story 3.2 第一段 Code Review（Blind Hunter）。第二段才會存檔名並在 S17、S18 顯示，先記下避免漏掉（low）。
+## Deferred from: spec-3-1-tournament-integration.md (2026-11-02)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`
+  summary: A 的 `frontend/tests/unit/admin-applications.test.tsx`（「不是平台管理員：顯示 S38 的 403，不呼叫審核 API」）偶發失敗，CI 可能因此偶爾失敗；請 A 確認原因並修正（medium，未證實）。
+  evidence: 2026-11-02 3.1 收尾時前端全部單元測試連跑 3 次，失敗 1 次，其他 2 次全過。同次在 `team-pages.test.tsx` 量到的原因是路由以 `autoCodeSplitting` 延遲載入，路由第一次渲染要 930～1006 ms，超過 `findBy` 預設的 1000 ms；以 `beforeAll` 呼叫 `router.loadRouteChunk` 先載入路由後連跑 10 次全過。A 的檔案是否同因未查證：在該檔加同樣的預先載入後連跑 10 次即可確認。不是本 Story 造成。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`
+  summary: A 的 `frontend/tests/unit/login.test.tsx`（「有 redirect：登入後回到原頁（包含查詢參數）」，找不到標題「帳號資料」）與 B 的 `frontend/tests/unit/tournament-pages.test.tsx`（「標題列、總覽分頁與賽事資訊；未登入也能看」）也會偶發失敗；可能和上一項同一個原因，要請 A、B 各自確認（medium，未證實）。
+  evidence: 2026-11-02 story/3-1 合併 origin/main（含 #29、#13、#12）後，前端全部單元測試跑 1 次，這兩個測試各失敗 1 次；只重跑這兩個檔 3 次，`login.test.tsx` 失敗 1 次、其他全過，`main` 最近 4 次 CI 都通過。兩個測試失敗的都是「進入另一個路由後第一次 `findBy`」。不是本 Story 造成；確認方法同上一項。
+
 ## Deferred from: spec-5-2-forfeit-rules.md (2026-10-30)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-forfeit-rules.md`
@@ -131,6 +140,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: S2 總覽「開放報名」時要顯示「已正取隊數／名額」（EXPERIENCE.md 狀態表），2.4 只顯示名額；需要 registration 提供正取隊數的公開函式。
   evidence: 2026-11-02 Story 2.4 第二輪審查（Blind Hunter）。spec 的 Never 明定不做；由 C 的 3.x 提供計數後，在 S2 總覽補上。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
-  summary: S2「開放報名」時啟用的「建立隊伍」按鈕與 3.1 的 `CreateTeamDialog` 尚未接上；2.4 只做「尚未開放」時停用的按鈕。
-  evidence: 2026-11-02 Story 2.4 第二輪審查（Blind Hunter）。spec 的 Never 明定由 C 的 3.1 在 S2 總覽掛上對話框（3.1 spec 第 39 行同樣記載）。
+
+## Deferred from: spec-3-1-create-team-entry.md (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md`
+  summary: A 的 identity：註冊時 email 的 @ 前面含中文（例如 `主辦方@example.com`）會被接受，但驗證信寄不出去，帳號無法完成驗證（low，未確認是否要擋）。
+  evidence: 2026-11-02 3.1 瀏覽器實測準備資料時發現，worker 記錄 `Email delivery ... failed (attempt 1): UnicodeEncodeError: 'ascii' codec can't encode characters`；改用英文 email 後正常。不是本 Story 造成。處理方式二擇一：註冊時以 422 擋下非 ASCII 的本地部分，或寄信時啟用 SMTPUTF8。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md`
+  summary: 前端單元測試的偶發逾時擴及更多檔案：D 的 `match-route.test.tsx`（第一個測試最常失敗，單獨跑該檔也會失敗）、A 的 `identity-switcher.test.tsx`、`organizer-apply.test.tsx`；全部一起跑時一次最多 9 個失敗，CI 可能因此失敗（medium）。
+  evidence: 2026-11-03 story/3-1 合併 #19 後在本機容器跑前端全部單元測試：第一次 9 個失敗、第二次 1 個；只跑這 5 個檔仍有 `match-route` 1 個失敗。失敗的都是路由第一次渲染時的 `findBy`。可能和上面兩項同一個原因（路由以 `autoCodeSplitting` 延遲載入，第一次轉譯超過 1000 ms），本機只在 `team-pages.test.tsx` 證實過；比較根本的修法是在共用的測試設定預先載入所有路由，或調高 `asyncUtilTimeout`，但那是共用設定，要組員一起決定。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-and-invite-members.md`
+  summary: 3.3 送出報名時，`join_team`（service.py:328）與 `_invite_status`（service.py:196）要補檢查報名狀態仍是 `forming`；否則已送出的隊伍仍可透過邀請連結加入，S19 預覽也會顯示連結有效（medium）。
+  evidence: 2026-11-02 A 在 PR #23 的審查。3.1 只有 `forming` 狀態，目前不會出錯；epic-3-context 規定「送出報名後名單鎖定、邀請連結失效」。
