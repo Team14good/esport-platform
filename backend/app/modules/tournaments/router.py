@@ -11,6 +11,7 @@ from app.modules.tournaments import service
 from app.modules.tournaments.models import (
     GameIn,
     GameRead,
+    PublicTournament,
     TournamentCreate,
     TournamentRead,
 )
@@ -48,6 +49,23 @@ def update_game(
     game = service.update_game(session, actor_id=admin.id, game_id=game_id, data=body)
     session.commit()
     return game
+
+
+# ---------------------------------------------------------------- 公開（不需登入）
+
+
+@router.get("/tournaments")
+def list_public_tournaments(session: SessionDep) -> list[PublicTournament]:
+    """所有賽事的公開資料，依開賽時間排序；不需登入，只回 `PublicTournament`。"""
+    return service.list_public_tournaments(session)
+
+
+@router.get("/tournaments/{tournament_id}")
+def read_public_tournament(
+    session: SessionDep, tournament_id: uuid.UUID
+) -> PublicTournament:
+    """一場賽事的公開資料；不需登入，不存在回 404 `TOURNAMENT_NOT_FOUND`。"""
+    return service.get_public_tournament(session, tournament_id=tournament_id)
 
 
 # ---------------------------------------------------------------- 主辦方
