@@ -83,3 +83,4 @@
 - 問題與修正：審查抓到 worker「鎖定後重新檢查」的分支沒有測試，拿掉這段檢查也不會有測試失敗；一個測試只檢查測試自己定義的集合（循環斷言），沒有呼叫 service；建立賽事時以 `FOR UPDATE` 鎖遊戲，讓同一款遊戲的建立互相排隊，改成 `FOR SHARE`。另有一筆審查者宣稱「只載入 core 的腳本會找不到 tournament 表」，主代理在容器實測後判定為誤報。「報名截止後沒有工作轉成 closed」屬於 C 的 3.6，記進 `deferred-work.md`
 - 成熟度：L4（多個審查者＋主代理實測查證＋測試驗證）
 - 證據：spec 的 Review Triage Log、`deferred-work.md`
+- 證據：`_bmad-output/implementation-artifacts/contracts/tournaments.md`
