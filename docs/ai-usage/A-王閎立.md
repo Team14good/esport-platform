@@ -123,3 +123,47 @@
 - 問題與修正：子代理發現 shadcn `Sidebar` 的手機斷點寫死 768 px、又是 fixed 定位會蓋住頂欄，改成自己排版；但也因此把手機版開側欄的按鈕放在內容區，與 spec「從頂欄開啟」不同，子代理自己寫進 Implementation Notes，主對話讀 diff 時確認並交給人決定。另外 1.7 的身分切換器測試原本預期 `/admin/applications` 是 404，實作後失效，已改成以平台管理員進入 S35
 - 成熟度：L3（AI 依 spec 實作並自動驗證；這次略過多審查者，偏離 spec 的地方靠讀 diff 找出）
 - 證據：spec 同上；尚未 commit
+
+### 2026-10-29｜需求、設計／Story 4.6 spec｜在上游 API 未完成時，把對戰樹拆成可先做的第一階段
+
+- Story／範圍：4.6（分支 `story/4-6`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（調查子代理 → spec → checkpoint）
+- 怎麼用：輸入「/bmad-build STORY4.6 且不要做 BMAD-CODEREVIEW」，AI 讀 epic-4 context、D 已合併的 competition 介面約定（PR #3）與 D 各分支的做法，派子代理整理 DESIGN.md、EXPERIENCE.md 與對戰樹示意圖的規格
+- AI 產出：`spec-4-6-bracket-tree-view.md`（I/O 矩陣 12 列、Decisions 8 項）；指出 4.6 依賴的公開 API（D 的 4.1）與 S2（B 的 2.4）都還沒做，提議照 D 的 5.1、5.3 分兩階段
+- 人做了什麼：回答 3 個待決問題（只做第一階段、加開發模式預覽頁、保留完整 spec）並核准 spec；決定不跑 code review
+- 驗證：AI 依 Ready for Development 標準自查；比對 D 的分支，讓日期格式檔 `match-time.ts` 與 D 的版本完全相同以免合併衝突
+- 問題與修正：調查時發現 1.8 與 D 的 5.3 都新增了 `alert-dialog.tsx` 與同一個套件，合併時會衝突，提醒使用者先和 D 協調；AI 沒有自行假設上游 API 的完成時間，而是把「等或先做」列成待決問題
+- 成熟度：L3（AI 依介面約定與既有做法規劃，跨人依賴的取捨由人決定）
+- 證據：`_bmad-output/implementation-artifacts/spec-4-6-bracket-tree-view.md`、`_bmad-output/implementation-artifacts/contracts/competition.md`
+
+### 2026-10-29｜程式、測試／Story 4.6 第一階段｜以 bmad-build 實作對戰樹元件、版面計算與輪詢
+
+- Story／範圍：4.6 第一階段（分支 `story/4-6`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理；依使用者決定不做 code review）
+- 怎麼用：spec 核准後交給沒有對話脈絡的實作子代理；主對話讀 diff、確認 `match-time.ts` 與 D 的檔案 blob 相同、逐列對照 I/O 矩陣，並重建容器重跑全部檢查
+- AI 產出：19 個檔案、新增 2346 行。版面計算純函式、場次卡與標記、對戰樹（SVG 連接線）、輪詢 hook（5 秒、背景暫停、連續 3 次失敗）、連線中斷 banner、尚未抽籤畫面、`update-flash` 動畫、假資料產生器、開發模式預覽頁 `/dev/bracket`；4 個測試檔、50 個測試（含參數化）
+- 人做了什麼：核准 spec 與範圍
+- 驗證：前端 29 個檔案 278 個測試通過（4.6 前 228），build、typecheck、biome 通過；後端 310 個測試通過；I/O 矩陣 12 列都有通過的測試；子代理在預覽頁實測 1280px 32 隊沒有橫向捲軸、375px 只有對戰樹容器可捲動，正式 build 的預覽頁只剩 404 元件
+- 問題與修正：子代理發現同一張卡連續兩次變動時 class 不變、動畫不會重播，改用重新掛載並加測試；也發現 TanStack Query 在假時鐘下通知會晚一輪，測試期間改用 `queueMicrotask`。另有三個版面常數（卡高 67、首卡上方 19、季軍賽距決賽 83）與 walkover 不顯示比分是 AI 依示意圖與 UX 文件自行判斷，記在 Implementation Notes 交給人確認
+- 成熟度：L3（AI 依 spec 實作並自動驗證，未經多審查者）
+- 證據：spec 同上；尚未 commit
+
+### 2026-10-31｜程式、測試／依審查修正｜Story 4.6：依 D 的審查改成 bye_a／bye_b、walkover 空缺方與 404 輪詢
+
+- Story／範圍：4.6（`story/4-6`）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：把 D 的審查意見貼給 AI，AI 先讀被指出的型別、假資料、場次卡與輪詢 hook 確認問題，再修正並補測試，重建 frontend 後跑全部檢查
+- AI 產出：
+  - `bracket-types.ts` 的 `bye_side` 改成 `bye_a`、`bye_b`，假資料、場次卡、逐場比較跟著改
+  - 場次卡：已確認的 walkover 空缺方即使還帶著來源也顯示「—」＋「輪空」
+  - `useBracketPolling`：新增 `BracketNotFoundError`，404 不計入連續失敗、照常輪詢，回傳 `notFound`
+  - 測試：5、9 隊版面各 1 個、場次卡 3 個、輪詢 2 個
+  - spec 的 Review Triage Log 與 Design Notes
+- 人做了什麼：D 審查並找出兩方輪空與 walkover 空缺方的問題、決定改約定；使用者決定交給 AI 修
+- 驗證：前端單元測試 29 個檔案、285 個通過（新增 7 個）；typecheck、biome、build 通過；改動的檔案都是 LF
+- 問題與修正：
+  - 10/29 實作時 AI 照當時的約定用 `bye_side`，假資料產生器其實已經算出兩方都輪空（`byeA`、`byeB`），卻用 `byeA ? "a" : byeB ? "b" : null` 丟掉 b 方；測試用的隊數（2、3、4、8、13、16、32）都不會出現兩方輪空，所以沒抓到。D 用 9 隊推算第二輪才發現
+  - 假資料在 walkover 後把下一場的 source 清成 null，剛好讓「確定沒有隊伍」的畫面正確，遮住了 API 若保留 source 時會顯示成待定的問題
+  - 這次的修正改了 4.6 的檔案，但 `story/5-8` 已經把同一段邏輯搬到 `match-status.ts`，合併 `story/4-6` 進 `story/5-8` 時要手動解衝突
+- 成熟度：L3（人審查找出問題，AI 修正並自動驗證）
+- 證據：`_bmad-output/implementation-artifacts/spec-4-6-bracket-tree-view.md` 的 Review Triage Log；尚未 commit

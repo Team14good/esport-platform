@@ -20,6 +20,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
 import { Route as AdminSchoolsRouteImport } from './routes/admin/schools'
+import { Route as DevBracketRouteImport } from './routes/dev/bracket'
 import { Route as OrganizerIndexRouteImport } from './routes/organizer/index'
 import { Route as OrganizerApplyRouteImport } from './routes/organizer/apply'
 import { Route as AdminGamesIndexRouteImport } from './routes/admin/games/index'
@@ -82,6 +83,11 @@ const AdminSchoolsRoute = AdminSchoolsRouteImport.update({
   path: '/schools',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const DevBracketRoute = DevBracketRouteImport.update({
+  id: '/dev/bracket',
+  path: '/dev/bracket',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrganizerIndexRoute = OrganizerIndexRouteImport.update({
   id: '/organizer/',
   path: '/organizer/',
@@ -126,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
+  '/dev/bracket': typeof DevBracketRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer/': typeof OrganizerIndexRoute
   '/admin/games/$gameId': typeof AdminGamesGameIdRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
+  '/dev/bracket': typeof DevBracketRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer': typeof OrganizerIndexRoute
   '/admin/games/$gameId': typeof AdminGamesGameIdRoute
@@ -165,6 +173,7 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
+  '/dev/bracket': typeof DevBracketRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer/': typeof OrganizerIndexRoute
   '/admin/games/$gameId': typeof AdminGamesGameIdRoute
@@ -186,6 +195,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/admin/schools'
+    | '/dev/bracket'
     | '/organizer/apply'
     | '/organizer/'
     | '/admin/games/$gameId'
@@ -205,6 +215,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/admin/schools'
+    | '/dev/bracket'
     | '/organizer/apply'
     | '/organizer'
     | '/admin/games/$gameId'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/admin/schools'
+    | '/dev/bracket'
     | '/organizer/apply'
     | '/organizer/'
     | '/admin/games/$gameId'
@@ -242,6 +254,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  DevBracketRoute: typeof DevBracketRoute
   OrganizerApplyRoute: typeof OrganizerApplyRoute
   OrganizerIndexRoute: typeof OrganizerIndexRoute
   TournamentsTournamentIdIndexRoute: typeof TournamentsTournamentIdIndexRoute
@@ -326,6 +339,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSchoolsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/dev/bracket': {
+      id: '/dev/bracket'
+      path: '/dev/bracket'
+      fullPath: '/dev/bracket'
+      preLoaderRoute: typeof DevBracketRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/organizer/': {
       id: '/organizer/'
       path: '/organizer'
@@ -401,6 +421,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  DevBracketRoute: DevBracketRoute,
   OrganizerApplyRoute: OrganizerApplyRoute,
   OrganizerIndexRoute: OrganizerIndexRoute,
   TournamentsTournamentIdIndexRoute: TournamentsTournamentIdIndexRoute,
