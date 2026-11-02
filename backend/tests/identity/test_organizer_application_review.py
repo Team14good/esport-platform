@@ -263,7 +263,7 @@ def test_pagination_is_20_per_page_and_beyond_last_page_is_empty(
     assert beyond == {"items": [], "total": 21, "page": 3, "page_size": 20}
 
 
-@pytest.mark.parametrize("page", ["0", "-1", "abc"])
+@pytest.mark.parametrize("page", ["0", "-1", "abc", "100001", "99999999999999999999"])
 def test_invalid_page_is_422(client: TestClient, session: Session, page: str) -> None:
     admin = _make_account(session, admin=True)
 
@@ -526,6 +526,35 @@ def test_reviewing_a_reviewed_application_is_409_and_changes_nothing(
     assert response.status_code == 409
     assert response.json() == NOT_PENDING
     assert _snapshot(session, application) == before
+
+
+@pytest.mark.parametrize("action", ["approve", "reject"])
+def test_admin_cannot_review_own_application(
+    client: TestClient, session: Session, action: str
+) -> None:
+    admin = _make_account(session, admin=True)
+    application = _make_application(session, admin)
+    before = _snapshot(session, application)
+
+    if action == "approve":
+        response = _approve(client, admin, application.id)
+    else:
+        response = _reject(client, admin, application.id, "自己退自己")
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "CANNOT_REVIEW_OWN_APPLICATION"
+    assert _snapshot(session, application) == before
+    assert _review_audits(session, application.id) == []
+    assert _review_events(session, application.id) == []
+    session.refresh(admin)
+    assert admin.is_organizer is False
+
+    # 由另一位平台管理員審核則照常
+    other_admin = _make_account(session, admin=True)
+    if action == "approve":
+        assert _approve(client, other_admin, application.id).status_code == 200
+    else:
+        assert _reject(client, other_admin, application.id, "原因").status_code == 200
 
 
 def test_second_approval_is_409(client: TestClient, session: Session) -> None:
