@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
+import { IdentityService } from "@/client"
 import {
   ACCESS_TOKEN_STORAGE_KEY,
   LAST_IDENTITY_STORAGE_KEY,
@@ -13,6 +14,11 @@ import {
   renderApp,
   signInAs,
 } from "./auth-fixtures"
+
+type ReadApplicationResult = Awaited<
+  ReturnType<typeof IdentityService.readCurrentOrganizerApplication>
+>
+type ListSchoolsResult = Awaited<ReturnType<typeof IdentityService.listSchools>>
 
 vi.mock("@tanstack/react-router-devtools", () => ({
   TanStackRouterDevtools: () => null,
@@ -158,6 +164,7 @@ describe("身分切換器", () => {
       "瀏覽賽事",
       "平台管理",
       "全部身分",
+      "申請成為主辦方",
       "帳號資料",
       "登出",
     ])
@@ -204,6 +211,53 @@ describe("身分切換器", () => {
     menu = await openSwitcher(user)
     await user.click(within(menu).getByRole("menuitem", { name: "帳號資料" }))
     await waitFor(() => expect(router.state.location.pathname).toBe("/account"))
+  })
+
+  it.each([
+    ["已驗證", ACCOUNT],
+    ["未驗證 Email", { ...ACCOUNT, email_verified: false }],
+  ])(
+    "非主辦方（%s）：「帳號資料」上方有「申請成為主辦方」，點了到 S15",
+    async (_, account) => {
+      const user = userEvent.setup()
+      signInAs({ account })
+      vi.spyOn(
+        IdentityService,
+        "readCurrentOrganizerApplication",
+      ).mockResolvedValue({ data: {} } as unknown as ReadApplicationResult)
+      vi.spyOn(IdentityService, "listSchools").mockResolvedValue({
+        data: [{ id: "school-ntu", name: "國立臺灣大學" }],
+      } as ListSchoolsResult)
+      const router = renderApp("/")
+
+      const menu = await openSwitcher(user)
+      const labels = within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent)
+      expect(labels.indexOf("申請成為主辦方")).toBe(
+        labels.indexOf("帳號資料") - 1,
+      )
+      await user.click(
+        within(menu).getByRole("menuitem", { name: "申請成為主辦方" }),
+      )
+
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe("/organizer/apply"),
+      )
+    },
+  )
+
+  it("主辦方：沒有「申請成為主辦方」", async () => {
+    const user = userEvent.setup()
+    signInAs({ account: { ...ACCOUNT, is_organizer: true } })
+    renderApp("/")
+
+    const menu = await openSwitcher(user)
+    await within(menu).findByRole("menuitem", { name: "帳號資料" })
+
+    expect(
+      within(menu).queryByRole("menuitem", { name: "申請成為主辦方" }),
+    ).toBeNull()
   })
 
   it("登出：不需確認，清除登入狀態並回到 S1；上次身分保留", async () => {

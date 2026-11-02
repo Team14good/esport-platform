@@ -87,3 +87,15 @@
 - 問題與修正：AI 發現擱置 4.2 後，原版 4.1 只能在報名截止前抽籤，流程會卡住，於是放寬；也發現 CONTRIBUTING 原本的 6.3 規則與架構 AD-7 不一致，已更正
 - 成熟度：L4（AI 做影響分析並找出流程卡點，人做取捨）
 - 證據：`_bmad-output/planning-artifacts/sprint-change-proposal-2026-10-28.md`、commit `5aa5e0e`、`50a3bdc`
+
+### 2026-10-29｜程式、測試／Story 1.7｜以 bmad-build 實作「申請成為主辦方」（S15、Status badge）
+
+- Story／範圍：1.7
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（spec → 實作子代理；step-04 審查依使用者決定略過）
+- 怎麼用：輸入「/bmad-build 1.7 有問題直接選最推薦那個」，由 AI 依 epic-1 context 寫 spec、自行選定推薦方案並記進 Decisions，再交給實作子代理
+- AI 產出：spec 一份（Decisions 9 項）；後端 `OrganizerApplication` 資料表、遷移 `c7e2a4d9b8f1`（部分唯一索引限制每個帳號只有一筆待審核）、2 支 API；前端 S15 頁面、全站共用的 `StatusBadge`、`formatDateTime`、身分切換器入口；commit 共 23 個檔案、新增 1971 行。測試：後端 `test_organizer_application.py` 18 個測試函式（參數化後 24 個），前端新增 `status-badge` 3 個、`organizer-apply` 12 個，並在 `identity-switcher` 增補
+- 人做了什麼：授權 AI 直接採用推薦方案；決定不再每個 Story 各自跑 code review，改在最後統一審查（寫進 spec 的 Decisions）
+- 驗證：合併最新 `main` 後重跑全部檢查：後端 278 個測試通過、覆蓋率 95%；mypy、ty、ruff 通過；前端 21 個檔案 190 個測試通過，biome、tsc 通過；Alembic 只有一個 head；另以瀏覽器手動走過 S15
+- 問題與修正：單元測試全部通過，S15 在實際瀏覽器卻崩潰。原因是產生的 client 會把後端的 `null` 回應換成 `{}`，AI 寫的程式與測試都假設會收到 `null`，所以測試測不到。手動檢查時才發現，改成以有沒有 `id` 判斷，測試也照實改用 `{}` 模擬，並寫進 spec 的 Implementation Notes 提醒後續 Story。另外子代理自己列出兩個沒處理的風險：遷移一致性測試可能不比對部分索引的 WHERE 條件；`school_id` 整個缺少時的 422 訊息是 pydantic 的英文預設訊息
+- 成熟度：L3（AI 依 spec 產出並自動驗證，但這次略過多審查者，`null` 問題是靠人手動檢查才發現）
+- 證據：commit `d3b77d4b956da8f563f174647a95db6cb7296f86`、`_bmad-output/implementation-artifacts/spec-1-7-apply-to-be-organizer.md`
