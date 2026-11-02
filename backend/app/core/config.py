@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     FIRST_ADMIN_EMAIL: EmailStr
     FIRST_ADMIN_PASSWORD: str
 
+    # 示範資料（Story 7.1）：未設定 DEMO_PASSWORD 時不載入示範資料
+    DEMO_PASSWORD: str | None = None
+    DEMO_EMAIL_DOMAIN: str = "example.com"
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
@@ -81,6 +85,7 @@ class Settings(BaseSettings):
         for host in self.DATABASE_URL.hosts():
             self._check_default_secret("DATABASE_URL password", host["password"])
         self._check_default_secret("FIRST_ADMIN_PASSWORD", self.FIRST_ADMIN_PASSWORD)
+        self._check_default_secret("DEMO_PASSWORD", self.DEMO_PASSWORD)
 
         return self
 
