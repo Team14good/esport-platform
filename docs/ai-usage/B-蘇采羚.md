@@ -86,6 +86,42 @@
 - 成熟度：L4（多個審查者＋主代理實測查證＋測試驗證）
 - 證據：spec 的 Review Triage Log、`deferred-work.md`
 
+### 2026-11-02｜需求／設計｜Story 2.4 spec：公開賽事列表與賽事頁
+
+- Story／範圍：2.4（PR #29）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Explore 子代理調查程式與組員分支）
+- 怎麼用：以 bmad-build 依 epic-2-context、介面約定與 A、C、D 尚未合併的分支產生 spec
+- AI 產出：`spec-2-4-public-tournament-pages.md`（I/O Matrix 11 列）；`deferred-work.md` 新增第二階段 1 筆
+- 人做了什麼：決定拆兩階段、S1 分組順序（觀眾最關心的在前）；審查後兩度決定倒數文字（報名開始寫「開放報名」、歸零寫「報名開放中 · 系統處理中」），並同意第二次以小修正處理、不還原重做
+- 驗證：spec 經人核准後鎖定；兩次修改凍結區塊都由人決定
+- 問題與修正：AI 調查時先找出 A 的 5.8 已在 S2 底下建了場次頁，若照一般寫法加外框路由會把 S4 包進 S2，因此改用 `index.tsx`。但 AI 寫 spec 時規定所有倒數都寫「截止」，沒想到報名開始也用同一個元件，造成報名開始被標成「截止」，第一輪審查才發現
+- 成熟度：L3（AI 依規格與組員程式產出 spec，規則由人決定）
+- 證據：spec 的 Decisions、Spec Change Log
+
+### 2026-11-02｜程式／程式生成｜Story 2.4 第一階段：公開 API、S1、S2 總覽、Countdown、Page banner
+
+- Story／範圍：2.4（PR #29）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理，intent_gap 後重新實作一次）
+- 怎麼用：核准 spec 後由實作子代理依 spec 實作；第一輪審查發現 intent_gap，依流程還原程式、人修改 spec 後重新實作（沿用第一輪 patch 中做對的部分）
+- AI 產出：公開 API 2 支與 `PublicTournament`；S1 賽事列表、S2 賽事頁總覽；全站共用的 Countdown、Page banner 元件；重新產生 client 與路由檔
+- 人做了什麼：核准兩版 spec；回答倒數文字的兩個問題
+- 驗證：後端 948 個測試、覆蓋率 96%；前端 287 個單元測試（24 個檔案）連跑多次皆通過；lint、build、typecheck、biome 通過；實作子代理在瀏覽器以 375 px 檢查 S1、S2 沒有橫向捲軸
+- 問題與修正：第一輪的 patch 是 BOM＋CRLF，無法直接套用，重新實作的子代理轉成 LF 後套用。另外子代理回報：新增 3 個測試檔後，前端單元測試在並行負載下偶爾冷啟動逾時（既有問題，已記在 deferred-work）
+- 成熟度：L4（spec → 子代理實作 → 自動測試；intent_gap 依流程回到人決定）
+- 證據：PR #29、spec 的 Implementation Notes、commit 未記錄
+
+### 2026-11-02｜測試／程式審查｜Story 2.4 兩輪三人審查
+
+- Story／範圍：2.4（PR #29）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap，兩輪）
+- 怎麼用：每輪三個審查者各自只看 diff，主代理逐筆查證後分類
+- AI 產出：第一輪 20 筆（1 筆 intent_gap 導致還原重做，10 筆改寫進 spec 的 Design Notes、1 筆延後）；第二輪 17 筆（1 筆 intent_gap 經人同意當小修正，7 筆修正、2 筆延後）；共 28 列記在 Review Triage Log
+- 人做了什麼：兩次決定倒數文字；決定第二次不還原重做
+- 驗證：修正後全部測試通過；第二輪修正的「deadline 改變時閃錯數字」先確認測試在修正前會失敗
+- 問題與修正：審查抓到的 AI 錯誤包括：報名開始倒數寫成「截止」、歸零又寫「已截止」（兩次都源自 spec）；分頁型別在 5.8 合併後會讓別人的 PR typecheck 失敗；離開賽事頁後分頁標題沒有還原；公開 API 的時間欄位對調也不會有測試失敗。審查者宣稱 S2 漏了優先期結束倒數，主代理對照 epics.md 判定該倒數在主辦方的 S27，屬誤報
+- 成熟度：L4（多個審查者＋主代理查證＋測試驗證；需要決定的事回到人）
+- 證據：spec 的 Review Triage Log、Spec Change Log、`deferred-work.md`
+
 ### 2026-11-02｜測試／CI｜Story 2.2 修正 CI 失敗：兩個 Alembic head
 
 - Story／範圍：2.2（PR #15）
