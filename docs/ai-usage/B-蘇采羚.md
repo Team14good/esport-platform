@@ -37,6 +37,7 @@
 - 問題與修正：審查抓到實作的錯誤：段位名稱的驗證不分大小寫，但資料庫唯一限制區分大小寫，繞過 API 的寫入可存入「Diamond」與「diamond」，改成 `lower(btrim(name))` 唯一索引；重名判斷以錯誤訊息字串比對索引名稱，前綴相同的索引也會命中，改成比對 `diag.constraint_name`；競態與 404 測試沒有檢查錯誤代碼與「沒有寫入操作紀錄」。另有 1 筆既有問題（Pydantic 內建 422 訊息是英文）記進 `deferred-work.md`
 - 成熟度：L4（多個審查者＋主代理查證＋測試驗證，人只在 PR 決策）
 - 證據：spec 的 Review Triage Log、`deferred-work.md`
+
 ### 2026-10-30｜設計／介面約定｜tournaments 模組介面約定
 
 - Story／範圍：CONTRIBUTING 6.5 約定介面；回覆 `contracts/competition.md`〈三〉第 1、3 項
@@ -48,6 +49,7 @@
 - 問題與修正：AI 對照各方需求時發現名稱不一致：D 的約定把每局預估時間叫 `game_minutes_per_game`，2.1 已實作的 `GameTitle` 與設計文件叫 `game_minutes`，統一為後者並改 D 的文件；也找到 A 的 5.2 分支已假設 `lock_tournament` 回傳 `status` 與 `appeal_minutes`，納入 `TournamentRead`
 - 成熟度：L3（AI 依既有規格彙整並提出介面，人做決策，組員審查）
 - 證據：`_bmad-output/implementation-artifacts/contracts/tournaments.md`
+
 ### 2026-10-30｜需求／設計｜Story 2.2 spec：建立賽事的後端
 
 - Story／範圍：2.2（PR #15）；附帶回寫 Story 2.1 第一階段的 commit `d4227cd`
