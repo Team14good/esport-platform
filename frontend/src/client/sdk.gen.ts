@@ -92,12 +92,17 @@ import type {
   tournamentsListGamesResponses,
   tournamentsListMyTournamentsData,
   tournamentsListMyTournamentsResponses,
+  tournamentsListPublicTournamentsData,
+  tournamentsListPublicTournamentsResponses,
   tournamentsReadGameData,
   tournamentsReadGameErrors,
   tournamentsReadGameResponses,
   tournamentsReadMyTournamentData,
   tournamentsReadMyTournamentErrors,
   tournamentsReadMyTournamentResponses,
+  tournamentsReadPublicTournamentData,
+  tournamentsReadPublicTournamentErrors,
+  tournamentsReadPublicTournamentResponses,
   tournamentsUpdateGameData,
   tournamentsUpdateGameErrors,
   tournamentsUpdateGameResponses,
@@ -636,6 +641,44 @@ export class TournamentsService {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * List Public Tournaments
+   *
+   * 所有賽事的公開資料，依開賽時間排序；不需登入，只回 `PublicTournament`。
+   */
+  public static listPublicTournaments<ThrowOnError extends boolean = true>(
+    options?: Options<tournamentsListPublicTournamentsData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      tournamentsListPublicTournamentsResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/tournaments",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Public Tournament
+   *
+   * 一場賽事的公開資料；不需登入，不存在回 404 `TOURNAMENT_NOT_FOUND`。
+   */
+  public static readPublicTournament<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsReadPublicTournamentData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      tournamentsReadPublicTournamentResponses,
+      tournamentsReadPublicTournamentErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/tournaments/{tournament_id}",
+      ...options,
     })
   }
 
