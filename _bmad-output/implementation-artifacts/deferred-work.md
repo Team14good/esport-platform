@@ -52,11 +52,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-create-tournament.md`
   summary: （中）目前沒有任何工作把賽事從 `open` 轉成 `closed`，`ensure_accepting_registrations` 也只看狀態；在 C 的 3.6 完成前，報名截止時間過後仍可報名。
   evidence: 2026-10-30 Story 2.2 第一階段審查（Blind Hunter）。依 `contracts/tournaments.md`〈三〉，`open` → `closed` 由 3.6 在截止補位之後呼叫 `transition_tournament`。3.6 實作時要確認截止工作會轉換狀態；若 3.6 延後，改由 `ensure_accepting_registrations` 另外比對 `registration_end` 與 `clock.now()`，並同步修改約定。
-  summary: Story 2.1 的兩條 AC 移到 2.2 驗收：以虛構的第三款遊戲（人數、BO、比分型態都與示範遊戲不同）建立賽事並驗證賽事快照的值；修改遊戲預設值後，已建立賽事的快照不變。
-  evidence: 2026-10-29 使用者決定。兩條都需要 2.2 的 Tournament 與 `game_snapshot`，2.1 第一階段只驗證遊戲設定本身（含虛構第三款遊戲可建立）。2.2 的 spec 要把這兩條寫進 I/O Matrix。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-1-game-settings-and-school-list.md`
-  summary: （低）Pydantic 內建的 422 訊息是英文：缺欄位、列舉值不合法（例如 `score_type`）、型別不是 list／object 時，`detail[].msg` 不是繁中，前端直接顯示會出現英文。
-  evidence: 2026-10-29 Story 2.1 第一階段審查（Edge Case Hunter）。既有問題，identity 的 API 也一樣（`core/errors.py` 沒有翻譯 `RequestValidationError`）。處理時在 core 加一個 `RequestValidationError` handler，依 `type`（missing、enum、list_type 等）換成繁中訊息，並補測試。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-score-rules.md`
   summary: （低）`rounds` 型態的回合數沒有上限，純函式 `scoring.make_game` 接受任意大的非負整數；寫入資料庫的整數欄位時可能溢位。
   evidence: 2026-10-29 Story 5.3 第一階段審查（Edge Case Hunter、Blind Hunter）。第二階段寫 `record_game` 的 API schema 時，以 `Field(ge=0, le=...)` 設定合理範圍（例如 999），回 422。
