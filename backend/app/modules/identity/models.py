@@ -39,6 +39,8 @@ CLUB_NAME_MAX_LENGTH = 50
 REJECT_REASON_MAX_LENGTH = 200
 # 分頁 API 每頁固定筆數（全專案的列表沿用）
 PAGE_SIZE = 20
+# 頁碼上限：極大的頁碼會讓 OFFSET 超出 bigint 而回 500，改在 API 回 422
+MAX_PAGE = 100_000
 REDIRECT_MAX_LENGTH = 2000
 # 同一帳號同時只能有一筆待審核申請的部分唯一索引（repository 以名稱辨識違反）
 PENDING_APPLICATION_INDEX = "ix_organizer_application_pending_account_id"

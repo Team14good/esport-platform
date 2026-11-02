@@ -13,6 +13,7 @@ from app.core.db import SessionDep
 from app.modules.identity import service
 from app.modules.identity.deps import CurrentAccount, PlatformAdmin, VerifiedAccount
 from app.modules.identity.models import (
+    MAX_PAGE,
     AccessToken,
     AccessTokenCreate,
     AccountCreate,
@@ -202,7 +203,7 @@ def list_organizer_applications(
     session: SessionDep,
     _admin: PlatformAdmin,
     status_filter: Annotated[ApplicationStatus | None, Query(alias="status")] = None,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
 ) -> OrganizerApplicationPage:
     """主辦方申請清單（平台管理員）：依送出時間由舊到新、每頁 20 筆；`status` 省略表示全部。"""
     return service.list_organizer_applications(session, status=status_filter, page=page)

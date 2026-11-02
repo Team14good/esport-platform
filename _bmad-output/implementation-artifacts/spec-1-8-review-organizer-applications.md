@@ -117,6 +117,10 @@ context:
 
 ## Review Triage Log
 
+- 2026-11-02 PR #11 人工審查（輕微，不擋合併），兩項都修正：
+  - 管理員可以審核自己的申請：1.7 沒有擋管理員送出申請，規格也沒禁止。2026-11-02 問使用者，使用者沒有偏好，採用建議的做法：核准、退回時，若申請人就是這位管理員，回 403 `CANNOT_REVIEW_OWN_APPLICATION`「不能審核自己的申請，請由其他平台管理員審核。」，由另一位管理員審核。檢查在鎖住申請之後、狀態轉換之前（`_lock_application_for_review`）；S35 的確認對話框照常顯示後端訊息。因為改變了審核規則，這條要由人補進凍結區塊的 Decisions。
+  - `page` 沒有上限：極大的頁碼會讓 OFFSET 超出 bigint 而回 500。改為 `Query(ge=1, le=MAX_PAGE)`（`MAX_PAGE = 100_000`，定義在 `identity/models.py`），超過回 422；前端 `parsePage` 把超過 `MAX_PAGE` 的值當成第 1 頁。
+
 ## Design Notes
 
 **API**（列表的回應格式是全專案第一個分頁 API，之後 2.1、2.2 沿用）：

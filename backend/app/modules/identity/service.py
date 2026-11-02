@@ -717,12 +717,19 @@ def list_organizer_applications(
     )
 
 
-def _lock_application(
-    session: Session, application_id: uuid.UUID
+def _lock_application_for_review(
+    session: Session, application_id: uuid.UUID, *, admin_id: uuid.UUID
 ) -> OrganizerApplication:
+    """鎖住要審核的申請；管理員不能審核自己的申請（403 `CANNOT_REVIEW_OWN_APPLICATION`）。"""
     application = repository.get_application(session, application_id, for_update=True)
     if application is None:
         raise _application_not_found()
+    if application.account_id == admin_id:
+        raise BusinessError(
+            "CANNOT_REVIEW_OWN_APPLICATION",
+            "不能審核自己的申請，請由其他平台管理員審核。",
+            status_code=403,
+        )
     return application
 
 
@@ -741,7 +748,9 @@ def approve_organizer_application(
     申請改為 approved、帳號 `is_organizer = true`、操作紀錄與
     `OrganizerApplicationApproved` 在同一個交易寫入。
     """
-    application = _lock_application(session, application_id)
+    application = _lock_application_for_review(
+        session, application_id, admin_id=admin_id
+    )
     _transition_application(application, ApplicationStatus.APPROVED)
     account = repository.get_account(session, application.account_id, for_update=True)
     assert account is not None  # 外鍵保證帳號存在
@@ -777,7 +786,9 @@ def reject_organizer_application(
     申請人可以修改後重送，重送一律建立新的一筆，這筆退回紀錄保留。
     申請、操作紀錄與 `OrganizerApplicationRejected` 在同一個交易寫入。
     """
-    application = _lock_application(session, application_id)
+    application = _lock_application_for_review(
+        session, application_id, admin_id=admin_id
+    )
     _transition_application(
         application, ApplicationStatus.REJECTED, reason=reason.strip()
     )
