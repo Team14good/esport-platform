@@ -19,8 +19,12 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
+import { Route as AdminSchoolsRouteImport } from './routes/admin/schools'
 import { Route as OrganizerIndexRouteImport } from './routes/organizer/index'
 import { Route as OrganizerApplyRouteImport } from './routes/organizer/apply'
+import { Route as AdminGamesIndexRouteImport } from './routes/admin/games/index'
+import { Route as AdminGamesGameIdRouteImport } from './routes/admin/games/$gameId'
+import { Route as AdminGamesNewRouteImport } from './routes/admin/games/new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -72,6 +76,11 @@ const AdminApplicationsRoute = AdminApplicationsRouteImport.update({
   path: '/applications',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminSchoolsRoute = AdminSchoolsRouteImport.update({
+  id: '/schools',
+  path: '/schools',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const OrganizerIndexRoute = OrganizerIndexRouteImport.update({
   id: '/organizer/',
   path: '/organizer/',
@@ -81,6 +90,21 @@ const OrganizerApplyRoute = OrganizerApplyRouteImport.update({
   id: '/organizer/apply',
   path: '/organizer/apply',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminGamesIndexRoute = AdminGamesIndexRouteImport.update({
+  id: '/games/',
+  path: '/games/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminGamesGameIdRoute = AdminGamesGameIdRouteImport.update({
+  id: '/games/$gameId',
+  path: '/games/$gameId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminGamesNewRoute = AdminGamesNewRouteImport.update({
+  id: '/games/new',
+  path: '/games/new',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -94,8 +118,12 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
+  '/admin/schools': typeof AdminSchoolsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer/': typeof OrganizerIndexRoute
+  '/admin/games/$gameId': typeof AdminGamesGameIdRoute
+  '/admin/games/new': typeof AdminGamesNewRoute
+  '/admin/games/': typeof AdminGamesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -108,8 +136,12 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
+  '/admin/schools': typeof AdminSchoolsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer': typeof OrganizerIndexRoute
+  '/admin/games/$gameId': typeof AdminGamesGameIdRoute
+  '/admin/games/new': typeof AdminGamesNewRoute
+  '/admin/games': typeof AdminGamesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -123,8 +155,12 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
+  '/admin/schools': typeof AdminSchoolsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/organizer/': typeof OrganizerIndexRoute
+  '/admin/games/$gameId': typeof AdminGamesGameIdRoute
+  '/admin/games/new': typeof AdminGamesNewRoute
+  '/admin/games/': typeof AdminGamesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -139,8 +175,12 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/admin/applications'
+    | '/admin/schools'
     | '/organizer/apply'
     | '/organizer/'
+    | '/admin/games/$gameId'
+    | '/admin/games/new'
+    | '/admin/games/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -153,8 +193,12 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/admin/applications'
+    | '/admin/schools'
     | '/organizer/apply'
     | '/organizer'
+    | '/admin/games/$gameId'
+    | '/admin/games/new'
+    | '/admin/games'
   id:
     | '__root__'
     | '/'
@@ -167,8 +211,12 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/admin/applications'
+    | '/admin/schools'
     | '/organizer/apply'
     | '/organizer/'
+    | '/admin/games/$gameId'
+    | '/admin/games/new'
+    | '/admin/games/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -257,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminApplicationsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/schools': {
+      id: '/admin/schools'
+      path: '/schools'
+      fullPath: '/admin/schools'
+      preLoaderRoute: typeof AdminSchoolsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/organizer/': {
       id: '/organizer/'
       path: '/organizer'
@@ -271,15 +326,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizerApplyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/games/': {
+      id: '/admin/games/'
+      path: '/games'
+      fullPath: '/admin/games/'
+      preLoaderRoute: typeof AdminGamesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/games/$gameId': {
+      id: '/admin/games/$gameId'
+      path: '/games/$gameId'
+      fullPath: '/admin/games/$gameId'
+      preLoaderRoute: typeof AdminGamesGameIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/games/new': {
+      id: '/admin/games/new'
+      path: '/games/new'
+      fullPath: '/admin/games/new'
+      preLoaderRoute: typeof AdminGamesNewRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
   }
 }
 
 interface AdminRouteRouteChildren {
   AdminApplicationsRoute: typeof AdminApplicationsRoute
+  AdminSchoolsRoute: typeof AdminSchoolsRoute
+  AdminGamesGameIdRoute: typeof AdminGamesGameIdRoute
+  AdminGamesNewRoute: typeof AdminGamesNewRoute
+  AdminGamesIndexRoute: typeof AdminGamesIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminApplicationsRoute: AdminApplicationsRoute,
+  AdminSchoolsRoute: AdminSchoolsRoute,
+  AdminGamesGameIdRoute: AdminGamesGameIdRoute,
+  AdminGamesNewRoute: AdminGamesNewRoute,
+  AdminGamesIndexRoute: AdminGamesIndexRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
