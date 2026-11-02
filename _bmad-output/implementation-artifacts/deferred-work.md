@@ -44,17 +44,14 @@
 ## Deferred from: spec-3-1-create-team-and-invite-members.md (2026-10-30)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-and-invite-members.md`
-  summary: Story 2.2 合併後，替 `team`、`team_member`、`registration` 的 `tournament_id` 補上外鍵到 `tournament.id`（另一支遷移檔），並移除 registration 等待 2.2 的暫時寫法。
-  evidence: 3.1 依 CONTRIBUTING 6.5 照 `contracts/tournaments.md` 先寫、不合併 story/2-2。要處理的地方：`backend/app/modules/registration/service.py` 呼叫 tournaments 的三處 `# type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]` 與本地 `_Tournament` Protocol（改用 `TournamentRead`）；`backend/tests/registration/test_teams.py` 的 `FakeTournaments` 替身改成以 2.2 的真實賽事資料測試（`tournaments` fixture）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-and-invite-members.md`
-  summary: 建隊與加入的人數上限仰賴 `lock_tournament` 的列鎖，目前沒有真實 PostgreSQL 的平行加入測試；替身不會加鎖，名額只剩 1 人時多人同時加入是否只成功 1 人未經驗證（未證實會出錯；若鎖失效，為 high：隊伍超過先發＋替補）。
-  evidence: 3.1 的測試以唯一鍵防線驗證（重複 TeamMember 被資料庫拒絕、service 轉成 409 `ALREADY_IN_TOURNAMENT`），但人數上限沒有資料庫約束。2.2 合併後，比照 deferred 中 1.5 的作法另建測試架構：自行提交資料、多條連線、多執行緒以 barrier 同時呼叫加入，斷言成功數不超過剩餘名額，其餘為 `TEAM_FULL`。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-and-invite-members.md`
   summary: Story 2.4 建立 S2 時，要把 `CreateTeamDialog`（`frontend/src/features/registration/CreateTeamDialog.tsx`）放上 S2 的「建立隊伍」（主辦方與自訂賽事不顯示），並確認 S19「回到賽事頁」的 `/tournaments/{id}` 連結可用；在此之前畫面上沒有建隊入口，回賽事頁連結會到找不到頁面。
   evidence: 3.1 第 1 輪 Code Review（Edge Case Hunter、Blind Hunter）。依 3.1 Decisions 刻意只做 Dialog 元件，S2 屬 B 的 2.4。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-and-invite-members.md`
-  summary: Story 2.2 合併後，先拿掉 `backend/tests/registration/test_teams.py` 替身的 `monkeypatch.setattr(..., raising=False)`（或直接改用真實賽事），否則 2.2 改了函式名稱或簽名時測試仍會通過（medium）。
-  evidence: 3.1 第 1 輪 Code Review（Verification Gap）。`raising=False` 會把不存在或已改名的屬性直接補上，測試無法發現介面不一致。
+
+## Deferred from: spec-3-1-tournament-integration.md (2026-11-02)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`
+  summary: A 的 `frontend/tests/unit/admin-applications.test.tsx`（「不是平台管理員：顯示 S38 的 403，不呼叫審核 API」）偶發失敗，CI 可能因此偶爾失敗；請 A 確認原因並修正（medium，未證實）。
+  evidence: 2026-11-02 3.1 收尾時前端全部單元測試連跑 3 次，失敗 1 次，其他 2 次全過。同次在 `team-pages.test.tsx` 量到的原因是路由以 `autoCodeSplitting` 延遲載入，路由第一次渲染要 930～1006 ms，超過 `findBy` 預設的 1000 ms；以 `beforeAll` 呼叫 `router.loadRouteChunk` 先載入路由後連跑 10 次全過。A 的檔案是否同因未查證：在該檔加同樣的預先載入後連跑 10 次即可確認。不是本 Story 造成。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-game-settings-and-school-list.md`
   summary: Story 2.1 第二階段：S36 遊戲設定（列表、新增／編輯頁、段位表）與學校清單分頁的前端畫面，含側欄入口、375 px 卡片版面，以及學校異動後讓 `["identity","schools"]` 查詢失效。
   evidence: 2026-10-29 使用者決定 2.1 拆兩階段：後台 Sidebar 版面、Data table 由 A 的 1.8 提供（11/1），第一階段只做後端以趕上 2.2 的 10/31 期限。1.8 合併後另寫 spec 實作，並驗收 epics.md Story 2.1 的 S36 相關 AC。

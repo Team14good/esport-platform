@@ -1,17 +1,19 @@
 """Story 3.1：建立隊伍與邀請隊員（I/O 矩陣、唯一鍵防線、報名狀態轉換、公開函式）。
 
-tournaments 的 `get_tournament`、`lock_tournament`、`ensure_accepting_registrations`
-由 Story 2.2 提供，合併前以 monkeypatch 替身代替（見 deferred-work）。
+賽事用 2.2 的真實資料（`tests.helpers.make_tournament`）；先鎖再檢查與使用鎖定回傳值，
+以包裝真實的 `tournaments.service.lock_tournament` 驗證。平行加入見
+`test_team_concurrency.py`。
 """
 
 import itertools
 import uuid
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.core.audit import AuditLog
@@ -24,84 +26,76 @@ from app.modules.registration.models import (
     MemberRole,
     Registration,
     RegistrationStatus,
+    Team,
     TeamMember,
 )
 from app.modules.tournaments import service as tournaments_service
+from app.modules.tournaments.models import (
+    GameRead,
+    Tournament,
+    TournamentRead,
+    TournamentStatus,
+)
 from tests.conftest import FrozenClock
+from tests.helpers import make_game, make_tournament
 
 API = settings.API_V1_STR
 
 
-# ---------------------------------------------------------------- 替身與測試資料
+# ---------------------------------------------------------------- 測試資料
 
 
-@dataclass
-class FakeTournament:
-    """`TournamentRead` 中 registration 用到的欄位。"""
+def _tournament(
+    session: Session,
+    *,
+    organizer: Account | None = None,
+    game: GameRead | None = None,
+    **overrides: Any,
+) -> TournamentRead:
+    """開放報名中的真實賽事（預設名「政大校園盃」、先發 5、替補 1）。"""
+    overrides.setdefault("name", "政大校園盃")
+    overrides.setdefault("starters", 5)
+    overrides.setdefault("substitutes", 1)
+    tournament = make_tournament(session, organizer=organizer, game=game, **overrides)
+    assert tournament.status == TournamentStatus.OPEN
+    return tournament
 
-    organizer_id: uuid.UUID
-    id: uuid.UUID = field(default_factory=uuid.uuid4)
-    name: str = "政大校園盃"
-    game_name: str = "特戰英豪"
-    starters: int = 5
-    substitutes: int = 1
-    status: str = "open"
+
+def _set_status(
+    session: Session, tournament_id: uuid.UUID, status: TournamentStatus
+) -> None:
+    """直接改賽事列的狀態（測試用；正式程式只能經 `transition_tournament`）。"""
+    row = session.get(Tournament, tournament_id)
+    assert row is not None
+    row.status = status
+    session.add(row)
+    session.flush()
 
 
-class FakeTournaments:
-    """tournaments.service 的替身：記錄 lock_tournament 的呼叫。"""
+class LockSpy:
+    """包住真實的 `lock_tournament`：記錄呼叫，必要時改寫鎖定後回傳的值。"""
 
     def __init__(self) -> None:
-        self.items: dict[uuid.UUID, FakeTournament] = {}
         self.locked: list[uuid.UUID] = []
-        # 呼叫順序（測試「先鎖再檢查」時由其他替身一起寫入）
+        # 呼叫順序（測試「先鎖再檢查」時由 `_record_checks` 一起寫入）
         self.events: list[str] = []
-        # lock_tournament 回傳的值與 get_tournament 不同時使用（鎖住後讀到的最新值）
-        self.locked_values: dict[uuid.UUID, FakeTournament] = {}
-
-    def add(self, **kwargs: Any) -> FakeTournament:
-        kwargs.setdefault("organizer_id", uuid.uuid4())
-        tournament = FakeTournament(**kwargs)
-        self.items[tournament.id] = tournament
-        return tournament
-
-    def get_tournament(
-        self, _session: Session, *, tournament_id: uuid.UUID
-    ) -> FakeTournament:
-        if tournament_id not in self.items:
-            raise BusinessError(
-                "TOURNAMENT_NOT_FOUND", "找不到這個賽事。", status_code=404
-            )
-        return self.items[tournament_id]
-
-    def lock_tournament(
-        self, session: Session, *, tournament_id: uuid.UUID
-    ) -> FakeTournament:
-        self.locked.append(tournament_id)
-        self.events.append("lock")
-        if tournament_id in self.locked_values:
-            return self.locked_values[tournament_id]
-        return self.get_tournament(session, tournament_id=tournament_id)
-
-    def ensure_accepting_registrations(self, tournament: FakeTournament) -> None:
-        if tournament.status != "open":
-            raise BusinessError(
-                "REGISTRATION_CLOSED", "目前不在報名期間。", status_code=409
-            )
+        # 模擬「鎖住後讀到的最新值」與先前讀到的不同
+        self.override: Callable[[TournamentRead], TournamentRead] | None = None
 
 
 @pytest.fixture
-def tournaments(monkeypatch: pytest.MonkeyPatch) -> FakeTournaments:
-    fake = FakeTournaments()
-    for name in (
-        "get_tournament",
-        "lock_tournament",
-        "ensure_accepting_registrations",
-    ):
-        monkeypatch.setattr(
-            tournaments_service, name, getattr(fake, name), raising=False
-        )
-    return fake
+def lock_spy(monkeypatch: pytest.MonkeyPatch) -> LockSpy:
+    spy = LockSpy()
+    original = tournaments_service.lock_tournament
+
+    def wrapped(session: Session, *, tournament_id: uuid.UUID) -> TournamentRead:
+        spy.locked.append(tournament_id)
+        spy.events.append("lock")
+        tournament = original(session, tournament_id=tournament_id)
+        return spy.override(tournament) if spy.override else tournament
+
+    monkeypatch.setattr(tournaments_service, "lock_tournament", wrapped)
+    return spy
 
 
 def _make_account(
@@ -152,17 +146,24 @@ def _error_code(response: Any) -> str:
     return str(response.json()["detail"]["code"])
 
 
-def _audit(session: Session, action: str) -> list[AuditLog]:
-    return list(session.exec(select(AuditLog).where(AuditLog.action == action)))
+def _audit(session: Session, action: str, tournament_id: uuid.UUID) -> list[AuditLog]:
+    """某賽事的操作紀錄（併發測試提交的紀錄會留在測試資料庫，所以限定賽事）。"""
+    return list(
+        session.exec(
+            select(AuditLog).where(
+                AuditLog.action == action, AuditLog.tournament_id == tournament_id
+            )
+        )
+    )
 
 
 # ---------------------------------------------------------------- 建立隊伍
 
 
 def test_create_team_makes_captain_forming_registration_and_invite_token(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session, lock_spy: LockSpy
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session, game=make_game(session, name="特戰英豪"))
     captain = _make_account(session, display_name="阿哲")
 
     body = _create_ok(client, captain, tournament.id, "  夜貓隊  ")
@@ -179,7 +180,7 @@ def test_create_team_makes_captain_forming_registration_and_invite_token(
     assert [(m["display_name"], m["role"]) for m in body["members"]] == [
         ("阿哲", "captain")
     ]
-    assert tournaments.locked == [tournament.id]
+    assert lock_spy.locked == [tournament.id]
 
     team_id = uuid.UUID(body["id"])
     registration = repository.get_registration_by_team(session, team_id)
@@ -187,7 +188,7 @@ def test_create_team_makes_captain_forming_registration_and_invite_token(
     assert registration.status == RegistrationStatus.FORMING
     assert registration.tournament_id == tournament.id
 
-    [log] = _audit(session, "team.created")
+    [log] = _audit(session, "team.created", tournament.id)
     assert log.actor_id == captain.id
     assert log.tournament_id == tournament.id
     assert log.entity_type == "team"
@@ -197,9 +198,9 @@ def test_create_team_makes_captain_forming_registration_and_invite_token(
 
 @pytest.mark.parametrize("name", ["", "   ", "隊" * 31, 123])
 def test_create_team_rejects_invalid_names(
-    client: TestClient, session: Session, tournaments: FakeTournaments, name: Any
+    client: TestClient, session: Session, name: Any
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
     captain = _make_account(session)
 
     response = client.post(
@@ -213,9 +214,9 @@ def test_create_team_rejects_invalid_names(
 
 
 def test_create_team_accepts_30_character_name(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
 
     body = _create_ok(client, _make_account(session), tournament.id, " " + "隊" * 30)
 
@@ -223,10 +224,10 @@ def test_create_team_accepts_30_character_name(
 
 
 def test_team_name_is_unique_per_tournament_ignoring_case(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session
 ) -> None:
-    tournament = tournaments.add()
-    other = tournaments.add()
+    tournament = _tournament(session)
+    other = _tournament(session)
     _create_ok(client, _make_account(session), tournament.id, "Night Owls")
 
     response = _create(client, _make_account(session), tournament.id, "night owls")
@@ -240,10 +241,9 @@ def test_team_name_is_unique_per_tournament_ignoring_case(
 def test_team_name_unique_index_is_the_last_line_of_defense(
     client: TestClient,
     session: Session,
-    tournaments: FakeTournaments,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
     _create_ok(client, _make_account(session), tournament.id, "Night Owls")
     # 模擬兩個請求同時通過檢查：查詢看不到對方，只剩唯一索引擋下
     monkeypatch.setattr(repository, "get_team_by_name", lambda *_args: None)
@@ -255,9 +255,9 @@ def test_team_name_unique_index_is_the_last_line_of_defense(
 
 
 def test_create_team_requires_verified_email(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
 
     response = _create(client, _make_account(session, verified=False), tournament.id)
 
@@ -265,11 +265,9 @@ def test_create_team_requires_verified_email(
     assert _error_code(response) == "EMAIL_NOT_VERIFIED"
 
 
-def test_organizer_cannot_create_team(
-    client: TestClient, session: Session, tournaments: FakeTournaments
-) -> None:
+def test_organizer_cannot_create_team(client: TestClient, session: Session) -> None:
     organizer = _make_account(session)
-    tournament = tournaments.add(organizer_id=organizer.id)
+    tournament = _tournament(session, organizer=organizer)
 
     response = _create(client, organizer, tournament.id)
 
@@ -277,34 +275,81 @@ def test_organizer_cannot_create_team(
     assert _error_code(response) == "ORGANIZER_CANNOT_JOIN"
 
 
-@pytest.mark.parametrize("status", ["upcoming", "closed", "published"])
+NOT_OPEN = [status for status in TournamentStatus if status != TournamentStatus.OPEN]
+
+
+@pytest.mark.parametrize("status", NOT_OPEN)
 def test_create_team_rejected_when_tournament_not_open(
-    client: TestClient, session: Session, tournaments: FakeTournaments, status: str
+    client: TestClient, session: Session, lock_spy: LockSpy, status: TournamentStatus
 ) -> None:
-    tournament = tournaments.add(status=status)
+    tournament = _tournament(session)
+    _set_status(session, tournament.id, status)
 
     response = _create(client, _make_account(session), tournament.id)
 
     assert response.status_code == 409
     assert _error_code(response) == "REGISTRATION_CLOSED"
-    assert tournaments.locked == [tournament.id]
+    assert lock_spy.locked == [tournament.id]
 
 
 def test_create_team_for_unknown_tournament_is_404(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session
 ) -> None:
-    del tournaments  # 沒有任何賽事
-
     response = _create(client, _make_account(session), uuid.uuid4())
 
     assert response.status_code == 404
     assert _error_code(response) == "TOURNAMENT_NOT_FOUND"
 
 
-def test_cannot_create_second_team_in_same_tournament(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+def test_team_with_unknown_tournament_is_rejected_by_the_database(
+    session: Session,
 ) -> None:
-    tournament = tournaments.add()
+    team = Team(tournament_id=uuid.uuid4(), name="孤兒隊", invite_token="orphan-token")
+
+    with pytest.raises(IntegrityError) as exc_info, session.begin_nested():
+        session.add(team)
+        session.flush()
+
+    assert "team_tournament_id_fkey" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("table", [TeamMember, Registration])
+def test_member_and_registration_reference_an_existing_tournament(
+    client: TestClient, session: Session, table: type[TeamMember] | type[Registration]
+) -> None:
+    captain = _make_account(session)
+    team = _create_ok(client, captain, _tournament(session).id)
+    team_id = uuid.UUID(team["id"])
+    if table is TeamMember:
+        row: TeamMember | Registration = TeamMember(
+            team_id=team_id,
+            tournament_id=uuid.uuid4(),
+            account_id=_make_account(session).id,
+            role=MemberRole.PLAYER,
+        )
+    else:
+        # 先移除既有報名（team_id 唯一），只留下 tournament_id 不存在這個問題
+        existing = repository.get_registration_by_team(session, team_id)
+        assert existing is not None
+        session.delete(existing)
+        session.flush()
+        row = Registration(
+            team_id=team_id,
+            tournament_id=uuid.uuid4(),
+            status=RegistrationStatus.FORMING,
+        )
+
+    with pytest.raises(IntegrityError) as exc_info, session.begin_nested():
+        session.add(row)
+        session.flush()
+
+    assert f"{table.__tablename__}_tournament_id_fkey" in str(exc_info.value)
+
+
+def test_cannot_create_second_team_in_same_tournament(
+    client: TestClient, session: Session
+) -> None:
+    tournament = _tournament(session)
     captain = _make_account(session)
     _create_ok(client, captain, tournament.id, "A 隊")
 
@@ -313,16 +358,16 @@ def test_cannot_create_second_team_in_same_tournament(
     assert response.status_code == 409
     assert _error_code(response) == "ALREADY_IN_TOURNAMENT"
     # 其他賽事可以
-    _create_ok(client, captain, tournaments.add().id, "B 隊")
+    _create_ok(client, captain, _tournament(session).id, "B 隊")
 
 
 # ---------------------------------------------------------------- 邀請預覽與加入
 
 
 def test_preview_invite_is_public_and_has_no_member_details(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session, game=make_game(session, name="特戰英豪"))
     team = _create_ok(client, _make_account(session), tournament.id)
 
     response = client.get(f"{API}/team-invites/{team['invite_token']}")
@@ -340,11 +385,7 @@ def test_preview_invite_is_public_and_has_no_member_details(
     }
 
 
-def test_unknown_invite_token_is_404(
-    client: TestClient, session: Session, tournaments: FakeTournaments
-) -> None:
-    del tournaments
-
+def test_unknown_invite_token_is_404(client: TestClient, session: Session) -> None:
     preview = client.get(f"{API}/team-invites/no-such-token")
     join = _join(client, _make_account(session), "no-such-token")
 
@@ -354,14 +395,14 @@ def test_unknown_invite_token_is_404(
 
 
 def test_join_team_as_player(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session, lock_spy: LockSpy
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
     team = _create_ok(
         client, _make_account(session, display_name="阿哲"), tournament.id
     )
     player = _make_account(session, display_name="小芸")
-    tournaments.locked.clear()
+    lock_spy.locked.clear()
 
     response = _join(client, player, team["invite_token"])
 
@@ -373,18 +414,16 @@ def test_join_team_as_player(
         ("阿哲", "captain"),
         ("小芸", "player"),
     ]
-    assert tournaments.locked == [tournament.id]
-    [log] = _audit(session, "team.member_joined")
+    assert lock_spy.locked == [tournament.id]
+    [log] = _audit(session, "team.member_joined", tournament.id)
     assert log.actor_id == player.id
     assert log.tournament_id == tournament.id
     assert log.entity_id == uuid.UUID(team["id"])
     assert log.after == {"account_id": str(player.id), "role": "player"}
 
 
-def test_join_requires_verified_email(
-    client: TestClient, session: Session, tournaments: FakeTournaments
-) -> None:
-    team = _create_ok(client, _make_account(session), tournaments.add().id)
+def test_join_requires_verified_email(client: TestClient, session: Session) -> None:
+    team = _create_ok(client, _make_account(session), _tournament(session).id)
 
     response = _join(
         client, _make_account(session, verified=False), team["invite_token"]
@@ -394,12 +433,10 @@ def test_join_requires_verified_email(
     assert _error_code(response) == "EMAIL_NOT_VERIFIED"
 
 
-def test_organizer_cannot_join(
-    client: TestClient, session: Session, tournaments: FakeTournaments
-) -> None:
+def test_organizer_cannot_join(client: TestClient, session: Session) -> None:
     organizer = _make_account(session)
     team = _create_ok(
-        client, _make_account(session), tournaments.add(organizer_id=organizer.id).id
+        client, _make_account(session), _tournament(session, organizer=organizer).id
     )
 
     response = _join(client, organizer, team["invite_token"])
@@ -408,12 +445,13 @@ def test_organizer_cannot_join(
     assert _error_code(response) == "ORGANIZER_CANNOT_JOIN"
 
 
+@pytest.mark.parametrize("status", NOT_OPEN)
 def test_join_rejected_when_tournament_not_open(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session, status: TournamentStatus
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
     team = _create_ok(client, _make_account(session), tournament.id)
-    tournament.status = "closed"
+    _set_status(session, tournament.id, status)
 
     response = _join(client, _make_account(session), team["invite_token"])
 
@@ -422,9 +460,9 @@ def test_join_rejected_when_tournament_not_open(
 
 
 def test_cannot_join_when_already_in_tournament(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
     team_a = _create_ok(client, _make_account(session), tournament.id, "A 隊")
     other_captain = _make_account(session)
     _create_ok(client, other_captain, tournament.id, "B 隊")
@@ -442,10 +480,8 @@ def test_cannot_join_when_already_in_tournament(
     assert _error_code(again) == "ALREADY_IN_TOURNAMENT"
 
 
-def test_team_full_invalidates_invite(
-    client: TestClient, session: Session, tournaments: FakeTournaments
-) -> None:
-    tournament = tournaments.add(starters=1, substitutes=1)
+def test_team_full_invalidates_invite(client: TestClient, session: Session) -> None:
+    tournament = _tournament(session, starters=1, substitutes=1)
     team = _create_ok(client, _make_account(session), tournament.id)
     token = team["invite_token"]
     assert _join(client, _make_account(session), token).status_code == 200
@@ -474,10 +510,9 @@ def _auth_of(session: Session, team: dict[str, Any]) -> dict[str, str]:
 def test_create_team_converts_member_unique_key_conflict_to_409(
     client: TestClient,
     session: Session,
-    tournaments: FakeTournaments,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
     captain = _make_account(session)
     _create_ok(client, captain, tournament.id, "A 隊")
     monkeypatch.setattr(repository, "get_membership", lambda *_args: None)
@@ -493,10 +528,9 @@ def test_create_team_converts_member_unique_key_conflict_to_409(
 def test_member_unique_key_is_the_last_line_of_defense(
     client: TestClient,
     session: Session,
-    tournaments: FakeTournaments,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tournament = tournaments.add()
+    tournament = _tournament(session)
     team_a = _create_ok(client, _make_account(session), tournament.id, "A 隊")
     team_b = _create_ok(client, _make_account(session), tournament.id, "B 隊")
     player = _make_account(session)
@@ -531,11 +565,9 @@ def test_member_unique_key_is_the_last_line_of_defense(
 # ---------------------------------------------------------------- 隊伍頁與我的隊伍
 
 
-def test_team_page_is_members_only(
-    client: TestClient, session: Session, tournaments: FakeTournaments
-) -> None:
+def test_team_page_is_members_only(client: TestClient, session: Session) -> None:
     captain = _make_account(session)
-    team = _create_ok(client, captain, tournaments.add().id)
+    team = _create_ok(client, captain, _tournament(session).id)
     player = _make_account(session)
     _join(client, player, team["invite_token"])
     url = f"{API}/teams/{team['id']}"
@@ -567,15 +599,16 @@ def test_unknown_team_is_404(client: TestClient, session: Session) -> None:
 def test_my_teams_lists_every_team_with_status(
     client: TestClient,
     session: Session,
-    tournaments: FakeTournaments,
     frozen_clock: FrozenClock,
 ) -> None:
     account = _make_account(session)
     url = f"{API}/accounts/me/teams"
     assert client.get(url, headers=_auth(account)).json() == []
 
-    first = tournaments.add(name="政大校園盃", game_name="特戰英豪")
-    second = tournaments.add(name="清大盃", game_name="英雄聯盟")
+    first = _tournament(session, game=make_game(session, name="特戰英豪"))
+    second = _tournament(
+        session, name="清大盃", game=make_game(session, name="英雄聯盟")
+    )
     team_a = _create_ok(client, account, first.id, "A 隊")
     team_b = _create_ok(client, _make_account(session), second.id, "B 隊")
     frozen_clock.advance(timedelta(minutes=1))
@@ -634,10 +667,8 @@ ALLOWED = {
 }
 
 
-def _registration(
-    client: TestClient, session: Session, tournaments: FakeTournaments
-) -> Registration:
-    team = _create_ok(client, _make_account(session), tournaments.add().id)
+def _registration(client: TestClient, session: Session) -> Registration:
+    team = _create_ok(client, _make_account(session), _tournament(session).id)
     registration = repository.get_registration_by_team(session, uuid.UUID(team["id"]))
     assert registration is not None
     return registration
@@ -647,11 +678,10 @@ def _registration(
 def test_mark_status_follows_the_state_diagram(
     client: TestClient,
     session: Session,
-    tournaments: FakeTournaments,
     frm: RegistrationStatus,
     to: RegistrationStatus,
 ) -> None:
-    registration = _registration(client, session, tournaments)
+    registration = _registration(client, session)
     registration.status = frm  # 直接設定起始狀態（測試用）
     session.add(registration)
     session.flush()
@@ -663,7 +693,9 @@ def test_mark_status_follows_the_state_diagram(
         )
         session.refresh(registration)
         assert registration.status == to
-        [log] = _audit(session, "registration.status_changed")
+        [log] = _audit(
+            session, "registration.status_changed", registration.tournament_id
+        )
         assert log.actor_id == actor.id
         assert log.tournament_id == registration.tournament_id
         assert log.entity_id == registration.id
@@ -675,17 +707,20 @@ def test_mark_status_follows_the_state_diagram(
             )
         assert exc_info.value.code == "REGISTRATION_INVALID_TRANSITION"
         assert exc_info.value.status_code == 409
-        assert _audit(session, "registration.status_changed") == []
+        assert (
+            _audit(session, "registration.status_changed", registration.tournament_id)
+            == []
+        )
 
 
 def test_mark_status_by_system_records_no_actor(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session
 ) -> None:
-    registration = _registration(client, session, tournaments)
+    registration = _registration(client, session)
 
     service.mark_status(session, registration=registration, to=S.PENDING, actor_id=None)
 
-    [log] = _audit(session, "registration.status_changed")
+    [log] = _audit(session, "registration.status_changed", registration.tournament_id)
     assert log.actor_id is None
     assert (log.before, log.after) == ({"status": "forming"}, {"status": "pending"})
 
@@ -693,15 +728,13 @@ def test_mark_status_by_system_records_no_actor(
 # ---------------------------------------------------------------- 先鎖再檢查
 
 
-def _record_checks(
-    monkeypatch: pytest.MonkeyPatch, tournaments: FakeTournaments
-) -> None:
+def _record_checks(monkeypatch: pytest.MonkeyPatch, lock_spy: LockSpy) -> None:
     """包住 repository 的檢查查詢，把呼叫順序與 lock 寫進同一個清單。"""
     for name in ("get_membership", "count_members"):
         original = getattr(repository, name)
 
         def wrapped(*args: Any, _name: str = name, _original: Any = original) -> Any:
-            tournaments.events.append(_name)
+            lock_spy.events.append(_name)
             return _original(*args)
 
         monkeypatch.setattr(repository, name, wrapped)
@@ -710,36 +743,31 @@ def _record_checks(
 def test_create_and_join_lock_the_tournament_before_checking(
     client: TestClient,
     session: Session,
-    tournaments: FakeTournaments,
+    lock_spy: LockSpy,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tournament = tournaments.add()
-    _record_checks(monkeypatch, tournaments)
+    tournament = _tournament(session)
+    _record_checks(monkeypatch, lock_spy)
 
     team = _create_ok(client, _make_account(session), tournament.id)
-    create_events = list(tournaments.events)
-    tournaments.events.clear()
+    create_events = list(lock_spy.events)
+    lock_spy.events.clear()
     assert (
         _join(client, _make_account(session), team["invite_token"]).status_code == 200
     )
-    join_events = list(tournaments.events)
+    join_events = list(lock_spy.events)
 
     assert create_events[:2] == ["lock", "get_membership"]
     assert join_events[:3] == ["lock", "get_membership", "count_members"]
 
 
 def test_join_uses_the_value_returned_by_lock_tournament(
-    client: TestClient, session: Session, tournaments: FakeTournaments
+    client: TestClient, session: Session, lock_spy: LockSpy
 ) -> None:
-    tournament = tournaments.add(starters=1, substitutes=1)
+    tournament = _tournament(session, starters=1, substitutes=1)
     team = _create_ok(client, _make_account(session), tournament.id)
     # 鎖住後讀到的最新值：替補已改成 0，隊伍（1 人）已滿
-    tournaments.locked_values[tournament.id] = FakeTournament(
-        organizer_id=tournament.organizer_id,
-        id=tournament.id,
-        starters=1,
-        substitutes=0,
-    )
+    lock_spy.override = lambda locked: locked.model_copy(update={"substitutes": 0})
 
     response = _join(client, _make_account(session), team["invite_token"])
 
@@ -750,10 +778,8 @@ def test_join_uses_the_value_returned_by_lock_tournament(
 # ---------------------------------------------------------------- 公開函式
 
 
-def test_public_functions(
-    client: TestClient, session: Session, tournaments: FakeTournaments
-) -> None:
-    tournament = tournaments.add()
+def test_public_functions(client: TestClient, session: Session) -> None:
+    tournament = _tournament(session)
     captain = _make_account(session)
     team = _create_ok(client, captain, tournament.id)
     player = _make_account(session)

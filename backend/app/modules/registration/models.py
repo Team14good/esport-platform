@@ -39,7 +39,6 @@ INVITE_TOKEN_MAX_LENGTH = 64
 
 
 # ---------------------------------------------------------------- 資料表
-# tournament_id 暫不加外鍵：tournament 表由 Story 2.2 建立（見 deferred-work）。
 
 
 class Team(SQLModel, table=True):
@@ -56,7 +55,7 @@ class Team(SQLModel, table=True):
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    tournament_id: uuid.UUID = Field(index=True)
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id", index=True)
     name: str = Field(max_length=TEAM_NAME_MAX_LENGTH)
     invite_token: str = Field(max_length=INVITE_TOKEN_MAX_LENGTH, unique=True)
     created_at: datetime = Field(
@@ -81,7 +80,7 @@ class TeamMember(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     team_id: uuid.UUID = Field(foreign_key="team.id", index=True)
-    tournament_id: uuid.UUID
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id")
     account_id: uuid.UUID = Field(foreign_key="account.id", index=True)
     role: MemberRole = Field(sa_type=String(16))
     created_at: datetime = Field(
@@ -97,7 +96,7 @@ class Registration(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     team_id: uuid.UUID = Field(foreign_key="team.id", unique=True)
-    tournament_id: uuid.UUID = Field(index=True)
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id", index=True)
     status: RegistrationStatus = Field(sa_type=String(32))
     created_at: datetime = Field(
         default_factory=clock.now, sa_type=DateTime(timezone=True)

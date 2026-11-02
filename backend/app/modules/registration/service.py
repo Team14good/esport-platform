@@ -1,15 +1,11 @@
 """registration 的業務規則、資源層級權限、狀態轉換、操作紀錄與事件；不得 commit 或 rollback。
 
-tournaments 的 `get_tournament`、`lock_tournament`、`ensure_accepting_registrations`
-由 Story 2.2 提供（contracts/tournaments.md）。2.2 合併前照約定呼叫、測試以替身代替；
-呼叫處的 `type: ignore[attr-defined]`（mypy）、`ty: ignore[unresolved-attribute]`（ty）
-與本地的 `_Tournament` Protocol 在 2.2 合併後移除
-（見 deferred-work）。
+賽事只透過 tournaments 的公開函式 `get_tournament`、`lock_tournament`、
+`ensure_accepting_registrations` 取得與檢查（contracts/tournaments.md）。
 """
 
 import secrets
 import uuid
-from typing import Protocol
 
 from sqlmodel import Session
 
@@ -33,48 +29,26 @@ from app.modules.registration.models import (
     TeamRead,
 )
 from app.modules.tournaments import service as tournaments_service
+from app.modules.tournaments.models import TournamentRead
 
 INVITE_TOKEN_BYTES = 24
-
-
-class _Tournament(Protocol):
-    """本模組需要的 `TournamentRead` 欄位（contracts/tournaments.md）。"""
-
-    @property
-    def id(self) -> uuid.UUID: ...
-    @property
-    def organizer_id(self) -> uuid.UUID: ...
-    @property
-    def name(self) -> str: ...
-    @property
-    def game_name(self) -> str: ...
-    @property
-    def starters(self) -> int: ...
-    @property
-    def substitutes(self) -> int: ...
 
 
 # ---------------------------------------------------------------- tournaments 介面
 
 
-def _get_tournament(session: Session, tournament_id: uuid.UUID) -> _Tournament:
-    tournament: _Tournament = tournaments_service.get_tournament(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-        session, tournament_id=tournament_id
-    )
-    return tournament
+def _get_tournament(session: Session, tournament_id: uuid.UUID) -> TournamentRead:
+    return tournaments_service.get_tournament(session, tournament_id=tournament_id)
 
 
-def _lock_tournament(session: Session, tournament_id: uuid.UUID) -> _Tournament:
+def _lock_tournament(session: Session, tournament_id: uuid.UUID) -> TournamentRead:
     """鎖住賽事列（AD-6）：建隊、加入等改變名單的操作都先鎖，再檢查身分與人數。"""
-    tournament: _Tournament = tournaments_service.lock_tournament(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-        session, tournament_id=tournament_id
-    )
-    return tournament
+    return tournaments_service.lock_tournament(session, tournament_id=tournament_id)
 
 
-def _ensure_accepting_registrations(tournament: _Tournament) -> None:
+def _ensure_accepting_registrations(tournament: TournamentRead) -> None:
     """賽事不是開放報名時，由 tournaments 拋 409 `REGISTRATION_CLOSED`。"""
-    tournaments_service.ensure_accepting_registrations(tournament)  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    tournaments_service.ensure_accepting_registrations(tournament)
 
 
 # ---------------------------------------------------------------- 錯誤
@@ -215,7 +189,7 @@ def mark_status(
 # ---------------------------------------------------------------- 內部共用
 
 
-def _max_members(tournament: _Tournament) -> int:
+def _max_members(tournament: TournamentRead) -> int:
     return tournament.starters + tournament.substitutes
 
 
@@ -230,7 +204,7 @@ def _registration_of(session: Session, team: Team) -> Registration:
 
 
 def _ensure_can_join(
-    session: Session, tournament: _Tournament, account_id: uuid.UUID
+    session: Session, tournament: TournamentRead, account_id: uuid.UUID
 ) -> None:
     """鎖住賽事後檢查：開放報名、不是主辦方、不在該賽事的任何隊伍。"""
     _ensure_accepting_registrations(tournament)
@@ -241,7 +215,7 @@ def _ensure_can_join(
 
 
 def _build_detail(
-    session: Session, team: Team, tournament: _Tournament, viewer: TeamMember
+    session: Session, team: Team, tournament: TournamentRead, viewer: TeamMember
 ) -> TeamDetail:
     members = repository.list_members(session, team.id)
     member_reads: list[TeamMemberRead] = []

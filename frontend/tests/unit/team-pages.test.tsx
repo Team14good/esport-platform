@@ -1,6 +1,7 @@
+import { createMemoryHistory, createRouter } from "@tanstack/react-router"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeAll, describe, expect, it, vi } from "vitest"
 
 import {
   type Identity,
@@ -9,6 +10,7 @@ import {
   type TeamDetail,
   type TeamInvitePreview,
 } from "@/client"
+import { routeTree } from "@/routeTree.gen"
 import { ACCOUNT, BROWSE, renderApp, signInAs } from "./auth-fixtures"
 import { httpError } from "./helpers"
 
@@ -86,6 +88,21 @@ function mockPreview(invite: TeamInvitePreview = INVITE) {
     .spyOn(RegistrationService, "previewTeamInvite")
     .mockResolvedValue({ data: invite } as PreviewResult)
 }
+
+// 路由以 autoCodeSplitting 延遲載入：第一次進入某個路由時，Vite 才轉譯它的元件，
+// 冷啟動時常要將近 1 秒，偶爾超過 findBy 預設的 1000 ms，使該路由的第一個測試失敗。
+// 先載入本檔用到的路由，讓每個測試只等待畫面本身。
+beforeAll(async () => {
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  })
+  await Promise.all(
+    (["/teams/$teamId", "/join/$inviteToken", "/me/teams"] as const).map(
+      (path) => router.loadRouteChunk(router.routesByPath[path]),
+    ),
+  )
+}, 30_000)
 
 describe("隊伍頁（S17）", () => {
   it("隊員檢視：名單、隊長徽章、人數與邀請連結", async () => {

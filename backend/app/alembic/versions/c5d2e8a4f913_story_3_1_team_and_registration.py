@@ -2,7 +2,7 @@
 
 建立 team（隊伍；邀請 token 明文、UNIQUE；同賽事隊名不分大小寫唯一）、team_member
 （隊員；（tournament_id, account_id）唯一）與 registration（報名；建立隊伍時為 forming）。
-tournament_id 暫不加外鍵：tournament 表由 Story 2.2 建立，合併後另以遷移補上。
+三張表的 tournament_id 都有外鍵到 tournament（Story 2.2 建立）。
 參賽資料欄位（3.2）與送出快照欄位（3.3）由之後的 Story 加入。
 
 Revision ID: c5d2e8a4f913
@@ -32,6 +32,7 @@ def upgrade():
             "invite_token", sqlmodel.sql.sqltypes.AutoString(length=64), nullable=False
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["tournament_id"], ["tournament.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("invite_token"),
     )
@@ -55,6 +56,7 @@ def upgrade():
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["account_id"], ["account.id"]),
         sa.ForeignKeyConstraint(["team_id"], ["team.id"]),
+        sa.ForeignKeyConstraint(["tournament_id"], ["tournament.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "tournament_id",
@@ -77,6 +79,7 @@ def upgrade():
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["team_id"], ["team.id"]),
+        sa.ForeignKeyConstraint(["tournament_id"], ["tournament.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("team_id"),
     )
