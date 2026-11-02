@@ -84,6 +84,7 @@ context:
 - `make_game` 會新建平台管理員；併發測試在提交前取消他的管理員身分，避免留下第二個管理員影響以管理員人數為前提的測試。
 - 前端偶發失敗的原因：路由以 `autoCodeSplitting` 延遲載入，該路由第一次渲染時 Vite 才轉譯元件，冷啟動量到 930～1006 ms。`team-pages.test.tsx` 加 `beforeAll` 以 `router.loadRouteChunk` 先載入三個路由；之後 S19 第一個測試 46～121 ms、S17 第一個測試 271～560 ms，連跑 10 次全過。
 - 全部前端單元測試連跑 3 次時，A 的 `admin-applications.test.tsx`（「不是平台管理員：顯示 S38 的 403」）失敗 1 次，疑為同一原因；不在本 Story 範圍，未修改。
+- 遷移的 `down_revision` 最後接到 `f7a3c9e1b5d2`，不是 Problem 寫的 `e4b8c1d2a6f7`：#19（4.1）合併後 head 改變，本分支 merge `origin/main` 時再改接一次。
 
 ## Spec Change Log
 

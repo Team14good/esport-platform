@@ -194,7 +194,7 @@ class TeamMemberRole(BaseModel):
 
 
 class TeamRead(BaseModel):
-    """給其他模組使用的隊伍資料：隊名、隊員帳號與角色（隊長身分交給 `core.authz` 判斷）。"""
+    """給其他模組使用的隊伍資料：隊名、隊員帳號與角色（判斷隊長請用 `registration.service.is_captain`）。"""
 
     id: uuid.UUID
     tournament_id: uuid.UUID

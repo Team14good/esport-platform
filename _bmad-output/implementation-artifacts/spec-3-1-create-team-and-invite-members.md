@@ -108,6 +108,7 @@ context:
 - `TeamDetail` 對所有隊員都含 `invite_token`；S19 的公開預覽 `TeamInvitePreview` 不含隊員名單。新增業務錯誤：`TEAM_NOT_FOUND` 404、`REGISTRATION_NOT_FOUND` 404。
 - 驗收時補上：`TeamRead` 加 `members`（`account_id`、`role`），依 c-d-design-groundwork「`get_team` 回傳 `TeamRead`（隊名、隊員帳號與角色）」，其他模組以它判斷隊長。
 - S16 Dialog 只有「建立隊伍」送出鈕，關閉用 Dialog 右上角的關閉鈕（避免「取消」這類非動詞＋名詞的按鈕）。
+- Decisions 的「S2 完成後由 B 放上『建立隊伍』」已由 `spec-3-1-create-team-entry.md` 取代：入口在本 Story 收尾時由 C 放上 S2。
 
 ## Spec Change Log
 
