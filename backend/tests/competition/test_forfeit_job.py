@@ -1,7 +1,8 @@
 """Story 5.2 第二階段：逾時判棄權 worker 工作的測試。
 
 D、B 的函式尚未合併，所以用記憶體中的假 `ForfeitPorts`（記錄呼叫順序）；
-session 是真的，操作紀錄與事件照常寫進測試資料庫。
+session 是真的，操作紀錄與事件照常寫進測試資料庫。`audit_log.tournament_id`
+有外鍵（Story 2.2），所以假賽事也會在資料庫新增一筆真的賽事列。
 """
 
 import dataclasses
@@ -15,7 +16,7 @@ from uuid import UUID
 import pytest
 from sqlmodel import Session, col, select
 
-from app.core import audit
+from app.core import audit, clock
 from app.core.events import OutboxEvent
 from app.modules.competition.forfeit_job import (
     ForfeitMatchRecord,
@@ -25,8 +26,14 @@ from app.modules.competition.forfeit_job import (
     make_forfeit_job,
 )
 from app.modules.competition.models import MatchOutcome, MatchStatus
+from app.modules.tournaments.models import (
+    Tournament,
+    TournamentMode,
+    TournamentStatus,
+)
 from app.worker import run_once
 from tests.conftest import FrozenClock
+from tests.helpers import make_account, make_game
 
 DEADLINE = datetime(2026, 11, 1, 13, 15, tzinfo=UTC)
 NOW = datetime(2026, 11, 1, 13, 16, tzinfo=UTC)
@@ -66,15 +73,41 @@ class FakePorts:
     calls: list[tuple[str, UUID | datetime]] = field(default_factory=list)
     sessions: list[Session] = field(default_factory=list)
     fail_transition_once: set[UUID] = field(default_factory=set)
+    # 寫入真的賽事列用（操作紀錄的外鍵）
+    db: Session | None = None
 
     def add_tournament(
         self, *, cancelled: bool = False, appeal_minutes: int = 60
     ) -> UUID:
-        tournament_id = uuid.uuid4()
+        tournament_id = self._insert_tournament_row()
         self.tournaments[tournament_id] = TournamentForfeitInfo(
             cancelled=cancelled, appeal_minutes=appeal_minutes
         )
         return tournament_id
+
+    def _insert_tournament_row(self) -> UUID:
+        """直接新增一筆賽事列並回傳 id；不經 service，才不會多出 tournament.created 紀錄。"""
+        assert self.db is not None
+        now = clock.now()
+        tournament = Tournament(
+            organizer_id=make_account(self.db, organizer=True).id,
+            game_id=make_game(self.db).id,
+            name="棄權測試",
+            status=TournamentStatus.ONGOING,
+            mode=TournamentMode.CAMPUS,
+            capacity=2,
+            registration_start=now,
+            priority_end=now,
+            registration_end=now,
+            start_at=now,
+            round_interval_minutes=1,
+            forfeit_minutes=15,
+            appeal_minutes=30,
+            game_snapshot={},
+        )
+        self.db.add(tournament)
+        self.db.flush()
+        return tournament.id
 
     def add_match(
         self,
@@ -146,8 +179,8 @@ class FakePorts:
 
 
 @pytest.fixture
-def ports() -> FakePorts:
-    return FakePorts()
+def ports(session: Session) -> FakePorts:
+    return FakePorts(db=session)
 
 
 @pytest.fixture(autouse=True)
@@ -405,10 +438,11 @@ def test_now_is_read_once_per_call(
     """時鐘每讀一次就前進一小時：若工作讀了兩次，申訴期截止時間會跟著偏移。"""
     from app.core import clock
 
-    ticks = iter(NOW + timedelta(hours=n) for n in range(100))
-    monkeypatch.setattr(clock, "now", lambda: next(ticks))
     tournament_id = ports.add_tournament(appeal_minutes=60)
     match = ports.add_match(tournament_id, checked_in="b")
+    # 建好測試資料（建立賽事列也會讀時鐘）之後才換時鐘，只量工作本身
+    ticks = iter(NOW + timedelta(hours=n) for n in range(100))
+    monkeypatch.setattr(clock, "now", lambda: next(ticks))
 
     assert forfeit_next_due(session, ports=ports) is True
 
