@@ -44,18 +44,8 @@
 ## Deferred from: spec-3-2-player-registration-info.md 第一段 (2026-10-30)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md`
-  summary: Story 3.2 第二段（依賴 Story 3.1 的 `team_member` 與 S17）尚未實作：參賽資料還不能存檔，S18 還沒有入口。
-  evidence: 依 spec Decisions，story/3-2 從 `main` 開出、與 story/3-1 獨立；第一段只做了 `core.storage`、`registration/player_profile.py` 的 `rank_score_for`、`ScreenshotUploader` 與 `PlayerProfileDialog`。3.1 合併後在同一分支 `git merge origin/main`，再做：`team_member` 加 `game_account_id`、`rank_tier`、`rank_score`、`rank_screenshot_key`、截圖原始檔名與遷移；multipart API（先 `lock_tournament`，只能改自己、名單鎖定時拒絕，段位用 `rank_score_for` 驗證、截圖用 `core.storage.save_image` 存）；重新產生 `frontend/src/client`；S17「填寫我的資料」、Roster 行與「資料完成／缺：…」、平均段位積分（含替補，取到小數第二位）；以生成的 client 的 options 傳 axios `onUploadProgress`，接上 `PlayerProfileDialog` 的 `uploadProgress`。段位對照表改用 tournaments 的 `RankTierRead`，取代 `player_profile.py` 的本地 `Protocol`。
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md`
-  summary: `core.storage` 沒有刪檔函式；第二段選手更換段位截圖後，舊檔會永遠留在 uploads volume。
-  evidence: 2026-10-30 Story 3.2 第一段 Code Review（Blind Hunter）。本段沒有更換流程所以尚未發生；第二段存檔時要新增 `delete_file(key)`，並在同一交易成功後刪除舊鍵值的檔案（medium）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md`
   summary: 上傳 API 沒有請求大小上限，5 MB 在 multipart 整個收完後才由 `core.storage` 檢查。
   evidence: 2026-10-30 Story 3.2 第一段 Code Review（Blind Hunter）。Starlette 會先把整個 body spool 到暫存檔，超大請求仍會被完整接收；第二段建 multipart API 時要決定請求大小上限（例如檢查 `Content-Length`）（medium）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md`
-  summary: 段位截圖原始檔名的欄位名、長度上限與清理規則（路徑分隔字元、控制字元）未定。
-  evidence: 2026-10-30 Story 3.2 第一段 Code Review（Blind Hunter）。第二段才會存檔名並在 S17、S18 顯示，先記下避免漏掉（low）。
 ## Deferred from: spec-3-1-tournament-integration.md (2026-11-02)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`
@@ -152,3 +142,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-and-invite-members.md`
   summary: 3.3 送出報名時，`join_team`（service.py:328）與 `_invite_status`（service.py:196）要補檢查報名狀態仍是 `forming`；否則已送出的隊伍仍可透過邀請連結加入，S19 預覽也會顯示連結有效（medium）。
   evidence: 2026-11-02 A 在 PR #23 的審查。3.1 只有 `forming` 狀態，目前不會出錯；epic-3-context 規定「送出報名後名單鎖定、邀請連結失效」。
+
+## Deferred from: spec-3-2-player-registration-info-2.md (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info-2.md`
+  summary: 上傳 API（`PUT /teams/{team_id}/members/me/profile`）仍沒有請求大小上限；上面第一段留下的同一項再次延後（medium）。
+  evidence: 第二段 spec 的 Never 明定「不做請求大小上限」：`save_image` 邊讀邊擋 5 MB，超過的檔案不會存下，但 Starlette 仍會先把整個 multipart body spool 到暫存檔。只靠 `Content-Length` 擋不住 chunked 傳輸，要在 ASGI middleware 或反向代理（例如 `client_max_body_size`）處理，屬部署層的決定，不在本 Story 範圍。

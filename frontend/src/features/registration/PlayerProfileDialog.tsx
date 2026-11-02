@@ -75,7 +75,12 @@ export type PlayerProfileDialogProps = {
 function buildSchema(hasUploadedScreenshot: boolean) {
   return z
     .object({
-      game_account_id: z.string().trim().min(1, "請輸入遊戲 ID"),
+      game_account_id: z
+        .string()
+        .trim()
+        .min(1, "請輸入遊戲 ID")
+        // 以 code point 計算，與後端的字數一致（emoji 等不算兩個字）
+        .refine((value) => [...value].length <= 50, "遊戲 ID 最多 50 個字"),
       rank_tier: z.string().min(1, "請選擇段位"),
       rank_screenshot: z.instanceof(File).nullable(),
     })

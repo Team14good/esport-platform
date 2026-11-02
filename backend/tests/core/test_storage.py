@@ -184,3 +184,41 @@ def test_open_file_does_not_read_outside_upload_dir(
 
     with pytest.raises(BusinessError, match="找不到"):
         storage.open_file("../secret.png")
+
+
+# ---------------------------------------------------------------- 刪除
+
+
+def test_delete_file_removes_stored_file(upload_dir: Path) -> None:
+    key = storage.save_image(io.BytesIO(PNG_MAGIC + b"x"), content_type="image/png")
+    other = storage.save_image(io.BytesIO(PNG_MAGIC + b"y"), content_type="image/png")
+
+    storage.delete_file(key)
+
+    assert _files(upload_dir) == [other]
+
+
+@pytest.mark.parametrize("key", ["", "../secret.png", "0" * 32 + ".png"])
+def test_delete_file_ignores_invalid_or_missing_key(
+    upload_dir: Path, tmp_path: Path, key: str
+) -> None:
+    upload_dir.mkdir()
+    (tmp_path / "secret.png").write_bytes(PNG_MAGIC)
+
+    storage.delete_file(key)
+
+    assert (tmp_path / "secret.png").exists()
+
+
+def test_delete_file_logs_other_os_errors(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    key = storage.save_image(io.BytesIO(PNG_MAGIC), content_type="image/png")
+
+    def denied(_self: Path, **_kwargs: object) -> None:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(Path, "unlink", denied)
+    storage.delete_file(key)
+
+    assert key in caplog.text

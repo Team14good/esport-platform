@@ -134,6 +134,36 @@ describe("S18 選手參賽資料", () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
+  it("遊戲 ID 去頭尾空白後超過 50 字時不送出", async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderDialog({
+      initialValues: { game_account_id: "x".repeat(51), rank_tier: "鑽石" },
+      uploadedScreenshotName: "my-rank.png",
+    })
+
+    await user.click(screen.getByRole("button", { name: "儲存資料" }))
+
+    expect(await screen.findByText("遊戲 ID 最多 50 個字")).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["頭尾空白的 50 字", ` ${"x".repeat(50)} `, "x".repeat(50)],
+    ["50 個 emoji（100 個 UTF-16 單位）", "😀".repeat(50), "😀".repeat(50)],
+  ])("遊戲 ID：%s可以送出", async (_label, input, expected) => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderDialog({
+      initialValues: { game_account_id: input, rank_tier: "鑽石" },
+      uploadedScreenshotName: "my-rank.png",
+    })
+
+    await user.click(screen.getByRole("button", { name: "儲存資料" }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0].game_account_id).toBe(expected)
+    expect(screen.queryByText("遊戲 ID 最多 50 個字")).toBeNull()
+  })
+
   it("已上傳過截圖：重開只顯示「已上傳」＋檔名、沒有圖片，不必重選即可送出", async () => {
     const user = userEvent.setup()
     const { onSubmit } = renderDialog({

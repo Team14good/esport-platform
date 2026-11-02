@@ -108,3 +108,39 @@
 - 問題與修正：三個審查者共提出 21 項（合併重複後 14 項），修正 1 組（補主辦方賽事載入中、帳號載入中與失敗、卡片優先於主辦方判斷共 4 個測試；子代理逐一改壞程式確認測試會失敗），其餘查證後駁回；其中「後端沒有擋主辦方建隊」經查 `_ensure_can_join` 已有檢查且實測被拒，判為誤報。實測腳本少了結束程式的呼叫，跑完後掛住約 50 分鐘才由主流程發現並停止
 - 成熟度：L4（固定流程，子代理實作、多個獨立審查者加自動測試與瀏覽器實測，人只在 checkpoint 決策）
 - 證據：_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md（Review Triage Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-03｜需求／設計｜Story 3.2 第二段 spec：存檔 API、S17 入口與平均段位積分
+
+- Story／範圍：3.2 第二段（分支 story/3-2，PR #24）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（兩個調查子代理、一個 spec 審查子代理）
+- 怎麼用：3.1（#23）合併後，AI 先把本機落後遠端的 story/3-2 快轉、合併 origin/main 並解 `sprint-status.yaml` 衝突；兩個子代理分別調查後端與前端，主流程寫出 spec；使用者要求審查 spec，由另一個子代理對照程式與 PRD／UX 審查
+- AI 產出：spec-3-2-player-registration-info-2.md（I/O 矩陣 12 列、13 項 Tasks）；調查時發現前端拿不到段位對照表（公開賽事 API 沒有 `rank_tiers`），改由 `TeamDetail` 帶出
+- 人做了什麼：決定平均段位積分只算已填者並註明人數（PRD 只寫「所有成員的平均」，未說明未填完時怎麼顯示）；決定保留約 3,500～4,000 tokens 的完整 spec；同意審查後對凍結區塊的 4 項修改；核准 spec
+- 驗證：spec 審查子代理提出 15 項，主流程抽查其中兩項（`join_team` 的檢查順序、deferred 項目數）屬實
+- 問題與修正：AI 初稿有三個錯誤，都由 spec 審查子代理抓到。一是檢查順序寫成「先鎖賽事再查隊伍是否存在」，但要先查到隊伍才知道鎖哪個賽事（3.1 的 `join_team` 就是先查再鎖）；二是遊戲 ID 用 FastAPI 的 Form 限制驗證，會在鎖之前就回英文 422；三是平均值型別寫成 `Decimal`，Pydantic 會序列化成字串。另外初稿寫「刪除 deferred-work 四項」，實際只有三項該刪。合併時 AI 一開始直接在落後遠端的本機分支上合併 main，看到衝突內容不對才發現，改為先快轉再合併
+- 成熟度：L4（固定流程，多個子代理調查與審查，人在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-2-player-registration-info-2.md（Decisions）；commit 未記錄（尚未 commit）
+
+### 2026-11-03｜程式／程式生成｜Story 3.2 第二段實作與審查
+
+- Story／範圍：3.2 第二段（分支 story/3-2，PR #24）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理、三個審查子代理）
+- 怎麼用：實作子代理只依 spec 實作；主流程讀 diff 對照 Tasks 與 I/O 矩陣，自己重建容器跑測試；三個審查子代理（Blind Hunter、Edge Case Hunter、Verification Gap）審 diff，主流程逐項查證後分類，修正交回同一個實作子代理
+- AI 產出：`team_member` 五個欄位與遷移、`PUT /teams/{team_id}/members/me/profile`（multipart）、`core.storage.delete_file`、遊戲 ID／檔名清理與平均值純函式、S17 名單的完成度與「填寫我的資料」、上傳進度；22 個檔案、新增 2107 行、刪除 65 行；新增 32 個 API 測試（I/O 矩陣 12 列都有對應測試）
+- 人做了什麼：核准 spec 後交由流程執行
+- 驗證：後端 1400 個測試通過、覆蓋率 97%，mypy、ty、ruff 通過；前端 typecheck、biome 通過，49 個檔、587 個單元測試通過。瀏覽器實測（375 px、兩個帳號、確認舊截圖檔被刪除）未做
+- 問題與修正：三個審查者共提出 18 項（Verification Gap 0 項），修正 5 組：遊戲 ID 只去頭尾空白，含 NUL 時 PostgreSQL 會拒絕而回 500、含 U+202E 會讓隊友看到的名單文字反轉；前後端計算「50 字」的方式不同（UTF-16 與 code point）；儲存失敗後 S17 沒有重新抓資料，S18 仍顯示可編輯；兩個檢查順序測試與一個去空白測試缺漏。其餘 10 項駁回，其中 3 項查證為誤報（例如「段位積分會過期」：賽事的段位表存在建立時的快照，不會變）。實作子代理有兩處偏離 spec 字面並說明原因：Form 欄位給空字串預設值，否則 FastAPI 會在鎖之前回自己的 422；新檔清理分在 service 與 router 兩處，因為例外發生時 router 拿不到鍵值
+- 成熟度：L4（固定流程，子代理實作、多個獨立審查者加自動測試，主流程查證每項發現）
+- 證據：spec-3-2-player-registration-info-2.md（Review Triage Log、Implementation Notes）；deferred-work.md；commit 未記錄（尚未 commit）
+
+### 2026-11-03｜測試／瀏覽器實測｜Story 3.2 第二段：S17、S18 的瀏覽器與 375 px
+
+- Story／範圍：3.2 第二段（分支 story/3-2，PR #24）
+- 工具：Claude Code（Opus 5.5）＋ Playwright 1.63（容器內的 Chromium）
+- 怎麼用：AI 寫 Node 腳本經 API 準備資料（管理員建遊戲、主辦方註冊驗證並經審核、建立開放報名的賽事、隊長建隊、隊員以邀請連結加入），再用 Playwright 以隊員（375 px）與隊長（桌機）兩個帳號操作 S17、S18 並逐項斷言、截圖；結束後比對 uploads volume 與資料庫的截圖鍵值
+- AI 產出：資料準備與實測腳本、7 張截圖；28 項檢查全部通過（缺漏文字、平均值三種顯示、只有自己那列有按鈕、手機 Sheet／桌機 Dialog、重開 S18 只顯示檔名不顯示圖片、遊戲 ID 去頭尾空白、換截圖、隊長看不到隊員的截圖檔名、375 px 各畫面沒有水平捲動）
+- 人做了什麼：決定在 commit 前先做瀏覽器實測
+- 驗證：28/28 通過；實測共上傳 3 張截圖，uploads volume 最後剩 2 張，與資料庫的兩個鍵值一致，確認換掉的舊檔已刪除；人工查看 3 張截圖確認版面。上傳進度條在本機傳輸太快，沒有在瀏覽器觀察到（由單元測試涵蓋）
+- 問題與修正：準備資料的腳本第一次把中文標籤放進 email 的 @ 前面，驗證信寄不出去而中斷，正是 deferred-work 裡已記錄的 identity 問題，改用英文 email；第二次因賽事每輪間隔 60 分鐘低於最小值 75 分鐘被拒，改成 90 分鐘
+- 成熟度：L3（AI 自動化實測與截圖，人決定要做這項檢查）
+- 證據：PR #24 檢查清單；commit 未記錄（尚未 commit）

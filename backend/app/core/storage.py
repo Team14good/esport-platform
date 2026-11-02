@@ -8,6 +8,7 @@
 鍵值；任何失敗都會刪掉暫存檔，不留下半個檔案。
 """
 
+import logging
 import os
 import re
 import tempfile
@@ -17,6 +18,8 @@ from typing import BinaryIO
 
 from app.core.config import settings
 from app.core.errors import BusinessError
+
+logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 """圖片大小上限：5 MB（剛好 5 MB 可收，多 1 byte 拒絕）。"""
@@ -99,3 +102,19 @@ def open_file(key: str) -> BinaryIO:
         return (Path(settings.UPLOAD_DIR) / key).open("rb")
     except FileNotFoundError, IsADirectoryError:
         raise _not_found() from None
+
+
+def delete_file(key: str) -> None:
+    """刪除已存的檔案；不會往外拋例外。
+
+    鍵值不合格式或檔案不存在時直接返回；其他 `OSError`（例如權限）記 log 後返回，
+    讓呼叫端（交易提交後的清理）不必處理刪檔失敗。
+    """
+    if not _KEY_PATTERN.fullmatch(key):
+        return
+    try:
+        (Path(settings.UPLOAD_DIR) / key).unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        logger.warning("刪除上傳檔案失敗：%s", key, exc_info=True)

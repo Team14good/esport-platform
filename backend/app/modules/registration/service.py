@@ -6,16 +6,20 @@
 
 import secrets
 import uuid
+from dataclasses import dataclass
+from pathlib import PurePath
+from typing import BinaryIO
 
 from sqlmodel import Session
 
-from app.core import audit, clock
-from app.core.errors import BusinessError
+from app.core import audit, clock, storage
+from app.core.errors import BusinessError, FieldError
 from app.modules.identity import service as identity_service
-from app.modules.registration import repository
+from app.modules.registration import player_profile, repository
 from app.modules.registration.models import (
     InviteStatus,
     MemberRole,
+    MissingProfileField,
     MyTeamCard,
     Registration,
     RegistrationRead,
@@ -29,7 +33,7 @@ from app.modules.registration.models import (
     TeamRead,
 )
 from app.modules.tournaments import service as tournaments_service
-from app.modules.tournaments.models import TournamentRead
+from app.modules.tournaments.models import TournamentRead, TournamentStatus
 
 INVITE_TOKEN_BYTES = 24
 
@@ -91,6 +95,18 @@ def _team_name_taken() -> BusinessError:
 def _team_member_required() -> BusinessError:
     return BusinessError(
         "TEAM_MEMBER_REQUIRED", "只有隊員可以查看這支隊伍。", status_code=403
+    )
+
+
+def _roster_locked() -> BusinessError:
+    return BusinessError("ROSTER_LOCKED", "名單已鎖定，資料無法修改。", status_code=409)
+
+
+def _rank_screenshot_required() -> FieldError:
+    return FieldError(
+        "RANK_SCREENSHOT_REQUIRED",
+        "請上傳段位截圖",
+        loc=("body", "rank_screenshot"),
     )
 
 
@@ -214,6 +230,25 @@ def _ensure_can_join(
         raise _already_in_tournament()
 
 
+def _missing_fields(member: TeamMember) -> list[MissingProfileField]:
+    """尚未填寫的參賽資料，固定依遊戲 ID、段位、段位截圖的順序。"""
+    missing: list[MissingProfileField] = []
+    if member.game_account_id is None:
+        missing.append("game_account_id")
+    if member.rank_tier is None:
+        missing.append("rank_tier")
+    if member.rank_screenshot_key is None:
+        missing.append("rank_screenshot")
+    return missing
+
+
+def _profile_editable(tournament: TournamentRead, registration: Registration) -> bool:
+    return (
+        tournament.status == TournamentStatus.OPEN
+        and registration.status == RegistrationStatus.FORMING
+    )
+
+
 def _build_detail(
     session: Session, team: Team, tournament: TournamentRead, viewer: TeamMember
 ) -> TeamDetail:
@@ -222,14 +257,26 @@ def _build_detail(
     for member in members:
         contact = identity_service.get_account_contact(session, member.account_id)
         assert contact is not None  # 外鍵保證帳號存在
+        is_viewer = member.account_id == viewer.account_id
         member_reads.append(
             TeamMemberRead(
                 account_id=member.account_id,
                 display_name=contact.display_name,
                 role=member.role,
                 joined_at=member.created_at,
+                game_account_id=member.game_account_id,
+                rank_tier=member.rank_tier,
+                rank_score=member.rank_score,
+                has_rank_screenshot=member.rank_screenshot_key is not None,
+                # 原始檔名可能含個資，只回給本人
+                rank_screenshot_name=(
+                    member.rank_screenshot_name if is_viewer else None
+                ),
+                missing_fields=_missing_fields(member),
             )
         )
+    scores = [m.rank_score for m in members if m.rank_score is not None]
+    registration = _registration_of(session, team)
     max_members = _max_members(tournament)
     return TeamDetail(
         id=team.id,
@@ -241,10 +288,14 @@ def _build_detail(
         substitutes=tournament.substitutes,
         max_members=max_members,
         members=member_reads,
-        registration_status=_registration_of(session, team).status,
+        registration_status=registration.status,
         invite_token=team.invite_token,
         invite_status=_invite_status(len(members), max_members),
         my_role=viewer.role,
+        rank_tiers=tournament.rank_tiers,
+        avg_rank_score=player_profile.average_rank_score(scores),
+        rank_filled_count=len(scores),
+        profile_editable=_profile_editable(tournament, registration),
     )
 
 
@@ -373,6 +424,96 @@ def get_team_detail(
         raise _team_member_required()
     tournament = _get_tournament(session, team.tournament_id)
     return _build_detail(session, team, tournament, viewer)
+
+
+@dataclass(frozen=True)
+class ProfileUpdate:
+    """`update_player_profile` 的結果。
+
+    `new_key`：這次存下的截圖鍵值（沒換截圖為 None）；交易提交失敗時由 router 刪除。
+    `old_key`：被換掉的舊截圖鍵值（沒換或第一次上傳為 None）；交易提交後由 router 刪除。
+    """
+
+    detail: TeamDetail
+    new_key: str | None
+    old_key: str | None
+
+
+def update_player_profile(
+    session: Session,
+    *,
+    team_id: uuid.UUID,
+    account_id: uuid.UUID,
+    game_account_id: str,
+    rank_tier: str,
+    screenshot: BinaryIO | None,
+    content_type: str | None,
+    file_name: str | None,
+) -> ProfileUpdate:
+    """S18 隊員存自己的參賽資料；`screenshot` 為 None 表示保留原本的截圖。
+
+    先查隊伍、鎖住賽事，再檢查身分、賽事與名單狀態與欄位，全部通過才存圖片。
+    圖片存下之後的步驟失敗時，在這裡刪掉新檔再往外拋（router 拿不到鍵值）；
+    交易提交與舊檔清理由 router 負責。
+    """
+    team = repository.get_team(session, team_id)
+    if team is None:
+        raise _team_not_found()
+    tournament = _lock_tournament(session, team.tournament_id)
+    member = repository.get_team_member(session, team.id, account_id)
+    if member is None:
+        raise _team_member_required()
+    _ensure_accepting_registrations(tournament)
+    if _registration_of(session, team).status != RegistrationStatus.FORMING:
+        raise _roster_locked()
+
+    cleaned_game_account_id = player_profile.validate_game_account_id(game_account_id)
+    rank_score = player_profile.rank_score_for(tournament.rank_tiers, rank_tier)
+    if screenshot is None and member.rank_screenshot_key is None:
+        raise _rank_screenshot_required()
+
+    before = {
+        "game_account_id": member.game_account_id,
+        "rank_tier": member.rank_tier,
+        "rank_score": member.rank_score,
+    }
+    new_key: str | None = None
+    old_key: str | None = None
+    if screenshot is not None:
+        new_key = storage.save_image(screenshot, content_type=content_type)
+    try:
+        if new_key is not None:
+            old_key = member.rank_screenshot_key
+            member.rank_screenshot_key = new_key
+            member.rank_screenshot_name = player_profile.clean_file_name(
+                file_name, extension=PurePath(new_key).suffix
+            )
+        member.game_account_id = cleaned_game_account_id
+        member.rank_tier = rank_tier
+        member.rank_score = rank_score
+        session.add(member)
+        audit.record(
+            session,
+            actor_id=account_id,
+            tournament_id=team.tournament_id,
+            action="team_member.profile_updated",
+            entity_type="team_member",
+            entity_id=member.id,
+            before=before,
+            after={
+                "game_account_id": cleaned_game_account_id,
+                "rank_tier": rank_tier,
+                "rank_score": rank_score,
+                "screenshot_replaced": new_key is not None,
+            },
+        )
+        session.flush()
+        detail = _build_detail(session, team, tournament, member)
+    except BaseException:
+        if new_key is not None:
+            storage.delete_file(new_key)
+        raise
+    return ProfileUpdate(detail=detail, new_key=new_key, old_key=old_key)
 
 
 def list_my_teams(session: Session, *, account_id: uuid.UUID) -> list[MyTeamCard]:
