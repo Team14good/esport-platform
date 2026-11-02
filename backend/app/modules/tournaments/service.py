@@ -13,6 +13,7 @@ from app.modules.tournaments.models import (
     GameIn,
     GameRead,
     GameTitle,
+    PublicTournament,
     RankTier,
     RankTierRead,
     Tournament,
@@ -398,6 +399,40 @@ def lock_tournament(session: Session, *, tournament_id: uuid.UUID) -> Tournament
     if tournament is None:
         raise _tournament_not_found()
     return _tournament_to_read(tournament)
+
+
+def _tournament_to_public(tournament: Tournament) -> PublicTournament:
+    return PublicTournament(
+        id=tournament.id,
+        name=tournament.name,
+        status=tournament.status,
+        game_name=tournament.game_snapshot["game_name"],
+        capacity=tournament.capacity,
+        registration_start=tournament.registration_start,
+        priority_end=tournament.priority_end,
+        registration_end=tournament.registration_end,
+        start_at=tournament.start_at,
+        round_interval_minutes=tournament.round_interval_minutes,
+        livestream_url=tournament.livestream_url,
+    )
+
+
+def list_public_tournaments(session: Session) -> list[PublicTournament]:
+    """所有賽事的公開資料（不需登入），依開賽時間排序。"""
+    return [
+        _tournament_to_public(tournament)
+        for tournament in repository.list_tournaments(session)
+    ]
+
+
+def get_public_tournament(
+    session: Session, *, tournament_id: uuid.UUID
+) -> PublicTournament:
+    """一場賽事的公開資料（不需登入）；不存在拋 404 `TOURNAMENT_NOT_FOUND`。"""
+    tournament = repository.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise _tournament_not_found()
+    return _tournament_to_public(tournament)
 
 
 def list_organizer_tournaments(
