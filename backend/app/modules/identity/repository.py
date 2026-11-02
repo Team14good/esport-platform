@@ -1,16 +1,30 @@
 """identity 擁有的資料表的查詢與加鎖；不做業務判斷、不碰其他模組的資料表。"""
 
 import uuid
+from collections.abc import Sequence
 
+import psycopg
 from sqlalchemy import delete, func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.modules.identity.models import Account, AccountToken, School, TokenPurpose
+from app.modules.identity.models import (
+    PENDING_APPLICATION_INDEX,
+    Account,
+    AccountToken,
+    ApplicationStatus,
+    OrganizerApplication,
+    School,
+    TokenPurpose,
+)
 
 
 class DuplicateEmailError(Exception):
     """新增帳號時撞到 lower(email) 唯一索引（同時註冊的競態）。"""
+
+
+class DuplicatePendingApplicationError(Exception):
+    """新增主辦方申請時撞到「每帳號一筆待審核」的部分唯一索引（同時送出的競態）。"""
 
 
 def get_account(
@@ -49,6 +63,41 @@ def add_account(session: Session, account: Account) -> Account:
 
 def get_school(session: Session, school_id: uuid.UUID) -> School | None:
     return session.get(School, school_id)
+
+
+class DuplicateSchoolNameError(Exception):
+    """寫入學校時撞到 ix_school_name 唯一索引（同時新增或改成同名的競態）。"""
+
+
+def get_school_for_update(session: Session, school_id: uuid.UUID) -> School | None:
+    """加鎖讀取學校，並以資料庫的最新值覆蓋 identity map 裡已載入的同一筆。"""
+    return session.get(School, school_id, with_for_update=True, populate_existing=True)
+
+
+def get_school_by_name(session: Session, name: str) -> School | None:
+    return session.exec(select(School).where(School.name == name)).first()
+
+
+def save_school(session: Session, school: School, *, name: str) -> School:
+    """以 `name` 新增學校或修改既有學校的名稱。
+
+    名稱已存在時拋 DuplicateSchoolNameError，外層交易不受影響。名稱在 savepoint
+    裡才設定：`begin_nested()` 會先 flush 既有的變更，若事先改好，唯一索引的錯誤
+    會發生在 savepoint 之外。
+    """
+    try:
+        with session.begin_nested():
+            school.name = name
+            session.add(school)
+            session.flush()
+    except IntegrityError as exc:
+        if (
+            isinstance(exc.orig, psycopg.Error)
+            and exc.orig.diag.constraint_name == "ix_school_name"
+        ):
+            raise DuplicateSchoolNameError from exc
+        raise
+    return school
 
 
 def list_schools(session: Session) -> list[School]:
@@ -92,3 +141,82 @@ def delete_unused_tokens(
         .where(col(AccountToken.purpose) == purpose)
         .where(col(AccountToken.used_at).is_(None))
     )
+
+
+def get_pending_application(
+    session: Session, account_id: uuid.UUID
+) -> OrganizerApplication | None:
+    return session.exec(
+        select(OrganizerApplication)
+        .where(OrganizerApplication.account_id == account_id)
+        .where(OrganizerApplication.status == ApplicationStatus.PENDING)
+    ).first()
+
+
+def get_latest_application(
+    session: Session, account_id: uuid.UUID
+) -> OrganizerApplication | None:
+    """帳號最新（created_at 最晚）的一筆主辦方申請。"""
+    return session.exec(
+        select(OrganizerApplication)
+        .where(OrganizerApplication.account_id == account_id)
+        .order_by(
+            col(OrganizerApplication.created_at).desc(),
+            col(OrganizerApplication.id).desc(),
+        )
+        .limit(1)
+    ).first()
+
+
+def add_organizer_application(
+    session: Session, application: OrganizerApplication
+) -> OrganizerApplication:
+    """新增主辦方申請；已有待審核申請時拋 DuplicatePendingApplicationError，外層交易不受影響。"""
+    try:
+        with session.begin_nested():
+            session.add(application)
+    except IntegrityError as exc:
+        if PENDING_APPLICATION_INDEX in str(exc.orig):
+            raise DuplicatePendingApplicationError from exc
+        raise
+    return application
+
+
+def get_application(
+    session: Session, application_id: uuid.UUID, *, for_update: bool = False
+) -> OrganizerApplication | None:
+    # for_update 時重新查詢並加鎖，並以資料庫的最新值覆蓋 identity map 裡已載入的同一筆
+    return session.get(
+        OrganizerApplication,
+        application_id,
+        with_for_update=for_update or None,
+        populate_existing=for_update,
+    )
+
+
+def count_applications(session: Session, status: ApplicationStatus | None) -> int:
+    statement = select(func.count()).select_from(OrganizerApplication)
+    if status is not None:
+        statement = statement.where(OrganizerApplication.status == status)
+    return session.exec(statement).one()
+
+
+def list_applications(
+    session: Session, status: ApplicationStatus | None, *, offset: int, limit: int
+) -> Sequence[tuple[OrganizerApplication, Account, School]]:
+    """主辦方申請連同申請人與學校，依送出時間由舊到新；`status` 為 None 表示全部。"""
+    statement = (
+        select(OrganizerApplication, Account, School)
+        .join(Account, col(Account.id) == col(OrganizerApplication.account_id))
+        .join(School, col(School.id) == col(OrganizerApplication.school_id))
+    )
+    if status is not None:
+        statement = statement.where(OrganizerApplication.status == status)
+    statement = (
+        statement.order_by(
+            col(OrganizerApplication.created_at), col(OrganizerApplication.id)
+        )
+        .offset(offset)
+        .limit(limit)
+    )
+    return session.exec(statement).all()
