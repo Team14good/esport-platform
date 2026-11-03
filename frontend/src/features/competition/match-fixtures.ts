@@ -1,7 +1,7 @@
 // S4 場次頁的假資料：從 createBracketFixture 的對戰樹推導每一場的 PublicMatchDetail，
 // 給單元測試、match-source（DEV）與 /dev/match 預覽頁共用。第二階段接上真資料後只留給測試。
-import type { BracketSide, PublicBracket, PublicMatch } from "./bracket-types"
-import { hasScore } from "./match-status"
+import type { PublicBracket, PublicMatch } from "@/client"
+import { type BracketSide, hasScore } from "./match-status"
 import type { PublicGame, PublicMatchDetail, ScoreType } from "./match-types"
 
 export const FIXTURE_TOURNAMENT_NAME = "2026 秋季校際盃"

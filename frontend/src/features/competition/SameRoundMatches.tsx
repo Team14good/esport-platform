@@ -1,9 +1,8 @@
 import { Link } from "@tanstack/react-router"
-
+import type { PublicMatch } from "@/client"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import type { PublicMatch } from "./bracket-types"
 import { MATCH_STATUS_BADGES, matchLabel } from "./match-status"
 
 type SameRoundMatchesProps = {
