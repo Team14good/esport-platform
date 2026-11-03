@@ -79,12 +79,25 @@ const TEAM: TeamDetail = {
       display_name: "小安",
       role: "captain",
       joined_at: "2026-11-02T10:00:00Z",
+      game_account_id: null,
+      rank_tier: null,
+      rank_score: null,
+      has_rank_screenshot: false,
+      rank_screenshot_name: null,
+      missing_fields: ["game_account_id", "rank_tier", "rank_screenshot"],
     },
   ],
   registration_status: "forming",
   invite_token: "tok-1",
   invite_status: "active",
   my_role: "captain",
+  rank_tiers: [
+    { name: "鑽石", score: 30 },
+    { name: "黃金", score: 10 },
+  ],
+  avg_rank_score: null,
+  rank_filled_count: 0,
+  profile_editable: true,
 }
 
 function mockTournament(status: TournamentStatus = "open") {
