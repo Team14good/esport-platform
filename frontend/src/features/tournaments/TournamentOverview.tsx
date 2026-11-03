@@ -5,6 +5,7 @@ import { Countdown, type CountdownVariant } from "@/components/common/Countdown"
 import { Button } from "@/components/ui/button"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { useIsSignedIn } from "@/features/identity/auth"
+import { CreateTeamEntry } from "@/features/registration/CreateTeamEntry"
 import {
   formatInterval,
   formatRegistrationPeriod,
@@ -69,15 +70,17 @@ function StatusPanel({
         </div>
       )
     case "open":
-      // 「建立隊伍」的啟用按鈕由 Story 3.1 接上
       return (
-        <Countdown
-          key={`open-${tournament.registration_end}`}
-          label="報名截止"
-          deadline={tournament.registration_end}
-          variant={registrationEndVariant}
-          onExpire={onCountdownExpire}
-        />
+        <div className="flex flex-col gap-4">
+          <Countdown
+            key={`open-${tournament.registration_end}`}
+            label="報名截止"
+            deadline={tournament.registration_end}
+            variant={registrationEndVariant}
+            onExpire={onCountdownExpire}
+          />
+          <CreateTeamEntry tournamentId={tournament.id} />
+        </div>
       )
     case "closed":
       return (

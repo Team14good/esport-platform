@@ -27,6 +27,20 @@ docker compose up -d --build --wait
 
 啟動時 backend 會先執行資料庫遷移（`alembic upgrade head`），再依 `.env` 的 `FIRST_ADMIN_EMAIL`／`FIRST_ADMIN_PASSWORD` 建立第一個平台管理員；同一個 Email 已存在時直接略過、不覆寫。
 
+### 示範帳號
+
+接著載入示範資料（`backend/app/demo_data/`），建立下列已驗證 Email 的帳號，都屬於「國立中央大學」。Email 網域來自 `.env` 的 `DEMO_EMAIL_DOMAIN`（預設 `example.com`），密碼共用 `DEMO_PASSWORD`（`.env.example` 為 `changethis`）。再次啟動不會重複建立，同一個 Email 已存在（包含已被真人註冊）時略過、不覆寫。
+
+| 身分 | Email（預設網域） | 密碼 | 說明 |
+| --- | --- | --- | --- |
+| 平台管理員 | `admin@example.com` | `FIRST_ADMIN_PASSWORD` | 由 `FIRST_ADMIN_EMAIL` 設定 |
+| 主辦方 | `organizer@example.com` | `DEMO_PASSWORD` | 已具主辦方身分（`is_organizer`），不必再申請 |
+| 裁判 | `referee@example.com` | `DEMO_PASSWORD` | 目前只有帳號，指派到賽事待之後補上 |
+| 隊長 | `captain@example.com` | `DEMO_PASSWORD` | 目前只有帳號，隊伍待之後補上 |
+| 選手 | `player@example.com` | `DEMO_PASSWORD` | 目前只有帳號 |
+
+舊的 `.env` 沒有 `DEMO_PASSWORD` 時只建立第一個平台管理員，backend log 會提示補上設定；從 `.env.example` 補上 `DEMO_PASSWORD`、`DEMO_EMAIL_DOMAIN` 後重新啟動即可。遊戲、隊伍與已抽籤的賽事等示範資料，會在各模組完成後加進來。
+
 | 服務 | 說明 | 網址／埠號 |
 | --- | --- | --- |
 | `frontend` | React SPA（Vite dev server） | http://localhost:5173 |
