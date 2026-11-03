@@ -113,6 +113,7 @@ def find_expired_appeal_id(
     now: datetime,
     *,
     exclude_tournaments: Collection[uuid.UUID] = (),
+    exclude_matches: Collection[uuid.UUID] = (),
 ) -> uuid.UUID | None:
     """一場申訴期、`appeal_deadline <= now`、已有 outcome 的場次 id（期限早的先）；沒有回 None。
 
@@ -127,6 +128,8 @@ def find_expired_appeal_id(
         statement = statement.where(
             col(Match.tournament_id).not_in(list(exclude_tournaments))
         )
+    if exclude_matches:
+        statement = statement.where(col(Match.id).not_in(list(exclude_matches)))
     statement = statement.order_by(col(Match.appeal_deadline), col(Match.id)).limit(1)
     return session.exec(statement).first()
 

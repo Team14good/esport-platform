@@ -1,7 +1,6 @@
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import type { BracketSide } from "./bracket-types"
-import { sideView } from "./match-status"
+import { type BracketSide, sideView } from "./match-status"
 import type { PublicGame, PublicMatchDetail, ScoreType } from "./match-types"
 
 function cellText(game: PublicGame, side: BracketSide, scoreType: ScoreType) {

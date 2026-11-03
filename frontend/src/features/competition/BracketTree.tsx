@@ -1,9 +1,8 @@
 import { useMemo } from "react"
-
+import type { PublicBracket } from "@/client"
 import { cn } from "@/lib/utils"
 import { BracketMatchCard } from "./BracketMatchCard"
 import { layoutBracket } from "./bracket-layout"
-import type { PublicBracket } from "./bracket-types"
 
 const NO_CHANGES: ReadonlySet<string> = new Set()
 

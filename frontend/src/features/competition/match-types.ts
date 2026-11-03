@@ -1,6 +1,7 @@
 // S4 場次頁的公開單場資料型別。contracts/competition.md 還沒有定義公開的單場 API，
 // 這份形狀是第二階段要請 D 補進 contract 的提議；改用產生的 client 型別後刪除。
-import type { BracketSide, PublicMatch } from "./bracket-types"
+import type { PublicMatch } from "@/client"
+import type { BracketSide } from "./match-status"
 
 /** 比分型態：win_loss 只記勝負；rounds 記每局回合數（不可平手） */
 export type ScoreType = "win_loss" | "rounds"

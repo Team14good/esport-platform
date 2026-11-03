@@ -762,12 +762,20 @@ def auto_confirm_expired(session: Session) -> bool:
     沿用場次上已寫入的 `outcome`、`winner_id`，操作者為系統。先找候選，略過已結束或
     已取消賽事的場次（AD-7）；鎖住賽事與場次後重新檢查，已被處理過就不做任何事。
     回傳是否找到候選（找到就可能還有下一筆）。
+
+    結果資料不自洽（例如完賽卻沒有勝隊，`progression` 拋 ValueError）的場次，退回
+    savepoint、記錄日誌後排除，改處理下一場；否則它每一輪都會排在最前面、rollback，
+    讓所有賽事後面的場次都無法確認。
     """
     now = clock.now()
-    skipped: set[uuid.UUID] = set()
+    ended_tournaments: set[uuid.UUID] = set()
+    broken_matches: set[uuid.UUID] = set()
     while True:
         match_id = repository.find_expired_appeal_id(
-            session, now, exclude_tournaments=skipped
+            session,
+            now,
+            exclude_tournaments=ended_tournaments,
+            exclude_matches=broken_matches,
         )
         if match_id is None:
             return False
@@ -776,30 +784,38 @@ def auto_confirm_expired(session: Session) -> bool:
         status = tournaments_service.get_tournament(
             session, tournament_id=candidate.tournament_id
         ).status
-        if status not in _ENDED:
-            break
-        skipped.add(candidate.tournament_id)
+        if status in _ENDED:
+            ended_tournaments.add(candidate.tournament_id)
+            continue
 
-    tournament = tournaments_service.lock_tournament(
-        session, tournament_id=candidate.tournament_id
-    )
-    match = lock_match(session, match_id=match_id)
-    if (
-        tournament.status in _ENDED
-        or match.status != MatchStatus.APPEAL_WINDOW
-        or match.appeal_deadline is None
-        or match.appeal_deadline > now
-        or match.outcome is None
-    ):
+        tournament = tournaments_service.lock_tournament(
+            session, tournament_id=candidate.tournament_id
+        )
+        match = lock_match(session, match_id=match_id)
+        if (
+            tournament.status in _ENDED
+            or match.status != MatchStatus.APPEAL_WINDOW
+            or match.appeal_deadline is None
+            or match.appeal_deadline > now
+            or match.outcome is None
+        ):
+            return True
+        try:
+            with session.begin_nested():
+                confirm_match(
+                    session,
+                    match=match,
+                    outcome=MatchOutcome(match.outcome),
+                    winner_id=match.winner_id,
+                    actor_id=None,
+                )
+        except ValueError:
+            logger.exception(
+                "Match %s has an inconsistent result; auto-confirm skipped", match_id
+            )
+            broken_matches.add(match_id)
+            continue
         return True
-    confirm_match(
-        session,
-        match=match,
-        outcome=MatchOutcome(match.outcome),
-        winner_id=match.winner_id,
-        actor_id=None,
-    )
-    return True
 
 
 # ---------------------------------------------------------------- 報到（Story 5.1）
