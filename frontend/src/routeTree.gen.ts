@@ -29,8 +29,11 @@ import { Route as TeamsTeamIdRouteImport } from './routes/teams.$teamId'
 import { Route as AdminGamesIndexRouteImport } from './routes/admin/games/index'
 import { Route as AdminGamesGameIdRouteImport } from './routes/admin/games/$gameId'
 import { Route as AdminGamesNewRouteImport } from './routes/admin/games/new'
+import { Route as OrganizerTournamentsTournamentIdRouteRouteImport } from './routes/organizer/tournaments/$tournamentId/route'
+import { Route as OrganizerTournamentsNewRouteImport } from './routes/organizer/tournaments/new'
 import { Route as TournamentsTournamentIdIndexRouteImport } from './routes/tournaments/$tournamentId/index'
 import { Route as TournamentsTournamentIdBracketRouteImport } from './routes/tournaments/$tournamentId/bracket'
+import { Route as OrganizerTournamentsTournamentIdIndexRouteImport } from './routes/organizer/tournaments/$tournamentId/index'
 import { Route as TournamentsTournamentIdMatchesMatchIdRouteImport } from './routes/tournaments/$tournamentId/matches/$matchId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -133,6 +136,17 @@ const AdminGamesNewRoute = AdminGamesNewRouteImport.update({
   path: '/games/new',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const OrganizerTournamentsTournamentIdRouteRoute =
+  OrganizerTournamentsTournamentIdRouteRouteImport.update({
+    id: '/organizer/tournaments/$tournamentId',
+    path: '/organizer/tournaments/$tournamentId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const OrganizerTournamentsNewRoute = OrganizerTournamentsNewRouteImport.update({
+  id: '/organizer/tournaments/new',
+  path: '/organizer/tournaments/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TournamentsTournamentIdIndexRoute =
   TournamentsTournamentIdIndexRouteImport.update({
     id: '/tournaments/$tournamentId/',
@@ -144,6 +158,12 @@ const TournamentsTournamentIdBracketRoute =
     id: '/tournaments/$tournamentId/bracket',
     path: '/tournaments/$tournamentId/bracket',
     getParentRoute: () => rootRouteImport,
+  } as any)
+const OrganizerTournamentsTournamentIdIndexRoute =
+  OrganizerTournamentsTournamentIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => OrganizerTournamentsTournamentIdRouteRoute,
   } as any)
 const TournamentsTournamentIdMatchesMatchIdRoute =
   TournamentsTournamentIdMatchesMatchIdRouteImport.update({
@@ -170,12 +190,15 @@ export interface FileRoutesByFullPath {
   '/organizer/apply': typeof OrganizerApplyRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/organizer/': typeof OrganizerIndexRoute
+  '/organizer/tournaments/$tournamentId': typeof OrganizerTournamentsTournamentIdRouteRouteWithChildren
   '/admin/games/$gameId': typeof AdminGamesGameIdRoute
   '/admin/games/new': typeof AdminGamesNewRoute
+  '/organizer/tournaments/new': typeof OrganizerTournamentsNewRoute
   '/tournaments/$tournamentId/bracket': typeof TournamentsTournamentIdBracketRoute
   '/admin/games/': typeof AdminGamesIndexRoute
   '/tournaments/$tournamentId/': typeof TournamentsTournamentIdIndexRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
+  '/organizer/tournaments/$tournamentId/': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -197,10 +220,12 @@ export interface FileRoutesByTo {
   '/organizer': typeof OrganizerIndexRoute
   '/admin/games/$gameId': typeof AdminGamesGameIdRoute
   '/admin/games/new': typeof AdminGamesNewRoute
+  '/organizer/tournaments/new': typeof OrganizerTournamentsNewRoute
   '/tournaments/$tournamentId/bracket': typeof TournamentsTournamentIdBracketRoute
   '/admin/games': typeof AdminGamesIndexRoute
   '/tournaments/$tournamentId': typeof TournamentsTournamentIdIndexRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
+  '/organizer/tournaments/$tournamentId': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -221,12 +246,15 @@ export interface FileRoutesById {
   '/organizer/apply': typeof OrganizerApplyRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/organizer/': typeof OrganizerIndexRoute
+  '/organizer/tournaments/$tournamentId': typeof OrganizerTournamentsTournamentIdRouteRouteWithChildren
   '/admin/games/$gameId': typeof AdminGamesGameIdRoute
   '/admin/games/new': typeof AdminGamesNewRoute
+  '/organizer/tournaments/new': typeof OrganizerTournamentsNewRoute
   '/tournaments/$tournamentId/bracket': typeof TournamentsTournamentIdBracketRoute
   '/admin/games/': typeof AdminGamesIndexRoute
   '/tournaments/$tournamentId/': typeof TournamentsTournamentIdIndexRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
+  '/organizer/tournaments/$tournamentId/': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -248,12 +276,15 @@ export interface FileRouteTypes {
     | '/organizer/apply'
     | '/teams/$teamId'
     | '/organizer/'
+    | '/organizer/tournaments/$tournamentId'
     | '/admin/games/$gameId'
     | '/admin/games/new'
+    | '/organizer/tournaments/new'
     | '/tournaments/$tournamentId/bracket'
     | '/admin/games/'
     | '/tournaments/$tournamentId/'
     | '/tournaments/$tournamentId/matches/$matchId'
+    | '/organizer/tournaments/$tournamentId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -275,10 +306,12 @@ export interface FileRouteTypes {
     | '/organizer'
     | '/admin/games/$gameId'
     | '/admin/games/new'
+    | '/organizer/tournaments/new'
     | '/tournaments/$tournamentId/bracket'
     | '/admin/games'
     | '/tournaments/$tournamentId'
     | '/tournaments/$tournamentId/matches/$matchId'
+    | '/organizer/tournaments/$tournamentId'
   id:
     | '__root__'
     | '/'
@@ -298,12 +331,15 @@ export interface FileRouteTypes {
     | '/organizer/apply'
     | '/teams/$teamId'
     | '/organizer/'
+    | '/organizer/tournaments/$tournamentId'
     | '/admin/games/$gameId'
     | '/admin/games/new'
+    | '/organizer/tournaments/new'
     | '/tournaments/$tournamentId/bracket'
     | '/admin/games/'
     | '/tournaments/$tournamentId/'
     | '/tournaments/$tournamentId/matches/$matchId'
+    | '/organizer/tournaments/$tournamentId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -322,6 +358,8 @@ export interface RootRouteChildren {
   OrganizerApplyRoute: typeof OrganizerApplyRoute
   TeamsTeamIdRoute: typeof TeamsTeamIdRoute
   OrganizerIndexRoute: typeof OrganizerIndexRoute
+  OrganizerTournamentsTournamentIdRouteRoute: typeof OrganizerTournamentsTournamentIdRouteRouteWithChildren
+  OrganizerTournamentsNewRoute: typeof OrganizerTournamentsNewRoute
   TournamentsTournamentIdBracketRoute: typeof TournamentsTournamentIdBracketRoute
   TournamentsTournamentIdIndexRoute: typeof TournamentsTournamentIdIndexRoute
   TournamentsTournamentIdMatchesMatchIdRoute: typeof TournamentsTournamentIdMatchesMatchIdRoute
@@ -469,6 +507,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminGamesNewRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/organizer/tournaments/$tournamentId': {
+      id: '/organizer/tournaments/$tournamentId'
+      path: '/organizer/tournaments/$tournamentId'
+      fullPath: '/organizer/tournaments/$tournamentId'
+      preLoaderRoute: typeof OrganizerTournamentsTournamentIdRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/organizer/tournaments/new': {
+      id: '/organizer/tournaments/new'
+      path: '/organizer/tournaments/new'
+      fullPath: '/organizer/tournaments/new'
+      preLoaderRoute: typeof OrganizerTournamentsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tournaments/$tournamentId/': {
       id: '/tournaments/$tournamentId/'
       path: '/tournaments/$tournamentId'
@@ -482,6 +534,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/tournaments/$tournamentId/bracket'
       preLoaderRoute: typeof TournamentsTournamentIdBracketRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/organizer/tournaments/$tournamentId/': {
+      id: '/organizer/tournaments/$tournamentId/'
+      path: '/'
+      fullPath: '/organizer/tournaments/$tournamentId/'
+      preLoaderRoute: typeof OrganizerTournamentsTournamentIdIndexRouteImport
+      parentRoute: typeof OrganizerTournamentsTournamentIdRouteRoute
     }
     '/tournaments/$tournamentId/matches/$matchId': {
       id: '/tournaments/$tournamentId/matches/$matchId'
@@ -513,6 +572,21 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
 )
 
+interface OrganizerTournamentsTournamentIdRouteRouteChildren {
+  OrganizerTournamentsTournamentIdIndexRoute: typeof OrganizerTournamentsTournamentIdIndexRoute
+}
+
+const OrganizerTournamentsTournamentIdRouteRouteChildren: OrganizerTournamentsTournamentIdRouteRouteChildren =
+  {
+    OrganizerTournamentsTournamentIdIndexRoute:
+      OrganizerTournamentsTournamentIdIndexRoute,
+  }
+
+const OrganizerTournamentsTournamentIdRouteRouteWithChildren =
+  OrganizerTournamentsTournamentIdRouteRoute._addFileChildren(
+    OrganizerTournamentsTournamentIdRouteRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRouteRoute: AdminRouteRouteWithChildren,
@@ -529,6 +603,9 @@ const rootRouteChildren: RootRouteChildren = {
   OrganizerApplyRoute: OrganizerApplyRoute,
   TeamsTeamIdRoute: TeamsTeamIdRoute,
   OrganizerIndexRoute: OrganizerIndexRoute,
+  OrganizerTournamentsTournamentIdRouteRoute:
+    OrganizerTournamentsTournamentIdRouteRouteWithChildren,
+  OrganizerTournamentsNewRoute: OrganizerTournamentsNewRoute,
   TournamentsTournamentIdBracketRoute: TournamentsTournamentIdBracketRoute,
   TournamentsTournamentIdIndexRoute: TournamentsTournamentIdIndexRoute,
   TournamentsTournamentIdMatchesMatchIdRoute:
