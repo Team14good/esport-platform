@@ -1,8 +1,7 @@
 import { render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-
+import type { MatchStatus } from "@/client"
 import { createBracketFixture } from "@/features/competition/bracket-fixtures"
-import type { MatchStatus } from "@/features/competition/bracket-types"
 import { MatchAppealWindow } from "@/features/competition/MatchAppealWindow"
 import { MatchSpectatorView } from "@/features/competition/MatchSpectatorView"
 import { matchDetailFromBracket } from "@/features/competition/match-fixtures"

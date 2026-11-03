@@ -2,7 +2,7 @@
 // 欄寬 200、連接線 28、場次間距 18、列高 32。直排位置照完整的 2 的次方排：第一輪輪空的位置不畫卡片，
 // 但仍佔一格，所以第二輪以後每張卡都對齊兩個來源位置的正中間。
 
-import type { PublicBracket, PublicMatch } from "./bracket-types"
+import type { PublicBracket, PublicMatch } from "@/client"
 
 export const BRACKET_COLUMN_WIDTH = 200
 export const BRACKET_CONNECTOR_WIDTH = 28

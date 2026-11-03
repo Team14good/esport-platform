@@ -5,7 +5,7 @@ import {
 } from "@tanstack/react-query"
 import { useState } from "react"
 
-import type { PublicBracket, PublicMatch } from "./bracket-types"
+import type { PublicBracket, PublicMatch } from "@/client"
 import { useConsecutiveFailures } from "./use-consecutive-failures"
 
 // 公開對戰樹每 5 秒輪詢（AD-14、EXPERIENCE.md〈Foundation〉即時性）
@@ -16,7 +16,7 @@ export const BRACKET_CONNECTION_LOST_AFTER = 3
 const NO_CHANGES: ReadonlySet<string> = new Set()
 
 /**
- * 對戰樹不存在（404 `BRACKET_NOT_FOUND`，例如尚未抽籤）。第二階段的 queryFn 收到 404 時拋出它：
+ * 對戰樹不存在（404 `BRACKET_NOT_FOUND`，例如尚未抽籤）。`fetchPublicBracket` 收到 404 時拋出它：
  * 不算連線失敗，照常輪詢，抽籤後就會出現。
  */
 export class BracketNotFoundError extends Error {
@@ -63,9 +63,9 @@ export function diffBracketMatches(
 
 type UseBracketPollingOptions = {
   queryKey: QueryKey
-  /** 第一階段由呼叫端傳入假資料；第二階段改傳呼叫產生的 client 的函式 */
+  /** S3 傳 `fetchPublicBracket`（產生的 client）；測試傳假資料 */
   queryFn: () => Promise<PublicBracket>
-  /** 例如尚未抽籤時不輪詢 */
+  /** false 時不抓取也不輪詢 */
   enabled?: boolean
 }
 
@@ -80,9 +80,9 @@ export type BracketPollingResult = {
   lastUpdatedAt: Date | null
   /** 第一次載入、還沒有任何資料 */
   isLoading: boolean
-  /** 對戰樹不存在（BracketNotFoundError），而且沒有資料可顯示 */
+  /** 對戰樹不存在（BracketNotFoundError），而且沒有資料可顯示；之後的暫時失敗不會讓它變回 false */
   notFound: boolean
-  /** 第一次載入就失敗（沒有舊資料可顯示）、且不是對戰樹不存在時的錯誤 */
+  /** 第一次載入就失敗（沒有資料、也沒收到過「對戰樹不存在」）時的錯誤 */
   error: unknown
 }
 
@@ -128,14 +128,21 @@ export function useBracketPolling({
     setSnapshot({ data, changed })
   }
 
-  // 收到「對戰樹不存在」不算連線失敗，連續失敗也歸零
+  // 還沒有資料時收到「對戰樹不存在」不算連線失敗，連續失敗也歸零；
+  // 已有對戰樹後才收到 404（例如之後的撤銷抽籤）照一般失敗累計，連續 3 次顯示連線中斷，不會無聲停在舊的對戰樹
   const consecutiveFailures = useConsecutiveFailures(
     dataUpdatedAt,
     errorUpdateCount,
-    query.error instanceof BracketNotFoundError,
+    query.error instanceof BracketNotFoundError && data === undefined,
   )
-  const firstLoadError = data === undefined ? query.error : null
-  const notFound = firstLoadError instanceof BracketNotFoundError
+  // 收到過「對戰樹不存在」、之後還沒拿到資料：畫面維持「尚未抽籤」，中間的暫時失敗只累計連續失敗次數，
+  // 不當成第一次載入就失敗（連續 3 次才顯示連線中斷）
+  const [sawNotFound, setSawNotFound] = useState(false)
+  let notFoundSeen = sawNotFound
+  if (data !== undefined) notFoundSeen = false
+  else if (query.error instanceof BracketNotFoundError) notFoundSeen = true
+  if (notFoundSeen !== sawNotFound) setSawNotFound(notFoundSeen)
+  const notFound = data === undefined && notFoundSeen
 
   return {
     bracket: data,
@@ -144,6 +151,6 @@ export function useBracketPolling({
     lastUpdatedAt: dataUpdatedAt > 0 ? new Date(dataUpdatedAt) : null,
     isLoading: query.isPending,
     notFound,
-    error: notFound ? null : firstLoadError,
+    error: data === undefined && !notFound ? query.error : null,
   }
 }
