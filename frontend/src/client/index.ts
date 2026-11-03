@@ -129,6 +129,7 @@ export type {
   ProfileUpdate,
   PublicBracket,
   PublicMatch,
+  PublicPodium,
   PublicSchool,
   PublicTeamRef,
   PublicTournament,
