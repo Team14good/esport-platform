@@ -62,7 +62,7 @@ development_status:
 
   epic-3: in-progress
   3-1-建立隊伍與邀請隊員: done  # 負責：C
-  3-2-選手填寫參賽資料: backlog  # 負責：C
+  3-2-選手填寫參賽資料: done  # 負責：C
   3-3-送出報名與鎖定名單: backlog  # 負責：C
   3-4-優先期結束自動分配: backlog  # 負責：C
   3-5-先搶期即時分配: backlog  # 負責：C
@@ -105,6 +105,6 @@ development_status:
 
   epic-7: in-progress
   7-1-一鍵載入示範資料: in-progress  # 負責：A
-  7-2-端對端演練-兩款遊戲的完整賽事: backlog  # 負責：A
+  7-2-端對端演練-兩款遊戲的完整賽事: in-progress  # 負責：A
   7-3-測試覆蓋率與測試報告素材: backlog  # 負責：A
   epic-7-retrospective: optional
