@@ -148,9 +148,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-status-badge-and-organizer-banner.md`
   summary: Story 2.4 第二階段第 3 項：S1 空狀態「目前沒有公開的賽事。」對主辦方另顯示「建立賽事」，連到 2.2 第二階段的 S26（`/organizer/tournaments/new`）（low）。等 PR #31 合併後再做。
   evidence: 2026-11-03 使用者決定 2.4 第二階段先只做狀態徽章與申請主辦方 banner；S26 在 PR #31，尚未合併。上方 source_spec 為 `spec-2-4-public-tournament-pages.md` 的「Story 2.4 第二階段」那筆列了三項，其中狀態徽章、申請主辦方 banner 兩項已由 `spec-2-4-status-badge-and-organizer-banner.md` 完成，只剩本項；那筆依使用者指示保留不刪。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-status-badge-and-organizer-banner.md`
-  summary: （低）`PageBanner` 的 `action` 只支援 `onClick`，S1「申請成為主辦方」按鈕以程式導向，不能中鍵開新分頁或複製連結；需要 A 為 `PageBanner` 新增連結型的 action。
-  evidence: 2026-11-03 Story 2.4 第二階段審查（Blind Hunter）。`PageBanner.tsx` 是 A 的元件，本 Story 只 import 不修改。
 ## Deferred from: spec-3-2-player-registration-info-2.md (2026-11-03)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info-2.md`
@@ -171,3 +168,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-organizer-tournament-ui.md`
   summary: （低）主辦方賽事清單的查詢在兩處各定義一次：`features/tournaments/organizer-queries.ts` 的 `myTournamentsQueryOptions` 與 C 的 `features/registration/CreateTeamEntry.tsx` 的 `organizerTournamentsQueryOptions`，都用查詢鍵 `["tournaments","organizer","list"]`；之後只改其中一邊（例如 `queryFn` 或回傳型別），兩邊的快取會互相污染。
   evidence: 2026-11-03 A（@max930000）在 PR #31 的審查。處理時請 C 把 `CreateTeamEntry.tsx` 改成 import `myTournamentsQueryOptions`，刪掉自己的定義（registration 模組只新增 import，不改 tournaments 的檔案）。
+
+## Deferred from: spec-5-2-appeal-countdown-and-banner-link.md (2026-11-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-appeal-countdown-and-banner-link.md`
+  summary: B 的 `OrganizerApplyBanner.tsx`：S1「申請成為主辦方」改用 `PageBanner` 新增的連結型 action（`action: { label, to: "/organizer/apply" }`），就能中鍵開新分頁、複製連結（low）。
+  evidence: 2026-11-04 A 已為 `PageBanner` 新增 `to`；使用者決定不改 B 的既有函式，交給 B。改完後 S1 的測試要從按鈕改成連結。
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-appeal-countdown-and-banner-link.md`
+  summary: 請 D 的公開單場 API 帶申訴期的開始時間（例如 `appeal_started_at`，或賽事的申訴時限），S4 把它傳給 `Countdown` 的 `startsAt`，進度條才會從滿開始（low）。
+  evidence: 2026-11-04 使用者決定先用 Countdown 預設的截止前 24 小時當起點；FR-7 的申訴期最少 30 分鐘、預設 30 分鐘，所以目前進度條一開始只有約 2%。

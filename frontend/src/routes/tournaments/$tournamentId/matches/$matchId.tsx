@@ -1,5 +1,7 @@
+import { useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 
+import { Countdown } from "@/components/common/Countdown"
 import { NotFoundPage } from "@/components/layout/ErrorPage"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionLostBanner } from "@/features/competition/ConnectionLostBanner"
@@ -46,20 +48,36 @@ function MatchPage({
   tournamentId: string
   matchId: string
 }) {
+  const queryClient = useQueryClient()
+  const queryKey = ["match", tournamentId, matchId]
   const { detail, changed, connectionLost, lastUpdatedAt, notFound, error } =
     useMatchPolling({
-      queryKey: ["match", tournamentId, matchId],
+      queryKey,
       queryFn: () => fetchMatchDetail({ tournamentId, matchId }),
     })
 
   if (notFound) return <NotFoundPage />
+  // 申訴期倒數（appeal 變體，帶進度條）；歸零後由 Countdown 每 5 秒呼叫 onExpire 重抓，直到伺服器回傳新狀態
+  const appealDeadline = detail?.appeal_deadline
+  const appealCountdown = appealDeadline ? (
+    <Countdown
+      label="剩餘時間"
+      deadline={appealDeadline}
+      variant="appeal"
+      onExpire={() => void queryClient.invalidateQueries({ queryKey })}
+    />
+  ) : undefined
   // 第一次載入就失敗（不是 404）時沒有舊畫面可保留，不等連續失敗 3 次，直接顯示橫幅並繼續重試
   const showBanner = connectionLost || error != null
   return (
     <div className="flex min-w-0 flex-col gap-5">
       {showBanner && <ConnectionLostBanner lastUpdatedAt={lastUpdatedAt} />}
       {detail ? (
-        <MatchSpectatorView detail={detail} changed={changed} />
+        <MatchSpectatorView
+          detail={detail}
+          changed={changed}
+          appealCountdown={appealCountdown}
+        />
       ) : (
         <div data-slot="match-loading" className="flex flex-col gap-4">
           <Skeleton className="h-20 w-64 max-w-full" />
