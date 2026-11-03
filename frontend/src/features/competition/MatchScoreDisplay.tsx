@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { BracketMarkTag } from "./BracketMarkTag"
-import type { BracketSide } from "./bracket-types"
+import type { BracketSide } from "./match-status"
 import {
   EMPTY_TEAM_TEXT,
   hasScore,

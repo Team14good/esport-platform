@@ -36,6 +36,40 @@
 - 驗證：修正後後端 762 個測試通過，allocation.py 分支覆蓋率 100%，lint 通過；主流程在一次性容器中刪掉 `decide_first_come` 的自我排除條件，確認新測試會失敗
 - 問題與修正：Verification Gap 審查者指出原本的測試用 `pending` 狀態的候選者，本來就不計入正取，刪掉或反轉過濾條件測試照樣通過，屬於「測試存在但驗證不到」；實作子代理推算新測試能抓到後，主流程實際做一次變異測試確認
 - 成熟度：L4（多個獨立審查者加自動測試與變異檢查，主流程查證每項發現）
+### 2026-10-30｜需求與設計／spec｜Story 3.2 選手填寫參賽資料（第一段 spec）
+
+- Story／範圍：3.2 第一段（分支 story/3-2，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（規劃步驟，前端與 UX 調查交給 Explore 子代理）
+- 怎麼用：使用者要求 story/3-2 與 story/3-1 完全獨立；AI 調查後指出 3.2 的參賽資料存在 3.1 才建立的 team_member、入口在 3.1 的 S17，提出三種做法讓使用者選，再依選擇寫 spec
+- AI 產出：spec 一份（I/O 與邊界情況表 8 列、驗收條件 4 條、任務 10 項），第二段（依賴 3.1 的部分）寫入 deferred-work
+- 人做了什麼：選擇「先做與 3.1 無關的部分，3.1 合併後在同一分支 merge main 再接上」；決定保留約 2,700 tokens 的完整 spec；核准 spec
+- 驗證：spec 經人審核後核准
+- 問題與修正：AI 一開始直接從 story/3-1 開分支（因為 3.1 未合併），使用者要求獨立後才改從 origin/main 開；AI 調查發現 UX 文件沒有規定上傳進度的樣式、「上場時必須使用這個遊戲 ID」只出現在 epics，改寫進 spec 的設計說明而不是自行假設需求
+- 成熟度：L4（固定流程產出 spec，人在 checkpoint 決定範圍與核准）
+- 證據：_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md；commit 未記錄（尚未 commit）
+
+### 2026-10-30｜程式／程式生成｜Story 3.2 選手填寫參賽資料（第一段實作）
+
+- Story／範圍：3.2 第一段（分支 story/3-2，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：由不帶對話脈絡的子代理只依 spec 實作，主流程對照 diff 驗收每個任務、驗收條件與 I/O 表每一列的測試，並自己重跑全部測試
+- AI 產出：後端 core.storage（存圖片時以 MIME 與檔頭驗證、5 MB 上限、防路徑穿越）、段位驗證函式 rank_score_for、UPLOAD_DIR 設定；前端 Screenshot uploader 元件、S18 參賽資料對話框（手機 Sheet、桌機 Dialog）、檔案檢查函式；新增 2 個後端測試檔、2 個前端測試檔
+- 人做了什麼：未記錄（待使用者確認實作子代理自訂的介面文字，見 spec 的 Implementation Notes）
+- 驗證：後端 289 個測試通過、覆蓋率 95%（新檔 100%）；mypy、ty、ruff 通過；前端 typecheck、biome 通過，單元測試 185 個通過
+- 問題與修正：主流程更新 sprint-status 時用的 python 其實是 Windows Store 的空殼，指令沒有報錯也沒有改檔，主流程從 git diff 為空發現後改用 PowerShell 寫回；子代理發現開發用資料庫的 Alembic 版本停在 story/3-1 的遷移，本分支的 backend 容器起不來，沒有自行修改資料庫，回報給使用者決定
+- 成熟度：L4（依 spec 由子代理實作，主流程對照 diff 驗收並自動測試）
+- 證據：spec 同上；commit 未記錄（尚未 commit）
+
+### 2026-10-30｜測試／程式審查｜Story 3.2 選手填寫參賽資料（第一段審查與測試）
+
+- Story／範圍：3.2 第一段（分支 story/3-2，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build 審查步驟（Blind Hunter、Edge Case Hunter、Verification Gap 三個審查子代理）
+- 怎麼用：三個審查者平行審 diff，主流程逐項查證後分類為修正、延後或駁回，記在 spec 的 Review Triage Log，修正交回原實作子代理
+- AI 產出：審查發現共 27 項；修正 6 組（S18 只在重新開啟時重設表單並補測試、伺服器 415／413 改顯示在截圖欄、上傳中不能換檔、拖檔到預覽列不再讓瀏覽器離開頁面、拖曳外框閃爍、進度 NaN），延後 3 項寫入 deferred-work（更換截圖後刪舊檔、上傳請求大小上限、原始檔名規則），其餘查證後駁回
+- 人做了什麼：未記錄（審查分類由 AI 完成，待使用者確認）
+- 驗證：修正後後端 289 個測試、前端 190 個單元測試全數通過，lint、typecheck、biome 通過
+- 問題與修正：Verification Gap 審查者指出 S18 的 10 個測試都只渲染一次，把重設表單的 effect 整個刪掉也會全部通過；Edge Case Hunter 指出檔案拖到已選取的預覽列時沒有處理，瀏覽器會直接開啟圖片、表單內容遺失；兩者都是實作子代理自己的測試沒抓到，補上修正與測試
+- 成熟度：L4（多個獨立審查者加自動測試，主流程查證每項發現）
 - 證據：spec 的 Review Triage Log；_bmad-output/implementation-artifacts/deferred-work.md；commit 未記錄（尚未 commit）
 ### 2026-10-30｜需求／驗收條件｜Story 3.1 建立隊伍與邀請隊員（spec）
 
@@ -108,3 +142,39 @@
 - 問題與修正：三個審查者共提出 21 項（合併重複後 14 項），修正 1 組（補主辦方賽事載入中、帳號載入中與失敗、卡片優先於主辦方判斷共 4 個測試；子代理逐一改壞程式確認測試會失敗），其餘查證後駁回；其中「後端沒有擋主辦方建隊」經查 `_ensure_can_join` 已有檢查且實測被拒，判為誤報。實測腳本少了結束程式的呼叫，跑完後掛住約 50 分鐘才由主流程發現並停止
 - 成熟度：L4（固定流程，子代理實作、多個獨立審查者加自動測試與瀏覽器實測，人只在 checkpoint 決策）
 - 證據：_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md（Review Triage Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-03｜需求／設計｜Story 3.2 第二段 spec：存檔 API、S17 入口與平均段位積分
+
+- Story／範圍：3.2 第二段（分支 story/3-2，PR #24）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（兩個調查子代理、一個 spec 審查子代理）
+- 怎麼用：3.1（#23）合併後，AI 先把本機落後遠端的 story/3-2 快轉、合併 origin/main 並解 `sprint-status.yaml` 衝突；兩個子代理分別調查後端與前端，主流程寫出 spec；使用者要求審查 spec，由另一個子代理對照程式與 PRD／UX 審查
+- AI 產出：spec-3-2-player-registration-info-2.md（I/O 矩陣 12 列、13 項 Tasks）；調查時發現前端拿不到段位對照表（公開賽事 API 沒有 `rank_tiers`），改由 `TeamDetail` 帶出
+- 人做了什麼：決定平均段位積分只算已填者並註明人數（PRD 只寫「所有成員的平均」，未說明未填完時怎麼顯示）；決定保留約 3,500～4,000 tokens 的完整 spec；同意審查後對凍結區塊的 4 項修改；核准 spec
+- 驗證：spec 審查子代理提出 15 項，主流程抽查其中兩項（`join_team` 的檢查順序、deferred 項目數）屬實
+- 問題與修正：AI 初稿有三個錯誤，都由 spec 審查子代理抓到。一是檢查順序寫成「先鎖賽事再查隊伍是否存在」，但要先查到隊伍才知道鎖哪個賽事（3.1 的 `join_team` 就是先查再鎖）；二是遊戲 ID 用 FastAPI 的 Form 限制驗證，會在鎖之前就回英文 422；三是平均值型別寫成 `Decimal`，Pydantic 會序列化成字串。另外初稿寫「刪除 deferred-work 四項」，實際只有三項該刪。合併時 AI 一開始直接在落後遠端的本機分支上合併 main，看到衝突內容不對才發現，改為先快轉再合併
+- 成熟度：L4（固定流程，多個子代理調查與審查，人在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-2-player-registration-info-2.md（Decisions）；commit 未記錄（尚未 commit）
+
+### 2026-11-03｜程式／程式生成｜Story 3.2 第二段實作與審查
+
+- Story／範圍：3.2 第二段（分支 story/3-2，PR #24）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理、三個審查子代理）
+- 怎麼用：實作子代理只依 spec 實作；主流程讀 diff 對照 Tasks 與 I/O 矩陣，自己重建容器跑測試；三個審查子代理（Blind Hunter、Edge Case Hunter、Verification Gap）審 diff，主流程逐項查證後分類，修正交回同一個實作子代理
+- AI 產出：`team_member` 五個欄位與遷移、`PUT /teams/{team_id}/members/me/profile`（multipart）、`core.storage.delete_file`、遊戲 ID／檔名清理與平均值純函式、S17 名單的完成度與「填寫我的資料」、上傳進度；22 個檔案、新增 2107 行、刪除 65 行；新增 32 個 API 測試（I/O 矩陣 12 列都有對應測試）
+- 人做了什麼：核准 spec 後交由流程執行
+- 驗證：後端 1400 個測試通過、覆蓋率 97%，mypy、ty、ruff 通過；前端 typecheck、biome 通過，49 個檔、587 個單元測試通過。瀏覽器實測（375 px、兩個帳號、確認舊截圖檔被刪除）未做
+- 問題與修正：三個審查者共提出 18 項（Verification Gap 0 項），修正 5 組：遊戲 ID 只去頭尾空白，含 NUL 時 PostgreSQL 會拒絕而回 500、含 U+202E 會讓隊友看到的名單文字反轉；前後端計算「50 字」的方式不同（UTF-16 與 code point）；儲存失敗後 S17 沒有重新抓資料，S18 仍顯示可編輯；兩個檢查順序測試與一個去空白測試缺漏。其餘 10 項駁回，其中 3 項查證為誤報（例如「段位積分會過期」：賽事的段位表存在建立時的快照，不會變）。實作子代理有兩處偏離 spec 字面並說明原因：Form 欄位給空字串預設值，否則 FastAPI 會在鎖之前回自己的 422；新檔清理分在 service 與 router 兩處，因為例外發生時 router 拿不到鍵值
+- 成熟度：L4（固定流程，子代理實作、多個獨立審查者加自動測試，主流程查證每項發現）
+- 證據：spec-3-2-player-registration-info-2.md（Review Triage Log、Implementation Notes）；deferred-work.md；commit 未記錄（尚未 commit）
+
+### 2026-11-03｜測試／瀏覽器實測｜Story 3.2 第二段：S17、S18 的瀏覽器與 375 px
+
+- Story／範圍：3.2 第二段（分支 story/3-2，PR #24）
+- 工具：Claude Code（Opus 5.5）＋ Playwright 1.63（容器內的 Chromium）
+- 怎麼用：AI 寫 Node 腳本經 API 準備資料（管理員建遊戲、主辦方註冊驗證並經審核、建立開放報名的賽事、隊長建隊、隊員以邀請連結加入），再用 Playwright 以隊員（375 px）與隊長（桌機）兩個帳號操作 S17、S18 並逐項斷言、截圖；結束後比對 uploads volume 與資料庫的截圖鍵值
+- AI 產出：資料準備與實測腳本、7 張截圖；28 項檢查全部通過（缺漏文字、平均值三種顯示、只有自己那列有按鈕、手機 Sheet／桌機 Dialog、重開 S18 只顯示檔名不顯示圖片、遊戲 ID 去頭尾空白、換截圖、隊長看不到隊員的截圖檔名、375 px 各畫面沒有水平捲動）
+- 人做了什麼：決定在 commit 前先做瀏覽器實測
+- 驗證：28/28 通過；實測共上傳 3 張截圖，uploads volume 最後剩 2 張，與資料庫的兩個鍵值一致，確認換掉的舊檔已刪除；人工查看 3 張截圖確認版面。上傳進度條在本機傳輸太快，沒有在瀏覽器觀察到（由單元測試涵蓋）
+- 問題與修正：準備資料的腳本第一次把中文標籤放進 email 的 @ 前面，驗證信寄不出去而中斷，正是 deferred-work 裡已記錄的 identity 問題，改用英文 email；第二次因賽事每輪間隔 60 分鐘低於最小值 75 分鐘被拒，改成 90 分鐘
+- 成熟度：L3（AI 自動化實測與截圖，人決定要做這項檢查）
+- 證據：PR #24 檢查清單；commit 未記錄（尚未 commit）

@@ -1,4 +1,4 @@
-import type { PublicMatch } from "@/features/competition/bracket-types"
+import type { PublicMatch } from "@/client"
 import type { PublicMatchDetail } from "@/features/competition/match-types"
 
 export const TEAM_A = { id: "team-a", name: "成大 Kraken" }
