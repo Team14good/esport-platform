@@ -1,11 +1,10 @@
 // 場次狀態與結果的顯示規則：對戰樹場次卡（4.6）與 S4 場次頁（5.8）共用同一份對照。
+
+import type { MatchOutcome, MatchStatus, PublicMatch } from "@/client"
 import type { StatusTone } from "@/components/common/StatusBadge"
-import type {
-  BracketSide,
-  MatchOutcome,
-  MatchStatus,
-  PublicMatch,
-} from "./bracket-types"
+
+/** 場次的兩方：A 方、B 方 */
+export type BracketSide = "a" | "b"
 
 export const THIRD_PLACE_LABEL = "季軍賽"
 
