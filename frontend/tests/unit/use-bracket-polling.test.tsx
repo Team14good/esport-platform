@@ -173,6 +173,23 @@ describe("對戰樹輪詢", () => {
     expect(result.current.notFound).toBe(false)
   })
 
+  it("已有對戰樹後才收到 404：照一般失敗累計，連續 3 次顯示連線中斷並保留舊對戰樹", async () => {
+    const bracket = createBracketFixture({ teamCount: 8 })
+    const queryFn = vi
+      .fn<() => Promise<PublicBracket>>()
+      .mockResolvedValueOnce(bracket)
+      .mockImplementation(() => Promise.reject(new BracketNotFoundError()))
+    const { result } = renderPolling(queryFn)
+    await advance(0)
+
+    await advance(BRACKET_POLL_INTERVAL_MS * 2)
+    expect(result.current.connectionLost).toBe(false)
+    await advance(BRACKET_POLL_INTERVAL_MS)
+    expect(result.current.connectionLost).toBe(true)
+    expect(result.current.bracket).toEqual(bracket)
+    expect(result.current.notFound).toBe(false)
+  })
+
   it("404 之後的連線失敗從 0 開始算", async () => {
     const fail = () => Promise.reject(new Error("network"))
     const queryFn = vi

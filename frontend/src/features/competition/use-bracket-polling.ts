@@ -128,11 +128,12 @@ export function useBracketPolling({
     setSnapshot({ data, changed })
   }
 
-  // 收到「對戰樹不存在」不算連線失敗，連續失敗也歸零
+  // 還沒有資料時收到「對戰樹不存在」不算連線失敗，連續失敗也歸零；
+  // 已有對戰樹後才收到 404（例如之後的撤銷抽籤）照一般失敗累計，連續 3 次顯示連線中斷，不會無聲停在舊的對戰樹
   const consecutiveFailures = useConsecutiveFailures(
     dataUpdatedAt,
     errorUpdateCount,
-    query.error instanceof BracketNotFoundError,
+    query.error instanceof BracketNotFoundError && data === undefined,
   )
   // 收到過「對戰樹不存在」、之後還沒拿到資料：畫面維持「尚未抽籤」，中間的暫時失敗只累計連續失敗次數，
   // 不當成第一次載入就失敗（連續 3 次才顯示連線中斷）

@@ -110,6 +110,11 @@ context:
 - [false] 缺 AI 使用紀錄與容器內驗證（BH）：AI 紀錄在收尾時新增；容器建置受網路政策限制，已在 Implementation Notes 說明。
 - [intent_gap，已由使用者決定] 已取消、已結束等狀態沒有對戰表時仍寫「報名截止後抽籤，對戰表會出現在這裡。」（BH、EC）：使用者決定改寫「這場賽事沒有對戰表。」，已更新 Decisions 與 I/O 矩陣並加測試。改動只在 `BracketNotDrawn` 的 default 分支，沒有照流程回退全部程式碼重做。
 
+**2026-11-03 PR 審查（D）**
+
+- [low，已修正] 已有對戰樹後才收到 `BRACKET_NOT_FOUND`，連續失敗仍歸零，畫面無聲停在舊的對戰樹：目前沒有程式會刪對戰表，之後有撤銷抽籤之類的功能才會觸發。改成只在還沒有資料時歸零（`data === undefined`），已有資料後的 404 照一般失敗累計；加 hook 測試，拿掉條件時測試失敗。
+- [low，已修正] 沒有對戰表的狀態表只測 `cancelled`、`finished`：補 `published`、`ongoing` 兩列。
+
 ## Verification
 
 **Commands:**

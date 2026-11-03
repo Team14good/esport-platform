@@ -350,3 +350,16 @@
   - 已取消的賽事仍寫「報名截止後抽籤…」，這是 spec 的文案問題，交由使用者決定
 - 成熟度：L4（多個審查者＋自動驗證，人只在 checkpoint 決策）
 - 證據：同上 spec 的 Review Triage Log；尚未 commit
+
+### 2026-11-03｜程式、測試／依審查修正｜Story 4.6 第二階段：依 D 的 PR 審查修正 404 計數並補狀態測試
+
+- Story／範圍：4.6 第二階段（`story/4-6-bracket-page`）
+- 怎麼用：先用 bmad-code-review 的四個審查員（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）審 a44e53e，確認可以開 PR；D 核准後提出兩點不擋合併的建議，AI 照建議修改並在本機 Docker 的前端容器跑檢查
+- AI 產出：`use-bracket-polling.ts` 只在還沒有資料時把 404 當成不算失敗；hook 測試 1 個、S3 頁面狀態表 2 列；spec 的 Review Triage Log 新增 2 列
+- 人做了什麼：決定審查只要確認能不能開 PR、不要花太多 token；中途拒絕在 worktree 啟動整套 compose；D 審查 PR 並提出修正建議
+- 驗證：前端容器內 typecheck、biome（176 個檔案）、build 通過；單元測試 48 個檔案、563 個通過（原本 560＋新增 3）。反向驗證：還原 hook 的修改，新的 hook 測試失敗
+- 問題與修正：
+  - 四個審查員中，Edge Case Hunter 與 Blind Hunter 都指出「已有對戰樹後收到 404 會停在舊畫面」，但 AI 整理時判斷為不擋 PR，D 的審查也得到同樣結論並給了具體改法
+  - 容器內第一次跑單元測試時 22 個失敗，都是跟這次修改無關的測試在約 1 秒時逾時；改用 `--maxWorkers=4` 重跑全部通過，判斷是 48 個 worker 同時跑造成的，不是程式問題
+- 成熟度：L3（AI 依人提出的審查意見修改，人決定範圍）
+- 證據：spec 的 Review Triage Log〈2026-11-03 PR 審查（D）〉；尚未 commit
