@@ -16,7 +16,12 @@ import {
   COPIED_TEXT,
   InviteLinkField,
 } from "@/features/registration/InviteLinkField"
-import { RosterList } from "@/features/registration/RosterList"
+import {
+  avgRankScoreText,
+  profileCaption,
+  profileStatusText,
+  RosterList,
+} from "@/features/registration/RosterList"
 import { ACCOUNT, signInAs } from "./auth-fixtures"
 import { httpError } from "./helpers"
 import { renderRouter } from "./render-router"
@@ -42,30 +47,61 @@ const TEAM: TeamDetail = {
       display_name: "阿哲",
       role: "captain",
       joined_at: "2026-10-30T10:00:00Z",
+      game_account_id: null,
+      rank_tier: null,
+      rank_score: null,
+      has_rank_screenshot: false,
+      rank_screenshot_name: null,
+      missing_fields: ["game_account_id", "rank_tier", "rank_screenshot"],
     },
     {
       account_id: "acc-2",
       display_name: "小芸",
       role: "player",
       joined_at: "2026-10-30T10:05:00Z",
+      game_account_id: null,
+      rank_tier: null,
+      rank_score: null,
+      has_rank_screenshot: false,
+      rank_screenshot_name: null,
+      missing_fields: ["game_account_id", "rank_tier", "rank_screenshot"],
     },
     {
       account_id: "acc-3",
       display_name: "阿凱",
       role: "player",
       joined_at: "2026-10-30T10:06:00Z",
+      game_account_id: null,
+      rank_tier: null,
+      rank_score: null,
+      has_rank_screenshot: false,
+      rank_screenshot_name: null,
+      missing_fields: ["game_account_id", "rank_tier", "rank_screenshot"],
     },
     {
       account_id: "acc-4",
       display_name: "小晴",
       role: "player",
       joined_at: "2026-10-30T10:07:00Z",
+      game_account_id: null,
+      rank_tier: null,
+      rank_score: null,
+      has_rank_screenshot: false,
+      rank_screenshot_name: null,
+      missing_fields: ["game_account_id", "rank_tier", "rank_screenshot"],
     },
   ],
   registration_status: "forming",
   invite_token: "tok-1",
   invite_status: "active",
   my_role: "captain",
+  rank_tiers: [
+    { name: "鑽石", score: 30 },
+    { name: "黃金", score: 10 },
+  ],
+  avg_rank_score: null,
+  rank_filled_count: 0,
+  profile_editable: true,
 }
 
 describe("Invite link field", () => {
@@ -123,20 +159,105 @@ describe("Roster list", () => {
         members={TEAM.members}
         starters={TEAM.starters}
         maxMembers={TEAM.max_members}
+        avgRankScore={null}
+        rankFilledCount={0}
       />,
     )
 
     const rows = within(
       screen.getByRole("list", { name: "隊伍名單" }),
     ).getAllByRole("listitem")
+    const missing = "缺：遊戲 ID、段位、段位截圖"
     expect(rows.map((row) => row.textContent)).toEqual([
-      "阿哲隊長",
-      "小芸",
-      "阿凱",
-      "小晴",
+      `阿哲隊長${missing}`,
+      `小芸${missing}`,
+      `阿凱${missing}`,
+      `小晴${missing}`,
     ])
     expect(within(rows[0]).getByText("隊長")).toBeInTheDocument()
     expect(screen.getByText("4／6 人（先發 5）")).toBeInTheDocument()
+    // 沒有傳目前帳號或 onEditMyProfile 時不顯示「填寫我的資料」
+    expect(screen.queryByRole("button", { name: "填寫我的資料" })).toBeNull()
+  })
+
+  it("自己那列的「填寫我的資料」呼叫 onEditMyProfile", async () => {
+    const user = userEvent.setup()
+    const onEdit = vi.fn()
+    render(
+      <RosterList
+        members={TEAM.members}
+        starters={TEAM.starters}
+        maxMembers={TEAM.max_members}
+        avgRankScore={null}
+        rankFilledCount={0}
+        currentAccountId="acc-3"
+        onEditMyProfile={onEdit}
+      />,
+    )
+
+    const rows = within(
+      screen.getByRole("list", { name: "隊伍名單" }),
+    ).getAllByRole("listitem")
+    await user.click(
+      within(rows[2]).getByRole("button", { name: "填寫我的資料" }),
+    )
+
+    expect(onEdit).toHaveBeenCalledTimes(1)
+    expect(
+      screen.getAllByRole("button", { name: "填寫我的資料" }),
+    ).toHaveLength(1)
+  })
+
+  it("缺漏依遊戲 ID、段位、段位截圖的順序列出；caption 只列有填的部分", () => {
+    const base = TEAM.members[0]
+    expect(
+      profileStatusText({ ...base, missing_fields: ["rank_screenshot"] }),
+    ).toBe("缺：段位截圖")
+    expect(
+      profileStatusText({
+        ...base,
+        missing_fields: ["game_account_id", "rank_screenshot"],
+      }),
+    ).toBe("缺：遊戲 ID、段位截圖")
+    expect(profileStatusText({ ...base, missing_fields: [] })).toBe("資料完成")
+    expect(profileCaption(base)).toBe("")
+    expect(profileCaption({ ...base, rank_tier: "鑽石" })).toBe("鑽石")
+    expect(
+      profileCaption({
+        ...base,
+        game_account_id: "Zhe#TW",
+        has_rank_screenshot: true,
+      }),
+    ).toBe("Zhe#TW · 段位截圖：已上傳")
+  })
+
+  it.each([
+    [null, 0, 4, "平均段位積分：尚無人填寫"],
+    [23.33, 3, 5, "平均段位積分 23.33（3／5 人已填）"],
+    [23.33, 3, 3, "平均段位積分 23.33"],
+    [30, 1, 1, "平均段位積分 30.00"],
+    [0.1, 2, 4, "平均段位積分 0.10（2／4 人已填）"],
+  ])(
+    "平均段位積分 %s（%s／%s 人已填）顯示「%s」",
+    (avg, filled, total, text) => {
+      expect(avgRankScoreText(avg, filled, total)).toBe(text)
+    },
+  )
+
+  it("名單下方顯示平均段位積分", () => {
+    render(
+      <RosterList
+        members={TEAM.members}
+        starters={TEAM.starters}
+        maxMembers={TEAM.max_members}
+        avgRankScore={20}
+        rankFilledCount={2}
+      />,
+    )
+
+    expect(
+      screen.getByText("平均段位積分 20.00（2／4 人已填）"),
+    ).toBeInTheDocument()
   })
 })
 

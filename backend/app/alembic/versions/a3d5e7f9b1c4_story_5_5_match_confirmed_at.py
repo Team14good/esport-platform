@@ -4,7 +4,7 @@
 以及 worker 找申訴期滿場次用的 (status, appeal_deadline) 索引。
 
 Revision ID: a3d5e7f9b1c4
-Revises: c5d2e8a4f913
+Revises: a3f6b9d2c8e1
 Create Date: 2026-10-31 18:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a3d5e7f9b1c4"
-down_revision = "c5d2e8a4f913"
+down_revision = "a3f6b9d2c8e1"
 branch_labels = None
 depends_on = None
 
