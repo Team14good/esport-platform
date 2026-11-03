@@ -596,6 +596,22 @@ def test_forfeit_due_excludes_fully_checked_in_matches(
     assert len(service.list_check_ins(session, match_id=setup.matches["M1"].id)) == 2
 
 
+def test_forfeit_due_skips_cancelled_tournaments(
+    session: Session, setup: Setup
+) -> None:
+    other, _ = draw_with(session, setup.fake, 8)
+    row = session.get(Tournament, other.id)
+    assert row is not None
+    row.status = TournamentStatus.CANCELLED
+    session.add(row)
+    session.flush()
+
+    due = service.list_forfeit_due(session, now=DEADLINE)
+
+    # 已取消賽事的第一輪不列入；同時到期的另一場賽事照常列出
+    assert sorted(due) == sorted(setup.matches[c].id for c in ("M1", "M2", "M3", "M4"))
+
+
 def test_forfeit_due_is_ordered_by_deadline_not_id(
     session: Session, setup: Setup
 ) -> None:
