@@ -11,6 +11,7 @@ from sqlalchemy import DateTime, Index, String, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 from app.core import clock
+from app.modules.tournaments.models import RankTierRead
 
 
 class MemberRole(StrEnum):
@@ -36,6 +37,10 @@ class RegistrationStatus(StrEnum):
 
 TEAM_NAME_MAX_LENGTH = 30
 INVITE_TOKEN_MAX_LENGTH = 64
+GAME_ACCOUNT_ID_MAX_LENGTH = 50
+RANK_TIER_MAX_LENGTH = 50
+RANK_SCREENSHOT_KEY_MAX_LENGTH = 64
+RANK_SCREENSHOT_NAME_MAX_LENGTH = 100
 
 
 # ---------------------------------------------------------------- 資料表
@@ -66,7 +71,8 @@ class Team(SQLModel, table=True):
 class TeamMember(SQLModel, table=True):
     """隊員。（tournament_id, account_id）唯一：同一帳號在同一賽事只能在一支隊伍。
 
-    參賽資料欄位（遊戲 ID、段位、截圖）由 Story 3.2 加入。
+    參賽資料（Story 3.2）：遊戲 ID、段位與其積分、段位截圖的檔案鍵值與清理過的原始
+    檔名；尚未填寫時為 null。截圖鍵值只留在資料庫，不出現在任何 API 回應。
     """
 
     __tablename__ = "team_member"
@@ -85,6 +91,17 @@ class TeamMember(SQLModel, table=True):
     role: MemberRole = Field(sa_type=String(16))
     created_at: datetime = Field(
         default_factory=clock.now, sa_type=DateTime(timezone=True)
+    )
+    game_account_id: str | None = Field(
+        default=None, max_length=GAME_ACCOUNT_ID_MAX_LENGTH
+    )
+    rank_tier: str | None = Field(default=None, max_length=RANK_TIER_MAX_LENGTH)
+    rank_score: int | None = Field(default=None)
+    rank_screenshot_key: str | None = Field(
+        default=None, max_length=RANK_SCREENSHOT_KEY_MAX_LENGTH
+    )
+    rank_screenshot_name: str | None = Field(
+        default=None, max_length=RANK_SCREENSHOT_NAME_MAX_LENGTH
     )
 
 
@@ -137,11 +154,23 @@ class TeamCreate(BaseModel):
     name: TeamNameField
 
 
+# 參賽資料缺漏的欄位代碼（固定依此順序列出）
+MissingProfileField = Literal["game_account_id", "rank_tier", "rank_screenshot"]
+
+
 class TeamMemberRead(BaseModel):
     account_id: uuid.UUID
     display_name: str
     role: MemberRole
     joined_at: datetime
+    game_account_id: str | None
+    rank_tier: str | None
+    rank_score: int | None
+    has_rank_screenshot: bool
+    # 截圖原始檔名可能含個資，只在檢視者自己那列有值
+    rank_screenshot_name: str | None
+    # 尚未填寫的參賽資料，依 game_account_id、rank_tier、rank_screenshot 的順序
+    missing_fields: list[MissingProfileField]
 
 
 class TeamDetail(BaseModel):
@@ -162,6 +191,13 @@ class TeamDetail(BaseModel):
     invite_status: InviteStatus
     # 目前檢視者在這支隊伍的角色
     my_role: MemberRole
+    # 賽事快照的段位對照表（積分由高到低），S18 的段位選項
+    rank_tiers: list[RankTierRead]
+    # 已填段位成員（含替補）的平均段位積分，取到小數第二位；沒有人填時為 null
+    avg_rank_score: float | None
+    rank_filled_count: int
+    # 賽事開放報名且報名仍是組隊中時，隊員才能修改自己的參賽資料
+    profile_editable: bool
 
 
 class TeamInvitePreview(BaseModel):
