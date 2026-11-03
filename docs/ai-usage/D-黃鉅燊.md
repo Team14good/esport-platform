@@ -297,3 +297,14 @@
 - 問題與修正：第一版照第一階段規則，允許把場次改到「現在」。審查指出這樣報到會立刻開放，兩隊只剩 15 分鐘棄權時限可報到；另一位指出棄權期限已過、worker 還沒判定的場次仍可改時間，等於把應判的棄權往後推。這兩點規格與測試都沒擋，交給人決定後修正。另外列表的最早時間帶秒數，訊息顯示的整分反而被拒絕，改為進位到整分。前端整批測試出現 3 個 identity 測試逾時，單獨重跑全過，確認是負載造成而非本次改動
 - 成熟度：L4（spec → 子代理實作 → 多代理審查 → 人決策 → 修正 → 突變驗證）
 - 證據：`spec-4-3-reschedule-backend.md` 的 Review Triage Log（17 項）與 Spec Change Log
+### 2026-11-03｜程式／測試｜依 A 對 #20（5.5、5.6）的 Request changes 修正自動確認
+
+- Story／範圍：5.5 第二階段的 `auto_confirm_expired`、5.5 spec
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：A 指出一場結果不自洽的場次會讓所有賽事的自動確認永遠停住。AI 讀 `progression` 確認它拋的是 `ValueError`、`confirm_match` 本身不擋，改成每個候選在 savepoint 內確認，出錯就退回、記錄並排除，再找下一場；補 A 要求的兩個測試，並依 A 的清單更新 spec 與 PR 說明
+- AI 產出：`auto_confirm_expired` 與 `find_expired_appeal_id(exclude_matches=)`；壞資料不擋其他賽事的測試、`confirm_match`／`confirm_walkover` 先鎖賽事的測試；spec 的 Code Map、已被取代的決定、驗證數字說明、第 2 輪 triage
+- 人做了什麼：A 審查並提出修正項目；使用者要求確認最新狀況後處理
+- 驗證：全部後端 1337 個測試通過、lint 通過、單一 Alembic head；`service.py` 分支覆蓋率 99%。突變：拿掉 `ValueError` 處理，壞資料測試失敗；拿掉兩個函式開頭的鎖，兩個鎖測試都失敗
+- 問題與修正：第 1 輪 AI 審查時把這個問題判成「那一輪停在它、駁回」，低估了 worker rollback 後下一輪會重選同一場，是 A 的人工審查抓到的。A 建議用第二個 session 的 `FOR UPDATE NOWAIT` 驗證鎖，但測試的所有 session 共用同一條連線與外層交易，另一條連線看不到未 commit 的資料，AI 改成記錄呼叫順序。第一版鎖測試只檢查「有呼叫過 `lock_tournament`」，突變時仍然通過，因為後面的 `advance` 也會鎖；改成斷言第一個動作就是鎖賽事後才抓到
+- 成熟度：L3（人審查找出問題，AI 修正並驗證）
+- 證據：#20 的審查與 CI 紀錄
