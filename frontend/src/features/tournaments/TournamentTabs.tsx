@@ -16,6 +16,11 @@ type TournamentTabPath = Exclude<
 // 分頁的白名單：新增分頁只要在這裡加一項，`TournamentTab` 跟著推導
 const TOURNAMENT_TABS = [
   { value: "overview", label: "總覽", to: "/tournaments/$tournamentId" },
+  {
+    value: "bracket",
+    label: "對戰表",
+    to: "/tournaments/$tournamentId/bracket",
+  },
 ] as const satisfies ReadonlyArray<{
   value: string
   label: string

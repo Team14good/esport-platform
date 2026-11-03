@@ -7,12 +7,11 @@ import {
 import { act, renderHook } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-
+import type { PublicBracket } from "@/client"
 import {
   createBracketFixture,
   simulateBracketChange,
 } from "@/features/competition/bracket-fixtures"
-import type { PublicBracket } from "@/features/competition/bracket-types"
 import {
   BRACKET_POLL_INTERVAL_MS,
   BracketNotFoundError,
@@ -185,12 +184,13 @@ describe("對戰樹輪詢", () => {
     await advance(0)
 
     await advance(BRACKET_POLL_INTERVAL_MS * 3)
-    // 404 兩次＋失敗兩次：還沒到 3 次
+    // 404 兩次＋失敗兩次：還沒到 3 次；畫面維持「尚未抽籤」，不當成第一次載入就失敗
     expect(result.current.connectionLost).toBe(false)
-    expect(result.current.notFound).toBe(false)
-    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.notFound).toBe(true)
+    expect(result.current.error).toBeNull()
     await advance(BRACKET_POLL_INTERVAL_MS)
     expect(result.current.connectionLost).toBe(true)
+    expect(result.current.notFound).toBe(true)
   })
 
   it("第一次載入不 flash；之後只有變動的場次在 changedMatchIds", async () => {
