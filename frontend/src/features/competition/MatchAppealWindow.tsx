@@ -1,8 +1,7 @@
 import { type ReactNode, useId } from "react"
-
+import type { MatchStatus } from "@/client"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import type { MatchStatus } from "./bracket-types"
 import { formatMatchDateTime } from "./match-time"
 import type { PublicMatchDetail } from "./match-types"
 

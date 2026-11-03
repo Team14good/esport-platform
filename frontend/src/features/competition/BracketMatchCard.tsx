@@ -1,10 +1,10 @@
 import { Link } from "@tanstack/react-router"
 import type { CSSProperties } from "react"
-
+import type { PublicMatch } from "@/client"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { cn } from "@/lib/utils"
 import { BracketMarkTag } from "./BracketMarkTag"
-import type { BracketSide, PublicMatch } from "./bracket-types"
+import type { BracketSide } from "./match-status"
 import {
   hasScore,
   MATCH_STATUS_BADGES,
