@@ -133,3 +133,39 @@
 - 問題與修正：本機 `story/2-2` 落後遠端 3 個 commit（A 已合併 main），AI 先比對遠端才發現，改為同步後再修，避免在舊版上修改；為了不蓋掉使用者正在跑的 2.4 容器，AI 另開 git worktree，並用暫時的 compose 設定清掉對外 port，在獨立的 compose 專案跑測試
 - 成熟度：L3（AI 依 CONTRIBUTING 第 4 節與審查意見修正，人決定是否推上去）
 - 證據：PR #15、CI run 41384713533（修正前失敗）
+
+### 2026-11-03｜需求／設計｜Story 2.4 第二階段 spec：狀態徽章與申請主辦方 banner
+
+- Story／範圍：2.4 第二階段（第 1、2 項；PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，由另一個 Claude Code session 交辦
+- 怎麼用：依 deferred-work 的 2.4 第二階段項目、第一階段 spec、epic-2-context 與 DESIGN／EXPERIENCE 產生 spec
+- AI 產出：`spec-2-4-status-badge-and-organizer-banner.md`（I/O Matrix 8 列）；1 個 Open Question（banner 文字與按鈕的兩種寫法）
+- 人做了什麼：選定 banner 文字「想辦賽事？」、按鈕「申請成為主辦方」；核准 AI 自行決定的三件事（關閉狀態依帳號分開、S2 總覽「狀態」欄也換徽章、S1 分組標題維持文字）；決定第 3 項等 PR #31 合併再做
+- 驗證：spec 經人核准後鎖定
+- 問題與修正：AI 對照 DESIGN.md 後發現交辦內容「開放報名、進行中：live 加上進行中脈動」若照字面會讓開放報名也有脈動點，依設計表改為只有進行中有脈動點，寫進 spec。AI 第一次用 Git Bash 的 `python` 改 spec 沒有生效（這台電腦的 `python` 是 Windows 商店的別名，沒有報錯），檢查 `grep` 結果才發現，改用編輯工具
+- 成熟度：L3（AI 依規格產出 spec，需要使用者察覺的選擇回到人決定）
+- 證據：spec 的 Decisions
+
+### 2026-11-03｜程式／程式生成｜Story 2.4 第二階段：S1、S2 狀態徽章與申請主辦方 banner
+
+- Story／範圍：2.4 第二階段（PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：核准 spec 後由實作子代理依 spec 實作，審查後再由同一個子代理修正
+- AI 產出：新增 `TournamentStatusBadge.tsx`、`OrganizerApplyBanner.tsx`（`useOrganizerApplyBanner` hook）；修改 `status.ts`、`TournamentList.tsx`、`TournamentPage.tsx`、`TournamentOverview.tsx`；2 個測試檔共 20 個測試；`deferred-work.md` 新增 2 筆
+- 人做了什麼：核准 spec；交辦時指定原本的延後項目不可刪除
+- 驗證：前端 typecheck、biome、build 通過；單元測試 49 個檔、562 個測試全部通過（`--maxWorkers=4`）；子代理以 375 px 在瀏覽器量 S1、S2 的 `scrollWidth` 為 375
+- 問題與修正：實作子代理把交辦時明確要求保留的 2.4 第二階段延後項目刪掉，主代理比對 `deferred-work.md` 的 diff 發現並還原。子代理為了實測 banner，自行連到另一個 session 的 docker 堆疊並各建了一個測試帳號（未刪除），回報後主代理要求之後不再這樣做
+- 成熟度：L4（spec → 子代理實作 → 主代理比對 diff → 自動測試）
+- 證據：spec 的 Implementation Notes、commit 未記錄
+
+### 2026-11-03｜測試／程式審查｜Story 2.4 第二階段三人審查
+
+- Story／範圍：2.4 第二階段（PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：三個審查者各自只看 diff，主代理逐筆查證後分類
+- AI 產出：16 筆發現（Blind 13、Edge 3、Gap 0）；5 筆修正、1 筆延後、10 筆不處理，記在 spec 的 Review Triage Log
+- 人做了什麼：未記錄（審查分類由 AI 完成，待人在 PR 審查時確認）
+- 驗證：修正後前端 typecheck、biome、build 通過，單元測試 562 個全部通過
+- 問題與修正：審查抓到 banner 元件自己包一個 `PageBannerSlot`，S1 頁面失去「同頁最多一則」的控制，與 spec 不符，改成 hook 由頁面擁有 slot。主代理修正後單獨重跑新測試時，S2 的徽章測試固定失敗（路由延遲載入的冷啟動超過 1 秒），全部一起跑時剛好通過，實作子代理與審查者都沒發現；比照既有測試加上預先載入後通過。審查者宣稱「未驗證 Email 的帳號點 banner 會卡住」，主代理查 S15 確認會引導去驗證，判定為誤報
+- 成熟度：L4（多個審查者＋主代理查證＋測試驗證）
+- 證據：spec 的 Review Triage Log、`deferred-work.md`
