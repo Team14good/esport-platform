@@ -1,0 +1,22 @@
+# 端對端測試容器：Playwright 官方 image（已含與 @playwright/test 1.63.0 對應的瀏覽器）加上 Bun。
+# 依賴的安裝順序與 frontend/Dockerfile 相同；用法見 README〈測試與檢查〉。
+FROM mcr.microsoft.com/playwright:v1.63.0-noble
+
+COPY --from=oven/bun:1.4 /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx
+
+WORKDIR /app
+
+COPY package.json bun.lock /app/
+COPY frontend/package.json /app/frontend/
+
+RUN bun install --frozen-lockfile
+
+COPY ./frontend /app/frontend
+
+WORKDIR /app/frontend
+
+# playwright-report／test-results 是從主機掛載的目錄，Playwright 刪不掉掛載點本身、舊檔會留著，
+# 所以每次執行前先清空內容；之後執行 CMD（或 docker compose run 時指定的指令）。
+ENTRYPOINT ["sh", "-c", "find playwright-report test-results -mindepth 1 -delete 2>/dev/null; exec \"$@\"", "e2e"]
+CMD ["bunx", "playwright", "test"]
