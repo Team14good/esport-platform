@@ -16,6 +16,7 @@
 
 import uuid
 from collections.abc import Callable
+from typing import Any
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -27,7 +28,11 @@ from app.core.events import OutboxEvent
 from app.modules.competition import repository, service
 from app.modules.competition.models import Match, MatchOutcome, MatchStatus
 from app.modules.tournaments import service as tournaments_service
-from app.modules.tournaments.models import Tournament, TournamentStatus
+from app.modules.tournaments.models import (
+    Tournament,
+    TournamentRead,
+    TournamentStatus,
+)
 from app.worker import run_once
 from app.worker.jobs import confirm_expired_appeals
 from tests.competition.conftest import (
@@ -212,9 +217,7 @@ def test_full_tournament_from_draw_to_finished(
         winners: dict[str, uuid.UUID] = {}
         for match in playable:
             assert match.team_a_id is not None and match.team_b_id is not None
-            winner = min(
-                (match.team_a_id, match.team_b_id), key=fake.teams.index
-            )
+            winner = min((match.team_a_id, match.team_b_id), key=fake.teams.index)
             winners[match.code] = winner
             _enter_appeal(
                 session, match, outcome=O.PLAYED, winner_id=winner, deadline=deadline
@@ -452,7 +455,11 @@ def test_double_forfeit_gives_opponent_walkover_and_keeps_advancing(
 
     rows = _rows(session, tournament.id)
     m1, m5 = rows["M1"], rows["M5"]
-    assert (m1.status, m1.outcome, m1.winner_id) == (S.CONFIRMED, O.DOUBLE_FORFEIT, None)
+    assert (m1.status, m1.outcome, m1.winner_id) == (
+        S.CONFIRMED,
+        O.DOUBLE_FORFEIT,
+        None,
+    )
     assert _slots(fake, m5) == (None, 3)
     assert (m5.status, m5.outcome, _k(fake, m5.winner_id)) == (
         S.CONFIRMED,
@@ -555,7 +562,9 @@ def test_semifinal_double_forfeit_finishes_tournament(
     assert (third.status, third.outcome, third.winner_id) == (S.VOIDED, None, None)
     assert third.forfeit_deadline is None
     # M6 先確認時敗隊 2 已排入季軍賽且留在原位；M5 先確認時季軍賽已取消，不再填位
-    assert _slots(fake, third) == ((None, 2) if semi_order == "M6 first" else (None, None))
+    assert _slots(fake, third) == (
+        (None, 2) if semi_order == "M6 first" else (None, None)
+    )
     assert _status(session, tournament_id) == T.FINISHED
     assert _podium_k(fake, session, tournament_id) == (1, 2, None)
     voided = [
@@ -725,7 +734,9 @@ def test_repeated_advance_after_finish_changes_nothing(
     outbox = count_outbox(session, "MatchResultConfirmed")
 
     for code in ("M7", "M8", "M1", "M5"):
-        service.advance(session, match=service.lock_match(session, match_id=rows[code].id))
+        service.advance(
+            session, match=service.lock_match(session, match_id=rows[code].id)
+        )
 
     assert _status(session, tournament_id) == T.FINISHED
     assert len(audit.list_for_tournament(session, tournament_id)) == logs
@@ -932,6 +943,105 @@ def test_match_without_outcome_does_not_block_later_expired_match(
     assert _slots(fake, rows["M5"]) == (None, 3)
 
 
+def test_inconsistent_result_does_not_block_other_expired_matches(
+    session: Session,
+    session_factory: Callable[[], Session],
+    fake_registration: FakeRegistration,
+    frozen_clock: FrozenClockLike,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # 期限最早的場次完賽卻沒有勝隊，progression 會拋 ValueError；它要被略過並記錄，
+    # 同一賽事與其他賽事後面期滿的場次照常確認（不能每一輪都卡在它）
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 8)
+    rows = _rows(session, tournament.id)
+    _enter_appeal(
+        session,
+        rows["M1"],
+        outcome=O.PLAYED,
+        winner_id=None,
+        deadline=START + timedelta(minutes=5),
+    )
+    _enter_appeal(
+        session,
+        rows["M2"],
+        outcome=O.PLAYED,
+        winner_id=rows["M2"].team_a_id,
+        deadline=START + APPEAL,
+    )
+    other, _ = draw_with(session, fake, 8)
+    other_m1 = _rows(session, other.id)["M1"]
+    _enter_appeal(
+        session,
+        other_m1,
+        outcome=O.PLAYED,
+        winner_id=other_m1.team_b_id,
+        deadline=START + APPEAL,
+    )
+    frozen_clock.set(START + APPEAL)
+
+    assert _drain(session, session_factory) == 2
+
+    rows = _rows(session, tournament.id)
+    assert (rows["M1"].status, rows["M1"].confirmed_at) == (S.APPEAL_WINDOW, None)
+    assert rows["M1"].winner_id is None
+    assert rows["M2"].status == S.CONFIRMED
+    assert rows["M2"].winner_id in (rows["M5"].team_a_id, rows["M5"].team_b_id)
+    assert _rows(session, other.id)["M1"].status == S.CONFIRMED
+    assert f"Match {rows['M1'].id} has an inconsistent result" in caplog.text
+
+
+@pytest.mark.parametrize("confirm", ["confirm_match", "confirm_walkover"])
+def test_confirm_locks_tournament_itself(
+    session: Session,
+    fake_registration: FakeRegistration,
+    monkeypatch: pytest.MonkeyPatch,
+    confirm: str,
+) -> None:
+    # 呼叫端沒先鎖賽事時，confirm 自己也要鎖（AD-6）。測試的 session 共用同一條連線，
+    # 無法從另一個 session 觀察列鎖，所以改為記錄 `lock_tournament` 的呼叫
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 8)
+    rows = _rows(session, tournament.id)
+    if confirm == "confirm_walkover":
+        _confirm(session, rows["M1"], O.PLAYED, _team(fake, 8))
+        match = service.lock_match(session, match_id=rows["M5"].id)
+    else:
+        match = service.lock_match(session, match_id=rows["M1"].id)
+        service.transition_match(session, match=match, to=S.APPEAL_WINDOW)
+    calls: list[str] = []
+    real_lock = tournaments_service.lock_tournament
+    real_set_status = repository.set_match_status
+
+    def recording_lock(
+        session: Session, *, tournament_id: uuid.UUID
+    ) -> TournamentRead:
+        calls.append(f"lock {tournament_id}")
+        return real_lock(session, tournament_id=tournament_id)
+
+    def recording_set_status(*args: Any, **kwargs: Any) -> None:
+        calls.append("write")
+        real_set_status(*args, **kwargs)
+
+    monkeypatch.setattr(tournaments_service, "lock_tournament", recording_lock)
+    monkeypatch.setattr(repository, "set_match_status", recording_set_status)
+    if confirm == "confirm_walkover":
+        service.confirm_walkover(session, match=match)
+    else:
+        service.confirm_match(
+            session,
+            match=match,
+            outcome=O.PLAYED,
+            winner_id=match.team_a_id,
+            actor_id=None,
+        )
+
+    # 第一個動作就是鎖這場賽事，在任何寫入之前
+    assert calls[0] == f"lock {tournament.id}"
+    assert "write" in calls
+    assert match.status == S.CONFIRMED
+
+
 def test_appeal_window_without_outcome_is_not_confirmed(
     session: Session,
     fake_registration: FakeRegistration,
@@ -1025,7 +1135,11 @@ def test_confirm_match_records_actor(
     service.transition_match(session, match=match, to=S.LIVE)
 
     service.confirm_match(
-        session, match=match, outcome=O.FORFEIT, winner_id=_team(fake, 4), actor_id=actor
+        session,
+        match=match,
+        outcome=O.FORFEIT,
+        winner_id=_team(fake, 4),
+        actor_id=actor,
     )
 
     logs = [

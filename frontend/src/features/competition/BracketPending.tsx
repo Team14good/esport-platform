@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/common/EmptyState"
 export const BRACKET_PENDING_TEXT = "報名截止後抽籤，對戰表會出現在這裡。"
 
 type BracketPendingProps = {
-  /** 報名截止倒數（Countdown 屬於 Epic 2，由呼叫端傳入；第二階段接上） */
+  /** 報名截止倒數或說明，由 S3 依賽事狀態傳入 */
   countdown?: ReactNode
   className?: string
 }
