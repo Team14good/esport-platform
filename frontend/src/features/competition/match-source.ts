@@ -12,7 +12,7 @@ export class MatchNotFoundError extends Error {
   }
 }
 
-/** 開發模式假對戰樹的賽事 id（與 createBracketFixture 相同），/dev/bracket 的卡片連結用它 */
+/** 開發模式假對戰樹的賽事 id（與 createBracketFixture 相同），/dev/match 與測試用它 */
 export const DEV_MATCH_SOURCE_TOURNAMENT_ID = "tournament-fixture"
 
 /** S4 的網址；給只接受字串的地方（對戰樹場次卡的 matchHref）使用 */
