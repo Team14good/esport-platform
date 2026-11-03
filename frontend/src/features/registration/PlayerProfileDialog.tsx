@@ -251,7 +251,11 @@ export function PlayerProfileDialog({
     <ResponsiveShell
       isMobile={isMobile}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // 送出中不能關閉（Esc、點遮罩、關閉鈕），否則請求失敗時錯誤沒地方顯示
+        if (!next && form.formState.isSubmitting) return
+        onOpenChange(next)
+      }}
       title={title}
       description={description}
     >

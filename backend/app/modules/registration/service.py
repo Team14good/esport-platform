@@ -476,6 +476,8 @@ def update_player_profile(
         "game_account_id": member.game_account_id,
         "rank_tier": member.rank_tier,
         "rank_score": member.rank_score,
+        # 與 after 的 screenshot_replaced 一起看，才分得出首次上傳還是換圖
+        "had_screenshot": member.rank_screenshot_key is not None,
     }
     new_key: str | None = None
     old_key: str | None = None

@@ -121,6 +121,38 @@ describe("S18 選手參賽資料", () => {
     })
   })
 
+  it("送出中按 Esc 不會關閉；送出完成後才能關閉", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    let finish: () => void = () => {}
+    renderDialog({
+      onOpenChange,
+      onSubmit: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    })
+
+    await user.type(screen.getByLabelText("遊戲 ID"), "Faker#TW1")
+    await user.click(screen.getByRole("combobox", { name: "段位" }))
+    await user.click(await screen.findByRole("option", { name: "白金" }))
+    await user.upload(screen.getByLabelText("段位截圖"), pngFile())
+    await user.click(screen.getByRole("button", { name: "儲存資料" }))
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "儲存資料" })).toBeDisabled(),
+    )
+
+    await user.keyboard("{Escape}")
+    expect(onOpenChange).not.toHaveBeenCalled()
+
+    finish()
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "儲存資料" })).toBeEnabled(),
+    )
+    await user.keyboard("{Escape}")
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it("沒填就送出：逐欄顯示錯誤，不呼叫 onSubmit", async () => {
     const user = userEvent.setup()
     const { onSubmit } = renderDialog()

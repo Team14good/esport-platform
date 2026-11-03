@@ -46,6 +46,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md`
   summary: 上傳 API 沒有請求大小上限，5 MB 在 multipart 整個收完後才由 `core.storage` 檢查。
   evidence: 2026-10-30 Story 3.2 第一段 Code Review（Blind Hunter）。Starlette 會先把整個 body spool 到暫存檔，超大請求仍會被完整接收；第二段建 multipart API 時要決定請求大小上限（例如檢查 `Content-Length`）（medium）。
+
 ## Deferred from: spec-3-1-tournament-integration.md (2026-11-02)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`

@@ -442,6 +442,7 @@ def test_records_audit_without_the_file_key(
         "game_account_id": None,
         "rank_tier": None,
         "rank_score": None,
+        "had_screenshot": False,
     }
     assert first.after == {
         "game_account_id": "Night#TW1",
@@ -453,6 +454,7 @@ def test_records_audit_without_the_file_key(
         "game_account_id": "Night#TW1",
         "rank_tier": "鑽石",
         "rank_score": 30,
+        "had_screenshot": True,
     }
     assert second.after is not None
     assert second.after["screenshot_replaced"] is False

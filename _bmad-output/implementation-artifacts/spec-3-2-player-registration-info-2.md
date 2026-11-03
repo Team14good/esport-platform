@@ -115,6 +115,8 @@ context:
 - 平均段位積分放在名單下方人數那行的下一行（同為 caption、`muted-foreground`）；前端用 `toFixed(2)` 補足兩位小數，四捨五入由後端完成。
 - 上傳進度：有選新截圖時才傳 `onUploadProgress`（`loaded / total × 100`）；沒有新檔時不顯示進度。
 - 瀏覽器手動檢查（375 px、兩個帳號、uploads volume 舊檔消失）尚未執行。
+- 2026-11-03 補做瀏覽器實測：Playwright 以隊員（375 px）與隊長（桌機）實測 28 項全部通過；實測上傳 3 張，uploads volume 剩 2 張且與資料庫鍵值一致，換掉的舊檔已刪除。上傳進度條因本機傳輸太快未在瀏覽器觀察到。
+- 2026-11-03 PR #24 審查（A）修正：送出中忽略關閉 S18（Esc、遮罩、關閉鈕）；操作紀錄 `before` 加 `had_screenshot`；deferred-work 補空行。Review Triage Log 的 B12「少空行在 baseline 就存在」判定錯誤：baseline `2a499fd` 已含第一段的改動，第一段的 deferred 區塊是這支 PR 新增的，應以 `main` 比對。
 
 ## Spec Change Log
 
