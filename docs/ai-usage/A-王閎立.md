@@ -302,3 +302,64 @@
   - 這次的修正改了 4.6 的檔案，但 `story/5-8` 已經把同一段邏輯搬到 `match-status.ts`，合併 `story/4-6` 進 `story/5-8` 時要手動解衝突
 - 成熟度：L3（人審查找出問題，AI 修正並自動驗證）
 - 證據：`_bmad-output/implementation-artifacts/spec-4-6-bracket-tree-view.md` 的 Review Triage Log；尚未 commit
+
+### 2026-11-03｜需求、設計／spec 撰寫｜Story 4.6 第二階段：S3 對戰表頁接上真資料
+
+- Story／範圍：4.6 第二階段（`story/4-6-bracket-page`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：先請 AI 盤點「主線、自己負責、因別人合併而能開始」的 Story，選定 4.6 第二階段；bmad-build 讀 epic-4 context 與第一階段 spec、調查 client、S2 分頁列、Countdown 後寫 spec
+- AI 產出：`spec-4-6-bracket-page.md`（I/O 矩陣 6 列、11 項任務），列出 3 個待決問題：預設分頁、場次卡是否先連到 S4、分支
+- 人做了什麼：決定預設分頁不做、交給 B（1A），場次卡現在就連（2A），改用 `story/4-6-bracket-page` 分支（3A），保留完整 spec
+- 驗證：spec 經 checkpoint 核准後才實作
+- 問題與修正：AI 發現「賽程已公布時預設對戰表分頁」與「總覽分頁連到同一網址」衝突，直接導向會讓總覽點不回去，沒有自行假設，列為待決問題；已寫進 `deferred-work.md`
+- 成熟度：L4（固定流程規劃，人只在 checkpoint 決策）
+- 證據：`_bmad-output/implementation-artifacts/spec-4-6-bracket-page.md` 的 Decisions；尚未 commit
+
+### 2026-11-03｜程式／程式生成｜Story 4.6 第二階段：S3 路由、client 輪詢與型別整理
+
+- Story／範圍：4.6 第二階段（`story/4-6-bracket-page`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：AI 依 spec 實作，不改 B 的 `TournamentPage`，只在 `TournamentTabs` 加一個分頁
+- AI 產出：
+  - 新增 `bracket-queries.ts`、`TournamentBracketPage.tsx`、S3 路由 `bracket.tsx`
+  - 13 個檔案的型別改從 `@/client` 匯入，刪除 `bracket-types.ts` 與 `/dev/bracket`
+  - S4 返回連結改用 TanStack `Link`；sprint-status 的 1.7、1.8 改 `done`，4.6 改 `review`
+  - 對 baseline 共 29 個檔案改動（不含新檔：+122／−330 行），新增 5 個檔案
+- 人做了什麼：checkpoint 核准 spec；審查後決定已取消賽事的空狀態文案
+- 驗證：本機 Bun：typecheck、biome（191 個檔案）、build 通過；單元測試 48 個檔案、560 個通過。容器內驗證沒跑成：Docker Hub 回 429、backend 要從 `pkg-containers.githubusercontent.com` 下載 uv 被網路政策擋、frontend 容器內 `bun install` 出現 `SELF_SIGNED_CERT_IN_CHAIN`
+- 問題與修正：
+  - AI 第一版的頁面元件寫了不存在的 `useBracketPolling.lastError`，在執行前自己發現並重寫
+  - `MatchHeader` 改成 `Link` 後，2 個測試檔（9 個測試）因為沒有 router 而失敗；新增 `renderWithRouterContext()` 修正
+- 成熟度：L4（依 spec 產出，自動驗證）
+- 證據：同上 spec 的 Tasks、Implementation Notes；尚未 commit
+
+### 2026-11-03｜測試／多代理審查與修正｜Story 4.6 第二階段：三個審查員找出的問題
+
+- Story／範圍：4.6 第二階段（`story/4-6-bracket-page`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap 三個子代理）
+- 怎麼用：使用者選擇跑三個審查子代理；AI 逐條驗證、分類後修正並補測試
+- AI 產出：Review Triage Log 13 列：修正 7 項、1 項由使用者決定後修正、駁回 2 項、判定不成立 3 項；S3 頁面測試從 9 個增加到 18 個
+- 人做了什麼：決定要跑審查；決定已取消賽事沒有對戰表時寫「這場賽事沒有對戰表。」
+- 驗證：修正後單元測試 48 個檔案、560 個通過；typecheck、biome、build 通過。反向驗證：拿掉 `connectionLost ||`、拿掉對戰表變動時重抓賽事、拿掉標題檢查，各有測試失敗
+- 問題與修正：
+  - AI 的實作在「尚未抽籤後一次暫時失敗」時立刻顯示連線中斷並把空狀態換成骨架。這是第一階段 hook 的語意，AI 沒有發現它跟 S3 衝突；Edge Case Hunter 與 Verification Gap 都指出。修正 hook，並改掉第一階段測試的錯誤預期
+  - 從 S3 點進 S4 時，S3 還原標題會蓋掉 S4 的標題。Edge Case Hunter 指出，AI 寫暫時測試重現（S4 標題變成「對戰表 · FLOW」）後修正
+  - 換賽事時 `keepPreviousData` 會把上一場的對戰樹顯示在新賽事底下，改成以賽事 id 當 key
+  - 所有 404 都被當成「尚未抽籤」，改成只認 `BRACKET_NOT_FOUND`
+  - AI 的測試只走「第一次載入就失敗」的路徑，「已取消又連線失敗」的測試可能沒驗到東西；補上 9 個測試
+  - 已取消的賽事仍寫「報名截止後抽籤…」，這是 spec 的文案問題，交由使用者決定
+- 成熟度：L4（多個審查者＋自動驗證，人只在 checkpoint 決策）
+- 證據：同上 spec 的 Review Triage Log；尚未 commit
+
+### 2026-11-03｜程式、測試／依審查修正｜Story 4.6 第二階段：依 D 的 PR 審查修正 404 計數並補狀態測試
+
+- Story／範圍：4.6 第二階段（`story/4-6-bracket-page`）
+- 怎麼用：先用 bmad-code-review 的四個審查員（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）審 a44e53e，確認可以開 PR；D 核准後提出兩點不擋合併的建議，AI 照建議修改並在本機 Docker 的前端容器跑檢查
+- AI 產出：`use-bracket-polling.ts` 只在還沒有資料時把 404 當成不算失敗；hook 測試 1 個、S3 頁面狀態表 2 列；spec 的 Review Triage Log 新增 2 列
+- 人做了什麼：決定審查只要確認能不能開 PR、不要花太多 token；中途拒絕在 worktree 啟動整套 compose；D 審查 PR 並提出修正建議
+- 驗證：前端容器內 typecheck、biome（176 個檔案）、build 通過；單元測試 48 個檔案、563 個通過（原本 560＋新增 3）。反向驗證：還原 hook 的修改，新的 hook 測試失敗
+- 問題與修正：
+  - 四個審查員中，Edge Case Hunter 與 Blind Hunter 都指出「已有對戰樹後收到 404 會停在舊畫面」，但 AI 整理時判斷為不擋 PR，D 的審查也得到同樣結論並給了具體改法
+  - 容器內第一次跑單元測試時 22 個失敗，都是跟這次修改無關的測試在約 1 秒時逾時；改用 `--maxWorkers=4` 重跑全部通過，判斷是 48 個 worker 同時跑造成的，不是程式問題
+- 成熟度：L3（AI 依人提出的審查意見修改，人決定範圍）
+- 證據：spec 的 Review Triage Log〈2026-11-03 PR 審查（D）〉；尚未 commit
