@@ -2,8 +2,7 @@ import type { PublicTournament, TournamentStatus } from "@/client"
 import type { StatusTone } from "@/components/common/StatusBadge"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 
-// 賽事狀態的中文名稱（contracts/tournaments.md〈三〉）。
-// 第一階段先以文字顯示；1.7 的 StatusBadge 合併後由第二階段換成徽章。
+// 賽事狀態的中文名稱（contracts/tournaments.md〈三〉）；狀態徽章與 S1 分組標題共用。
 export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
   upcoming: "尚未開放",
   open: "開放報名",
@@ -12,6 +11,21 @@ export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
   ongoing: "進行中",
   finished: "已結束",
   cancelled: "已取消",
+}
+
+// 賽事狀態徽章的色調（DESIGN.md〈Status badge〉）。以 TournamentStatus 為鍵：
+// 後端新增狀態、重新產生 client 後，忘了補對照會編譯失敗
+export const TOURNAMENT_STATUS_BADGES: Record<
+  TournamentStatus,
+  { tone: StatusTone; pulse?: boolean }
+> = {
+  upcoming: { tone: "muted" },
+  open: { tone: "live" },
+  closed: { tone: "muted" },
+  published: { tone: "brand" },
+  ongoing: { tone: "live", pulse: true },
+  finished: { tone: "muted" },
+  cancelled: { tone: "destructive" },
 }
 
 /** S1 的分組順序：觀眾最關心的在前（spec-2-4 Decisions）。 */
@@ -64,18 +78,4 @@ export function formatInterval(minutes: number): string {
 /** 「報名期間」：開始 ～ 截止（Asia/Taipei）。 */
 export function formatRegistrationPeriod(tournament: PublicTournament): string {
   return `${formatMatchDateTime(tournament.registration_start)} ～ ${formatMatchDateTime(tournament.registration_end)}`
-}
-
-/** 賽事狀態徽章的色調（DESIGN.md〈Status badge〉）；進行中加脈動圓點。 */
-export const TOURNAMENT_STATUS_BADGE: Record<
-  TournamentStatus,
-  { tone: StatusTone; pulse?: boolean }
-> = {
-  upcoming: { tone: "muted" },
-  open: { tone: "live" },
-  closed: { tone: "muted" },
-  published: { tone: "brand" },
-  ongoing: { tone: "live", pulse: true },
-  finished: { tone: "muted" },
-  cancelled: { tone: "destructive" },
 }

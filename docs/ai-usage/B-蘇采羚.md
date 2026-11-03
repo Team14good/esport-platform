@@ -134,6 +134,41 @@
 - 成熟度：L3（AI 依 CONTRIBUTING 第 4 節與審查意見修正，人決定是否推上去）
 - 證據：PR #15、CI run 41384713533（修正前失敗）
 
+### 2026-11-03｜需求／設計｜Story 2.4 第二階段 spec：狀態徽章與申請主辦方 banner
+
+- Story／範圍：2.4 第二階段（第 1、2 項；PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，由另一個 Claude Code session 交辦
+- 怎麼用：依 deferred-work 的 2.4 第二階段項目、第一階段 spec、epic-2-context 與 DESIGN／EXPERIENCE 產生 spec
+- AI 產出：`spec-2-4-status-badge-and-organizer-banner.md`（I/O Matrix 8 列）；1 個 Open Question（banner 文字與按鈕的兩種寫法）
+- 人做了什麼：選定 banner 文字「想辦賽事？」、按鈕「申請成為主辦方」；核准 AI 自行決定的三件事（關閉狀態依帳號分開、S2 總覽「狀態」欄也換徽章、S1 分組標題維持文字）；決定第 3 項等 PR #31 合併再做
+- 驗證：spec 經人核准後鎖定
+- 問題與修正：AI 對照 DESIGN.md 後發現交辦內容「開放報名、進行中：live 加上進行中脈動」若照字面會讓開放報名也有脈動點，依設計表改為只有進行中有脈動點，寫進 spec。AI 第一次用 Git Bash 的 `python` 改 spec 沒有生效（這台電腦的 `python` 是 Windows 商店的別名，沒有報錯），檢查 `grep` 結果才發現，改用編輯工具
+- 成熟度：L3（AI 依規格產出 spec，需要使用者察覺的選擇回到人決定）
+- 證據：spec 的 Decisions
+
+### 2026-11-03｜程式／程式生成｜Story 2.4 第二階段：S1、S2 狀態徽章與申請主辦方 banner
+
+- Story／範圍：2.4 第二階段（PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：核准 spec 後由實作子代理依 spec 實作，審查後再由同一個子代理修正
+- AI 產出：新增 `TournamentStatusBadge.tsx`、`OrganizerApplyBanner.tsx`（`useOrganizerApplyBanner` hook）；修改 `status.ts`、`TournamentList.tsx`、`TournamentPage.tsx`、`TournamentOverview.tsx`；2 個測試檔共 20 個測試；`deferred-work.md` 新增 2 筆
+- 人做了什麼：核准 spec；交辦時指定原本的延後項目不可刪除
+- 驗證：前端 typecheck、biome、build 通過；單元測試 49 個檔、562 個測試全部通過（`--maxWorkers=4`）；子代理以 375 px 在瀏覽器量 S1、S2 的 `scrollWidth` 為 375
+- 問題與修正：實作子代理把交辦時明確要求保留的 2.4 第二階段延後項目刪掉，主代理比對 `deferred-work.md` 的 diff 發現並還原。子代理為了實測 banner，自行連到另一個 session 的 docker 堆疊並各建了一個測試帳號（未刪除），回報後主代理要求之後不再這樣做
+- 成熟度：L4（spec → 子代理實作 → 主代理比對 diff → 自動測試）
+- 證據：spec 的 Implementation Notes、commit 未記錄
+
+### 2026-11-03｜測試／程式審查｜Story 2.4 第二階段三人審查
+
+- Story／範圍：2.4 第二階段（PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：三個審查者各自只看 diff，主代理逐筆查證後分類
+- AI 產出：16 筆發現（Blind 13、Edge 3、Gap 0）；5 筆修正、1 筆延後、10 筆不處理，記在 spec 的 Review Triage Log
+- 人做了什麼：未記錄（審查分類由 AI 完成，待人在 PR 審查時確認）
+- 驗證：修正後前端 typecheck、biome、build 通過，單元測試 562 個全部通過
+- 問題與修正：審查抓到 banner 元件自己包一個 `PageBannerSlot`，S1 頁面失去「同頁最多一則」的控制，與 spec 不符，改成 hook 由頁面擁有 slot。主代理修正後單獨重跑新測試時，S2 的徽章測試固定失敗（路由延遲載入的冷啟動超過 1 秒），全部一起跑時剛好通過，實作子代理與審查者都沒發現；比照既有測試加上預先載入後通過。審查者宣稱「未驗證 Email 的帳號點 banner 會卡住」，主代理查 S15 確認會引導去驗證，判定為誤報
+- 成熟度：L4（多個審查者＋主代理查證＋測試驗證）
+- 證據：spec 的 Review Triage Log、`deferred-work.md`
 ### 2026-11-02｜需求／驗收條件｜Story 2.2 第二階段 spec：S25、S26、S27 畫面
 
 - Story／範圍：2.2 第二階段（PR 未建立）
@@ -212,3 +247,15 @@
 - 問題與修正：審查找到實作的 3 個實際問題：網址的遊戲 id 不是 UUID 時後端回 422，畫面顯示英文驗證訊息；已載入後背景重抓失敗，表單被錯誤畫面取代，未儲存的修改消失；注音輸入法打出的全形數字「５」被判為「請輸入整數」。另外段位名稱比對用 `toLowerCase()`，後端用 `casefold()`，ß 與 SS 前端會放行。「路由產生檔沒有被審查」一筆為誤報：產生檔刻意不放進審查的 diff，build 通過。主代理在獨立的 compose 專案驗證時重新 build 了共用名稱的 `flow-backend:latest` 映像，事後才發現 compose 檔固定了這個映像名稱
 - 成熟度：L4（多個審查者＋主代理查證＋測試驗證，人只決定凍結區塊）
 - 證據：spec 的 Review Triage Log
+
+### 2026-11-03｜測試／測試個案修正｜Story 2.4 第二階段：依 PR #32 審查加強 banner 測試
+
+- Story／範圍：2.4 第二階段（PR #32）
+- 工具：Claude Code（Opus 5.5），未經 BMAD，由另一個 Claude Code session 轉交
+- 怎麼用：照 D 在 PR #32 的審查意見第 1、2 點修改測試，再用突變檢查確認測試會失敗
+- AI 產出：`organizer-apply-banner.test.tsx` 的 `settle()` 改成等 QueryClient 中帳號與申請查詢的狀態落定才斷言；加上 `beforeAll` 預先載入 S1
+- 人做了什麼：D 審查時指出「不顯示」的測試可能在查詢 pending 時空過；使用者決定處理第 1、2 點、第 3 點不做
+- 驗證：3 種突變（申請條件兩種、帳號條件一種）各自讓對應測試失敗，還原後 11 個全過；前端 typecheck、biome、build 通過，單元測試 662 個中 661 個通過，失敗的是 2.1 的 `admin-games.test.tsx` 偶發逾時，單獨跑全過
+- 問題與修正：這是先前 AI 寫的測試的缺陷，三個 AI 審查者都沒抓到，由組員 D 在 PR 審查發現。AI 修改時第一版用了 `.at(-1)`，vitest 能跑但 typecheck 失敗（專案的 lib 設定沒有 ES2022），跑完整檢查才發現，改成索引取值
+- 成熟度：L3（AI 依人的審查意見修正，並以突變檢查驗證）
+- 證據：PR #32 的 review、spec 的 Implementation Notes
