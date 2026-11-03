@@ -620,6 +620,7 @@ export type PublicBracket = {
    * Matches
    */
   matches: Array<PublicMatch>
+  podium: PublicPodium | null
   /**
    * Updated At
    */
@@ -688,6 +689,17 @@ export type PublicMatch = {
    * Wins B
    */
   wins_b: number
+}
+
+/**
+ * PublicPodium
+ *
+ * 名次；從缺為 None。
+ */
+export type PublicPodium = {
+  champion: PublicTeamRef | null
+  runner_up: PublicTeamRef | null
+  third_place: PublicTeamRef | null
 }
 
 /**
