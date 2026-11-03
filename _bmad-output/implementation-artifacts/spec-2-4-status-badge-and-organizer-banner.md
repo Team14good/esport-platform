@@ -88,6 +88,7 @@ context:
 - 延後：`deferred-work.md` 原本涵蓋整個 2.4 第二階段的項目依使用者指示保留（實作代理一度刪除，已還原）；另記一筆「S1 空狀態對主辦方顯示建立賽事」，等 PR #31 合併後再做。
 - 瀏覽器實測：本機 espory-platform 的資料庫缺 `organizer_application` 資料表（申請 API 回 500），正好驗證「載入失敗不顯示」；顯示、關閉、重新整理後不顯示、按鈕導向改接另一套已遷移的後端驗證。375 px 下 S1（卡片＋徽章、banner）與 S2 的 `scrollWidth` 都是 375。主辦方帳號只由單元測試涵蓋，沒有在瀏覽器實測。
 - 審查修正後主代理驗證：`tournament-status-badge.test.tsx` 的 S2 測試單獨跑時固定失敗（路由延遲載入，冷啟動超過 `findBy` 的 1 秒），全部一起跑時剛好通過；比照 `tournament-pages.test.tsx` 加上 `beforeAll` 預先載入頁面模組後，單獨跑兩次、全部跑一次都通過（49 個檔、562 個測試）。
+- 2026-11-03 依 D 在 PR #32 的審查（使用者同意處理第 1、2 點，第 3 點「申請已核准但帳號快取未更新時短暫顯示」不處理）：`organizer-apply-banner.test.tsx` 的 `settle()` 改為等 QueryClient 裡帳號與申請查詢的 `status` 落定（success／error，載入中那則等 pending）再斷言；並在 `beforeAll` 預先載入 S1。突變檢查：`application.status !== "success"` 改成 `!== "pending"` 時 6 個測試失敗，改成 `=== "pending"`（失敗時會顯示）時「申請資料載入失敗」失敗，`account.status` 改成 `=== "pending"` 時「帳號載入失敗」失敗；還原後 11 個全過。
 
 ## Spec Change Log
 

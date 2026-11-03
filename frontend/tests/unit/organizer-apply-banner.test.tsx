@@ -1,9 +1,22 @@
+import { QueryClient } from "@tanstack/react-query"
 import { act, cleanup, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockInstance,
+  vi,
+} from "vitest"
 
 import { IdentityService, type OrganizerApplicationRead } from "@/client"
-import { ACCESS_TOKEN_STORAGE_KEY } from "@/features/identity/auth"
+import {
+  ACCESS_TOKEN_STORAGE_KEY,
+  currentAccountQueryOptions,
+} from "@/features/identity/auth"
+import { organizerApplicationQueryOptions } from "@/features/identity/organizer-application"
 import {
   ORGANIZER_APPLY_BANNER_TEXT,
   organizerBannerDismissedKey,
@@ -47,12 +60,46 @@ function mockApplication(app: OrganizerApplicationRead | null) {
     .mockResolvedValue({ data: app ?? {} } as unknown as ReadApplicationResult)
 }
 
-/** 等 S1 與帳號、申請查詢都完成，再判斷 banner 不在畫面上。 */
-async function settle(spies: unknown[]) {
+// renderApp 在 provider 裡自己建立 QueryClient；從 mount 的 this 取得最新一個，
+// 才能等查詢真的落定（success 或 error），不會在 pending 時就斷言「不顯示」
+let mountQueryClient: MockInstance<QueryClient["mount"]>
+
+function currentQueryClient(): QueryClient {
+  const { contexts } = mountQueryClient.mock
+  const client = contexts[contexts.length - 1]
+  if (!(client instanceof QueryClient)) throw new Error("QueryClient 尚未掛載")
+  return client
+}
+
+type Settled = "success" | "error" | "pending"
+
+/**
+ * 等 S1 出現、帳號與申請查詢走到指定狀態，再讓畫面套用最新的查詢結果。
+ * 斷言「不顯示」前一定要等到這裡，否則查詢還在 pending 時本來就不顯示，測試會空過。
+ */
+async function settle(expected: { account: Settled; application: Settled }) {
   expect(await screen.findByText(EMPTY_TOURNAMENTS_TEXT)).toBeInTheDocument()
-  for (const spy of spies) await waitFor(() => expect(spy).toHaveBeenCalled())
+  await waitFor(() => {
+    const client = currentQueryClient()
+    expect(
+      client.getQueryState(currentAccountQueryOptions().queryKey)?.status,
+    ).toBe(expected.account)
+    expect(
+      client.getQueryState(organizerApplicationQueryOptions().queryKey)?.status,
+    ).toBe(expected.application)
+  })
   await act(async () => {})
 }
+
+// 路由元件是拆分後延遲載入的；先載入頁面模組，避免冷啟動轉譯超過 findBy 的 1 秒等待
+beforeAll(async () => {
+  await import("@/features/tournaments/TournamentList")
+})
+
+beforeEach(() => {
+  // setup.ts 每個測試後會 restoreAllMocks，所以每個測試重新掛上
+  mountQueryClient = vi.spyOn(QueryClient.prototype, "mount")
+})
 
 function bannerText() {
   return screen.queryByText(ORGANIZER_APPLY_BANNER_TEXT)
@@ -102,60 +149,62 @@ describe("S1「想辦賽事？」banner", () => {
   })
 
   it("最新申請待審核：不顯示", async () => {
-    const { readAccount } = signInAs()
-    const readApplication = mockApplication(application("pending"))
+    signInAs()
+    mockApplication(application("pending"))
     renderApp("/")
 
-    await settle([readAccount, readApplication])
+    await settle({ account: "success", application: "success" })
     expect(bannerText()).toBeNull()
   })
 
   it("主辦方：不顯示", async () => {
-    const { readAccount } = signInAs({
+    signInAs({
       account: { ...ACCOUNT, is_organizer: true },
     })
-    const readApplication = mockApplication(application("approved"))
+    mockApplication(application("approved"))
     renderApp("/")
 
-    await settle([readAccount, readApplication])
+    await settle({ account: "success", application: "success" })
     expect(bannerText()).toBeNull()
   })
 
   it("申請資料載入中：不顯示", async () => {
-    const { readAccount } = signInAs()
-    const readApplication = vi
-      .spyOn(IdentityService, "readCurrentOrganizerApplication")
-      .mockReturnValue(new Promise(() => {}) as never)
+    signInAs()
+    vi.spyOn(
+      IdentityService,
+      "readCurrentOrganizerApplication",
+    ).mockReturnValue(new Promise(() => {}) as never)
     renderApp("/")
 
-    await settle([readAccount, readApplication])
+    await settle({ account: "success", application: "pending" })
     expect(bannerText()).toBeNull()
   })
 
   it("申請資料載入失敗：不顯示，也不另顯示錯誤", async () => {
-    const { readAccount } = signInAs()
-    const readApplication = vi
-      .spyOn(IdentityService, "readCurrentOrganizerApplication")
-      .mockRejectedValue(httpError(500, "Internal Server Error"))
+    signInAs()
+    vi.spyOn(
+      IdentityService,
+      "readCurrentOrganizerApplication",
+    ).mockRejectedValue(httpError(500, "Internal Server Error"))
     renderApp("/")
 
-    await settle([readAccount, readApplication])
+    await settle({ account: "success", application: "error" })
     expect(bannerText()).toBeNull()
     expect(screen.queryByRole("alert")).toBeNull()
   })
 
   it("帳號載入失敗：不顯示", async () => {
     window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, "token-1")
-    const readAccount = vi
-      .spyOn(IdentityService, "readCurrentAccount")
-      .mockRejectedValue(httpError(500, "Internal Server Error"))
+    vi.spyOn(IdentityService, "readCurrentAccount").mockRejectedValue(
+      httpError(500, "Internal Server Error"),
+    )
     vi.spyOn(IdentityService, "listCurrentIdentities").mockRejectedValue(
       httpError(500, "Internal Server Error"),
     )
-    const readApplication = mockApplication(null)
+    mockApplication(null)
     renderApp("/")
 
-    await settle([readAccount, readApplication])
+    await settle({ account: "error", application: "success" })
     expect(bannerText()).toBeNull()
   })
 
@@ -173,12 +222,10 @@ describe("S1「想辦賽事？」banner", () => {
 
     // 重新整理：整個畫面重新渲染
     cleanup()
-    const { readAccount } = signInAs()
-    const readApplication = mockApplication(null)
-    readAccount.mockClear()
-    readApplication.mockClear()
+    signInAs()
+    mockApplication(null)
     renderApp("/")
-    await settle([readAccount, readApplication])
+    await settle({ account: "success", application: "success" })
     expect(bannerText()).toBeNull()
   })
 
