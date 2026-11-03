@@ -1,4 +1,6 @@
-"""啟動時的初始資料：建立第一個平台管理員（已存在則略過）。
+"""啟動時的初始資料：建立第一個平台管理員（已存在則略過），再載入示範資料（`app.demo_data`）。
+
+示範資料載入失敗只記錄錯誤，不會中斷啟動。
 
 由 `scripts/prestart.sh` 在遷移之後執行；角色等同 router，負責開啟並提交交易。
 """
@@ -8,6 +10,7 @@ from collections.abc import Callable
 
 from sqlmodel import Session
 
+from app import demo_data
 from app.core.config import settings
 from app.core.db import engine
 from app.modules.identity import service as identity_service
@@ -32,6 +35,17 @@ def init(session_factory: Callable[[], Session] = _default_session_factory) -> N
         logger.info("First platform admin created: %s", settings.FIRST_ADMIN_EMAIL)
     else:
         logger.info("First platform admin already exists, skipped")
+
+    # 示範資料另開交易：載入失敗時記錄錯誤並略過，不影響已提交的第一個管理員，
+    # 也不讓 backend 起不來（prestart.sh 有 set -e）。失敗時離開 with 會回滾，
+    # 示範資料一筆都不寫入
+    try:
+        with session_factory() as session:
+            if demo_data.load(session):
+                session.commit()
+                logger.info("Demo data loaded")
+    except Exception:
+        logger.exception("Demo data failed to load, skipped")
 
 
 def main() -> None:

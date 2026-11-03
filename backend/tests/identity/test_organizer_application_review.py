@@ -378,6 +378,7 @@ def test_approved_applicant_is_organizer_immediately(
     ).json()
     assert identities == [
         {"key": "browse", "label": "瀏覽賽事", "home_path": "/"},
+        {"key": "my_teams", "label": "我的隊伍", "home_path": "/me/teams"},
         {"key": "organizer", "label": "主辦方後台", "home_path": "/organizer"},
     ]
     mine = client.get(MINE, headers=_headers(applicant)).json()
@@ -610,6 +611,7 @@ def test_identities_order_is_browse_organizer_platform_admin(
 
     assert [identity["key"] for identity in response.json()] == [
         "browse",
+        "my_teams",
         "organizer",
         "platform_admin",
     ]
