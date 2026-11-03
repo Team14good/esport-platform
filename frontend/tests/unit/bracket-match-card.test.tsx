@@ -6,11 +6,10 @@ import {
   within,
 } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-
+import type { PublicMatch } from "@/client"
 import { BracketMatchCard } from "@/features/competition/BracketMatchCard"
 import { BracketTree } from "@/features/competition/BracketTree"
 import { createBracketFixture } from "@/features/competition/bracket-fixtures"
-import type { PublicMatch } from "@/features/competition/bracket-types"
 import {
   DEV_MATCH_SOURCE_TOURNAMENT_ID,
   matchPath,
