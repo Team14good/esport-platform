@@ -150,6 +150,7 @@ context:
 - `auto_confirm_expired` 逐一嘗試候選：每場的 `confirm_match` 包在 `session.begin_nested()` 裡，`progression` 因結果資料不自洽拋 `ValueError` 時退回 savepoint、`logger.exception` 記下場次 id、排除這場，再找下一場（`find_expired_appeal_id` 新增 `exclude_matches`）。推翻第 1 輪 triage #8：原本以為「那一輪停在它」，實際上 worker rollback 後下一輪又會選到同一場，所有賽事後面的場次都不會再確認。這些值由 5.2、5.3、5.4 更早寫入，在 `confirm_match` 加檢查擋不住。
 - 新增測試：期限最早的場次 `played` 但沒有勝隊，同一賽事與另一場賽事後面期滿的場次都照常確認，壞的那場不變並記錄日誌；`confirm_match`、`confirm_walkover` 在任何寫入之前先鎖賽事（記錄 `lock_tournament` 與 `set_match_status` 的呼叫順序；測試的 session 共用同一條連線，無法從另一個 session 用 `FOR UPDATE NOWAIT` 觀察列鎖）。
 - 突變確認：拿掉 `ValueError` 的處理，壞資料測試失敗；拿掉 `confirm_match`、`confirm_walkover` 開頭的 `lock_tournament`，兩個鎖測試都失敗。第一版鎖測試只檢查「有呼叫過」，`advance` 之後也會鎖賽事，突變時仍通過，改成檢查第一個動作才抓得到。
+- 重跑（合併 main 至 #33 之後）：全部後端 1337 passed；lint 通過；只有一個 Alembic head（a3d5e7f9b1c4）；`coverage run --branch`（tests/competition、tests/worker）`service.py` 99%（228 行、72 分支，只缺 617->597），`repository.py` 100%。
 
 ## Spec Change Log
 

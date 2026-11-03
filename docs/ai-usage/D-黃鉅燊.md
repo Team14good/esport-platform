@@ -249,3 +249,15 @@
 - 問題與修正：A 發現第一階段的測試有盲點：兩個最小間隔在測試裡剛好都是 85 分，把其中一個換成另一個測試仍全過。這是 AI 寫測試時用了相同數值造成的，說明測試資料要刻意讓不同參數取不同值
 - 成熟度：L4（人審查加上 AI 查證與突變驗證）
 - 證據：PR #5～#8 的留言與 commit
+
+### 2026-11-03｜程式／測試｜依 A 對 #20（5.5、5.6）的 Request changes 修正自動確認
+
+- Story／範圍：5.5 第二階段的 `auto_confirm_expired`、5.5 spec
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：A 指出一場結果不自洽的場次會讓所有賽事的自動確認永遠停住。AI 讀 `progression` 確認它拋的是 `ValueError`、`confirm_match` 本身不擋，改成每個候選在 savepoint 內確認，出錯就退回、記錄並排除，再找下一場；補 A 要求的兩個測試，並依 A 的清單更新 spec 與 PR 說明
+- AI 產出：`auto_confirm_expired` 與 `find_expired_appeal_id(exclude_matches=)`；壞資料不擋其他賽事的測試、`confirm_match`／`confirm_walkover` 先鎖賽事的測試；spec 的 Code Map、已被取代的決定、驗證數字說明、第 2 輪 triage
+- 人做了什麼：A 審查並提出修正項目；使用者要求確認最新狀況後處理
+- 驗證：全部後端 1337 個測試通過、lint 通過、單一 Alembic head；`service.py` 分支覆蓋率 99%。突變：拿掉 `ValueError` 處理，壞資料測試失敗；拿掉兩個函式開頭的鎖，兩個鎖測試都失敗
+- 問題與修正：第 1 輪 AI 審查時把這個問題判成「那一輪停在它、駁回」，低估了 worker rollback 後下一輪會重選同一場，是 A 的人工審查抓到的。A 建議用第二個 session 的 `FOR UPDATE NOWAIT` 驗證鎖，但測試的所有 session 共用同一條連線與外層交易，另一條連線看不到未 commit 的資料，AI 改成記錄呼叫順序。第一版鎖測試只檢查「有呼叫過 `lock_tournament`」，突變時仍然通過，因為後面的 `advance` 也會鎖；改成斷言第一個動作就是鎖賽事後才抓到
+- 成熟度：L3（人審查找出問題，AI 修正並驗證）
+- 證據：#20 的審查與 CI 紀錄
