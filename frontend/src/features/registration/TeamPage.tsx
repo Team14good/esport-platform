@@ -1,17 +1,32 @@
 import { useQuery } from "@tanstack/react-query"
+import { useState } from "react"
 
 import { RouteErrorPage } from "@/components/layout/ErrorPage"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useCurrentAccount } from "@/features/identity/auth"
+import { notifySuccess } from "@/lib/feedback"
 import { InviteLinkField } from "./InviteLinkField"
+import {
+  PlayerProfileDialog,
+  type PlayerProfileValues,
+} from "./PlayerProfileDialog"
 import { teamInviteUrl, teamQueryOptions } from "./queries"
 import { RosterList } from "./RosterList"
 import { RegistrationStatusBadge } from "./registration-status"
+import { useUpdatePlayerProfile } from "./useUpdatePlayerProfile"
 
 export const TEAM_FULL_REASON = "隊伍已滿"
+export const PROFILE_SAVED_TEXT = "已儲存參賽資料"
 
-/** S17 隊伍頁：隊名與報名狀態、邀請連結（Invite link field）、名單（Roster list）。 */
+/**
+ * S17 隊伍頁：隊名與報名狀態、邀請連結（Invite link field）、名單（Roster list）；
+ * 自己那列的「填寫我的資料」開 S18。
+ */
 export function TeamPage({ teamId }: { teamId: string }) {
   const team = useQuery(teamQueryOptions(teamId))
+  const account = useCurrentAccount()
+  const [profileOpen, setProfileOpen] = useState(false)
+  const { save, uploadProgress } = useUpdatePlayerProfile(teamId)
 
   if (team.isPending) {
     return (
@@ -30,6 +45,15 @@ export function TeamPage({ teamId }: { teamId: string }) {
   if (team.isError) return <RouteErrorPage error={team.error} />
 
   const data = team.data
+  const myAccountId = account.data?.id ?? null
+  const me = data.members.find((member) => member.account_id === myAccountId)
+
+  async function saveProfile(values: PlayerProfileValues) {
+    await save(values)
+    setProfileOpen(false)
+    notifySuccess(PROFILE_SAVED_TEXT)
+  }
+
   return (
     <section className="mx-auto flex w-full max-w-2xl flex-col gap-8 py-8 sm:py-12">
       <header className="flex flex-col gap-2">
@@ -72,8 +96,28 @@ export function TeamPage({ teamId }: { teamId: string }) {
           members={data.members}
           starters={data.starters}
           maxMembers={data.max_members}
+          avgRankScore={data.avg_rank_score}
+          rankFilledCount={data.rank_filled_count}
+          currentAccountId={myAccountId}
+          onEditMyProfile={() => setProfileOpen(true)}
         />
       </section>
+      {/* 開啟時才掛載：S17 平時不需要 S18 的 Sheet／Dialog 與表單狀態 */}
+      {me && profileOpen && (
+        <PlayerProfileDialog
+          open
+          onOpenChange={setProfileOpen}
+          rankTiers={data.rank_tiers}
+          initialValues={{
+            game_account_id: me.game_account_id ?? undefined,
+            rank_tier: me.rank_tier ?? undefined,
+          }}
+          uploadedScreenshotName={me.rank_screenshot_name}
+          readOnly={!data.profile_editable}
+          uploadProgress={uploadProgress}
+          onSubmit={saveProfile}
+        />
+      )}
     </section>
   )
 }

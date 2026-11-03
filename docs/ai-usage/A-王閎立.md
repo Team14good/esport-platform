@@ -264,6 +264,17 @@
 - 成熟度：L3（AI 依 UX 文件產出並自動驗證，人做範圍取捨；這次沒有多審查者）
 - 證據：`_bmad-output/implementation-artifacts/spec-5-2-appeal-window-display.md`、`frontend/src/features/competition/MatchAppealWindow.tsx`；尚未 commit
 
+### 2026-10-31｜測試／測試個案產生｜Story 7.2 第一階段：端對端演練框架、身分流程與觀眾檢視
+
+- Story／範圍：7.2 第一階段（分支 `story/7-2`，以 `story/5-8` 為基礎，PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（調查子代理 → spec → 實作子代理 → 主對話複驗）
+- 怎麼用：使用者授權「等其他人的部分直接接假資料、有問題直接選 AI 最推薦的」；AI 自行決定分支基礎、執行方式與待辦步驟的寫法並記在 spec 的 Decisions
+- AI 產出：compose 的 `e2e` 服務與 `frontend/Dockerfile.e2e`（Playwright＋Bun，容器內 TCP 轉發）；`frontend/tests/e2e/` 共 10 個檔案：2 個可執行的情境（註冊→Mailpit 驗證→申請主辦方→管理員核准；觀眾瀏覽對戰樹假資料與場次頁），桌機與 375 px 各跑一次，自動記錄 API 回應時間並判定 1 秒；完整賽事流程依三款遊戲設定假資料產生 38 個 `test.fixme`，以 tag 標註 Story 與 FR
+- 人做了什麼：只給授權與範圍原則；分支、執行方式、假資料內容等決定由 AI 依建議選項做出
+- 驗證：主對話在全新資料庫的 compose 專案連跑 2 次，都是 4 passed、76 skipped；API 最慢約 175 ms（子代理從報告取得）；typecheck、biome、前端單元測試 367 個、build 皆通過
+- 問題與修正：(1) 子代理第一次執行時，橫向捲軸檢查把開發模式的 TanStack Router Devtools 面板誤判成捲動區，改為略過開發工具元素。(2) 報告目錄是主機掛載點，Playwright 刪不掉，舊截圖持續累積，改在容器進入點先清空。(3) 子代理在使用者本機的 compose 上執行 e2e，讓開發資料庫多了 `e2e-` 開頭的測試帳號；主對話檢查容器狀態時發現，改用獨立的 compose 專案複驗並告知使用者。(4) 這次沒跑多代理審查（依使用者設定最後統一 code review）
+- 成熟度：L3（AI 依 spec 產出並自動驗證；人只給授權原則，決策由 AI 依建議選項做出）
+- 證據：`_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill.md`；commit 未建立
 ### 2026-10-31｜程式、測試／依審查修正｜Story 5.8：依 D 的審查修正場次卡可及名稱、首次載入失敗與 flash 判斷
 
 - Story／範圍：5.8（`story/5-8`）
@@ -363,3 +374,17 @@
   - 容器內第一次跑單元測試時 22 個失敗，都是跟這次修改無關的測試在約 1 秒時逾時；改用 `--maxWorkers=4` 重跑全部通過，判斷是 48 個 worker 同時跑造成的，不是程式問題
 - 成熟度：L3（AI 依人提出的審查意見修改，人決定範圍）
 - 證據：spec 的 Review Triage Log〈2026-11-03 PR 審查（D）〉；尚未 commit
+
+### 2026-11-03｜測試／依審查修正｜Story 7.2 第一階段：依 D 的審查修正審核清單換頁競態與觀眾 e2e
+
+- Story／範圍：7.2 第一階段（`story/7-2`）
+- 怎麼用：把 D 的審查意見貼給 AI，AI 先確認遠端分支狀態，再逐項修改 e2e 測試、compose、CI、README 與 spec
+- AI 產出：`identity.spec.ts` 換頁改看第 n 頁的 API 回應判斷；`spectator.spec.ts` 改開場次頁假資料，S3 步驟改 `test.fixme`；`E2E_API_URL` 跟著 `VITE_API_URL`、新增 `E2E_API_TARGET`；`requestfailed` 也記錄；標 `@NFR-2` 卻沒記到請求時失敗；CI 加建置 e2e image；README 加獨立 compose 專案跑法；`deferred-work.md` 新增 2 項
+- 人做了什麼：D 審查並提出 2 個擋合併項目與 5 個建議；使用者決定觀眾 e2e 先用場次頁假資料、S3 步驟 fixme，2.4 那步留到第二階段；決定不跑 e2e 直接 commit
+- 驗證：前端容器內 typecheck、biome（186 個檔案）通過；e2e 未執行
+- 問題與修正：
+  - D 指出的衝突，在 AI 檢查時已經不存在：使用者先前已把 main 合進遠端的 `story/7-2`，AI 用 `git merge-tree` 確認沒有衝突，沒有重複合併
+  - AI 發現 D 沒提到的問題：合併 main 後 4.6 第二階段已刪除 `/dev/bracket`，`spectator.spec.ts` 仍從那頁開始，e2e 一定會失敗；交由使用者決定改法
+  - AI 第一次改完 biome 回報 2 個格式錯誤，用 `biome check --write` 修正
+- 成熟度：L3（AI 依人提出的審查意見修改，範圍與做法由人決定）
+- 證據：spec-7-2 的 Spec Change Log（2026-11-03）

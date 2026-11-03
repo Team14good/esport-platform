@@ -41,6 +41,12 @@
   summary: `tests/test_migrations.py` 只開 `compare_type`，沒有比對 server default；遷移檔與模型的 `server_default` 不一致（例如 `account.credentials_version` 的 `"0"` 被刪掉或改值）時測試照樣通過。測試資料庫每次從空表升級，也測不到「既有帳號升級後拿到 0」（低；若遷移檔被改錯，為 medium：有資料的資料庫升級失敗，或舊登入全部失效）。
   evidence: 2026-10-28 Story 1.5 第二輪 Code Review（Verification Gap）。比對設定自 Story 1.1 起就是如此，不是本 Story 造成。處理時在 `MigrationContext.configure` 加 `"compare_server_default": True`，先跑一次確認其他既有欄位沒有誤報；要完整守住資料升級，另寫一支「升到上一版、插入帳號、再升到 head」的測試。
 
+## Deferred from: spec-3-2-player-registration-info.md 第一段 (2026-10-30)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md`
+  summary: 上傳 API 沒有請求大小上限，5 MB 在 multipart 整個收完後才由 `core.storage` 檢查。
+  evidence: 2026-10-30 Story 3.2 第一段 Code Review（Blind Hunter）。Starlette 會先把整個 body spool 到暫存檔，超大請求仍會被完整接收；第二段建 multipart API 時要決定請求大小上限（例如檢查 `Content-Length`）（medium）。
+
 ## Deferred from: spec-3-1-tournament-integration.md (2026-11-02)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`
@@ -146,6 +152,20 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-status-badge-and-organizer-banner.md`
   summary: （低）`PageBanner` 的 `action` 只支援 `onClick`，S1「申請成為主辦方」按鈕以程式導向，不能中鍵開新分頁或複製連結；需要 A 為 `PageBanner` 新增連結型的 action。
   evidence: 2026-11-03 Story 2.4 第二階段審查（Blind Hunter）。`PageBanner.tsx` 是 A 的元件，本 Story 只 import 不修改。
+## Deferred from: spec-3-2-player-registration-info-2.md (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info-2.md`
+  summary: 上傳 API（`PUT /teams/{team_id}/members/me/profile`）仍沒有請求大小上限；上面第一段留下的同一項再次延後（medium）。
+  evidence: 第二段 spec 的 Never 明定「不做請求大小上限」：`save_image` 邊讀邊擋 5 MB，超過的檔案不會存下，但 Starlette 仍會先把整個 multipart body spool 到暫存檔。只靠 `Content-Length` 擋不住 chunked 傳輸，要在 ASGI middleware 或反向代理（例如 `client_max_body_size`）處理，屬部署層的決定，不在本 Story 範圍。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-6-bracket-page.md`
   summary: S2 在「賽程已公布」「進行中」時應以「對戰表」為預設分頁（epics 4.6 AC、EXPERIENCE.md 狀態表），4.6 第二階段沒有做；目前 `/tournaments/$tournamentId` 固定顯示總覽，觀眾要自己點「對戰表」。
   evidence: 2026-11-03 使用者決定（spec Decisions 1A）交給 B 決定做法。「總覽」分頁本身連到 `/tournaments/$tournamentId`，直接導向會讓總覽點不回去。可行做法：總覽改用新網址（例如 `/overview`），`/tournaments/$tournamentId` 依狀態導向 `/bracket` 或總覽；或 S1 列表在這兩個狀態直接連到 `/bracket`（外部分享連結仍落在總覽）。兩者都要改 B 的 `TournamentPage`／`TournamentTabs`／`TournamentList`。
+
+## Deferred from: spec-7-2-e2e-tournament-drill.md (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill.md`
+  summary: 觀眾 e2e 從 S3 對戰表點場次卡進 S4、再回到 S3 的步驟（`spectator.spec.ts` 的 `test.fixme`）還沒接上；目前場次頁直接開開發模式的假資料 `tournament-fixture`。
+  evidence: 2026-11-03 合併 main 後，4.6 第二階段已刪除 `/dev/bracket`。真的 S3 需要已抽籤的賽事（7.1 示範資料或測試內建立），S4 要等 D 的 #21 與 5.8 第二階段接上單場 API；使用者決定先 fixme。接上時要檢查 375 px 只有對戰樹容器橫向捲動。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill.md`
+  summary: `tournament.spec.ts`「觀眾未登入瀏覽公開賽事列表與賽事頁的正取隊伍」仍是 `test.fixme`；2.4（#29）已合併，但正取隊伍要有 3.x 的報名資料。
+  evidence: 2026-11-03 D 在 7.2 第一階段審查中提出可以接上；使用者決定留到第二階段，跟報名步驟一起做。
