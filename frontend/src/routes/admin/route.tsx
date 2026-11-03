@@ -4,7 +4,7 @@ import {
   type ParsedLocation,
   redirect,
 } from "@tanstack/react-router"
-import { ClipboardCheckIcon } from "lucide-react"
+import { ClipboardCheckIcon, Gamepad2Icon, SchoolIcon } from "lucide-react"
 
 import {
   BackofficeLayout,
@@ -13,9 +13,11 @@ import {
 import { AccountGate } from "@/features/identity/AccountGate"
 import { requireSignedIn } from "@/features/identity/auth"
 
-// 平台管理後台的側欄項目；S36（遊戲設定、學校清單）在 Story 2.1 加入
+// 平台管理後台的側欄項目；S36 的遊戲設定與學校清單各一個項目（Story 2.1）
 const ADMIN_NAV: BackofficeNavItem[] = [
   { to: "/admin/applications", label: "主辦方申請", icon: ClipboardCheckIcon },
+  { to: "/admin/games", label: "遊戲設定", icon: Gamepad2Icon },
+  { to: "/admin/schools", label: "學校清單", icon: SchoolIcon },
 ]
 
 export const Route = createFileRoute("/admin")({
