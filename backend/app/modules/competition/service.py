@@ -1021,8 +1021,23 @@ def list_check_ins(session: Session, *, match_id: uuid.UUID) -> list[CheckInRead
 
 
 def list_forfeit_due(session: Session, *, now: datetime) -> list[uuid.UUID]:
-    """待開打、棄權期限已到（`forfeit_deadline <= now`）、且不是兩隊都已報到的場次 id。"""
-    return repository.find_forfeit_due(session, now)
+    """待開打、棄權期限已到（`forfeit_deadline <= now`）、且不是兩隊都已報到的場次 id。
+
+    已取消賽事的場次不列入：賽事取消後場次停在待開打，不排除的話 5.2 的 worker
+    每一輪都會把它們鎖住再略過。這裡不加鎖，工作鎖住賽事後仍會重新判斷。
+    """
+    due = repository.find_forfeit_due(session, now)
+    cancelled = {
+        tournament_id
+        for tournament_id in {tournament_id for _, tournament_id in due}
+        if tournaments_service.get_tournament(
+            session, tournament_id=tournament_id
+        ).status
+        == TournamentStatus.CANCELLED
+    }
+    return [
+        match_id for match_id, tournament_id in due if tournament_id not in cancelled
+    ]
 
 
 def start_due_tournament(session: Session) -> bool:
