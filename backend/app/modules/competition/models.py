@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel
-from sqlalchemy import DateTime, String, UniqueConstraint
+from sqlalchemy import DateTime, Index, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from app.core import clock
@@ -66,6 +66,8 @@ class Match(SQLModel, table=True):
             "is_third_place",
             name="uq_match_bracket_round_slot",
         ),
+        # worker 找申訴期滿的場次
+        Index("ix_match_status_appeal_deadline", "status", "appeal_deadline"),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -95,6 +97,8 @@ class Match(SQLModel, table=True):
     appeal_deadline: datetime | None = Field(
         default=None, sa_type=DateTime(timezone=True)
     )
+    # 只在轉為已確認時寫入（含輪空確認）
+    confirmed_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
     # 勝隊進入的場次；決賽與季軍賽為 None
     next_match_id: uuid.UUID | None = Field(default=None, foreign_key="match.id")
     # 只有準決賽有：敗隊進入季軍賽
@@ -112,6 +116,19 @@ class BracketDrawn(Event):
 
     tournament_id: uuid.UUID
     bracket_id: uuid.UUID
+
+
+class MatchResultConfirmed(Event):
+    """場次結果已確認（含輪空確認）；雙方棄權或兩方都沒有隊伍時 `winner_id` 為 None。"""
+
+    match_id: uuid.UUID
+    winner_id: uuid.UUID | None
+
+
+class MatchOpponentsDecided(Event):
+    """晉級填位後這一場的兩隊都已確定（通知兩隊隊長下一場對手）。"""
+
+    match_id: uuid.UUID
 
 
 # ---------------------------------------------------------------- API schema
@@ -181,9 +198,19 @@ class PublicMatch(BaseModel):
     wins_b: int
 
 
+class PublicPodium(BaseModel):
+    """名次；從缺為 None。"""
+
+    champion: PublicTeamRef | None
+    runner_up: PublicTeamRef | None
+    third_place: PublicTeamRef | None
+
+
 class PublicBracket(BaseModel):
     tournament_id: uuid.UUID
     rounds: int
     round_names: list[str]
     matches: list[PublicMatch]
+    # 賽事結束後才有；未結束為 None
+    podium: PublicPodium | None
     updated_at: datetime

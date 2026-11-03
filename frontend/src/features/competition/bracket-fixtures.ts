@@ -368,6 +368,8 @@ export function createBracketFixture({
     round_names: [...Array(rounds).keys()].map((i) => roundName(i + 1, rounds)),
     matches: [...matches.values()],
     updated_at: new Date(FIRST_ROUND_AT).toISOString(),
+    // 名次只在賽事已結束時由後端計算；假資料不模擬
+    podium: null,
   }
 }
 
