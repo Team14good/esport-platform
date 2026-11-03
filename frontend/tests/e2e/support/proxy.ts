@@ -1,6 +1,7 @@
 // Playwright 的 globalSetup：
-// 1. 有 E2E_PROXY（例如 "5173=frontend:5173,8000=backend:8000"）時，在容器內的 localhost 開 TCP 轉發，
-//    讓瀏覽器照常使用 localhost:5173／localhost:8000，前端的 API 網址與後端的 CORS 都不必改。
+// 1. 有 E2E_PROXY（例如 "5173=frontend:5173"）或 E2E_API_TARGET（例如 "backend:8000"，轉發 API_URL 的埠）時，
+//    在容器內的 localhost 開 TCP 轉發，讓瀏覽器照常使用 localhost:5173 與前端設定的 API 網址，
+//    前端的 API 網址與後端的 CORS 都不必改。
 // 2. 等前端與 API 回應後才開始測試（compose 只保證容器已啟動，Vite 可能還在準備）。
 import net from "node:net"
 import type { FullConfig } from "@playwright/test"
@@ -101,9 +102,15 @@ async function waitForHttp(url: string): Promise<void> {
 
 export default async function globalSetup(config: FullConfig) {
   const spec = process.env.E2E_PROXY
-  const stops = spec
-    ? await Promise.all(parseProxyRoutes(spec).map(startForwarder))
-    : []
+  const routes = spec ? parseProxyRoutes(spec) : []
+  // E2E_API_TARGET（例如 "backend:8000"）：把 API_URL 的埠轉到後端；API_URL 跟著前端的 VITE_API_URL，改了埠也不必改這裡
+  const apiTarget = process.env.E2E_API_TARGET
+  if (apiTarget) {
+    const url = new URL(API_URL)
+    const port = url.port || (url.protocol === "https:" ? "443" : "80")
+    routes.push(...parseProxyRoutes(`${port}=${apiTarget}`))
+  }
+  const stops = await Promise.all(routes.map(startForwarder))
   const baseURL =
     config.projects[0]?.use.baseURL ??
     process.env.PLAYWRIGHT_BASE_URL ??

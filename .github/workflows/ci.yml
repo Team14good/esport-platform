@@ -50,6 +50,10 @@ jobs:
       - name: 前端單元測試
         run: docker compose exec -T frontend bun run test:unit
 
+      # 端對端測試不在 CI 執行，但要確認 Dockerfile.e2e 還建得起來（Playwright image 或依賴版本漂移時早點發現）
+      - name: 端對端測試 image 可建置
+        run: docker compose --profile e2e build e2e
+
       - name: API client 與後端一致
         run: |
           bash scripts/generate-client.sh

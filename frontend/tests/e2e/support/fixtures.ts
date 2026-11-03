@@ -2,7 +2,11 @@
 // - 記錄每個送往 API 的請求的回應時間，附在測試報告（api-timings.json），給 7.3 彙整 NFR-2。
 // - 一般請求超過 1 秒就讓測試失敗並列出網址；登入（密碼雜湊）只記錄不判定。
 // - `newRoleContext` 為每個角色開獨立的 browser context（各自的 localStorage＝各自的登入狀態）。
-import { type BrowserContext, test as base } from "@playwright/test"
+import {
+  type BrowserContext,
+  test as base,
+  type Request,
+} from "@playwright/test"
 
 import { API_URL } from "./env"
 
@@ -18,6 +22,8 @@ export type ApiTiming = {
   durationMs: number | null
   /** 不判定 1 秒限制的原因；一般請求為 null */
   exempt: string | null
+  /** 請求失敗（沒有回應）的原因；有回應時為 null */
+  failure: string | null
 }
 
 export const SLOW_API_THRESHOLD_MS = 1_000
@@ -41,11 +47,12 @@ function trackApiTimings(
   role: string,
   timings: ApiTiming[],
 ) {
-  context.on("requestfinished", async (request) => {
+  const record = async (request: Request, failure: string | null) => {
     const url = request.url()
     if (!url.startsWith(`${API_URL}/api/`)) return
     const { responseEnd } = request.timing()
-    const response = await request.response().catch(() => null)
+    const response =
+      failure === null ? await request.response().catch(() => null) : null
     timings.push({
       role,
       method: request.method(),
@@ -53,8 +60,14 @@ function trackApiTimings(
       status: response?.status() ?? null,
       durationMs: responseEnd >= 0 ? Math.round(responseEnd) : null,
       exempt: exemptionFor(request.method(), url),
+      failure,
     })
-  })
+  }
+  context.on("requestfinished", (request) => record(request, null))
+  // 逾時、連線中斷等沒有回應的請求也要記下來，否則慢到失敗的請求會從報告裡消失
+  context.on("requestfailed", (request) =>
+    record(request, request.failure()?.errorText ?? "失敗"),
+  )
 }
 
 type E2EFixtures = {
@@ -91,6 +104,16 @@ export const test = base.extend<E2EFixtures>({
         body: JSON.stringify(apiTimings, null, 2),
         contentType: "application/json",
       })
+      // 標了 @NFR-2 卻一筆都沒記到，多半是 E2E_API_URL 跟前端的 API 網址不同，1 秒檢查等於沒做
+      if (
+        testInfo.tags.includes("@NFR-2") &&
+        testInfo.status === "passed" &&
+        apiTimings.length === 0
+      ) {
+        throw new Error(
+          `標了 @NFR-2 的測試沒有記錄到任何送往 ${API_URL}/api/ 的請求；請確認 E2E_API_URL 與前端的 VITE_API_URL 相同`,
+        )
+      }
       const slow = apiTimings.filter(
         (timing) =>
           timing.exempt === null &&

@@ -109,6 +109,14 @@ docker compose --profile e2e run --rm e2e bunx playwright test --grep @story-1.7
 - 測試以 tag 標註 Story 與需求編號（例如 `@story-1.7`、`@FR-2`）；上游還沒合併的步驟以 `test.fixme` 列出，報告中顯示為 skipped。
 - HTML 報告寫到 `frontend/playwright-report/`（用瀏覽器打開 `index.html`），失敗時的截圖與 trace 在 `frontend/test-results/`。
 - `tests/` 與 `playwright.config.ts` 是掛載進容器的，改測試不必重新 build；改了依賴或 `frontend/Dockerfile.e2e` 時加 `--build`。
+- 測試會在資料庫留下 `e2e-*` 開頭的帳號與已核准的主辦方。不想弄髒開發用資料庫時，先停掉平常的服務，改用獨立的 compose 專案（另一組 volume）跑，跑完連同 volume 一起刪掉：
+
+  ```bash
+  docker compose down
+  docker compose -p flow-e2e up -d --build --wait
+  docker compose -p flow-e2e --profile e2e run --rm e2e
+  docker compose -p flow-e2e down -v
+  ```
 
 每個 PR 與 `main` 的 push 都由 GitHub Actions（`.github/workflows/ci.yml`）跑上面全部項目，另外檢查 Alembic 只有一個 head、`frontend/src/client` 與後端 API 一致；範本原本的 Actions 已移除，這份是本專案自己的。
 

@@ -374,3 +374,17 @@
   - 容器內第一次跑單元測試時 22 個失敗，都是跟這次修改無關的測試在約 1 秒時逾時；改用 `--maxWorkers=4` 重跑全部通過，判斷是 48 個 worker 同時跑造成的，不是程式問題
 - 成熟度：L3（AI 依人提出的審查意見修改，人決定範圍）
 - 證據：spec 的 Review Triage Log〈2026-11-03 PR 審查（D）〉；尚未 commit
+
+### 2026-11-03｜測試／依審查修正｜Story 7.2 第一階段：依 D 的審查修正審核清單換頁競態與觀眾 e2e
+
+- Story／範圍：7.2 第一階段（`story/7-2`）
+- 怎麼用：把 D 的審查意見貼給 AI，AI 先確認遠端分支狀態，再逐項修改 e2e 測試、compose、CI、README 與 spec
+- AI 產出：`identity.spec.ts` 換頁改看第 n 頁的 API 回應判斷；`spectator.spec.ts` 改開場次頁假資料，S3 步驟改 `test.fixme`；`E2E_API_URL` 跟著 `VITE_API_URL`、新增 `E2E_API_TARGET`；`requestfailed` 也記錄；標 `@NFR-2` 卻沒記到請求時失敗；CI 加建置 e2e image；README 加獨立 compose 專案跑法；`deferred-work.md` 新增 2 項
+- 人做了什麼：D 審查並提出 2 個擋合併項目與 5 個建議；使用者決定觀眾 e2e 先用場次頁假資料、S3 步驟 fixme，2.4 那步留到第二階段；決定不跑 e2e 直接 commit
+- 驗證：前端容器內 typecheck、biome（186 個檔案）通過；e2e 未執行
+- 問題與修正：
+  - D 指出的衝突，在 AI 檢查時已經不存在：使用者先前已把 main 合進遠端的 `story/7-2`，AI 用 `git merge-tree` 確認沒有衝突，沒有重複合併
+  - AI 發現 D 沒提到的問題：合併 main 後 4.6 第二階段已刪除 `/dev/bracket`，`spectator.spec.ts` 仍從那頁開始，e2e 一定會失敗；交由使用者決定改法
+  - AI 第一次改完 biome 回報 2 個格式錯誤，用 `biome check --write` 修正
+- 成熟度：L3（AI 依人提出的審查意見修改，範圍與做法由人決定）
+- 證據：spec-7-2 的 Spec Change Log（2026-11-03）

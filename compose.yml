@@ -149,11 +149,12 @@ services:
       mailpit:
         condition: service_started
     environment:
-      # 瀏覽器照常使用 localhost:5173／localhost:8000：globalSetup 在容器內把這兩個埠轉到
-      # frontend／backend，前端的 VITE_API_URL 與後端的 CORS 都不必修改。
+      # 瀏覽器照常使用 localhost:5173 與前端的 VITE_API_URL：globalSetup 在容器內把 5173 轉到 frontend、
+      # 把 E2E_API_URL 的埠轉到 backend，前端的 VITE_API_URL 與後端的 CORS 都不必修改。
       PLAYWRIGHT_BASE_URL: http://localhost:5173
-      E2E_API_URL: http://localhost:8000
-      E2E_PROXY: 5173=frontend:5173,8000=backend:8000
+      E2E_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      E2E_PROXY: 5173=frontend:5173
+      E2E_API_TARGET: backend:8000
       MAILPIT_URL: http://mailpit:8025
       FIRST_ADMIN_EMAIL: ${FIRST_ADMIN_EMAIL:?Variable not set}
       FIRST_ADMIN_PASSWORD: ${FIRST_ADMIN_PASSWORD:?Variable not set}

@@ -18,10 +18,49 @@ const SCHOOL = "國立政治大學"
 
 /** S35 找到這個 Email 的待審核申請並核准；申請依送出時間由舊到新排，可能在後面的頁。 */
 async function approveApplication(page: Page, applicantEmail: string) {
+  // 換頁時列表用 keepPreviousData，不會出現 aria-busy，畫面上的列可能還是上一頁的；
+  // 所以改看第 n 頁的 API 回應決定要不要再按「下一頁」
+  const listedPage = (n: number) =>
+    page
+      .waitForResponse((response) => {
+        const url = new URL(response.url())
+        return (
+          response.request().method() === "GET" &&
+          response.ok() &&
+          url.pathname.endsWith("/admin/organizer-applications") &&
+          url.searchParams.get("page") === String(n)
+        )
+      })
+      .then(async (response) => {
+        const body = (await response.json()) as {
+          items: { applicant_email: string }[]
+          total: number
+          page_size: number
+        }
+        return {
+          found: body.items.some(
+            (item) => item.applicant_email === applicantEmail,
+          ),
+          lastPage: Math.max(1, Math.ceil(body.total / body.page_size)),
+        }
+      })
+
+  let current = 1
+  let listed = listedPage(current)
   await page.goto("/admin/applications")
   await expect(
     page.getByRole("heading", { name: "主辦方申請", level: 1 }),
   ).toBeVisible()
+  for (;;) {
+    const { found, lastPage } = await listed
+    if (found) break
+    if (current >= lastPage) {
+      throw new Error(`待審核清單裡找不到 ${applicantEmail} 的主辦方申請`)
+    }
+    current += 1
+    listed = listedPage(current)
+    await page.getByRole("button", { name: "下一頁" }).click()
+  }
   // 桌機是表格的一列，窄螢幕是卡片清單的一項；只取看得到的那一個
   const row = page
     .locator(
@@ -29,15 +68,7 @@ async function approveApplication(page: Page, applicantEmail: string) {
     )
     .filter({ hasText: applicantEmail })
     .filter({ visible: true })
-  for (;;) {
-    await expect(page.locator("[aria-busy=true]")).toHaveCount(0)
-    if ((await row.count()) > 0) break
-    const next = page.getByRole("button", { name: "下一頁" })
-    if (!(await next.isVisible()) || (await next.isDisabled())) {
-      throw new Error(`待審核清單裡找不到 ${applicantEmail} 的主辦方申請`)
-    }
-    await next.click()
-  }
+  await expect(row).toBeVisible()
   await expectNoHorizontalScroll(page)
   await row.getByRole("button", { name: "核准", exact: true }).click()
   const dialog = page.getByRole("alertdialog", { name: "核准主辦方申請" })
@@ -54,6 +85,7 @@ test("訪客註冊並驗證 Email、申請主辦方，平台管理員核准後�
     "@story-1.4",
     "@story-1.7",
     "@story-1.8",
+    "@story-7.2",
     "@FR-1",
     "@FR-2",
     "@FR-3",

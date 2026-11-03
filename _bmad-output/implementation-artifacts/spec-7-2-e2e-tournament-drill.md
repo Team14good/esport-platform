@@ -36,7 +36,7 @@ context: []
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
 | 身分流程 | 訪客註冊、驗證、申請主辦方；管理員核准 | 申請人重新整理後身分切換器出現「主辦方後台」，可進入 `/organizer` | 驗證信 60 秒內沒到就失敗並列出 Mailpit 收件人 |
-| 觀眾檢視 | 未登入開 `/dev/bracket`（32 隊進行中假資料） | 點場次卡進入場次頁，標題與卡片代碼一致，返回連結回到賽事 | N/A |
+| 觀眾檢視 | 未登入開場次頁假資料 `/tournaments/tournament-fixture/matches/match-M17`（32 隊進行中） | 標題為「16 強 · M17」，可換到同輪另一場，返回連結指向該賽事的 `/bracket`；從 S3 點場次卡進入的步驟以 `test.fixme` 列出 | N/A |
 | 375 px | 同一組測試以 mobile 專案執行 | 每個頁面 `document` 沒有橫向捲軸；只有 `[data-slot=bracket-tree]` 可以橫向捲動 | N/A |
 | API 回應時間 | 測試期間所有送往 API 的請求 | 每個測試附上回應時間 JSON；一般請求超過 1 秒就失敗並列出網址 | 登入（密碼雜湊）列為例外，只記錄不判定 |
 | 上游未合併 | 建立賽事～頒獎、第三款遊戲、操作紀錄、10 秒更新 | 以 `test.fixme` 列出，標題註明等待的 Story，報告中顯示為待辦 | N/A |
@@ -46,6 +46,8 @@ context: []
 - 分支從 `origin/story/5-8` 開 `story/7-2`：該分支已含 1.7、1.8、4.6、5.8 與它們的假資料；PR 在上游合併前會帶著那些 commit。
 - 等待其他人的部分：有畫面的用該畫面的假資料（`/dev/bracket`、場次頁假資料）；沒有畫面的寫成 `test.fixme`，不自建假畫面。
 - 執行方式：compose 新增 `e2e` 服務（profile `e2e`，Playwright 官方 image 加 Bun），容器內以 TCP 轉發讓瀏覽器照常使用 `localhost:5173`、`localhost:8000`，CORS 與 `VITE_API_URL` 不必改。
+- 觀眾檢視改法（2026-11-03 使用者決定）：合併 main 後 4.6 第二階段已刪除 `/dev/bracket`，還沒有已抽籤的真賽事，單場 API（#21）也未合併。場次頁先直接開假資料；從 S3 點場次卡進入的步驟改為 `test.fixme`，記進 `deferred-work.md`。
+- `tournament.spec.ts` 的 2.4 那步（2026-11-03 使用者決定）：正取隊伍要有報名資料，留到第二階段，記進 `deferred-work.md`。
 - 遊戲設定假資料：《特戰英豪》（`rounds`）、《英雄聯盟》（`win_loss`）與一款虛構的第三款遊戲，人數、BO、比分型態不同；之後與 7.1 第二階段的示範資料對齊。
 
 </frozen-after-approval>
@@ -106,5 +108,7 @@ context: []
 - sprint 狀態維持 `in-progress`：只完成第一階段，比照 4.6、5.2 分階段時的做法。
 
 ## Spec Change Log
+
+- 2026-11-03 依 D 的審查與合併 main：觀眾檢視改用場次頁假資料、S3 步驟改 fixme（I/O 矩陣「觀眾檢視」列與 Decisions 依使用者決定更新）；審核清單換頁改看 API 回應判斷；`E2E_API_URL` 跟著 `VITE_API_URL`、API 埠由 `E2E_API_TARGET` 轉發；`requestfailed` 也記錄；標 `@NFR-2` 卻沒記到任何請求時失敗；CI 加建置 e2e image；README 寫獨立 compose 專案的跑法。
 
 ## Review Triage Log
