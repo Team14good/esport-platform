@@ -132,6 +132,8 @@ context:
 - 優先期倒數歸零後在「名額分配」區塊顯示「已送出・待分配」；開啟頁面時優先期已過則整個區塊不顯示。
 - 程式審查後：`useDeadlinePassed` 除了到期的 setTimeout，另在分頁重新顯示時與 `Countdown` 的 `onExpire` 再檢查一次（裝置休眠時計時器可能延後）；S19 加入時被拒 `ROSTER_LOCKED` 與預覽 `locked` 顯示同一句「連結已失效：名單已鎖定。」。
 - 瀏覽器手動檢查（含 375 px）尚未執行。
+- 2026-11-03 補做瀏覽器實測：Playwright 以隊長（375 px）、隊員（桌機）、未加入者實測 32 項全部通過，含實際等一場賽事截止、倒數歸零後沒有轉圈與逾時文字；資料庫的報名快照與操作紀錄正確。
+- 2026-11-03 合併 main 時，D 的 5.5（#20）遷移 `a3d5e7f9b1c4` 也接在 `a3f6b9d2c8e1` 之後，依 CONTRIBUTING 第 4 節把本 Story 的 `down_revision` 改接 `a3d5e7f9b1c4`；開發資料庫先 downgrade 回 `a3f6b9d2c8e1` 再升級，避免 5.5 的遷移被跳過。
 
 ## Spec Change Log
 
