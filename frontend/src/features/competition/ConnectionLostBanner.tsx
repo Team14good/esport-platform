@@ -18,6 +18,13 @@ export function formatClockWithSeconds(date: Date): string {
   return `${parts.hour}:${parts.minute}:${parts.second}`
 }
 
+/** 連線中斷的文字；從未成功取得資料時不寫「最後更新」。S3 交給 PageBannerSlot 與取消 banner 擇一顯示。 */
+export function connectionLostText(lastUpdatedAt: Date | null): string {
+  return lastUpdatedAt
+    ? `連線中斷，正在重試 · 最後更新 ${formatClockWithSeconds(lastUpdatedAt)}`
+    : "連線中斷，正在重試"
+}
+
 type ConnectionLostBannerProps = {
   /** 最後一次成功取得資料的時間；從未成功時不寫「最後更新」 */
   lastUpdatedAt: Date | null
@@ -29,9 +36,7 @@ export function ConnectionLostBanner({
   lastUpdatedAt,
   className,
 }: ConnectionLostBannerProps) {
-  const text = lastUpdatedAt
-    ? `連線中斷，正在重試 · 最後更新 ${formatClockWithSeconds(lastUpdatedAt)}`
-    : "連線中斷，正在重試"
+  const text = connectionLostText(lastUpdatedAt)
   return (
     <Alert
       data-slot="connection-lost-banner"
