@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
+import type { TeamInvitePreview } from "@/client"
 import { RouteErrorPage } from "@/components/layout/ErrorPage"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentAccount } from "@/features/identity/auth"
@@ -13,17 +14,37 @@ import {
 import { teamInviteUrl, teamQueryOptions } from "./queries"
 import { RosterList } from "./RosterList"
 import { RegistrationStatusBadge } from "./registration-status"
+import { SubmitRegistrationSection } from "./SubmitRegistrationSection"
 import { useUpdatePlayerProfile } from "./useUpdatePlayerProfile"
 
 export const TEAM_FULL_REASON = "隊伍已滿"
+export const ROSTER_LOCKED_REASON = "名單已鎖定"
+export const REGISTRATION_CLOSED_REASON = "報名已截止"
+
+/** 邀請連結失效的原因；有效時為 null（優先順序由後端決定：已鎖定 > 已截止 > 已滿）。 */
+export function inviteInvalidReason(
+  status: TeamInvitePreview["invite_status"],
+): string | null {
+  switch (status) {
+    case "locked":
+      return ROSTER_LOCKED_REASON
+    case "closed":
+      return REGISTRATION_CLOSED_REASON
+    case "full":
+      return TEAM_FULL_REASON
+    default:
+      return null
+  }
+}
 export const PROFILE_SAVED_TEXT = "已儲存參賽資料"
 
 /**
  * S17 隊伍頁：隊名與報名狀態、邀請連結（Invite link field）、名單（Roster list）；
- * 自己那列的「填寫我的資料」開 S18。
+ * 自己那列的「填寫我的資料」開 S18；名單下方是送出報名（3.3）。
  */
 export function TeamPage({ teamId }: { teamId: string }) {
   const team = useQuery(teamQueryOptions(teamId))
+  const queryClient = useQueryClient()
   const account = useCurrentAccount()
   const [profileOpen, setProfileOpen] = useState(false)
   const { save, uploadProgress } = useUpdatePlayerProfile(teamId)
@@ -47,6 +68,7 @@ export function TeamPage({ teamId }: { teamId: string }) {
   const data = team.data
   const myAccountId = account.data?.id ?? null
   const me = data.members.find((member) => member.account_id === myAccountId)
+  const inviteReason = inviteInvalidReason(data.invite_status)
 
   async function saveProfile(values: PlayerProfileValues) {
     await save(values)
@@ -75,13 +97,11 @@ export function TeamPage({ teamId }: { teamId: string }) {
         <InviteLinkField
           label="隊伍邀請連結"
           url={teamInviteUrl(data.invite_token)}
-          invalid={
-            data.invite_status === "full" ? { reason: TEAM_FULL_REASON } : null
-          }
+          invalid={inviteReason === null ? null : { reason: inviteReason }}
           note={
-            data.invite_status === "full"
-              ? undefined
-              : "隊友開啟連結、登入並完成 Email 驗證後即可加入。"
+            data.invite_status === "active"
+              ? "隊友開啟連結、登入並完成 Email 驗證後即可加入。"
+              : undefined
           }
         />
       </section>
@@ -102,6 +122,14 @@ export function TeamPage({ teamId }: { teamId: string }) {
           onEditMyProfile={() => setProfileOpen(true)}
         />
       </section>
+      <SubmitRegistrationSection
+        team={data}
+        onDeadlinePassed={() =>
+          queryClient.invalidateQueries({
+            queryKey: teamQueryOptions(teamId).queryKey,
+          })
+        }
+      />
       {/* 開啟時才掛載：S17 平時不需要 S18 的 Sheet／Dialog 與表單狀態 */}
       {me && profileOpen && (
         <PlayerProfileDialog

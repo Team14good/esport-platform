@@ -12,7 +12,7 @@ from typing import BinaryIO
 
 from sqlmodel import Session
 
-from app.core import audit, clock, storage
+from app.core import audit, authz, clock, storage
 from app.core.errors import BusinessError, FieldError
 from app.modules.identity import service as identity_service
 from app.modules.registration import player_profile, repository
@@ -24,6 +24,7 @@ from app.modules.registration.models import (
     Registration,
     RegistrationRead,
     RegistrationStatus,
+    SubmitBlocker,
     Team,
     TeamDetail,
     TeamInvitePreview,
@@ -53,6 +54,25 @@ def _lock_tournament(session: Session, tournament_id: uuid.UUID) -> TournamentRe
 def _ensure_accepting_registrations(tournament: TournamentRead) -> None:
     """賽事不是開放報名時，由 tournaments 拋 409 `REGISTRATION_CLOSED`。"""
     tournaments_service.ensure_accepting_registrations(tournament)
+
+
+def _in_registration_period(tournament: TournamentRead) -> bool:
+    """賽事開放報名且現在早於報名截止時間。
+
+    tournaments 的 `ensure_accepting_registrations` 只看狀態，open → closed 要到 3.6 才有；
+    所以 registration 自己再比對截止時間。
+    """
+    return (
+        tournament.status == TournamentStatus.OPEN
+        and clock.now() < tournament.registration_end
+    )
+
+
+def _ensure_registration_period(tournament: TournamentRead) -> None:
+    """在報名期間（賽事開放且早於截止時間）；否則拋 409 `REGISTRATION_CLOSED`。"""
+    _ensure_accepting_registrations(tournament)
+    if clock.now() >= tournament.registration_end:
+        raise _registration_deadline_passed()
 
 
 # ---------------------------------------------------------------- 錯誤
@@ -100,6 +120,30 @@ def _team_member_required() -> BusinessError:
 
 def _roster_locked() -> BusinessError:
     return BusinessError("ROSTER_LOCKED", "名單已鎖定，資料無法修改。", status_code=409)
+
+
+def _roster_locked_for_join() -> BusinessError:
+    return BusinessError("ROSTER_LOCKED", "名單已鎖定，無法加入。", status_code=409)
+
+
+def _registration_deadline_passed() -> BusinessError:
+    return BusinessError(
+        "REGISTRATION_CLOSED", "這場賽事的報名已截止。", status_code=409
+    )
+
+
+def _registration_already_submitted() -> BusinessError:
+    return BusinessError(
+        "REGISTRATION_ALREADY_SUBMITTED", "這支隊伍已送出報名", status_code=409
+    )
+
+
+def _requirements_unmet(blockers: list[SubmitBlocker]) -> BusinessError:
+    return BusinessError(
+        "REGISTRATION_REQUIREMENTS_UNMET",
+        "；".join(blocker.message for blocker in blockers),
+        status_code=409,
+    )
 
 
 def _rank_screenshot_required() -> FieldError:
@@ -209,8 +253,29 @@ def _max_members(tournament: TournamentRead) -> int:
     return tournament.starters + tournament.substitutes
 
 
-def _invite_status(member_count: int, max_members: int) -> InviteStatus:
-    return "full" if member_count >= max_members else "active"
+def _invite_status(
+    tournament: TournamentRead,
+    member_count: int,
+    registration_status: RegistrationStatus,
+) -> InviteStatus:
+    """已鎖定（報名不是組隊中）> 已截止（不在報名期間）> 已滿 > 有效。"""
+    if registration_status != RegistrationStatus.FORMING:
+        return "locked"
+    if not _in_registration_period(tournament):
+        return "closed"
+    return "full" if member_count >= _max_members(tournament) else "active"
+
+
+def _team_read(team: Team, members: list[TeamMember]) -> TeamRead:
+    return TeamRead(
+        id=team.id,
+        tournament_id=team.tournament_id,
+        name=team.name,
+        members=[
+            TeamMemberRole(account_id=member.account_id, role=member.role)
+            for member in members
+        ],
+    )
 
 
 def _registration_of(session: Session, team: Team) -> Registration:
@@ -222,8 +287,8 @@ def _registration_of(session: Session, team: Team) -> Registration:
 def _ensure_can_join(
     session: Session, tournament: TournamentRead, account_id: uuid.UUID
 ) -> None:
-    """鎖住賽事後檢查：開放報名、不是主辦方、不在該賽事的任何隊伍。"""
-    _ensure_accepting_registrations(tournament)
+    """鎖住賽事後檢查：報名期間、不是主辦方、不在該賽事的任何隊伍。"""
+    _ensure_registration_period(tournament)
     if tournament.organizer_id == account_id:
         raise _organizer_cannot_join()
     if repository.get_membership(session, tournament.id, account_id) is not None:
@@ -244,24 +309,54 @@ def _missing_fields(member: TeamMember) -> list[MissingProfileField]:
 
 def _profile_editable(tournament: TournamentRead, registration: Registration) -> bool:
     return (
-        tournament.status == TournamentStatus.OPEN
+        _in_registration_period(tournament)
         and registration.status == RegistrationStatus.FORMING
     )
+
+
+def _display_names(session: Session, members: list[TeamMember]) -> list[str]:
+    names: list[str] = []
+    for member in members:
+        contact = identity_service.get_account_contact(session, member.account_id)
+        assert contact is not None  # 外鍵保證帳號存在
+        names.append(contact.display_name)
+    return names
+
+
+def _roster_entries(
+    session: Session, members: list[TeamMember], names: list[str]
+) -> list[player_profile.RosterEntry]:
+    """送出檢查用的隊員資料（依加入順序）；學校讀帳號目前的設定。"""
+    schools = identity_service.get_account_school_ids(
+        session, [member.account_id for member in members]
+    )
+    return [
+        player_profile.RosterEntry(
+            display_name=name,
+            missing_fields=_missing_fields(member),
+            school_id=schools.get(member.account_id),
+        )
+        for member, name in zip(members, names, strict=True)
+    ]
+
+
+def _registration_closed_blocker() -> SubmitBlocker:
+    """只供畫面停用「送出報名」；伺服器送出時另回 409 `REGISTRATION_CLOSED`。"""
+    return SubmitBlocker(code="REGISTRATION_CLOSED", message="已截止")
 
 
 def _build_detail(
     session: Session, team: Team, tournament: TournamentRead, viewer: TeamMember
 ) -> TeamDetail:
     members = repository.list_members(session, team.id)
+    names = _display_names(session, members)
     member_reads: list[TeamMemberRead] = []
-    for member in members:
-        contact = identity_service.get_account_contact(session, member.account_id)
-        assert contact is not None  # 外鍵保證帳號存在
+    for member, name in zip(members, names, strict=True):
         is_viewer = member.account_id == viewer.account_id
         member_reads.append(
             TeamMemberRead(
                 account_id=member.account_id,
-                display_name=contact.display_name,
+                display_name=name,
                 role=member.role,
                 joined_at=member.created_at,
                 game_account_id=member.game_account_id,
@@ -278,6 +373,16 @@ def _build_detail(
     scores = [m.rank_score for m in members if m.rank_score is not None]
     registration = _registration_of(session, team)
     max_members = _max_members(tournament)
+    blockers: list[SubmitBlocker] = []
+    if registration.status == RegistrationStatus.FORMING:
+        if not _in_registration_period(tournament):
+            blockers.append(_registration_closed_blocker())
+        blockers.extend(
+            player_profile.submit_blockers(
+                starters=tournament.starters,
+                members=_roster_entries(session, members, names),
+            )
+        )
     return TeamDetail(
         id=team.id,
         name=team.name,
@@ -290,12 +395,16 @@ def _build_detail(
         members=member_reads,
         registration_status=registration.status,
         invite_token=team.invite_token,
-        invite_status=_invite_status(len(members), max_members),
+        invite_status=_invite_status(tournament, len(members), registration.status),
         my_role=viewer.role,
         rank_tiers=tournament.rank_tiers,
         avg_rank_score=player_profile.average_rank_score(scores),
         rank_filled_count=len(scores),
         profile_editable=_profile_editable(tournament, registration),
+        submit_blockers=blockers,
+        priority_end=tournament.priority_end,
+        registration_end=tournament.registration_end,
+        submitted_at=registration.submitted_at,
     )
 
 
@@ -372,7 +481,9 @@ def preview_invite(session: Session, *, token: str) -> TeamInvitePreview:
         game_name=tournament.game_name,
         member_count=member_count,
         max_members=max_members,
-        invite_status=_invite_status(member_count, max_members),
+        invite_status=_invite_status(
+            tournament, member_count, _registration_of(session, team).status
+        ),
     )
 
 
@@ -383,6 +494,9 @@ def join_team(session: Session, *, token: str, account_id: uuid.UUID) -> TeamDet
         raise _invite_not_found()
     tournament = _lock_tournament(session, team.tournament_id)
     _ensure_can_join(session, tournament, account_id)
+    # 鎖之後才讀報名狀態：送出與加入同時發生時，加入一定看到送出後的結果
+    if _registration_of(session, team).status != RegistrationStatus.FORMING:
+        raise _roster_locked_for_join()
     if repository.count_members(session, team.id) >= _max_members(tournament):
         raise _team_full()
 
@@ -463,7 +577,7 @@ def update_player_profile(
     member = repository.get_team_member(session, team.id, account_id)
     if member is None:
         raise _team_member_required()
-    _ensure_accepting_registrations(tournament)
+    _ensure_registration_period(tournament)
     if _registration_of(session, team).status != RegistrationStatus.FORMING:
         raise _roster_locked()
 
@@ -518,6 +632,71 @@ def update_player_profile(
     return ProfileUpdate(detail=detail, new_key=new_key, old_key=old_key)
 
 
+def submit_registration(
+    session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+) -> TeamDetail:
+    """S17 隊長送出報名：報名從組隊中轉為待分配、名單鎖定，凍結學校、平均段位積分與送出時間。
+
+    先查隊伍、鎖住賽事，再依序檢查隊員、隊長、報名期間、報名仍是組隊中與送出條件。
+    送出條件與 S17 的 `submit_blockers` 是同一個函式，不符合時全部原因以「；」串接。
+    3.3 一律轉為 `pending`，名額分配在 3.4～3.6；送出不發事件（FR-37 只通知報名結果）。
+    """
+    team = repository.get_team(session, team_id)
+    if team is None:
+        raise _team_not_found()
+    tournament = _lock_tournament(session, team.tournament_id)
+    members = repository.list_members(session, team.id)
+    viewer = next((m for m in members if m.account_id == account_id), None)
+    if viewer is None:
+        raise _team_member_required()
+    authz.ensure_captain(
+        _team_read(team, members), account_id, message="只有隊長可以送出報名"
+    )
+    _ensure_registration_period(tournament)
+    registration = _registration_of(session, team)
+    if registration.status != RegistrationStatus.FORMING:
+        raise _registration_already_submitted()
+
+    entries = _roster_entries(session, members, _display_names(session, members))
+    blockers = player_profile.submit_blockers(
+        starters=tournament.starters, members=entries
+    )
+    if blockers:
+        raise _requirements_unmet(blockers)
+
+    # 送出條件保證每位都有段位積分、都設了學校且學校相同
+    school_id = entries[0].school_id
+    scores = [m.rank_score for m in members if m.rank_score is not None]
+    avg_rank_score = player_profile.average_rank_score_decimal(scores)
+    assert school_id is not None and avg_rank_score is not None
+    submitted_at = clock.now()
+    registration.school_id = school_id
+    registration.avg_rank_score = avg_rank_score
+    registration.submitted_at = submitted_at
+    mark_status(
+        session,
+        registration=registration,
+        to=RegistrationStatus.PENDING,
+        actor_id=account_id,
+    )
+    audit.record(
+        session,
+        actor_id=account_id,
+        tournament_id=team.tournament_id,
+        action="registration.submitted",
+        entity_type="registration",
+        entity_id=registration.id,
+        before=None,
+        after={
+            "school_id": school_id,
+            "avg_rank_score": avg_rank_score,
+            "submitted_at": submitted_at,
+        },
+    )
+    session.flush()
+    return _build_detail(session, team, tournament, viewer)
+
+
 def list_my_teams(session: Session, *, account_id: uuid.UUID) -> list[MyTeamCard]:
     """S12 我的隊伍：帳號加入的每支隊伍與其報名狀態（新加入的在前）。"""
     cards: list[MyTeamCard] = []
@@ -546,15 +725,7 @@ def get_team(session: Session, *, team_id: uuid.UUID) -> TeamRead:
     team = repository.get_team(session, team_id)
     if team is None:
         raise _team_not_found()
-    return TeamRead(
-        id=team.id,
-        tournament_id=team.tournament_id,
-        name=team.name,
-        members=[
-            TeamMemberRole(account_id=member.account_id, role=member.role)
-            for member in repository.list_members(session, team.id)
-        ],
-    )
+    return _team_read(team, repository.list_members(session, team.id))
 
 
 def get_registration(session: Session, *, team_id: uuid.UUID) -> RegistrationRead:

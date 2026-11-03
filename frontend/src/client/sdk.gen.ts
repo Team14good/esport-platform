@@ -78,6 +78,9 @@ import type {
   registrationReadTeamData,
   registrationReadTeamErrors,
   registrationReadTeamResponses,
+  registrationSubmitRegistrationData,
+  registrationSubmitRegistrationErrors,
+  registrationSubmitRegistrationResponses,
   registrationUpdateMyPlayerProfileData,
   registrationUpdateMyPlayerProfileErrors,
   registrationUpdateMyPlayerProfileResponses,
@@ -876,6 +879,28 @@ export class RegistrationService {
         "Content-Type": null,
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * Submit Registration
+   *
+   * S17 隊長送出報名：報名轉為「已送出・待分配」，名單鎖定並凍結學校、平均段位積分與送出時間。
+   *
+   * 不符合送出條件時回 409 `REGISTRATION_REQUIREMENTS_UNMET`，`message` 列出全部原因。
+   */
+  public static submitRegistration<ThrowOnError extends boolean = true>(
+    options: Options<registrationSubmitRegistrationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationSubmitRegistrationResponses,
+      registrationSubmitRegistrationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/submission",
+      ...options,
     })
   }
 
