@@ -4,7 +4,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query"
-import { act, render, renderHook } from "@testing-library/react"
+import { act, renderHook } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -17,6 +17,7 @@ import {
   useMatchPolling,
 } from "@/features/competition/use-match-polling"
 import { matchDetail } from "./match-detail-fixture"
+import { renderWithRouterContext } from "./render-router"
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
@@ -245,7 +246,9 @@ describe("場次頁的 flash", () => {
   }
 
   it("第一次顯示不 flash；比分變動時 flash，連續兩次變動會重新掛載讓動畫重播", () => {
-    const { rerender } = render(<MatchSpectatorView detail={LIVE_1_0} />)
+    const { rerender } = renderWithRouterContext(
+      <MatchSpectatorView detail={LIVE_1_0} />,
+    )
     expect(scoreDisplay()).not.toHaveClass("update-flash")
 
     rerender(<MatchSpectatorView detail={LIVE_2_0} changed />)
