@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
 import { describe, expect, it, vi } from "vitest"
@@ -278,6 +278,21 @@ describe("S25 我的賽事", () => {
     expect(screen.queryByText(NO_TOURNAMENTS_TEXT)).toBeNull()
   })
 
+  it("清單載入失敗：顯示錯誤，按「重新載入」重抓", async () => {
+    const user = userEvent.setup()
+    const mine = vi
+      .spyOn(TournamentsService, "listMyTournaments")
+      .mockRejectedValueOnce(httpError(500, "Internal Server Error"))
+      .mockResolvedValue({ data: [] } as unknown as ListMineResult)
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer")
+
+    await user.click(await screen.findByRole("button", { name: "重新載入" }))
+
+    expect(await screen.findByText(NO_TOURNAMENTS_TEXT)).toBeInTheDocument()
+    expect(mine).toHaveBeenCalledTimes(2)
+  })
+
   it("狀態徽章的色調依 DESIGN.md", async () => {
     const statuses = [
       ["upcoming", "尚未開放", "muted"],
@@ -391,6 +406,7 @@ describe("S26 建立賽事", () => {
   it("連按「建立賽事」只呼叫一次 API", async () => {
     const user = userEvent.setup()
     const create = mockCreate()
+    mockRead({ ...TOURNAMENT, id: "t-new" })
     await openCreatePage()
     await fillValidForm(user)
 
@@ -404,6 +420,7 @@ describe("S26 建立賽事", () => {
   it("名額超過 128 時連按確認鈕只呼叫一次 API", async () => {
     const user = userEvent.setup()
     const create = mockCreate()
+    mockRead({ ...TOURNAMENT, id: "t-new" })
     await openCreatePage()
     await fillValidForm(user, { capacity: "200" })
 
@@ -454,6 +471,42 @@ describe("S26 建立賽事", () => {
       ),
     )
     expect(fieldMessage("報名開始")).toBeNull()
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it("送出後改日期：依賴的欄位跟著重新檢查，不必再送出", async () => {
+    const user = userEvent.setup()
+    const create = mockCreate()
+    await openCreatePage()
+    await fillValidForm(user)
+    setDateTime("報名截止", "2026-11-10T20:00")
+    await user.click(screen.getByRole("button", { name: "建立賽事" }))
+    await waitFor(() =>
+      expect(fieldMessage("報名截止")).toBe("報名截止不能晚於開賽時間"),
+    )
+
+    // 開賽時間 → 報名截止
+    setDateTime("開賽時間", "2026-11-11T19:00")
+    await waitFor(() => expect(fieldMessage("報名截止")).toBeNull())
+
+    // 報名截止 → 報名開始
+    setDateTime("報名截止", "2026-11-03T11:00")
+    await waitFor(() =>
+      expect(fieldMessage("報名開始")).toBe("報名開始必須早於報名截止"),
+    )
+
+    // 報名截止 → 報名開始、優先期（報名期間 1 小時、優先期 24 小時）
+    setDateTime("報名截止", "2026-11-03T13:00")
+    await waitFor(() => expect(fieldMessage("報名開始")).toBeNull())
+    await waitFor(() =>
+      expect(fieldMessage("優先期（小時）")).toBe(
+        "優先期結束（報名開始＋優先期）不能晚於報名截止",
+      ),
+    )
+
+    // 報名開始 → 優先期（報名期間改為 25 小時）
+    setDateTime("報名開始", "2026-11-02T12:00")
+    await waitFor(() => expect(fieldMessage("優先期（小時）")).toBeNull())
     expect(create).not.toHaveBeenCalled()
   })
 
@@ -594,6 +647,71 @@ describe("S26 建立賽事", () => {
     expect(screen.queryByRole("alert")).toBeNull()
   })
 
+  it("伺服器 422 後修正欄位再送出：呼叫第二次並導向 S27", async () => {
+    const user = userEvent.setup()
+    const create = vi
+      .spyOn(TournamentsService, "createTournament")
+      .mockRejectedValueOnce(
+        httpError(422, {
+          detail: [
+            {
+              loc: ["body", "registration_end"],
+              msg: "報名截止必須晚於現在",
+              type: "value_error",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValue({ data: { ...TOURNAMENT, id: "t-new" } } as never)
+    mockRead({ ...TOURNAMENT, id: "t-new" })
+    const router = await openCreatePage()
+    await fillValidForm(user)
+
+    await user.click(screen.getByRole("button", { name: "建立賽事" }))
+    await waitFor(() =>
+      expect(fieldMessage("報名截止")).toBe("報名截止必須晚於現在"),
+    )
+
+    setDateTime("報名截止", "2026-11-09T22:00")
+    await user.click(screen.getByRole("button", { name: "建立賽事" }))
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/organizer/tournaments/t-new",
+      ),
+    )
+  })
+
+  it("遊戲清單載入失敗：顯示錯誤，按「重新載入」重抓後可以選", async () => {
+    const user = userEvent.setup()
+    const games = vi
+      .spyOn(TournamentsService, "listGamesForOrganizer")
+      .mockRejectedValueOnce(httpError(500, "Internal Server Error"))
+      .mockResolvedValue({ data: [VALORANT] } as ListGamesResult)
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer/tournaments/new")
+
+    await user.click(await screen.findByRole("button", { name: "重新載入" }))
+
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "遊戲" })).toBeEnabled(),
+    )
+    expect(screen.queryByRole("button", { name: "重新載入" })).toBeNull()
+    expect(games).toHaveBeenCalledTimes(2)
+    await chooseGame(user, "特戰英豪")
+  })
+
+  it("沒有可選的遊戲：顯示「目前沒有可選的遊戲」", async () => {
+    mockGames([])
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer/tournaments/new")
+
+    expect(
+      await screen.findByText("目前沒有可選的遊戲，請聯絡平台管理員新增。"),
+    ).toBeInTheDocument()
+  })
+
   it("伺服器業務錯誤：表單頂部 Alert 顯示訊息", async () => {
     const user = userEvent.setup()
     vi.spyOn(TournamentsService, "createTournament").mockRejectedValue(
@@ -707,6 +825,45 @@ describe("S27 賽事總覽", () => {
     expect(
       await screen.findByRole("heading", { name: "找不到這個頁面。" }),
     ).toBeInTheDocument()
+  })
+})
+
+describe("S27 載入失敗", () => {
+  it("非 403／404：重試後顯示錯誤，按「重新載入」重抓", async () => {
+    // 登入與路由載入要靠真實時間推進，只把重試的等待時間快轉
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout"],
+      shouldAdvanceTime: true,
+    })
+    const read = vi
+      .spyOn(TournamentsService, "readMyTournament")
+      .mockRejectedValueOnce(httpError(500, "Internal Server Error"))
+      .mockRejectedValueOnce(httpError(500, "Internal Server Error"))
+      .mockRejectedValueOnce(httpError(500, "Internal Server Error"))
+      .mockRejectedValueOnce(httpError(500, "Internal Server Error"))
+      .mockResolvedValue({ data: TOURNAMENT } as ReadMineResult)
+    signInAs({ account: ORGANIZER })
+    try {
+      renderApp("/organizer/tournaments/t-1")
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+
+      // 沿用全站規則重試 3 次（間隔 1、2、4 秒）
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000)
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(read).toHaveBeenCalledTimes(4)
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: "重新載入" }))
+
+    expect(
+      await screen.findByRole("heading", { name: "臺大秋季盃" }),
+    ).toBeInTheDocument()
+    // 按下後重新取得（總覽掛上時會再取一次，所以不比對確切次數）
+    expect(read.mock.calls.length).toBeGreaterThan(4)
   })
 })
 
