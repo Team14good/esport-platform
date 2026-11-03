@@ -3,11 +3,14 @@ import { Link } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 
 import type { PublicTournament } from "@/client"
+import { EmptyState } from "@/components/common/EmptyState"
 import { PageBannerSlot } from "@/components/common/PageBanner"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatMatchDateTime } from "@/features/competition/match-time"
+import { useCurrentAccount } from "@/features/identity/auth"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
+import { CreateTournamentButton } from "./CreateTournamentButton"
 import { useOrganizerApplyBanner } from "./OrganizerApplyBanner"
 import { publicTournamentsQueryOptions } from "./queries"
 import {
@@ -75,15 +78,18 @@ function ListSkeleton() {
 export function TournamentList() {
   const tournaments = useQuery(publicTournamentsQueryOptions())
   const organizerApplyBanner = useOrganizerApplyBanner()
+  // 未登入時不送請求（data 為 undefined）；載入中或失敗也不顯示「建立賽事」
+  const isOrganizer = useCurrentAccount().data?.is_organizer === true
 
   let content: ReactNode
   if (tournaments.data) {
     const groups = groupTournaments(tournaments.data)
     content =
       groups.length === 0 ? (
-        <p className="py-12 text-center text-body-lg text-muted-foreground">
-          {EMPTY_TOURNAMENTS_TEXT}
-        </p>
+        <EmptyState
+          title={EMPTY_TOURNAMENTS_TEXT}
+          action={isOrganizer ? <CreateTournamentButton /> : undefined}
+        />
       ) : (
         groups.map((group) => {
           const label = TOURNAMENT_STATUS_LABEL[group.status]

@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { PlusIcon } from "lucide-react"
 import { useEffect } from "react"
 
 import type { TournamentRead } from "@/client"
@@ -9,11 +8,11 @@ import { EmptyState } from "@/components/common/EmptyState"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { formatDateTime } from "@/lib/datetime"
+import { CreateTournamentButton } from "./CreateTournamentButton"
 import { myTournamentsQueryOptions } from "./organizer-queries"
 import { TournamentStatusBadge } from "./TournamentStatusBadge"
 
 export const NO_TOURNAMENTS_TEXT = "你還沒有建立賽事。"
-export const CREATE_TOURNAMENT_TEXT = "建立賽事"
 export const ORGANIZER_TOURNAMENTS_PAGE_SIZE = 20
 
 function DateTimeCell({ value }: { value: string }) {
@@ -55,17 +54,6 @@ const COLUMNS: DataTableColumn<TournamentRead>[] = [
     cell: (row) => <DateTimeCell value={row.start_at} />,
   },
 ]
-
-function CreateTournamentButton() {
-  return (
-    <Button asChild>
-      <Link to="/organizer/tournaments/new">
-        <PlusIcon aria-hidden="true" />
-        {CREATE_TOURNAMENT_TEXT}
-      </Link>
-    </Button>
-  )
-}
 
 type OrganizerTournamentsPageProps = {
   /** 目前頁碼（從 1 開始，寫在網址 `?page=`） */
