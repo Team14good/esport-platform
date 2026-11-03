@@ -285,3 +285,15 @@
 - 問題與修正：原本約定 #20 先合、#24 再改接，結果 #24 先合，改由 #20 這邊改接，結果相同
 - 成熟度：L2（AI 整合，CI 驗證）
 - 證據：#20 的 commit 與 CI 紀錄
+
+### 2026-11-03｜實作｜Story 7.1 第二階段：示範資料的 competition 步驟
+
+- Story／範圍：7.1（A 的 Story）裡 D 負責的 competition 示範資料，依 7.1 腳本骨架的擴充方式新增步驟檔
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 7.1 spec、`demo_data` 擴充說明與 4.1 的 `draw`，新增 `demo_data/competition.py`：替 `context.tournament_to_draw` 指定的賽事抽籤（固定亂數種子），沒有指定、已抽過、或抽籤被業務規則拒絕時記錄並略過；抽籤放在 savepoint 裡，失敗不會讓整段示範資料回滾
+- AI 產出：`demo_data/competition.py`、`DemoContext.tournament_to_draw` 欄位、`STEPS` 加入 competition、7 個測試、deferred-work 一項
+- 人做了什麼：使用者決定先做這項
+- 驗證：後端全套 1456 passed、lint 通過；突變測試 3 項（拿掉「已抽過」檢查、拿掉固定種子、改成不攔截業務錯誤）都會讓測試失敗，已還原
+- 問題與修正：第一次在容器裡跑測試時，指令經過管線過濾輸出而卡住 10 分鐘，改成把輸出寫進檔案、加上 timeout 後正常。本機用 `ruff check tests` 會把 `app.*` 當第三方套件，提出錯誤的 import 排序建議；CI 只 lint `app/`，所以不採用
+- 成熟度：L2（AI 實作，測試與突變驗證）
+- 證據：本 PR 的 CI 紀錄
