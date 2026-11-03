@@ -1,7 +1,8 @@
 import { createMemoryHistory, createRouter } from "@tanstack/react-router"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeAll, describe, expect, it, vi } from "vitest"
+import { toast } from "sonner"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   type Identity,
@@ -9,6 +10,7 @@ import {
   RegistrationService,
   type TeamDetail,
   type TeamInvitePreview,
+  type TeamMemberRead,
 } from "@/client"
 import { routeTree } from "@/routeTree.gen"
 import { ACCOUNT, BROWSE, renderApp, signInAs } from "./auth-fixtures"
@@ -27,6 +29,9 @@ type PreviewResult = Awaited<
 >
 type JoinResult = Awaited<ReturnType<typeof RegistrationService.joinTeam>>
 type MyTeamsResult = Awaited<ReturnType<typeof RegistrationService.listMyTeams>>
+type UpdateProfileResult = Awaited<
+  ReturnType<typeof RegistrationService.updateMyPlayerProfile>
+>
 
 const MY_TEAMS: Identity = {
   key: "my_teams",
@@ -38,12 +43,38 @@ const member = (
   id: string,
   name: string,
   role: "captain" | "player" = "player",
-) => ({
+  profile: Partial<TeamMemberRead> = {},
+): TeamMemberRead => ({
   account_id: id,
   display_name: name,
   role,
   joined_at: "2026-10-30T10:00:00Z",
+  game_account_id: null,
+  rank_tier: null,
+  rank_score: null,
+  has_rank_screenshot: false,
+  rank_screenshot_name: null,
+  missing_fields: ["game_account_id", "rank_tier", "rank_screenshot"],
+  ...profile,
 })
+
+/** 已填完參賽資料的隊員（`screenshotName` 只有本人看得到）。 */
+const filled = (
+  id: string,
+  name: string,
+  rankTier: string,
+  rankScore: number,
+  role: "captain" | "player" = "player",
+  screenshotName: string | null = null,
+) =>
+  member(id, name, role, {
+    game_account_id: `${name}#TW`,
+    rank_tier: rankTier,
+    rank_score: rankScore,
+    has_rank_screenshot: true,
+    rank_screenshot_name: screenshotName,
+    missing_fields: [],
+  })
 
 const TEAM: TeamDetail = {
   id: "team-1",
@@ -64,6 +95,13 @@ const TEAM: TeamDetail = {
   invite_token: "tok-1",
   invite_status: "active",
   my_role: "player",
+  rank_tiers: [
+    { name: "鑽石", score: 30 },
+    { name: "黃金", score: 10 },
+  ],
+  avg_rank_score: null,
+  rank_filled_count: 0,
+  profile_editable: true,
 }
 
 const INVITE: TeamInvitePreview = {
@@ -103,6 +141,18 @@ beforeAll(async () => {
     ),
   )
 }, 30_000)
+
+beforeEach(() => {
+  // S17 會渲染 S18；jsdom 沒有 matchMedia，useIsMobile 只用它監聽變化，寬度看 innerWidth
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }))
+  URL.createObjectURL = vi.fn(() => "blob:preview")
+  URL.revokeObjectURL = vi.fn()
+})
 
 describe("隊伍頁（S17）", () => {
   it("隊員檢視：名單、隊長徽章、人數與邀請連結", async () => {
@@ -168,6 +218,244 @@ describe("隊伍頁（S17）", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"))
     expect(router.state.location.search).toEqual({ redirect: "/teams/team-1" })
+  })
+})
+
+describe("隊伍頁的參賽資料（S17、S18）", () => {
+  // 目前帳號是 acc-1（auth-fixtures 的 ACCOUNT）
+  const PARTIAL: TeamDetail = {
+    ...TEAM,
+    members: [
+      member("acc-1", "阿哲", "captain"),
+      filled("acc-2", "小芸", "鑽石", 30),
+      member("acc-3", "阿凱", "player", {
+        game_account_id: "Kai#TW",
+        rank_tier: "黃金",
+        rank_score: 10,
+        missing_fields: ["rank_screenshot"],
+      }),
+      member("acc-4", "小晴", "player", {
+        has_rank_screenshot: true,
+        missing_fields: ["game_account_id", "rank_tier"],
+      }),
+    ],
+    avg_rank_score: 20,
+    rank_filled_count: 2,
+  }
+
+  function rows() {
+    return within(screen.getByRole("list", { name: "隊伍名單" })).getAllByRole(
+      "listitem",
+    )
+  }
+
+  it("每列顯示已填資料與完成度，只有自己那列有「填寫我的資料」", async () => {
+    signInAs()
+    mockReadTeam(PARTIAL)
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("小芸")).toBeInTheDocument()
+    const [mine, complete, noScreenshot, onlyScreenshot] = rows()
+    expect(within(mine).getByText("缺：遊戲 ID、段位、段位截圖")).toHaveClass(
+      "text-muted-foreground",
+    )
+    expect(
+      within(complete).getByText("小芸#TW · 鑽石 · 段位截圖：已上傳"),
+    ).toBeInTheDocument()
+    expect(within(complete).getByText("資料完成")).toHaveClass(
+      "text-status-confirmed",
+    )
+    expect(within(noScreenshot).getByText("Kai#TW · 黃金")).toBeInTheDocument()
+    expect(within(noScreenshot).getByText("缺：段位截圖")).toBeInTheDocument()
+    expect(
+      within(onlyScreenshot).getByText("段位截圖：已上傳"),
+    ).toBeInTheDocument()
+    expect(
+      within(onlyScreenshot).getByText("缺：遊戲 ID、段位"),
+    ).toBeInTheDocument()
+
+    expect(
+      await within(mine).findByRole("button", { name: "填寫我的資料" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByRole("button", { name: "填寫我的資料" }),
+    ).toHaveLength(1)
+    expect(
+      screen.getByText("平均段位積分 20.00（2／4 人已填）"),
+    ).toBeInTheDocument()
+  })
+
+  it("全員填完時平均段位積分不註明人數", async () => {
+    signInAs()
+    mockReadTeam({
+      ...TEAM,
+      members: [
+        filled("acc-1", "阿哲", "鑽石", 30, "captain"),
+        filled("acc-2", "小芸", "鑽石", 30),
+        filled("acc-3", "阿凱", "黃金", 10),
+      ],
+      avg_rank_score: 23.33,
+      rank_filled_count: 3,
+    })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("平均段位積分 23.33")).toBeInTheDocument()
+  })
+
+  it("開 S18：段位來自對照表；儲存後關閉、名單更新並 Toast「已儲存參賽資料」", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    signInAs()
+    mockReadTeam(PARTIAL)
+    const saved: TeamDetail = {
+      ...PARTIAL,
+      members: [
+        filled("acc-1", "阿哲", "鑽石", 30, "captain", "rank.png"),
+        ...PARTIAL.members.slice(1),
+      ],
+      avg_rank_score: 23.33,
+      rank_filled_count: 3,
+    }
+    const progress: number[] = []
+    const update = vi
+      .spyOn(RegistrationService, "updateMyPlayerProfile")
+      .mockImplementation(async (options) => {
+        options.onUploadProgress?.({
+          loaded: 1,
+          total: 2,
+          bytes: 1,
+          lengthComputable: true,
+        })
+        // 進度回報後，畫面上的百分比
+        await waitFor(() =>
+          expect(screen.getByText("上傳中 50%")).toBeInTheDocument(),
+        )
+        progress.push(50)
+        // mockImplementation 的型別涵蓋 throwOnError 為 false 的回傳，直接轉型
+        return { data: saved } as never
+      })
+    renderApp("/teams/team-1")
+
+    await user.click(
+      await screen.findByRole("button", { name: "填寫我的資料" }),
+    )
+    const dialog = await screen.findByTestId("player-profile-dialog")
+    await user.type(within(dialog).getByLabelText("遊戲 ID"), "阿哲#TW")
+    await user.click(within(dialog).getByRole("combobox", { name: "段位" }))
+    const options = await screen.findAllByRole("option")
+    expect(options.map((option) => option.textContent)).toEqual([
+      "鑽石",
+      "黃金",
+    ])
+    await user.click(screen.getByRole("option", { name: "鑽石" }))
+    const screenshot = new File(["png"], "rank.png", { type: "image/png" })
+    await user.upload(within(dialog).getByLabelText("段位截圖"), screenshot)
+    await user.click(within(dialog).getByRole("button", { name: "儲存資料" }))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("player-profile-dialog")).toBeNull(),
+    )
+    expect(progress).toEqual([50])
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: { team_id: "team-1" },
+        body: {
+          game_account_id: "阿哲#TW",
+          rank_tier: "鑽石",
+          rank_screenshot: screenshot,
+        },
+        onUploadProgress: expect.any(Function),
+      }),
+    )
+    expect(success).toHaveBeenCalledWith("已儲存參賽資料", expect.anything())
+    expect(within(rows()[0]).getByText("資料完成")).toBeInTheDocument()
+    expect(
+      screen.getByText("平均段位積分 23.33（3／4 人已填）"),
+    ).toBeInTheDocument()
+  })
+
+  it("已上傳截圖時重開 S18 只顯示檔名，不換圖也能儲存", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    const mine = filled("acc-1", "阿哲", "黃金", 10, "captain", "old.png")
+    mockReadTeam({ ...TEAM, members: [mine] })
+    const update = vi
+      .spyOn(RegistrationService, "updateMyPlayerProfile")
+      .mockResolvedValue({
+        data: { ...TEAM, members: [mine] },
+      } as UpdateProfileResult)
+    renderApp("/teams/team-1")
+
+    await user.click(
+      await screen.findByRole("button", { name: "填寫我的資料" }),
+    )
+    const dialog = await screen.findByTestId("player-profile-dialog")
+    expect(within(dialog).getByLabelText("遊戲 ID")).toHaveValue("阿哲#TW")
+    expect(within(dialog).getByTestId("screenshot-uploaded")).toHaveTextContent(
+      "old.png",
+    )
+    expect(within(dialog).queryByRole("img")).toBeNull()
+    await user.click(within(dialog).getByRole("button", { name: "儲存資料" }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0][0].body).toEqual({
+      game_account_id: "阿哲#TW",
+      rank_tier: "黃金",
+      rank_screenshot: undefined,
+    })
+    expect(update.mock.calls[0][0].onUploadProgress).toBeUndefined()
+  })
+
+  it("伺服器拒絕時 S18 保持開啟並顯示原因，並重新取得隊伍", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    const mine = filled("acc-1", "阿哲", "黃金", 10, "captain", "old.png")
+    const read = mockReadTeam({ ...TEAM, members: [mine] })
+    vi.spyOn(RegistrationService, "updateMyPlayerProfile").mockRejectedValue(
+      httpError(409, {
+        detail: {
+          code: "ROSTER_LOCKED",
+          message: "名單已鎖定，資料無法修改。",
+        },
+      }),
+    )
+    renderApp("/teams/team-1")
+
+    await user.click(
+      await screen.findByRole("button", { name: "填寫我的資料" }),
+    )
+    const dialog = await screen.findByTestId("player-profile-dialog")
+    await user.click(within(dialog).getByRole("button", { name: "儲存資料" }))
+
+    expect(
+      await within(dialog).findByText("名單已鎖定，資料無法修改。"),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId("player-profile-dialog")).toBeInTheDocument()
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+  })
+
+  it("不能編輯時（profile_editable 為 false）S18 唯讀，按鈕仍是「填寫我的資料」", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    mockReadTeam({
+      ...TEAM,
+      registration_status: "pending",
+      profile_editable: false,
+      members: [filled("acc-1", "阿哲", "黃金", 10, "captain", "old.png")],
+    })
+    renderApp("/teams/team-1")
+
+    await user.click(
+      await screen.findByRole("button", { name: "填寫我的資料" }),
+    )
+    const dialog = await screen.findByTestId("player-profile-dialog")
+    expect(within(dialog).getByLabelText("遊戲 ID")).toBeDisabled()
+    expect(
+      within(dialog).getByRole("combobox", { name: "段位" }),
+    ).toBeDisabled()
+    expect(
+      within(dialog).queryByRole("button", { name: "儲存資料" }),
+    ).toBeNull()
   })
 })
 
