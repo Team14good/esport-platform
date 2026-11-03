@@ -71,7 +71,7 @@ context:
 - `backend/app/modules/competition/repository.py` -- 新增「依 id 遞增鎖住整個對戰表的場次」「找一場申訴期滿的場次」
 - `backend/app/modules/tournaments/service.py` -- `lock_tournament`、`transition_tournament`、`get_tournament`
 - `backend/app/worker/jobs.py` -- `JOBS` 清單，新增自動確認工作（只新增一行與一個函式）；`open_registrations` 是「找候選 → 鎖 → 重新檢查」的寫法參考
-- `backend/app/alembic/versions/f7a3c9e1b5d2_story_4_1_bracket_and_match.py` -- 新遷移的 `down_revision`
+- `backend/app/alembic/versions/c5d2e8a4f913_story_3_1_team_and_registration.py` -- 新遷移的 `down_revision`（原本接 4.1 的 f7a3c9e1b5d2；3.1 先合進 main，2026-11-03 改接 3.1）
 - `backend/tests/competition/conftest.py`、`test_draw.py` -- 抽籤替身與建資料的方式
 - `backend/tests/worker/` -- worker 工作測試寫法
 - `_bmad-output/implementation-artifacts/contracts/competition.md` -- `confirm_match`、`advance`、`confirm_walkover` 的簽名；事件表
@@ -121,7 +121,7 @@ context:
 ### 已確認的決定（協調者 2026-10-31 回覆）
 
 - `confirm_match` 只接受 `live`、`appeal_window`、`appealed`；`scheduled`、`confirmed`、`voided` 在寫入前拋 409 `MATCH_INVALID_TRANSITION`，不改任何資料（照 I/O 矩陣）。轉換表保留 scheduled → confirmed，給輪空確認用：`confirm_walkover` 與 `advance` 內的 `ConfirmWalkover` 直接走內部的 `_confirm`，不經 `confirm_match`。5.2 判棄權是 scheduled → appeal_window，不經 `confirm_match`。
-- 賽事已取消時，其他模組直接呼叫 `confirm_match` 不擋，維持現狀（取消賽事不在期中範圍）；若觸發賽事結束，`transition_tournament` 會拋 409 `TOURNAMENT_INVALID_TRANSITION`。
+- 賽事已取消時，其他模組直接呼叫 `confirm_match` 不擋，維持現狀（取消賽事不在期中範圍）；若觸發賽事結束，`transition_tournament` 會拋 409 `TOURNAMENT_INVALID_TRANSITION`。（已被〈審查後修正〉第 3 點取代：`_finish` 只處理 `published`、`ongoing`，已取消的賽事直接略過、不拋 409。）
 
 ### 審查後修正（協調者 2026-10-31）
 
@@ -135,6 +135,8 @@ context:
 
 ### 驗證
 
+以下是第一次實作時（2026-10-31）的數字；之後的修正各自在〈審查後修正〉與〈A 審查後修正〉記錄重跑結果，以最後一次為準。
+
 - 全部測試（`bash scripts/test.sh`，掛載 worktree 的 app、tests、scripts）：899 passed（本分支 HEAD 基準 861，`--collect-only`；新增 38 個），後端整體行覆蓋率 97%；`tests/test_migrations.py` 通過。加上 `confirm_match` 來源狀態檢查後重跑 `tests/competition`、`tests/worker`：455 passed。
 - `bash scripts/lint.sh`（mypy、ty、ruff check、ruff format --check）：通過。
 - 分支覆蓋率（`coverage run --branch --source=app/modules/competition -m pytest tests/competition`）：competition 全體 99%，`service.py` 99%（加上 `confirm_match` 來源狀態檢查後 208 行、70 分支，只缺 `auto_confirm_expired` 迴圈的一條分支 588->568），`repository.py` 100%。
@@ -142,6 +144,12 @@ context:
   - (a) `advance` 不套用 `StartForfeitClock`：6 個失敗（3、8、13 隊整合測試、兩個湊齊測試、重複推進測試）。
   - (b1) repository 拿掉 `appeal_deadline <= now`：6 個失敗（4 個整合測試、期限未到、沒有期限）。
   - (b2) 鎖住後的重新檢查拿掉 `appeal_deadline > now`：一開始沒有測試失敗（repository 已過濾，重新檢查沒被測到）；補上「候選期限其實未到」的測試後 1 個失敗。
+
+### A 審查後修正（2026-11-03，PR #20）
+
+- `auto_confirm_expired` 逐一嘗試候選：每場的 `confirm_match` 包在 `session.begin_nested()` 裡，`progression` 因結果資料不自洽拋 `ValueError` 時退回 savepoint、`logger.exception` 記下場次 id、排除這場，再找下一場（`find_expired_appeal_id` 新增 `exclude_matches`）。推翻第 1 輪 triage #8：原本以為「那一輪停在它」，實際上 worker rollback 後下一輪又會選到同一場，所有賽事後面的場次都不會再確認。這些值由 5.2、5.3、5.4 更早寫入，在 `confirm_match` 加檢查擋不住。
+- 新增測試：期限最早的場次 `played` 但沒有勝隊，同一賽事與另一場賽事後面期滿的場次都照常確認，壞的那場不變並記錄日誌；`confirm_match`、`confirm_walkover` 在任何寫入之前先鎖賽事（記錄 `lock_tournament` 與 `set_match_status` 的呼叫順序；測試的 session 共用同一條連線，無法從另一個 session 用 `FOR UPDATE NOWAIT` 觀察列鎖）。
+- 突變確認：拿掉 `ValueError` 的處理，壞資料測試失敗；拿掉 `confirm_match`、`confirm_walkover` 開頭的 `lock_tournament`，兩個鎖測試都失敗。第一版鎖測試只檢查「有呼叫過」，`advance` 之後也會鎖賽事，突變時仍通過，改成檢查第一個動作才抓得到。
 
 ## Spec Change Log
 
@@ -166,3 +174,12 @@ context:
 | 13 | EC | 填位後沒檢查裁判衝突 | false | spec 的 Never 明列留給 4.4 | 駁回 |
 | 14 | BH | 賽事結束沒有事件 | low | spec 沒要求；`transition_tournament` 已寫操作紀錄 | 駁回 |
 | 15 | BH | 沒有非空名次的 HTTP 測試、遷移沒測、docstring 寫 5.6 | false | VG 確認 `test_confirm_advance.py` 有公開 `podium` JSON 測試；`test_migrations.py` 比對遷移；spec 標題就是 5.5、5.6 | 駁回 |
+
+第 2 輪（2026-11-03）：A 在 PR #20 的人工審查。
+
+| # | 來源 | 發現 | 判定 | 證據 | 處置 |
+|---|------|------|------|------|------|
+| 1 | A | 結果資料不自洽的場次會讓所有賽事的自動確認永遠停住（推翻第 1 輪 #8） | high | worker rollback 後下一輪又選到期限最早的同一場 | patch：savepoint＋排除＋記錄日誌，見〈A 審查後修正〉 |
+| 2 | A | `confirm_match`、`confirm_walkover` 開頭的 `lock_tournament` 沒有測試守住 | low | 測試的 `_confirm` 自己先鎖了賽事 | patch：記錄呼叫順序的測試 |
+| 3 | A | spec 的 Code Map 遷移、〈已確認的決定〉第 2 點、驗證數字與實際不符 | low | 3.1 先合併改了 `down_revision`；`_finish` 已改為略過 | patch：更新 spec |
+| 4 | A | `deferred-work.md` 新增項目後少一個空行 | low | 格式 | patch |
