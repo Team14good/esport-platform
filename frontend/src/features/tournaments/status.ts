@@ -1,4 +1,5 @@
 import type { PublicTournament, TournamentStatus } from "@/client"
+import type { StatusTone } from "@/components/common/StatusBadge"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 
 // 賽事狀態的中文名稱（contracts/tournaments.md〈三〉）。
@@ -63,4 +64,18 @@ export function formatInterval(minutes: number): string {
 /** 「報名期間」：開始 ～ 截止（Asia/Taipei）。 */
 export function formatRegistrationPeriod(tournament: PublicTournament): string {
   return `${formatMatchDateTime(tournament.registration_start)} ～ ${formatMatchDateTime(tournament.registration_end)}`
+}
+
+/** 賽事狀態徽章的色調（DESIGN.md〈Status badge〉）；進行中加脈動圓點。 */
+export const TOURNAMENT_STATUS_BADGE: Record<
+  TournamentStatus,
+  { tone: StatusTone; pulse?: boolean }
+> = {
+  upcoming: { tone: "muted" },
+  open: { tone: "live" },
+  closed: { tone: "muted" },
+  published: { tone: "brand" },
+  ongoing: { tone: "live", pulse: true },
+  finished: { tone: "muted" },
+  cancelled: { tone: "destructive" },
 }
