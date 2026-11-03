@@ -71,7 +71,7 @@ context:
 - `backend/app/modules/competition/repository.py` -- 新增「依 id 遞增鎖住整個對戰表的場次」「找一場申訴期滿的場次」
 - `backend/app/modules/tournaments/service.py` -- `lock_tournament`、`transition_tournament`、`get_tournament`
 - `backend/app/worker/jobs.py` -- `JOBS` 清單，新增自動確認工作（只新增一行與一個函式）；`open_registrations` 是「找候選 → 鎖 → 重新檢查」的寫法參考
-- `backend/app/alembic/versions/c5d2e8a4f913_story_3_1_team_and_registration.py` -- 新遷移的 `down_revision`（原本接 4.1 的 f7a3c9e1b5d2；3.1 先合進 main，2026-11-03 改接 3.1）
+- `backend/app/alembic/versions/a3f6b9d2c8e1_story_3_2_player_profile.py`（3.2）-- 新遷移的 `down_revision`（原接 4.1 的 f7a3c9e1b5d2；3.1、3.2 先後合進 main，2026-11-03 改接 3.2 的 a3f6b9d2c8e1）
 - `backend/tests/competition/conftest.py`、`test_draw.py` -- 抽籤替身與建資料的方式
 - `backend/tests/worker/` -- worker 工作測試寫法
 - `_bmad-output/implementation-artifacts/contracts/competition.md` -- `confirm_match`、`advance`、`confirm_walkover` 的簽名；事件表
