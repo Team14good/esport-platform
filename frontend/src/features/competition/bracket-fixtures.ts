@@ -1,15 +1,15 @@
-// 對戰樹的假資料產生器，給單元測試與 /dev/bracket 預覽頁共用；第二階段接上真資料後只留給測試。
+// 對戰樹的假資料產生器，給單元測試、match-source（DEV）與 /dev/match 共用。
 // 結構照 D 的 backend/app/modules/competition/bracket.py（origin/story/4-1）：P＝不小於隊數的最小 2 的次方，
 // 輪空位置以位元反轉平均分散，第一輪輪空的位置留空號，只編實際存在的場次，正取 4 隊以上才有季軍賽。
 
 import type {
-  BracketSide,
   MatchOutcome,
   MatchStatus,
   PublicBracket,
   PublicMatch,
   PublicTeamRef,
-} from "./bracket-types"
+} from "@/client"
+import type { BracketSide } from "./match-status"
 
 export type BracketScenario =
   /** 剛抽籤：全部待開打 */
