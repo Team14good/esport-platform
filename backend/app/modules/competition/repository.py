@@ -193,8 +193,10 @@ def list_check_ins(session: Session, match_id: uuid.UUID) -> list[CheckIn]:
     return list(session.exec(statement))
 
 
-def find_forfeit_due(session: Session, now: datetime) -> list[uuid.UUID]:
-    """待開打、`forfeit_deadline <= now`、且不是兩隊都已報到的場次 id，依期限排序。"""
+def find_forfeit_due(
+    session: Session, now: datetime
+) -> list[tuple[uuid.UUID, uuid.UUID]]:
+    """待開打、`forfeit_deadline <= now`、且不是兩隊都已報到的（場次 id, 賽事 id），依期限排序。"""
     checked_in = (
         select(func.count())
         .select_from(CheckIn)
@@ -202,7 +204,7 @@ def find_forfeit_due(session: Session, now: datetime) -> list[uuid.UUID]:
         .scalar_subquery()
     )
     statement = (
-        select(Match.id)
+        select(Match.id, Match.tournament_id)
         .where(
             Match.status == MatchStatus.SCHEDULED,
             col(Match.forfeit_deadline) <= now,
@@ -210,7 +212,9 @@ def find_forfeit_due(session: Session, now: datetime) -> list[uuid.UUID]:
         )
         .order_by(col(Match.forfeit_deadline), col(Match.id))
     )
-    return list(session.exec(statement))
+    return [
+        (match_id, tournament_id) for match_id, tournament_id in session.exec(statement)
+    ]
 
 
 def find_unstarted_bracket_id(
