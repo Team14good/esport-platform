@@ -320,3 +320,15 @@
 - 問題與修正：第 1 輪 AI 審查時把這個問題判成「那一輪停在它、駁回」，低估了 worker rollback 後下一輪會重選同一場，是 A 的人工審查抓到的。A 建議用第二個 session 的 `FOR UPDATE NOWAIT` 驗證鎖，但測試的所有 session 共用同一條連線與外層交易，另一條連線看不到未 commit 的資料，AI 改成記錄呼叫順序。第一版鎖測試只檢查「有呼叫過 `lock_tournament`」，突變時仍然通過，因為後面的 `advance` 也會鎖；改成斷言第一個動作就是鎖賽事後才抓到
 - 成熟度：L3（人審查找出問題，AI 修正並驗證）
 - 證據：#20 的審查與 CI 紀錄
+
+### 2026-11-03｜除錯｜#33 合併後 D 的 7 支 PR 前端建置失敗
+
+- Story／範圍：D 的 #20～#27、#34 與 main（含 A 的 #33）同步後的前端建置
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 CI 失敗 log，找出唯一的型別錯誤，在本機前端容器跑 `typecheck` 與 `tsconfig.build.json` 確認修好，並檢查 3 支分支上沒有其他直接建立 `PublicBracket` 的地方
+- AI 產出：`bracket-fixtures.ts` 補 `podium: null`，傳到 7 支分支
+- 人做了什麼：無（使用者要求確認狀況時發現）
+- 驗證：本機 typecheck 只剩映像過舊造成的「找不到 `@radix-ui/react-alert-dialog`」（套件已在 package.json，CI 會重建映像），`podium` 錯誤消失；以 CI 為最終依據
+- 問題與修正：這正是 AI 審 #33 時說「合併後不會編譯失敗」的那種衝突。D 的 5.5 在 `PublicBracket` 加了必填的 `podium`，#33 讓假資料改用 client 型別，缺了這個欄位。當時 AI 用 Python 正則比對 main 與 D 鏈尾的型別定義，兩邊都沒比對到（回傳 None），`None == None` 被印成「same」，於是在 #33 的審查與 AI 紀錄裡寫了錯誤的結論。教訓：比對腳本找不到目標時要報錯，不能預設成相同；之後改用實際建置驗證整合，而不是比對文字
+- 成熟度：L2（AI 除錯修正；先前的錯誤判斷由 CI 抓到）
+- 證據：#20～#27、#34 的 CI 紀錄
