@@ -149,6 +149,24 @@ export type AdminOrganizerApplication = {
 export type ApplicationStatus = "pending" | "approved" | "rejected"
 
 /**
+ * Body_registration-update_my_player_profile
+ */
+export type Body_registration_update_my_player_profile = {
+  /**
+   * Game Account Id
+   */
+  game_account_id?: string
+  /**
+   * Rank Tier
+   */
+  rank_tier?: string
+  /**
+   * Rank Screenshot
+   */
+  rank_screenshot?: Blob | File | null
+}
+
+/**
  * BracketRead
  */
 export type BracketRead = {
@@ -1281,6 +1299,22 @@ export type TeamDetail = {
    */
   invite_status: "active" | "full"
   my_role: MemberRole
+  /**
+   * Rank Tiers
+   */
+  rank_tiers: Array<RankTierRead>
+  /**
+   * Avg Rank Score
+   */
+  avg_rank_score: number | null
+  /**
+   * Rank Filled Count
+   */
+  rank_filled_count: number
+  /**
+   * Profile Editable
+   */
+  profile_editable: boolean
 }
 
 /**
@@ -1340,6 +1374,30 @@ export type TeamMemberRead = {
    * Joined At
    */
   joined_at: string
+  /**
+   * Game Account Id
+   */
+  game_account_id: string | null
+  /**
+   * Rank Tier
+   */
+  rank_tier: string | null
+  /**
+   * Rank Score
+   */
+  rank_score: number | null
+  /**
+   * Has Rank Screenshot
+   */
+  has_rank_screenshot: boolean
+  /**
+   * Rank Screenshot Name
+   */
+  rank_screenshot_name: string | null
+  /**
+   * Missing Fields
+   */
+  missing_fields: Array<"game_account_id" | "rank_tier" | "rank_screenshot">
 }
 
 /**
@@ -2432,6 +2490,38 @@ export type registrationJoinTeamResponses = {
 
 export type registrationJoinTeamResponse =
   registrationJoinTeamResponses[keyof registrationJoinTeamResponses]
+
+export type registrationUpdateMyPlayerProfileData = {
+  body?: Body_registration_update_my_player_profile
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/members/me/profile"
+}
+
+export type registrationUpdateMyPlayerProfileErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationUpdateMyPlayerProfileError =
+  registrationUpdateMyPlayerProfileErrors[keyof registrationUpdateMyPlayerProfileErrors]
+
+export type registrationUpdateMyPlayerProfileResponses = {
+  /**
+   * Successful Response
+   */
+  200: TeamDetail
+}
+
+export type registrationUpdateMyPlayerProfileResponse =
+  registrationUpdateMyPlayerProfileResponses[keyof registrationUpdateMyPlayerProfileResponses]
 
 export type registrationListMyTeamsData = {
   body?: never
