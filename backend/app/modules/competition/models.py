@@ -203,6 +203,20 @@ class MatchRescheduled(Event):
     scheduled_at: datetime
 
 
+class RefereeAssigned(Event):
+    """主辦方指派或改派了場次的裁判（4.4）；`referee_account_id` 為新裁判。"""
+
+    match_id: uuid.UUID
+    referee_account_id: uuid.UUID
+
+
+class RefereeUnassigned(Event):
+    """場次的裁判被收回、改派，或晉級後成為參賽隊員而自動收回（4.4、5.5）。"""
+
+    match_id: uuid.UUID
+    referee_account_id: uuid.UUID
+
+
 # ---------------------------------------------------------------- API schema
 
 
@@ -480,6 +494,19 @@ class ManagedMatch(BaseModel):
     source_b: str | None
     scheduled_at: datetime
     status: MatchStatus
-    # 指派的裁判帳號 id（4.4 前為 None）
+    # 指派的裁判帳號 id，未指派為 None
     referee_account_id: uuid.UUID | None
     reschedule: RescheduleInfo
+    # 4.4：可指派的裁判（依賽事裁判的接受順序，排除已確定兩隊的隊員）
+    assignable_referee_ids: list[uuid.UUID]
+    # 4.4：這場現在能不能指派或收回裁判
+    can_assign_referee: bool
+
+
+# ---------------------------------------------------------------- 指派裁判（4.4）
+
+
+class RefereeAssignIn(BaseModel):
+    """指派裁判的請求。"""
+
+    account_id: uuid.UUID

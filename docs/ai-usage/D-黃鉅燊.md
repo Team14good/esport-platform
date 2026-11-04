@@ -518,3 +518,27 @@
 - 驗證：單場 API 測試涵蓋 6 種狀態的開始時間；前端 biome 通過、相關 110 個單元測試通過；其餘以 CI 為準
 - 成熟度：L2（AI 實作與驗證）
 - 證據：本 PR 的 CI 紀錄
+
+### 2026-11-04｜審查／合併｜第二輪代審：解 #35 衝突與遷移鏈、審 #44 架構測試與 #45
+
+- Story／範圍：A 的 #41、#44，B 的 #45，C 的 #28、#35；D 的 #43
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：#40 合併後 #35 與 main 衝突（`authz.py`、`identity/service.py` 兩邊各加一個函式），遷移也與 #40 接在同一個 head。AI 兩邊都保留，把 3.3 遷移的 `down_revision` 改接 2.7，本機跑完整後端測試後推上並留言給 C。審 A 的 #44（AST 架構測試）時，AI 另外寫了幾種繞法實測，找到兩個 AI 繞得過的洞：新開的模組資料夾整個被當成進入點略過、相對 import 不檢查，附改法寫在審查。#45 逐點對照 #42 程式與 sprint-status 才核准
+- AI 產出：#35、#28 的衝突解法與同步、3 份審查（#44、#45 核准；#44 附兩個洞與改法）、6 支 PR 依序合併（每合一支就把 main 合進其餘 PR 再等 CI）
+- 人做了什麼：使用者授權「這邊你都處理好就行」；A 說明 #44 的用途是 AI 寫完後的第二道檢查
+- 驗證：#35 合併前本機後端 1747 passed、`alembic heads` 只有一個；#44 在 Docker 跑 53 passed，繞法用探測腳本實際執行確認；最後 main（a469f95）CI 綠
+- 問題與修正：第一次在 worktree 跑 compose 失敗（worktree 沒有 `.env`），改在主 repo 執行並掛載 worktree
+- 成熟度：L2（AI 審查與整合，人決定授權範圍）
+- 證據：#28、#35、#41、#43、#44、#45 的審查、留言與合併紀錄
+
+### 2026-11-04｜實作／測試｜Story 4.4 指派裁判到場次（後端）
+
+- Story／範圍：4.4（D），含 5.5 留下的晉級後裁判衝突
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；實作與三個審查員（Blind Hunter、Edge Case Hunter、Verification Gap）都是子代理
+- 怎麼用：AI 先對照 Line 討論與 spec-2-7 的 Decisions，確認「主辦方不能兼任裁判、沒有裁判時主辦方代登」已有定案；再查 epics、架構與 contracts（事件 `RefereeAssigned`／`RefereeUnassigned` 早已定義），寫 spec，範圍由使用者選「只做後端」
+- AI 產出：`spec-4-4-assign-referee-backend.md`；`PUT`／`DELETE .../matches/{match_id}/referee`、S30 列表的 `assignable_referee_ids`／`can_assign_referee`、`advance` 填位後自動收回；`test_assign_referee.py` 30 個測試；contracts、deferred-work、sprint-status（順便修正 4.1、4.3、5.1、5.3、5.4 過時的「待合併」註記）；重新產生 client
+- 人做了什麼：使用者決定範圍（只做後端）、確認照 2.7 文件（選手自行登錄比分期中不做）
+- 驗證：後端全套 1867 passed、覆蓋率 97%、lint 通過；前端 biome 通過
+- 問題與修正：審查共 17 項，修 9 項、駁回 8 項（理由記在 spec 的 Review Triage Log）。實際修正的錯誤：賽事進行中能指派沒有測試、真正的 `registration_port.is_member` 轉接沒被測到、已取消場次的錯誤訊息寫成「已送出結果」；實作子代理的列表測試把同時接受邀請的兩位裁判順序寫死，跑一次就失敗，改比對集合。AI 自己更新 sprint-status 時把 `last_updated` 寫成另一種日期格式，又因 Git Bash 不認 `Asia/Taipei` 而寫成 UTC 時間，對照原值後改正
+- 成熟度：L3（AI 實作、審查與修正，人決定範圍）
+- 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
