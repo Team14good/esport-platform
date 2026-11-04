@@ -291,6 +291,17 @@ describe("Check-in panel", () => {
     expect(button).toHaveAccessibleDescription("目前無法報到，請重新整理頁面")
   })
 
+  it.each(["not_checkable", "not_captain"] as const)(
+    "後端的 %s 原因：按鈕停用，沿用預設說明",
+    (reason) => {
+      renderPanel({ ownSide: "a", reason })
+
+      const button = screen.getByRole("button", { name: "報到" })
+      expect(button).toBeDisabled()
+      expect(button).toHaveAccessibleDescription("目前無法報到，請重新整理頁面")
+    },
+  )
+
   it("離開待開打：只留兩隊報到時間，沒有按鈕、說明與倒數", () => {
     renderPanel({
       teams: {

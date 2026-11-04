@@ -37,6 +37,11 @@ def open_registrations(session: Session) -> bool:
     return tournaments_service.open_due_registration(session)
 
 
+def start_due_tournaments(session: Session) -> bool:
+    """把一場報到開放已到的「賽程已公布」賽事轉為進行中（操作者為系統）。"""
+    return competition_service.start_due_tournament(session)
+
+
 def confirm_expired_appeals(session: Session) -> bool:
     """確認一場申訴期滿的場次並推進晉級（操作者為系統）。"""
     return competition_service.auto_confirm_expired(session)
@@ -44,6 +49,7 @@ def confirm_expired_appeals(session: Session) -> bool:
 
 JOBS: list[Job] = [
     open_registrations,
+    start_due_tournaments,
     confirm_expired_appeals,
     dispatch_outbox,
     make_send_email_job(SmtpEmailSender()),

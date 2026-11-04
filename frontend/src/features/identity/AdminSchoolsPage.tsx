@@ -198,7 +198,13 @@ export function AdminSchoolsPage() {
       key: "actions",
       header: "操作",
       cell: (row) => (
-        <Button variant="outline" size="sm" onClick={() => setRenaming(row)}>
+        // 每一列的無障礙名稱帶上學校名稱，讀螢幕軟體才分得出是哪一筆
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={`修正「${row.name}」的名稱`}
+          onClick={() => setRenaming(row)}
+        >
           修正名稱
         </Button>
       ),
