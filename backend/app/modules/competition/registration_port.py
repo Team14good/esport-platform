@@ -19,25 +19,25 @@ from app.modules.registration import service as registration_service
 
 
 class RegistrationUnavailableError(BusinessError):
-    """registration 尚未提供抽籤用的函式。
+    """registration 尚未提供 competition 需要的函式（抽籤、報到）。
 
     `BusinessError` 只接受 4xx，但這是「依賴的功能還沒上線」而非使用者違反規則，
     spec 規定回 503，所以建立後才把狀態碼改成 503（全域 handler 直接使用它）。
     """
 
-    def __init__(self) -> None:
+    def __init__(self, action: str = "抽籤") -> None:
         super().__init__(
             "REGISTRATION_UNAVAILABLE",
-            "報名功能尚未提供抽籤所需的資料，暫時無法抽籤。",
+            f"報名功能尚未提供{action}所需的資料，暫時無法{action}。",
             status_code=409,
         )
         self.status_code = 503
 
 
-def _lookup(name: str) -> Callable[..., Any]:
+def _lookup(name: str, *, action: str = "抽籤") -> Callable[..., Any]:
     func = getattr(registration_service, name, None)
     if not callable(func):
-        raise RegistrationUnavailableError()
+        raise RegistrationUnavailableError(action)
     return cast(Callable[..., Any], func)
 
 
@@ -82,4 +82,5 @@ def get_team_names(
 
 def is_captain(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) -> bool:
     """帳號是不是該隊的隊長（報到用）；registration 尚未提供時拋 503。"""
-    return bool(_lookup("is_captain")(session, team_id=team_id, account_id=account_id))
+    lookup = _lookup("is_captain", action="報到")
+    return bool(lookup(session, team_id=team_id, account_id=account_id))
