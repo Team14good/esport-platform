@@ -137,6 +137,13 @@ def set_scheduled_at(
     session.flush()
 
 
+def touch_match(session: Session, match: Match, at: datetime) -> None:
+    """只更新 `updated_at`（場次本身沒變、但公開資料有變，例如報到）。"""
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
 def set_referee(
     session: Session, match: Match, referee_account_id: uuid.UUID | None, at: datetime
 ) -> None:

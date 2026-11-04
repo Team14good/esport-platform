@@ -383,6 +383,8 @@ class PublicMatchDetail(PublicMatch):
     # 兩隊的報到時間（公開）；未報到或該方未確定為 None
     check_in_a_at: datetime | None = None
     check_in_b_at: datetime | None = None
+    # 報到截止（= 棄權期限）；只在待開打且兩隊都確定時有值，給 S4 報到倒數
+    forfeit_deadline: datetime | None = None
 
 
 # ---------------------------------------------------------------- 比分登錄（5.3、5.4）
