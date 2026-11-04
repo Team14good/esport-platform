@@ -121,6 +121,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-public-match-api.md`
   summary: （低）賽事取消後，停在申訴期或申訴中的場次，公開單場 API 仍會回傳 `appeal_deadline`，但 worker 已不再自動確認（未驗證，若為真屬 low）。
   evidence: 2026-10-31 公開單場 API 審查（Edge Case Hunter、Blind Hunter）。期中不能取消賽事（2.6 擱置），已結束的賽事也不會有停在申訴期的場次，所以目前不會發生。2.6 實作取消時，要決定公開頁對這類場次顯示什麼，並在 `get_public_match` 加上賽事狀態判斷。
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-panel.md`
+  summary: （中）前端單元測試在容器冷啟動時不穩定：`login`、`signup`、`account`、`auth`、`forgot-password` 等走路由的舊測試，在 frontend 容器裡第一次執行會有 4～32 個因等不到元素（預設 1 秒）失敗，同一個容器第二次執行全部通過。CI 若遇到機器忙碌也可能偶發失敗。
+  evidence: 2026-10-29 在沒有任何前端改動的分支（story/5-5）上重現：第一次 14 failed／162，第二次 162 passed；與本 Story 的新測試無關。可能的修法：路由測試的 `findBy*` 加長 timeout，或在 `vitest.config.ts` 設 `testTimeout`／預先載入路由，修好後以冷啟動連跑多次確認。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （中）6.2「重新比賽」把場次從申訴中轉回待開打時，舊的報到紀錄還在，會讓重賽回 `ALREADY_CHECKED_IN`，且兩隊都有紀錄時 `list_forfeit_due` 永遠不會選到它（未驗證，若為真屬 medium）。
+  evidence: 2026-11-01 5.1 第二階段審查（Edge Case Hunter）。FR-31 規定重新比賽要清除報到紀錄、依新時間重新起算棄權期限。6.2 實作時需要 competition 提供清除報到紀錄的公開函式（由 D 新增），並在轉回待開打後呼叫 `start_forfeit_clock`。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （低）報到只鎖場次、讀賽事狀態不加鎖；2.6 做取消賽事時，取消與報到同時發生可能寫入一筆已取消賽事的報到紀錄。
+  evidence: 2026-11-01 5.1 第二階段審查（Blind Hunter、Edge Case Hunter）。期中不能取消賽事（2.6 擱置），所以目前不會發生。2.6 實作時改成先 `lock_tournament` 再 `lock_match`（AD-6 順序），或由取消流程鎖住所有場次。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
+  evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-schedule-rules.md`
   summary: 4.3 第二階段的改時間 service 呼叫 `reschedule_window`／`check_reschedule` 時，準決賽的 `next_match_at` 要傳決賽與季軍賽中較早的那一場。
   evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
