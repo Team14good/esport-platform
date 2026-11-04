@@ -24,7 +24,7 @@ import logging
 from sqlmodel import Session
 
 from app.core.config import settings
-from app.demo_data import accounts
+from app.demo_data import accounts, competition
 from app.demo_data.context import DemoContext, Step
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 # 依呼叫方向的反序執行：identity → tournaments → registration → competition
 STEPS: list[Step] = [
     accounts.seed,
+    competition.seed,
 ]
 
 

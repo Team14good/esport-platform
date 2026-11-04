@@ -207,7 +207,7 @@ def draw(
     """抽籤：產生對戰表與全部場次、排定時間、設定棄權期限，賽事轉為已公布。
 
     全部在呼叫端的同一個交易裡完成；任何一步拋錯時呼叫端不 commit，
-    什麼都不會寫入。`rng` 只供測試注入，正式環境用 `secrets.SystemRandom()`。
+    什麼都不會寫入。`rng` 只供測試與示範資料注入，正式環境用 `secrets.SystemRandom()`。
     """
     tournament = tournaments_service.lock_tournament(
         session, tournament_id=tournament_id
@@ -238,6 +238,11 @@ def draw(
         raise BusinessError(
             "NOT_ENOUGH_TEAMS", "正取不足 2 隊，無法抽籤", status_code=409
         )
+
+    # 洗牌前先依隊名（相同再比 id）排序：結果只取決於亂數，不受 registration
+    # 回傳順序影響，示範資料用固定種子時每次都得到同一張對戰表
+    names = registration_port.get_team_names(session, team_ids=team_ids)
+    team_ids = sorted(team_ids, key=lambda team: (names.get(team, ""), str(team)))
 
     plan = bracket_rules.plan(len(team_ids))
     assigned = bracket_rules.assign(
