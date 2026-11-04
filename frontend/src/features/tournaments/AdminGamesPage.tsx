@@ -63,7 +63,12 @@ const COLUMNS: DataTableColumn<GameRead>[] = [
     header: "操作",
     cell: (row) => (
       <Button asChild variant="outline" size="sm">
-        <Link to="/admin/games/$gameId" params={{ gameId: row.id }}>
+        {/* 每一列的無障礙名稱帶上遊戲名稱，讀螢幕軟體才分得出是哪一筆 */}
+        <Link
+          to="/admin/games/$gameId"
+          params={{ gameId: row.id }}
+          aria-label={`編輯「${row.name}」`}
+        >
           編輯
         </Link>
       </Button>
