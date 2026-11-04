@@ -134,10 +134,6 @@
   summary: epic-3-context 要求 `AllocationPolicy` 分支覆蓋率 ≥ 90%，但 `scripts/test.sh` 沒有 `--branch`，只靠 spec 的手動指令檢查。
   evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Verification Gap）。目前實測 100%；之後修改 `allocation.py` 時若漏測分支，一般測試仍會通過。要自動檢查時，在 CI 加一步對 `app/modules/registration/allocation.py` 以 `--branch` 量測並設 `--fail-under=90`（low）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
-  summary: 4.4 指派裁判後，S4 的記分者判斷要接上：`ScoreEntryState.is_scorer` 已依 `Match.referee_account_id`（有指派時只有該裁判、未指派時為主辦方）判斷，但目前沒有任何流程會寫入 `referee_account_id`。
-  evidence: 2026-11-01 5.3 第二階段。兩條路都已有測試（直接寫入 `referee_account_id` 模擬指派）。4.4 實作指派、改派、5.5 填位後取消指派時，確認 S4 面板隨之顯示或隱藏，並補一條經指派 API 的端對端測試。
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: S4 接上 `ScoreEntryPanel`（A 的工作）：用重新產生的 client 呼叫 `GET .../score-entry`、`PUT`／`DELETE .../games/{game_no}`、`POST .../submit`，把錯誤碼轉回面板吃的小寫原因代碼。
   evidence: 2026-11-01 5.3 第二階段只做後端與重新產生 client。對照：`SCORE_TIE`→`tie`、`SCORE_INVALID`→`invalid_score`、`SERIES_DECIDED`→`series_decided`、`REDUNDANT_GAMES`→`redundant_games`、`INVALID_GAME_NO`→`invalid_game_no`、`NOT_LAST_GAME`→`not_last_game`、`SERIES_NOT_DECIDED`→`not_decided`；`ScoreEntryState.reason` 非 null 時面板停用（`check_in_incomplete` 對應「等待雙方報到」），`submitted_by_name`、`submitted_at` 給已送出的唯讀列。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
@@ -234,3 +230,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
   summary: 示範資料的 tournaments 步驟已建立「FLOW 校園盃 特戰英豪」並寫入 `context.tournament_to_draw`（開放報名、開賽在啟動後 7 天），competition 步驟會嘗試抽籤；但目前沒有 registration 步驟建立 32 隊正取，registration 也還沒提供抽籤用的 `finalize_for_draw`、`list_accepted_teams` 等函式，實際啟動會記錄 `REGISTRATION_UNAVAILABLE` 並略過抽籤。
   evidence: 2026-11-04 Story 7.1 tournaments 步驟（B）完成後，以 compose 實際啟動確認的 log。剩下的是 C 的 registration 步驟（32 隊正取，放在 `STEPS` 的 tournaments 之後、competition 之前）與 contracts/competition.md〈二〉的四個函式；賽事維持 `open`，所以 `draw` 會先呼叫 `finalize_for_draw`（spec-7-1-tournaments-demo-step.md Decisions）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
+  summary: S30 指派裁判選單還沒做（與改時間 Dialog 同一頁）：列表每列已有 `assignable_referee_ids`、`can_assign_referee`，選單只列這些裁判，顯示名稱取自 `GET /api/v1/organizer/tournaments/{tournament_id}/referees` 並以 `account_id` 對應，目前裁判以 `GET /tournaments/{id}/manage/matches` 的 `referee_account_id` 顯示目前裁判；`PUT`／`DELETE .../matches/{match_id}/referee` 的 409（`NOT_TOURNAMENT_REFEREE`、`REFEREE_IS_TEAM_MEMBER`、`MATCH_REFEREE_LOCKED`、`TOURNAMENT_NOT_ASSIGNABLE`）都要重抓列表；`PUT`／`DELETE` 回傳的是 `MatchRead`，成功後也要重抓列表。
+  evidence: 2026-11-04 使用者決定 4.4 先做後端（A），S30 頁面另開 PR。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
+  summary: S13「我執法的場次」還沒做：裁判需要列出自己被指派的場次，目前沒有查詢 API。
+  evidence: 2026-11-04 使用者決定之後再做；需要新增依 `referee_account_id` 查場次的 competition 函式與 API。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
+  summary: S4 要隨 `is_scorer` 顯示或隱藏比分登錄面板：指派、改派、收回後（含晉級衝突自動收回），`ScoreEntryState.is_scorer` 會改變，S4 需重抓 `GET .../score-entry`（A 的 S4 工作）。
+  evidence: 2026-11-04 承接已刪除的 5.3 項目；後端端對端測試已在 `test_assign_referee.py`（指派／收回後 `is_scorer` 切換、晉級衝突收回），前端尚未接上。

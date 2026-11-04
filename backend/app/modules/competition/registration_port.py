@@ -84,3 +84,9 @@ def is_captain(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) -
     """帳號是不是該隊的隊長（報到用）；registration 尚未提供時拋 503。"""
     lookup = _lookup("is_captain", action="報到")
     return bool(lookup(session, team_id=team_id, account_id=account_id))
+
+
+def is_member(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) -> bool:
+    """帳號是不是該隊的隊員（指派裁判用）；registration 尚未提供時拋 503。"""
+    lookup = _lookup("is_member", action="指派裁判")
+    return bool(lookup(session, team_id=team_id, account_id=account_id))

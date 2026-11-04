@@ -426,6 +426,14 @@ export type ManagedMatch = {
    */
   referee_account_id: string | null
   reschedule: RescheduleInfo
+  /**
+   * Assignable Referee Ids
+   */
+  assignable_referee_ids: Array<string>
+  /**
+   * Can Assign Referee
+   */
+  can_assign_referee: boolean
 }
 
 /**
@@ -1085,6 +1093,18 @@ export type RankTierRead = {
    * Score
    */
   score: number
+}
+
+/**
+ * RefereeAssignIn
+ *
+ * 指派裁判的請求。
+ */
+export type RefereeAssignIn = {
+  /**
+   * Account Id
+   */
+  account_id: string
 }
 
 /**
@@ -3240,3 +3260,75 @@ export type competitionRescheduleMatchResponses = {
 
 export type competitionRescheduleMatchResponse =
   competitionRescheduleMatchResponses[keyof competitionRescheduleMatchResponses]
+
+export type competitionUnassignRefereeData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/referee"
+}
+
+export type competitionUnassignRefereeErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionUnassignRefereeError =
+  competitionUnassignRefereeErrors[keyof competitionUnassignRefereeErrors]
+
+export type competitionUnassignRefereeResponses = {
+  /**
+   * Successful Response
+   */
+  200: MatchRead
+}
+
+export type competitionUnassignRefereeResponse =
+  competitionUnassignRefereeResponses[keyof competitionUnassignRefereeResponses]
+
+export type competitionAssignRefereeData = {
+  body: RefereeAssignIn
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/referee"
+}
+
+export type competitionAssignRefereeErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionAssignRefereeError =
+  competitionAssignRefereeErrors[keyof competitionAssignRefereeErrors]
+
+export type competitionAssignRefereeResponses = {
+  /**
+   * Successful Response
+   */
+  200: MatchRead
+}
+
+export type competitionAssignRefereeResponse =
+  competitionAssignRefereeResponses[keyof competitionAssignRefereeResponses]
