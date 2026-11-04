@@ -3,6 +3,7 @@
 import uuid
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel
 from sqlalchemy import DateTime, Index, String, UniqueConstraint
@@ -10,6 +11,7 @@ from sqlmodel import Field, SQLModel
 
 from app.core import clock
 from app.core.events import Event
+from app.modules.tournaments.models import ScoreType
 
 
 class MatchStatus(StrEnum):
@@ -213,4 +215,39 @@ class PublicBracket(BaseModel):
     matches: list[PublicMatch]
     # 賽事結束後才有；未結束為 None
     podium: PublicPodium | None
+    updated_at: datetime
+
+
+class PublicGame(BaseModel):
+    """已登錄的一局（公開）；段位截圖不出現在公開 API（AD-19）。"""
+
+    # 1 起算
+    game_no: int
+    winner_side: Literal["a", "b"]
+    # rounds 型態的回合數；win_loss 型態為 None
+    score_a: int | None
+    score_b: int | None
+
+
+class PublicTournamentRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class PublicMatchDetail(PublicMatch):
+    """公開單場（5.8 S4 場次頁）：`PublicMatch` 加上賽事、輪次與同輪場次。"""
+
+    tournament: PublicTournamentRef
+    game_name: str
+    # 本輪 BO
+    best_of: int
+    score_type: ScoreType
+    round_name: str
+    # 逐局資料表（5.3 第二階段）建立前一律為空
+    games: list[PublicGame]
+    # 同一輪的其他場次（不含自己），依 slot_no、季軍賽在最後
+    same_round: list[PublicMatch]
+    # 只在申訴期、申訴中有值，其他狀態為 None
+    appeal_deadline: datetime | None
+    # 這場與同輪其他場次 updated_at 的最大值
     updated_at: datetime

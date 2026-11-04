@@ -14,6 +14,9 @@ import type {
   competitionReadPublicBracketData,
   competitionReadPublicBracketErrors,
   competitionReadPublicBracketResponses,
+  competitionReadPublicMatchData,
+  competitionReadPublicMatchErrors,
+  competitionReadPublicMatchResponses,
   identityApproveOrganizerApplicationData,
   identityApproveOrganizerApplicationErrors,
   identityApproveOrganizerApplicationResponses,
@@ -1058,6 +1061,25 @@ export class CompetitionService {
     >({
       responseType: "json",
       url: "/api/v1/tournaments/{tournament_id}/bracket",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Public Match
+   *
+   * 公開單場（不需登入）；賽事或場次不存在、未抽籤、場次不屬於該賽事都回 404 `MATCH_NOT_FOUND`。
+   */
+  public static readPublicMatch<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadPublicMatchData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadPublicMatchResponses,
+      competitionReadPublicMatchErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}",
       ...options,
     })
   }

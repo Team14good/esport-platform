@@ -25,8 +25,10 @@ from app.modules.competition.models import (
     MatchStatus,
     PublicBracket,
     PublicMatch,
+    PublicMatchDetail,
     PublicPodium,
     PublicTeamRef,
+    PublicTournamentRef,
 )
 from app.modules.tournaments import service as tournaments_service
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
@@ -38,6 +40,9 @@ _DRAWABLE = frozenset({TournamentStatus.OPEN, TournamentStatus.CLOSED})
 
 # 賽事已結束或已取消：worker 不再自動確認（AD-7）
 _ENDED = frozenset({TournamentStatus.FINISHED, TournamentStatus.CANCELLED})
+
+# 公開單場只在這兩個狀態顯示申訴期截止時間
+_APPEAL_STATUSES = frozenset({MatchStatus.APPEAL_WINDOW, MatchStatus.APPEALED})
 
 # `confirm_match` 只接受已開打的場次；待開打直接確認只走輪空（`confirm_walkover`、`advance`）
 _CONFIRMABLE = frozenset(
@@ -313,14 +318,10 @@ def get_bracket(session: Session, *, tournament_id: uuid.UUID) -> BracketRead | 
     )
 
 
-def get_public_bracket(
-    session: Session, *, tournament_id: uuid.UUID
-) -> PublicBracket | None:
-    """公開對戰樹（AD-19）：隊伍只有 `{id, name}`；尚未抽籤回 None。"""
-    bracket = repository.get_bracket_by_tournament(session, tournament_id)
-    if bracket is None:
-        return None
-    matches = repository.list_matches(session, bracket.id)
+def _public_matches(
+    session: Session, bracket: Bracket, matches: list[Match]
+) -> tuple[list[PublicMatch], Callable[[uuid.UUID | None], PublicTeamRef | None]]:
+    """組 `PublicMatch`（公開對戰樹與公開單場共用）；一併回傳查隊名的 `team_ref`。"""
     plan = bracket_rules.plan(bracket.team_count)
     team_ids = sorted(
         {
@@ -361,6 +362,19 @@ def get_public_bracket(
                 wins_b=match.wins_b,
             )
         )
+    return public_matches, team_ref
+
+
+def get_public_bracket(
+    session: Session, *, tournament_id: uuid.UUID
+) -> PublicBracket | None:
+    """公開對戰樹（AD-19）：隊伍只有 `{id, name}`；尚未抽籤回 None。"""
+    bracket = repository.get_bracket_by_tournament(session, tournament_id)
+    if bracket is None:
+        return None
+    matches = repository.list_matches(session, bracket.id)
+    plan = bracket_rules.plan(bracket.team_count)
+    public_matches, team_ref = _public_matches(session, bracket, matches)
     updated_at: datetime = max(
         [bracket.drawn_at, *(match.updated_at for match in matches)]
     )
@@ -376,6 +390,51 @@ def get_public_bracket(
             _finished_podium(session, tournament_id, plan, matches), team_ref
         ),
         updated_at=updated_at,
+    )
+
+
+def get_public_match(
+    session: Session, *, tournament_id: uuid.UUID, match_id: uuid.UUID
+) -> PublicMatchDetail:
+    """公開單場（AD-19）。
+
+    賽事不存在、尚未抽籤、場次不存在、場次不屬於這個賽事，一律拋 404 `MATCH_NOT_FOUND`。
+    """
+    bracket = repository.get_bracket_by_tournament(session, tournament_id)
+    if bracket is None:
+        raise _match_not_found()
+    match = repository.get_match(session, match_id)
+    if match is None or match.bracket_id != bracket.id:
+        raise _match_not_found()
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=tournament_id
+    )
+    # list_matches 已依 slot_no 排序、季軍賽在最後
+    round_matches = [
+        m
+        for m in repository.list_matches(session, bracket.id)
+        if m.round_no == match.round_no
+    ]
+    public_round, _team_ref = _public_matches(session, bracket, round_matches)
+    this = next(m for m in public_round if m.id == match.id)
+    same_round = [m for m in public_round if m.id != match.id]
+    return PublicMatchDetail(
+        **this.model_dump(),
+        tournament=PublicTournamentRef(id=tournament.id, name=tournament.name),
+        game_name=tournament.game_name,
+        best_of=tournaments_service.bo_for_round(
+            session, tournament_id=tournament_id, round_no=match.round_no
+        ),
+        score_type=tournament.score_type,
+        round_name="季軍賽"
+        if match.is_third_place
+        else bracket_rules.round_name(match.round_no, bracket.rounds),
+        games=[],
+        same_round=same_round,
+        appeal_deadline=match.appeal_deadline
+        if match.status in _APPEAL_STATUSES
+        else None,
+        updated_at=max(m.updated_at for m in round_matches),
     )
 
 
