@@ -1,4 +1,4 @@
-import { useId } from "react"
+import { type ReactNode, useId } from "react"
 
 import type { PublicTournament } from "@/client"
 import { Countdown, type CountdownVariant } from "@/components/common/Countdown"
@@ -6,11 +6,8 @@ import { Button } from "@/components/ui/button"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { useIsSignedIn } from "@/features/identity/auth"
 import { CreateTeamEntry } from "@/features/registration/CreateTeamEntry"
-import {
-  formatInterval,
-  formatRegistrationPeriod,
-  TOURNAMENT_STATUS_LABEL,
-} from "./status"
+import { formatInterval, formatRegistrationPeriod } from "./status"
+import { TournamentStatusBadge } from "./TournamentStatusBadge"
 
 export const DRAW_PENDING_TEXT = "抽籤準備中"
 /** 報名開始倒數歸零後、狀態轉為開放報名前的文字 */
@@ -91,7 +88,7 @@ function StatusPanel({
   }
 }
 
-function Field({ term, children }: { term: string; children: string }) {
+function Field({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
       <dt className="text-muted-foreground">{term}</dt>
@@ -112,7 +109,9 @@ export function TournamentOverview({
         onCountdownExpire={onCountdownExpire}
       />
       <dl className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-body">
-        <Field term="狀態">{TOURNAMENT_STATUS_LABEL[tournament.status]}</Field>
+        <Field term="狀態">
+          <TournamentStatusBadge status={tournament.status} />
+        </Field>
         <Field term="遊戲">{tournament.game_name}</Field>
         <Field term="名額">{`${tournament.capacity} 隊`}</Field>
         <Field term="報名期間">{formatRegistrationPeriod(tournament)}</Field>
