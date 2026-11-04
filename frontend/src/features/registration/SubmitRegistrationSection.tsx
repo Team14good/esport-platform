@@ -211,7 +211,8 @@ function FormingSubmit({
 
 /**
  * 已送出・待分配：優先期內顯示「優先期結束後分配名額」倒數；倒數歸零後改顯示
- * 「已送出・待分配」（分配在 3.4 第二階段），不輪詢。開啟頁面時優先期已過則不顯示。
+ * 「已送出・待分配」（worker 在 1 分鐘內分配，重新整理後顯示結果），不輪詢。開啟頁面時
+ * 優先期已過則不顯示。
  */
 function PriorityCountdown({ priorityEnd }: { priorityEnd: string }) {
   const { passed, recheck } = useDeadlinePassed(priorityEnd)
@@ -237,7 +238,37 @@ function PriorityCountdown({ priorityEnd }: { priorityEnd: string }) {
   )
 }
 
-/** S17 的報名區塊：組隊中可送出報名，已送出後顯示分配前的倒數。 */
+/**
+ * 正取：抽籤前顯示報名截止倒數（EXPERIENCE.md〈報名狀態〉）；倒數歸零後改顯示靜態的
+ * 「已截止」，不輪詢。開啟頁面時報名已截止則不顯示。
+ */
+function AcceptedCountdown({ registrationEnd }: { registrationEnd: string }) {
+  const { passed, recheck } = useDeadlinePassed(registrationEnd)
+  const [passedOnMount] = useState(passed)
+
+  if (passed && passedOnMount) return null
+  return (
+    <RegistrationSection heading={ALLOCATION_HEADING}>
+      {passed ? (
+        <PassedDeadline
+          label={DEADLINE_LABEL}
+          text={DEADLINE_PASSED_TEXT}
+          deadline={registrationEnd}
+        />
+      ) : (
+        <Countdown
+          label={DEADLINE_LABEL}
+          deadline={registrationEnd}
+          variant={deadlineVariant}
+          expiredText={DEADLINE_PASSED_TEXT}
+          onExpire={recheck}
+        />
+      )}
+    </RegistrationSection>
+  )
+}
+
+/** S17 的報名區塊：組隊中可送出報名，已送出後顯示分配前的倒數，正取時顯示報名截止倒數。 */
 export function SubmitRegistrationSection({
   team,
   onDeadlinePassed,
@@ -247,6 +278,9 @@ export function SubmitRegistrationSection({
   }
   if (team.registration_status === "pending") {
     return <PriorityCountdown priorityEnd={team.priority_end} />
+  }
+  if (team.registration_status === "accepted") {
+    return <AcceptedCountdown registrationEnd={team.registration_end} />
   }
   return null
 }

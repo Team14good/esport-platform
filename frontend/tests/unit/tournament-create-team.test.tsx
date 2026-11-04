@@ -62,6 +62,10 @@ const MY_TEAM: MyTeamCard = {
   tournament_name: "期中盃",
   game_name: "特戰英豪",
   registration_status: "forming",
+  waitlist_position: null,
+  waitlist_reason: null,
+  representative_backfill: null,
+  waitlist_phase: null,
 }
 
 const TEAM: TeamDetail = {
@@ -102,6 +106,10 @@ const TEAM: TeamDetail = {
   priority_end: "2099-01-01T00:00:00Z",
   registration_end: "2099-01-08T00:00:00Z",
   submitted_at: null,
+  waitlist_position: null,
+  waitlist_reason: null,
+  representative_backfill: null,
+  waitlist_phase: null,
 }
 
 function mockTournament(status: TournamentStatus = "open") {

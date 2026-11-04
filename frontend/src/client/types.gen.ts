@@ -559,6 +559,26 @@ export type MemberRole = "captain" | "player"
  */
 export type MyTeamCard = {
   /**
+   * Waitlist Position
+   */
+  waitlist_position: number | null
+  /**
+   * Waitlist Reason
+   */
+  waitlist_reason:
+    | "SCHOOL_NOT_ELIGIBLE"
+    | "LATER_THAN_SCHOOLMATE"
+    | "SCHOOL_LIMIT_REACHED"
+    | null
+  /**
+   * Representative Backfill
+   */
+  representative_backfill: boolean | null
+  /**
+   * Waitlist Phase
+   */
+  waitlist_phase: "first_come" | "after_deadline" | null
+  /**
    * Team Id
    */
   team_id: string
@@ -1366,6 +1386,26 @@ export type TeamCreate = {
  * S17 隊伍頁：只有隊員看得到（含邀請 token）。
  */
 export type TeamDetail = {
+  /**
+   * Waitlist Position
+   */
+  waitlist_position: number | null
+  /**
+   * Waitlist Reason
+   */
+  waitlist_reason:
+    | "SCHOOL_NOT_ELIGIBLE"
+    | "LATER_THAN_SCHOOLMATE"
+    | "SCHOOL_LIMIT_REACHED"
+    | null
+  /**
+   * Representative Backfill
+   */
+  representative_backfill: boolean | null
+  /**
+   * Waitlist Phase
+   */
+  waitlist_phase: "first_come" | "after_deadline" | null
   /**
    * Id
    */

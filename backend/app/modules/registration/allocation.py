@@ -9,6 +9,9 @@
 - `decide_first_come`：先搶期送出當下判定正取或候補（FR-15）。
 - `waitlist_order`：依階段算出每個候補的順位，或沒有順位的原因（FR-17）。
 - `fill_from_waitlist`：截止補位（FR-16）＝報名截止後階段的順位前 N 名。
+- `backfill_vacancies`：有空位時，當下階段有順位的候補依順位遞補（PR #28 審查）。
+  期中抽籤前取消資格不立即遞補，空出的名額留給之後的分配；之後分配時（先搶期新送出、
+  截止補位），呼叫端在同一個鎖裡先呼叫本函式讓候補遞補，再判定新送出的報名。
 
 所有函式的結果只由輸入決定，與輸入順序無關。名額或剩餘名額為負、報名 id 重複時拋
 `ValueError`（第二階段的 service 不會傳入，屬程式錯誤）。
@@ -169,8 +172,10 @@ def decide_first_come(
     `candidates` 是該賽事目前的報名（可以包含 `candidate` 本身，會被略過）。
     該校優先期沒有報名、目前也沒有正取，且正取數未達 `capacity` 時回 `accepted`，
     否則回 `waitlisted`。
-    呼叫端契約：每次釋出名額（撤回、退回、提高名額）時，必須在同一個鎖與交易內先依
-    `waitlist_order` 遞補，所以「有空位但仍有有順位的候補」的狀態不會傳到本函式。
+    呼叫端契約：本函式不處理遞補。名額可能因抽籤前取消資格（期中不立即遞補）或撤回、退回、
+    提高名額而空出，所以呼叫端必須在同一個鎖與交易內，先以 `backfill_vacancies`（`phase=FIRST_COME`）
+    取得應遞補的候補並改為正取，再把更新後的報名傳進本函式；否則新送出的隊伍會插到
+    有順位的候補前面。
     """
     _check_non_negative("capacity", capacity)
     others = [c for c in _check_unique(candidates) if c.id != candidate.id]
@@ -268,6 +273,31 @@ def fill_from_waitlist(
     order = waitlist_order(
         candidates, phase=AllocationPhase.AFTER_DEADLINE, priority_schools=()
     )
-    return tuple(e.registration_id for e in order.values() if e.position is not None)[
-        :remaining
-    ]
+    return _positioned_ids(order)[:remaining]
+
+
+def backfill_vacancies(
+    candidates: Iterable[Candidate],
+    *,
+    phase: AllocationPhase,
+    priority_schools: Collection[UUID],
+    capacity: int,
+) -> tuple[UUID, ...]:
+    """有空位時應遞補的候補 id，依順位排列（PR #28 審查）。
+
+    空位＝`capacity` − 目前正取數（`accepted`、`drawn`），不足 0 時視為 0；回傳當下
+    階段 `waitlist_order` 有順位者的前「空位」名，不足時全部回傳，其餘空位保留。
+    先搶期每校只有一隊有順位，報名截止後的順位已計入每校上限，所以依順位一次遞補多隊
+    不會改變其他人的資格。報名截止後階段的結果與 `fill_from_waitlist(remaining=空位)`
+    相同。
+    只在抽籤前使用；抽籤後的取消資格依 6.5 由對手輪空或頂替，不呼叫本函式。
+    """
+    _check_non_negative("capacity", capacity)
+    items = _check_unique(candidates)
+    vacancies = max(capacity - _accepted_per_school(items).total(), 0)
+    order = waitlist_order(items, phase=phase, priority_schools=priority_schools)
+    return _positioned_ids(order)[:vacancies]
+
+
+def _positioned_ids(order: dict[UUID, WaitlistEntry]) -> tuple[UUID, ...]:
+    return tuple(e.registration_id for e in order.values() if e.position is not None)
