@@ -1304,6 +1304,27 @@ export type SeriesRead = {
 }
 
 /**
+ * SubmitBlocker
+ *
+ * S17「送出報名」停用的一項原因；`message` 與伺服器拒絕時的文字相同。
+ */
+export type SubmitBlocker = {
+  /**
+   * Code
+   */
+  code:
+    | "STARTERS_NOT_MET"
+    | "PROFILE_INCOMPLETE"
+    | "SCHOOL_MISSING"
+    | "SCHOOL_MISMATCH"
+    | "REGISTRATION_CLOSED"
+  /**
+   * Message
+   */
+  message: string
+}
+
+/**
  * TeamCreate
  *
  * S16 建立隊伍。
@@ -1365,7 +1386,7 @@ export type TeamDetail = {
   /**
    * Invite Status
    */
-  invite_status: "active" | "full"
+  invite_status: "active" | "full" | "closed" | "locked"
   my_role: MemberRole
   /**
    * Rank Tiers
@@ -1383,6 +1404,22 @@ export type TeamDetail = {
    * Profile Editable
    */
   profile_editable: boolean
+  /**
+   * Submit Blockers
+   */
+  submit_blockers: Array<SubmitBlocker>
+  /**
+   * Priority End
+   */
+  priority_end: string
+  /**
+   * Registration End
+   */
+  registration_end: string
+  /**
+   * Submitted At
+   */
+  submitted_at: string | null
 }
 
 /**
@@ -1422,7 +1459,7 @@ export type TeamInvitePreview = {
   /**
    * Invite Status
    */
-  invite_status: "active" | "full"
+  invite_status: "active" | "full" | "closed" | "locked"
 }
 
 /**
@@ -2754,6 +2791,38 @@ export type registrationUpdateMyPlayerProfileResponses = {
 
 export type registrationUpdateMyPlayerProfileResponse =
   registrationUpdateMyPlayerProfileResponses[keyof registrationUpdateMyPlayerProfileResponses]
+
+export type registrationSubmitRegistrationData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/submission"
+}
+
+export type registrationSubmitRegistrationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationSubmitRegistrationError =
+  registrationSubmitRegistrationErrors[keyof registrationSubmitRegistrationErrors]
+
+export type registrationSubmitRegistrationResponses = {
+  /**
+   * Successful Response
+   */
+  200: TeamDetail
+}
+
+export type registrationSubmitRegistrationResponse =
+  registrationSubmitRegistrationResponses[keyof registrationSubmitRegistrationResponses]
 
 export type registrationListMyTeamsData = {
   body?: never

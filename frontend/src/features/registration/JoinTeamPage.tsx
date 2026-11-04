@@ -17,10 +17,11 @@ import {
   teamInviteQueryOptions,
   teamQueryOptions,
 } from "./queries"
-import { TEAM_FULL_REASON } from "./TeamPage"
+import { inviteInvalidReason, ROSTER_LOCKED_REASON } from "./TeamPage"
 
 export const JOINED_TEXT = "已加入隊伍。"
 export const ALREADY_IN_TOURNAMENT = "ALREADY_IN_TOURNAMENT"
+export const ROSTER_LOCKED = "ROSTER_LOCKED"
 export const INVITE_NOT_FOUND_TEXT = "這個邀請連結無效。"
 
 function isNotFound(error: unknown): boolean {
@@ -91,10 +92,11 @@ function JoinAction({
     },
   })
 
-  if (invite.invite_status === "full") {
+  const invalidReason = inviteInvalidReason(invite.invite_status)
+  if (invalidReason !== null) {
     return (
       <Rejected
-        reason={`連結已失效：${TEAM_FULL_REASON}。`}
+        reason={`連結已失效：${invalidReason}。`}
         tournamentId={invite.tournament_id}
       />
     )
@@ -126,9 +128,16 @@ function JoinAction({
 
   if (join.isError) {
     const apiError = parseApiError(join.error)
+    // 開啟預覽後隊伍才送出報名：與預覽已鎖定時同樣的文字
+    const rosterLocked =
+      apiError.kind === "business" && apiError.code === ROSTER_LOCKED
     return (
       <Rejected
-        reason={getErrorMessage(apiError)}
+        reason={
+          rosterLocked
+            ? `連結已失效：${ROSTER_LOCKED_REASON}。`
+            : getErrorMessage(apiError)
+        }
         tournamentId={invite.tournament_id}
         showMyTeams={
           apiError.kind === "business" &&

@@ -102,6 +102,10 @@ const TEAM: TeamDetail = {
   avg_rank_score: null,
   rank_filled_count: 0,
   profile_editable: true,
+  submit_blockers: [],
+  priority_end: "2099-01-01T00:00:00Z",
+  registration_end: "2099-01-08T00:00:00Z",
+  submitted_at: null,
 }
 
 const INVITE: TeamInvitePreview = {
@@ -660,6 +664,339 @@ describe("我的隊伍（S12）", () => {
 
     await waitFor(() =>
       expect(router.state.location.pathname).toBe("/me/teams"),
+    )
+  })
+})
+
+describe("送出報名（S17、S19）", () => {
+  type SubmitResult = Awaited<
+    ReturnType<typeof RegistrationService.submitRegistration>
+  >
+  // 目前帳號是 acc-1（auth-fixtures 的 ACCOUNT），在這裡是隊長
+  const READY: TeamDetail = {
+    ...TEAM,
+    my_role: "captain",
+    members: [
+      filled("acc-1", "阿哲", "鑽石", 30, "captain", "rank.png"),
+      filled("acc-2", "小芸", "鑽石", 30),
+      filled("acc-3", "阿凱", "黃金", 10),
+      filled("acc-4", "小晴", "黃金", 10),
+      filled("acc-5", "阿宏", "黃金", 10),
+    ],
+    avg_rank_score: 18,
+    rank_filled_count: 5,
+  }
+  const SUBMITTED: TeamDetail = {
+    ...READY,
+    registration_status: "pending",
+    invite_status: "locked",
+    profile_editable: false,
+    submitted_at: "2026-11-03T10:00:00Z",
+  }
+  const BLOCKERS = [
+    { code: "STARTERS_NOT_MET", message: "還差 1 人才達先發人數（5 人）" },
+    { code: "PROFILE_INCOMPLETE", message: "尚未填完參賽資料：小芸、阿凱" },
+  ] satisfies TeamDetail["submit_blockers"]
+
+  const inMs = (ms: number) => new Date(Date.now() + ms).toISOString()
+
+  function reasons() {
+    return within(
+      screen.getByRole("list", { name: "尚未符合送出條件" }),
+    ).getAllByRole("listitem")
+  }
+
+  function countdownOf(label: string) {
+    const countdown = screen
+      .getByText(label)
+      .closest<HTMLElement>("[data-slot=countdown]")
+    expect(countdown).not.toBeNull()
+    return countdown as HTMLElement
+  }
+
+  it("條件不符：「送出報名」停用，下方逐項列出原因", async () => {
+    signInAs()
+    mockReadTeam({ ...READY, submit_blockers: BLOCKERS })
+    renderApp("/teams/team-1")
+
+    const button = await screen.findByRole("button", { name: "送出報名" })
+    expect(button).toBeDisabled()
+    expect(reasons().map((item) => item.textContent)).toEqual([
+      "還差 1 人才達先發人數（5 人）",
+      "尚未填完參賽資料：小芸、阿凱",
+    ])
+    expect(screen.queryByText("由隊長送出報名")).toBeNull()
+  })
+
+  it("確認後送出：徽章、Toast、邀請連結失效、優先期倒數與 S18 唯讀", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    signInAs()
+    mockReadTeam(READY)
+    const submitted = { ...SUBMITTED, priority_end: inMs(3 * 60 * 60 * 1000) }
+    const submit = vi
+      .spyOn(RegistrationService, "submitRegistration")
+      .mockResolvedValue({ data: submitted } as SubmitResult)
+    renderApp("/teams/team-1")
+
+    const button = await screen.findByRole("button", { name: "送出報名" })
+    expect(button).toBeEnabled()
+    expect(screen.queryByRole("list", { name: "尚未符合送出條件" })).toBeNull()
+    await user.click(button)
+    const dialog = await screen.findByRole("alertdialog")
+    expect(dialog).toHaveAccessibleName("送出報名")
+    expect(dialog).toHaveAccessibleDescription(
+      "送出後名單會鎖定，只有被主辦方退回才能修改。",
+    )
+    await user.click(within(dialog).getByRole("button", { name: "送出報名" }))
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(submit).toHaveBeenCalledWith({ path: { team_id: "team-1" } })
+    expect(success).toHaveBeenCalledWith("已送出報名", expect.anything())
+    expect(screen.getByText("已送出・待分配")).toBeInTheDocument()
+    expect(screen.getByText("連結已失效")).toBeInTheDocument()
+    expect(screen.getByText(/名單已鎖定/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "複製連結" })).toBeDisabled()
+    expect(screen.queryByRole("button", { name: "送出報名" })).toBeNull()
+    expect(countdownOf("優先期結束後分配名額")).toHaveAttribute(
+      "data-variant",
+      "muted",
+    )
+
+    await user.click(screen.getByRole("button", { name: "填寫我的資料" }))
+    const profile = await screen.findByTestId("player-profile-dialog")
+    expect(within(profile).getByLabelText("遊戲 ID")).toBeDisabled()
+  })
+
+  it("伺服器拒絕時在對話框內顯示原因，並重新取得隊伍", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    const read = mockReadTeam(READY)
+    vi.spyOn(RegistrationService, "submitRegistration").mockRejectedValue(
+      httpError(409, {
+        detail: {
+          code: "REGISTRATION_REQUIREMENTS_UNMET",
+          message: "尚未設定學校：阿凱",
+        },
+      }),
+    )
+    renderApp("/teams/team-1")
+
+    await user.click(await screen.findByRole("button", { name: "送出報名" }))
+    const dialog = await screen.findByRole("alertdialog")
+    await user.click(within(dialog).getByRole("button", { name: "送出報名" }))
+
+    expect(
+      await within(dialog).findByText("尚未設定學校：阿凱"),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+  })
+
+  it("非隊長：不顯示「送出報名」，改寫「由隊長送出報名」並列出缺漏", async () => {
+    signInAs()
+    mockReadTeam({ ...READY, my_role: "player", submit_blockers: BLOCKERS })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("由隊長送出報名")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "送出報名" })).toBeNull()
+    expect(reasons()).toHaveLength(2)
+  })
+
+  it("報名截止剩餘超過 24 小時：倒數為 muted", async () => {
+    signInAs()
+    mockReadTeam({ ...READY, registration_end: inMs(3 * 24 * 60 * 60 * 1000) })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("報名截止")).toBeInTheDocument()
+    expect(countdownOf("報名截止")).toHaveAttribute("data-variant", "muted")
+  })
+
+  it("報名截止最後 24 小時：倒數為 appeal", async () => {
+    signInAs()
+    mockReadTeam({ ...READY, registration_end: inMs(2 * 60 * 60 * 1000) })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("報名截止")).toBeInTheDocument()
+    expect(countdownOf("報名截止")).toHaveAttribute("data-variant", "appeal")
+  })
+
+  it("報名截止倒數歸零：寫「已截止」、停用「送出報名」並只重新取得隊伍一次", async () => {
+    signInAs()
+    const open = { ...READY, registration_end: inMs(1_200) }
+    const closed: TeamDetail = {
+      ...open,
+      profile_editable: false,
+      submit_blockers: [{ code: "REGISTRATION_CLOSED", message: "已截止" }],
+    }
+    const read = vi
+      .spyOn(RegistrationService, "readTeam")
+      .mockResolvedValueOnce({ data: open } as ReadTeamResult)
+      .mockResolvedValue({ data: closed } as ReadTeamResult)
+    renderApp("/teams/team-1")
+
+    expect(
+      await screen.findByRole("button", { name: "送出報名" }),
+    ).toBeEnabled()
+    await waitFor(
+      () =>
+        expect(screen.getByRole("button", { name: "送出報名" })).toBeDisabled(),
+      { timeout: 3_000 },
+    )
+    expect(reasons().map((item) => item.textContent)).toEqual(["已截止"])
+    expect(
+      within(countdownOf("報名截止")).getByText("已截止"),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    // 歸零後不輪詢
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it("優先期已過才檢視已送出的隊伍：不顯示倒數", async () => {
+    signInAs()
+    mockReadTeam({ ...SUBMITTED, priority_end: inMs(-60_000) })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("已送出・待分配")).toBeInTheDocument()
+    expect(screen.queryByText("優先期結束後分配名額")).toBeNull()
+    expect(screen.queryByText("報名截止")).toBeNull()
+  })
+
+  it("優先期倒數歸零：改顯示「已送出・待分配」，不輪詢", async () => {
+    signInAs()
+    const read = mockReadTeam({ ...SUBMITTED, priority_end: inMs(1_200) })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("優先期結束後分配名額")).toBeInTheDocument()
+    await waitFor(
+      () => expect(screen.queryByText("優先期結束後分配名額")).toBeNull(),
+      { timeout: 3_000 },
+    )
+    // 徽章與分配區塊各一
+    expect(screen.getAllByText("已送出・待分配")).toHaveLength(2)
+    expect(read).toHaveBeenCalledTimes(1)
+  })
+
+  it("裝置休眠、計時器延後：Countdown 先歸零時也立即寫「已截止」並重新取得隊伍", async () => {
+    // 只假造 Date：hook 排的 10 分鐘 setTimeout 不會觸發，Countdown 每秒的真實 interval 照常執行
+    vi.useFakeTimers({ toFake: ["Date"] })
+    try {
+      signInAs()
+      const open = { ...READY, registration_end: inMs(10 * 60 * 1000) }
+      const read = vi
+        .spyOn(RegistrationService, "readTeam")
+        .mockResolvedValueOnce({ data: open } as ReadTeamResult)
+        .mockResolvedValue({
+          data: {
+            ...open,
+            submit_blockers: [
+              { code: "REGISTRATION_CLOSED", message: "已截止" },
+            ],
+          },
+        } as ReadTeamResult)
+      renderApp("/teams/team-1")
+
+      expect(
+        await screen.findByRole("button", { name: "送出報名" }),
+      ).toBeEnabled()
+      vi.setSystemTime(Date.now() + 11 * 60 * 1000)
+
+      await waitFor(
+        () =>
+          expect(
+            screen.getByRole("button", { name: "送出報名" }),
+          ).toBeDisabled(),
+        { timeout: 3_000 },
+      )
+      expect(
+        within(countdownOf("報名截止")).getByText("已截止"),
+      ).toBeInTheDocument()
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("裝置休眠、計時器延後：優先期 Countdown 先歸零時也立即改顯示「已送出・待分配」", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    try {
+      signInAs()
+      mockReadTeam({ ...SUBMITTED, priority_end: inMs(10 * 60 * 1000) })
+      renderApp("/teams/team-1")
+
+      expect(
+        await screen.findByText("優先期結束後分配名額"),
+      ).toBeInTheDocument()
+      vi.setSystemTime(Date.now() + 11 * 60 * 1000)
+
+      await waitFor(
+        () => expect(screen.queryByText("優先期結束後分配名額")).toBeNull(),
+        { timeout: 3_000 },
+      )
+      expect(screen.getAllByText("已送出・待分配")).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("報名已截止仍在組隊中：S17 邀請連結顯示「報名已截止」", async () => {
+    signInAs()
+    mockReadTeam({ ...READY, invite_status: "closed" })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("連結已失效")).toBeInTheDocument()
+    expect(screen.getByText(/報名已截止/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "複製連結" })).toBeDisabled()
+  })
+
+  it("S19：報名已截止時顯示「連結已失效：報名已截止。」", async () => {
+    signInAs()
+    mockPreview({ ...INVITE, invite_status: "closed" })
+    renderApp("/join/tok-1")
+
+    expect(
+      await screen.findByText("連結已失效：報名已截止。"),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "加入隊伍" })).toBeNull()
+  })
+
+  it("S19：開啟預覽後隊伍才送出，加入被拒（ROSTER_LOCKED）時顯示「連結已失效：名單已鎖定。」", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    mockPreview()
+    vi.spyOn(RegistrationService, "joinTeam").mockRejectedValue(
+      httpError(409, {
+        detail: { code: "ROSTER_LOCKED", message: "名單已鎖定，無法加入。" },
+      }),
+    )
+    renderApp("/join/tok-1")
+
+    const button = await screen.findByRole("button", { name: "加入隊伍" })
+    await waitFor(() => expect(button).toBeEnabled())
+    await user.click(button)
+
+    expect(
+      await screen.findByText("連結已失效：名單已鎖定。"),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("名單已鎖定，無法加入。")).toBeNull()
+    expect(screen.getByRole("link", { name: "回到賽事頁" })).toHaveAttribute(
+      "href",
+      "/tournaments/tour-1",
+    )
+  })
+
+  it("S19：已送出的隊伍顯示「連結已失效：名單已鎖定。」與回賽事頁", async () => {
+    signInAs()
+    mockPreview({ ...INVITE, member_count: 5, invite_status: "locked" })
+    renderApp("/join/tok-1")
+
+    expect(
+      await screen.findByText("連結已失效：名單已鎖定。"),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "加入隊伍" })).toBeNull()
+    expect(screen.getByRole("link", { name: "回到賽事頁" })).toHaveAttribute(
+      "href",
+      "/tournaments/tour-1",
     )
   })
 })
