@@ -140,10 +140,6 @@
   summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
   evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-reschedule-backend.md`
-  summary: S30 場次管理頁面與修改時間的 `Dialog`（時間選擇器只開放 `RescheduleInfo` 的 earliest～latest）還沒做，等 B 的主辦方版面合併後再做；後端 `GET /tournaments/{id}/manage/matches` 與 `PATCH /tournaments/{id}/matches/{match_id}/schedule` 已完成。列表的範圍是 GET 當下算的（最早隨時間前進、相鄰場次改時間也會變），對話框遇到任何 409 `RESCHEDULE_*` 都要重抓列表（錯誤訊息帶有當下的允許範圍）。
-  evidence: 2026-11-01 使用者決定先做後端。前端 client 重新產生後即有 `ManagedMatch`、`RescheduleInfo`、`RescheduleIn`。
-
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-replay-clear-helper.md`
   summary: 6.2 `replay_match`（B）要呼叫 `clear_for_replay` 並串完整重賽流程，目前尚未實作。
   evidence: 呼叫順序：`lock_tournament` → `clear_for_replay` → `transition_match` 回待開打 → 寫入新 `scheduled_at` → `start_forfeit_clock` → 操作紀錄 → 事件；全部在同一個交易內。操作紀錄的變更前內容用 `ReplayCleared`（報到、各局、結果、勝隊、勝局數與各期限）。
@@ -231,11 +227,11 @@
   summary: 示範資料的 tournaments 步驟已建立「FLOW 校園盃 特戰英豪」並寫入 `context.tournament_to_draw`（開放報名、開賽在啟動後 7 天），competition 步驟會嘗試抽籤；但目前沒有 registration 步驟建立 32 隊正取，registration 也還沒提供抽籤用的 `finalize_for_draw`、`list_accepted_teams` 等函式，實際啟動會記錄 `REGISTRATION_UNAVAILABLE` 並略過抽籤。
   evidence: 2026-11-04 Story 7.1 tournaments 步驟（B）完成後，以 compose 實際啟動確認的 log。剩下的是 C 的 registration 步驟（32 隊正取，放在 `STEPS` 的 tournaments 之後、competition 之前）與 contracts/competition.md〈二〉的四個函式；賽事維持 `open`，所以 `draw` 會先呼叫 `finalize_for_draw`（spec-7-1-tournaments-demo-step.md Decisions）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
-  summary: S30 指派裁判選單還沒做（與改時間 Dialog 同一頁）：列表每列已有 `assignable_referee_ids`、`can_assign_referee`，選單只列這些裁判，顯示名稱取自 `GET /api/v1/organizer/tournaments/{tournament_id}/referees` 並以 `account_id` 對應，目前裁判以 `GET /tournaments/{id}/manage/matches` 的 `referee_account_id` 顯示目前裁判；`PUT`／`DELETE .../matches/{match_id}/referee` 的 409（`NOT_TOURNAMENT_REFEREE`、`REFEREE_IS_TEAM_MEMBER`、`MATCH_REFEREE_LOCKED`、`TOURNAMENT_NOT_ASSIGNABLE`）都要重抓列表；`PUT`／`DELETE` 回傳的是 `MatchRead`，成功後也要重抓列表。
-  evidence: 2026-11-04 使用者決定 4.4 先做後端（A），S30 頁面另開 PR。
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
   summary: S13「我執法的場次」還沒做：裁判需要列出自己被指派的場次，目前沒有查詢 API。
   evidence: 2026-11-04 使用者決定之後再做；需要新增依 `referee_account_id` 查場次的 competition 函式與 API。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
   summary: S4 要隨 `is_scorer` 顯示或隱藏比分登錄面板：指派、改派、收回後（含晉級衝突自動收回），`ScoreEntryState.is_scorer` 會改變，S4 需重抓 `GET .../score-entry`（A 的 S4 工作）。
   evidence: 2026-11-04 承接已刪除的 5.3 項目；後端端對端測試已在 `test_assign_referee.py`（指派／收回後 `is_scorer` 切換、晉級衝突收回），前端尚未接上。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-s30-matches-page.md`
+  summary: 主辦方賽事後台側欄在子頁（例如 S30 `/organizer/tournaments/{id}/matches`）時，「總覽」（`/organizer/tournaments/{id}`）也顯示為目前位置：`BackofficeLayout` 的 `Link` 沒設 `activeOptions`，以前綴比對；「我的賽事」（`/organizer`）在所有賽事頁也同樣亮起。
+  evidence: 2026-11-04 S30 實作時發現；B 的 S31 裁判頁也會遇到。修法需要改 B 的 `components/layout/BackofficeLayout.tsx`（例如 `BackofficeNavItem` 加選填的 `exact`，傳給 `activeOptions`），S30 spec 禁止改 B 的元件，交給 B 決定。

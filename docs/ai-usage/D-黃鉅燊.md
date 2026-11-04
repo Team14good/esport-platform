@@ -542,3 +542,26 @@
 - 問題與修正：審查共 17 項，修 9 項、駁回 8 項（理由記在 spec 的 Review Triage Log）。實際修正的錯誤：賽事進行中能指派沒有測試、真正的 `registration_port.is_member` 轉接沒被測到、已取消場次的錯誤訊息寫成「已送出結果」；實作子代理的列表測試把同時接受邀請的兩位裁判順序寫死，跑一次就失敗，改比對集合。AI 自己更新 sprint-status 時把 `last_updated` 寫成另一種日期格式，又因 Git Bash 不認 `Asia/Taipei` 而寫成 UTC 時間，對照原值後改正
 - 成熟度：L3（AI 實作、審查與修正，人決定範圍）
 - 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
+
+### 2026-11-04｜審查｜審 A 的 #47（S4 接上真資料、報到與比分面板）
+
+- Story／範圍：5.8 第二階段（A），使用 D 的 `CheckInPanel`、`ScoreEntryPanel` 與單場、報到、比分 API
+- 工具：Claude Code（Opus 5.5），一個審查子代理讀 diff、spec 與 contracts，AI 再回到後端原始碼查證
+- 怎麼用：A 點名請 D 看錯誤碼對照與 `forfeit_deadline`。AI 對照 contracts 確認 7 個錯誤碼一致，逐條核對 #47 刪除的延後項目確實完成；審查子代理找到 4 個問題，AI 查證最嚴重的一個：score-entry 的 query key 只看 `updated_at`，但後端 `repository.add_check_in` 不更新 `match.updated_at`，記分者面板在兩隊報到後會停在「等待雙方報到」
+- AI 產出：核准審查（附 4 點：報到不觸發重抓由 D 在後端修、`keepPreviousData` 跨場次、時鐘偏差、e2e 改 `page.route`）
+- 人做了什麼：A 指定審查重點
+- 驗證：問題 1 由 AI 讀 `repository.add_check_in` 與 `MatchScoreEntry.tsx` 確認；單元測試的 harness 在 refresh 時改 `updated_at`，所以 A 的測試沒抓到
+- 成熟度：L2（AI 審查，人決定合併）
+- 證據：#47 的審查紀錄
+
+### 2026-11-04｜實作／測試｜S30 場次管理頁：修改時間與指派裁判（4.3、4.4 前端）
+
+- Story／範圍：4.3 S30 頁面、4.4 S30 指派選單（D）
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；前端調查、實作與三個審查員都是子代理
+- 怎麼用：AI 調查 B 的主辦方後台寫法（側欄、`DataTable`、錯誤處理、測試方式）後寫 spec；UX 文件沒定的部分（裁判選定即送出、停用原因文字、不做狀態篩選）寫成 Design Notes，由使用者核准
+- AI 產出：`spec-4-3-s30-matches-page.md`；`OrganizerMatchesPage`、`RescheduleDialog`、`RefereeSelect`、`organizer-matches-queries.ts`、路由與側欄「場次管理」；`roundName` 從假資料檔移到 `round-name.ts`；`isoToTaipeiLocal`；`organizer-matches.test.tsx` 等 3 個測試檔共 26 個測試
+- 人做了什麼：使用者核准 spec 與 Design Notes
+- 驗證：新測試 26 個通過、biome 通過、typecheck 只剩本機映像過舊的 2 個已知錯誤；本機全套前端單元測試因映像缺 `@radix-ui/react-alert-dialog` 與冷啟動逾時大量失敗，以 CI 為準。瀏覽器實測未做：本機沒有已抽籤的賽事（抽籤要等 C 的 registration 函式）
+- 問題與修正：審查 22 項，修 8 項、駁回 13 項、延後 1 項。修正的錯誤包括：裁判清單載入失敗時誤顯示「還沒有裁判接受邀請」與「未知的裁判」、Dialog 被 `open && can` 遮住後會自己重開、預定時間早於可選範圍時預填值不合法、收回裁判的測試用了後端不會回傳的資料。兩個審查員都說「最早時間只取到分會被後端拒絕」，AI 查 contracts（最早＝現在進位到整分＋30 分鐘）判定為誤報。實作者發現側欄「總覽」在子頁也亮起，是 B 的 `BackofficeLayout` 用前綴比對，記入延後項目交給 B
+- 成熟度：L3（AI 實作、審查與修正，人核准設計）
+- 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄

@@ -1,5 +1,10 @@
 import type { LinkOptions } from "@tanstack/react-router"
-import { EyeIcon, LayoutDashboardIcon, TrophyIcon } from "lucide-react"
+import {
+  CalendarClockIcon,
+  EyeIcon,
+  LayoutDashboardIcon,
+  TrophyIcon,
+} from "lucide-react"
 
 import type { BackofficeNavItem } from "@/components/layout/BackofficeLayout"
 
@@ -27,6 +32,11 @@ export function tournamentNav(tournamentId: string): BackofficeNavItem[] {
       to: `/organizer/tournaments/${id}` as LinkOptions["to"],
       label: "總覽",
       icon: LayoutDashboardIcon,
+    },
+    {
+      to: `/organizer/tournaments/${id}/matches` as LinkOptions["to"],
+      label: "場次管理",
+      icon: CalendarClockIcon,
     },
   ]
 }
