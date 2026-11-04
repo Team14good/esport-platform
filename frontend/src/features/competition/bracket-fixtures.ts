@@ -10,6 +10,7 @@ import type {
   PublicTeamRef,
 } from "@/client"
 import type { BracketSide } from "./match-status"
+import { roundName } from "./round-name"
 
 export type BracketScenario =
   /** 剛抽籤：全部待開打 */
@@ -95,11 +96,6 @@ function byePairs(size: number, byeCount: number): Set<number> {
   const upper = order.slice(0, Math.min(byeCount, quarter))
   const lower = byeCount > quarter ? order.slice(0, byeCount - quarter) : []
   return new Set([...upper.map((j) => 2 * j), ...lower.map((j) => 2 * j + 1)])
-}
-
-export function roundName(roundNo: number, rounds: number): string {
-  const teamsLeft = 2 ** (rounds - roundNo + 1)
-  return teamsLeft === 2 ? "決賽" : `${teamsLeft} 強`
 }
 
 function planBracket(teamCount: number) {
