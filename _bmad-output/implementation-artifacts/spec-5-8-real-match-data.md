@@ -109,6 +109,8 @@ context:
 - **主對話驗證（重建 frontend 後）**：typecheck 通過；biome 檢查 239 個檔案沒有錯誤；build 成功，`dist/assets` 不含 `Titan`、`tournament-fixture`、`秋季校際盃`、`dev/match`；`bun run test:unit` 58 個檔案、757 個測試全部通過；同時跑 3 份，三份都是 757 passed（約 82 秒）。修正前同樣同時跑 3 份是 47～53 個失敗；改動的 31 個檔案都是 LF。
 - **沒有在瀏覽器看過真資料的版面**：本機示範資料沒有已抽籤的賽事（缺 C 的 registration 步驟），1280px／375px 只以單元測試確認 DOM 順序。依使用者的決定，沒有跑 code review。
 
+- **PR #47 審查後補（2026-11-04）**：審查 4.4（#46）時比對 `deferred-work.md`，發現漏刪 5.3 留下的「S4 接上 `ScoreEntryPanel`（A 的工作）」，本 Story 已完成（錯誤碼對照與 `SCORE_ERROR_REASONS` 七項一致、`check_in_incomplete` 時面板停用、已送出顯示唯讀列），補刪除。
+
 ## Spec Change Log
 
 ## Review Triage Log

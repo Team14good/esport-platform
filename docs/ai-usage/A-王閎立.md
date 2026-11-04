@@ -503,3 +503,21 @@
   - spec 漏了棄權期限：要求顯示「棄權期限」倒數，但公開 API 沒有 `forfeit_deadline`，子代理回報後記入 deferred-work，等 D 補欄位
 - 成熟度：L3（依 BMAD 流程規劃、子代理實作、主對話核對並自動驗證，人只在 checkpoint 決策；跳過了多審查者的 code review，所以不算 L4）
 - 證據：`_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`；尚未 commit
+
+### 2026-11-04｜測試／程式審查｜審查 D 的 Story 4.4 指派裁判到場次（後端，PR #46）
+
+- Story／範圍：4.4（`origin/main...origin/story/4-4`，14 個檔案；正式程式約 260 行、測試 597 行），審查別人的 PR
+- 工具：Claude Code（Opus 5.5）；人指定直接審查，不用 bmad-code-review 的子代理
+- 怎麼用：AI 讀 spec 的凍結區與 I/O 矩陣、contract，逐行審 service、router、models、repository、registration_port，對照 25 個測試的名稱與內容；開暫時的 worktree 在容器裡跑分支上的測試；另外比對 4.4 與我的 PR #47 對 `deferred-work.md` 的改動
+- AI 產出：審查結論「沒有擋合併的問題」與 3 點意見：
+  - 晉級衝突檢查只掛在 `advance` 的 `FillSlot`；6.5 取消資格頂替、6.2 重新比賽若不經 `FillSlot` 換隊伍，會繞過檢查，建議在 contract 寫明或把函式公開
+  - 準決賽敗隊進季軍賽的填位走同一段程式，但沒有專屬測試
+  - 4.4 新增的「S4 要隨 is_scorer 顯示或隱藏比分面板」在 #47 已經做到（指派會更新 `updated_at`，S4 依它重抓）
+- 人做了什麼：指定審查方式；決定是否轉給 D
+- 驗證：分支上 `tests/competition` 與 `test_architecture.py` 935 passed
+- 問題與修正：
+  - 比對兩個 PR 時發現我自己的 #47 漏刪 `deferred-work.md` 的「S4 接上 `ScoreEntryPanel`（A 的工作）」，#47 已經做完這件事；是 #47 實作子代理的遺漏，主對話核對 diff 時也沒看出來
+  - 用 `--cov` 量 4.4 的分支覆蓋率時沒有輸出，沒有追查原因，覆蓋率未確認
+  - 審查只有單一 AI，沒有多個獨立審查者交叉確認
+- 成熟度：L3（AI 依 spec 審查並實際執行測試，人決定方式與是否採用）
+- 證據：審查意見在對話中；尚未貼到 PR
