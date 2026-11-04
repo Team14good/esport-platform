@@ -97,12 +97,6 @@
   summary: （低）Pydantic 內建的 422 訊息是英文：缺欄位、列舉值不合法（例如 `score_type`）、型別不是 list／object 時，`detail[].msg` 不是繁中，前端直接顯示會出現英文。
   evidence: 2026-10-29 Story 2.1 第一階段審查（Edge Case Hunter）。既有問題，identity 的 API 也一樣（`core/errors.py` 沒有翻譯 `RequestValidationError`）。處理時在 core 加一個 `RequestValidationError` handler，依 `type`（missing、enum、list_type 等）換成繁中訊息，並補測試。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-create-tournament.md`
-  summary: Story 2.2 第二階段：S25 我的賽事（列表、狀態徽章、空狀態「你還沒有建立賽事。」）、S26 建立賽事表單（選遊戲帶入預設值、每輪間隔不足時顯示最小間隔、欄位錯誤顯示）、S27 賽事總覽（主辦方賽事後台側欄「查看賽事頁」「總覽」、狀態徽章、模式、報名期間、優先期結束、開賽時間），以及接手 1.8 的 `routes/organizer/index.tsx`。
-  evidence: 2026-10-30 使用者決定 2.2 拆兩階段：主辦方後台版面、`/organizer` 路由、Data table、狀態徽章由 A 的 1.8（PR #11）提供，第一階段只做後端以趕上 10/31 的交接期限。1.8 合併後另寫 spec，並驗收 epics.md Story 2.2 的畫面 AC；時間輸入需要新增以 Asia/Taipei 輸入、送出 UTC 的處理。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-create-tournament.md`
-  summary: Story 2.2 第二階段的 S26 表單：名額超過 128 時，送出前彈出提醒「名額超過 128 隊，請確認沒有輸入錯誤」，主辦方確認後才送出（後端不限制 128）。
-  evidence: 2026-10-30 使用者決定：128 是提醒門檻、不是上限，避免誤輸入極大值又不擋住真的需要的大型賽事。第一階段後端只擋 < 2 與超過資料庫整數上限。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-create-tournament.md`
   summary: （中）目前沒有任何工作把賽事從 `open` 轉成 `closed`，`ensure_accepting_registrations` 也只看狀態；在 C 的 3.6 完成前，報名截止時間過後仍可報名。
   evidence: 2026-10-30 Story 2.2 第一階段審查（Blind Hunter）。依 `contracts/tournaments.md`〈三〉，`open` → `closed` 由 3.6 在截止補位之後呼叫 `transition_tournament`。3.6 實作時要確認截止工作會轉換狀態；若 3.6 延後，改由 `ensure_accepting_registrations` 另外比對 `registration_end` 與 `clock.now()`，並同步修改約定。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-score-rules.md`
@@ -149,6 +143,14 @@
   summary: 3.3 送出報名時，`join_team`（service.py:328）與 `_invite_status`（service.py:196）要補檢查報名狀態仍是 `forming`；否則已送出的隊伍仍可透過邀請連結加入，S19 預覽也會顯示連結有效（medium）。
   evidence: 2026-11-02 A 在 PR #23 的審查。3.1 只有 `forming` 狀態，目前不會出錯；epic-3-context 規定「送出報名後名單鎖定、邀請連結失效」。
 
+## Deferred from: spec-2-4-status-badge-and-organizer-banner.md (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-status-badge-and-organizer-banner.md`
+  summary: Story 2.4 第二階段第 3 項：S1 空狀態「目前沒有公開的賽事。」對主辦方另顯示「建立賽事」，連到 2.2 第二階段的 S26（`/organizer/tournaments/new`）（low）。等 PR #31 合併後再做。
+  evidence: 2026-11-03 使用者決定 2.4 第二階段先只做狀態徽章與申請主辦方 banner；S26 在 PR #31，尚未合併。上方 source_spec 為 `spec-2-4-public-tournament-pages.md` 的「Story 2.4 第二階段」那筆列了三項，其中狀態徽章、申請主辦方 banner 兩項已由 `spec-2-4-status-badge-and-organizer-banner.md` 完成，只剩本項；那筆依使用者指示保留不刪。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-status-badge-and-organizer-banner.md`
+  summary: （低）`PageBanner` 的 `action` 只支援 `onClick`，S1「申請成為主辦方」按鈕以程式導向，不能中鍵開新分頁或複製連結；需要 A 為 `PageBanner` 新增連結型的 action。
+  evidence: 2026-11-03 Story 2.4 第二階段審查（Blind Hunter）。`PageBanner.tsx` 是 A 的元件，本 Story 只 import 不修改。
 ## Deferred from: spec-3-2-player-registration-info-2.md (2026-11-03)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info-2.md`
@@ -172,3 +174,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-demo-seed-data.md`
   summary: competition 步驟（`demo_data/competition.py`）已會替 `context.tournament_to_draw` 指定的賽事抽籤，但目前沒有上游步驟寫入這個欄位，實際啟動只會記錄「No demo tournament to draw」並略過。
   evidence: 要等 B 的 tournaments 步驟建立「已截止報名、開賽在未來、主辦方為 `context.accounts["organizer"]`」的校園賽事並寫入 `context.tournament_to_draw`，以及 C 的 registration 步驟建立 32 隊正取、registration 提供抽籤用的 `list_accepted_teams` 等四個函式（contracts/competition.md〈二〉）。開賽時間要離啟動夠遠：時間已過時抽籤會被拒絕並略過。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-organizer-tournament-ui.md`
+  summary: （低）主辦方賽事清單的查詢在兩處各定義一次：`features/tournaments/organizer-queries.ts` 的 `myTournamentsQueryOptions` 與 C 的 `features/registration/CreateTeamEntry.tsx` 的 `organizerTournamentsQueryOptions`，都用查詢鍵 `["tournaments","organizer","list"]`；之後只改其中一邊（例如 `queryFn` 或回傳型別），兩邊的快取會互相污染。
+  evidence: 2026-11-03 A（@max930000）在 PR #31 的審查。處理時請 C 把 `CreateTeamEntry.tsx` 改成 import `myTournamentsQueryOptions`，刪掉自己的定義（registration 模組只新增 import，不改 tournaments 的檔案）。

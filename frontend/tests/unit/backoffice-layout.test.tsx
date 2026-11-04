@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
-import { IdentityService } from "@/client"
+import { IdentityService, TournamentsService } from "@/client"
 import { FORBIDDEN_FALLBACK_MESSAGE } from "@/lib/api-error"
 import { ACCOUNT, renderApp, signInAs } from "./auth-fixtures"
 
@@ -16,6 +16,16 @@ vi.mock("@tanstack/react-query-devtools", () => ({
 type ListResult = Awaited<
   ReturnType<typeof IdentityService.listOrganizerApplications>
 >
+
+type ListMineResult = Awaited<
+  ReturnType<typeof TournamentsService.listMyTournaments>
+>
+
+function mockNoTournaments() {
+  return vi
+    .spyOn(TournamentsService, "listMyTournaments")
+    .mockResolvedValue({ data: [] } as unknown as ListMineResult)
+}
 
 function mockEmptyList() {
   return vi
@@ -65,25 +75,31 @@ describe("後台側欄版面", () => {
   })
 })
 
-describe("S25 我的賽事（佔位頁）", () => {
-  it("主辦方：側欄只有「我的賽事」，顯示 Empty state，沒有「建立賽事」", async () => {
+describe("S25 我的賽事（Story 2.2 接手 1.8 的佔位頁）", () => {
+  it("主辦方：側欄只有「我的賽事」；沒有賽事時 Empty state＋「建立賽事」連到 S26", async () => {
+    mockNoTournaments()
     signInAs({ account: { ...ACCOUNT, is_organizer: true } })
     renderApp("/organizer")
 
     expect(
       await screen.findByRole("heading", { name: "我的賽事" }),
     ).toBeInTheDocument()
-    expect(screen.getByText("你還沒有建立賽事。")).toBeInTheDocument()
+    expect(await screen.findByText("你還沒有建立賽事。")).toBeInTheDocument()
     const sidebar = document.querySelector(
       "[data-slot=backoffice-sidebar]",
     ) as HTMLElement
     const links = within(sidebar).getAllByRole("link")
     expect(links.map((link) => link.textContent)).toEqual(["我的賽事"])
-    expect(screen.queryByRole("button", { name: "建立賽事" })).toBeNull()
-    expect(screen.queryByRole("link", { name: "建立賽事" })).toBeNull()
+    const emptyState = document.querySelector(
+      "[data-slot=empty-state]",
+    ) as HTMLElement
+    expect(
+      within(emptyState).getByRole("link", { name: "建立賽事" }),
+    ).toHaveAttribute("href", "/organizer/tournaments/new")
   })
 
   it("不是主辦方：顯示 S38 的 403", async () => {
+    const mine = mockNoTournaments()
     signInAs()
     renderApp("/organizer")
 
@@ -91,6 +107,7 @@ describe("S25 我的賽事（佔位頁）", () => {
       await screen.findByRole("heading", { name: FORBIDDEN_FALLBACK_MESSAGE }),
     ).toBeInTheDocument()
     expect(screen.queryByText("你還沒有建立賽事。")).toBeNull()
+    expect(mine).not.toHaveBeenCalled()
   })
 
   it("未登入：導向 S6 並帶 redirect", async () => {
