@@ -135,3 +135,10 @@ context:
 | 18 | VG | 正式環境 `is_captain` 尚未提供，報到一律 503 | 已知：等 C 合併，PR 說明列出 |
 
 修正後驗證：後端全套 1132 passed（合入 #21 最新版後），`scripts/lint.sh` 全過；前端單元測試 239 個中 3 個 identity 測試在全套負載下逾時，單獨重跑全過（與本變更無關），biome、build 通過；重新產生 client 無差異。突變檢查：`list_forfeit_due` 不排除兩隊都報到 → 1 失敗；不捕捉 `IntegrityError` → 2 失敗；不依期限排序 → 1 失敗。
+
+- 2026-11-04 PR #22 C 的審查（核准，5 項低嚴重度）：
+  - 修正 `find_forfeit_due` 只數報到筆數：重賽或頂替換隊後，舊隊伍留下的報到會讓這場被當成兩隊都已報到、不判棄權。子查詢改成只算 `team_id` 是這場目前兩隊的報到。補測試：換掉 b 隊後這場重新列入（拿掉條件時失敗）。
+  - 修正 `start_due_tournament` 每次只看最早的候選：它一直拋錯時，後面已到時間的賽事都不會轉成進行中。改成在 savepoint 裡處理，出錯就記錄、略過、改看下一個；鎖住後發現被改期的也一樣略過，不再回傳 False 停下。沒有標記已處理，修好後下一輪仍會處理。補測試：最早的賽事轉換一直出錯，第二場仍轉成進行中（改回不攔截時失敗）。
+  - 修正 `RegistrationUnavailableError` 的訊息寫死「抽籤」：改成可帶用途，`is_captain` 用「報到」，503 測試多驗訊息。
+  - 補整合測試：不替換 `is_captain`，用 registration 的 `create_team` 建兩隊、抽籤、隊長報到 201、局外人 403。過時的「registration 目前沒有這個函式」註解一併更正。
+  - 不改：報到維持 `CurrentAccount`。spec 的 Code Map 就是這樣定的，而且建立和加入隊伍都要求 `VerifiedAccount`，能成為隊長的帳號一定已驗證。

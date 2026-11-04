@@ -1031,15 +1031,32 @@ def start_due_tournament(session: Session) -> bool:
 
     先找候選對戰表，鎖賽事後重新檢查；賽事不是賽程已公布（已進行、已取消、已結束）
     就只標記為已處理、不做其他事。重複執行沒有副作用。回傳 True 代表處理了一個對戰表
-    （轉為進行中或標記略過），worker 會再呼叫一次；沒有候選、或鎖住後發現還沒到開始時間
-    （期間被改期）回傳 False。
+    （轉為進行中或標記略過），worker 會再呼叫一次；沒有候選回傳 False。
+
+    鎖住後發現還沒到開始時間（期間被改期），或處理時拋錯，就略過這個對戰表、改看下一個
+    候選：拋錯的那個在 savepoint 裡回滾並記錄錯誤，不會讓後面已到時間的賽事一直卡住。
     """
     now = clock.now()
-    bracket_id = repository.find_unstarted_bracket_id(
-        session, now + checkin_rules.CHECK_IN_LEAD
-    )
-    if bracket_id is None:
-        return False
+    skipped: set[uuid.UUID] = set()
+    while True:
+        bracket_id = repository.find_unstarted_bracket_id(
+            session, now + checkin_rules.CHECK_IN_LEAD, exclude=skipped
+        )
+        if bracket_id is None:
+            return False
+        try:
+            with session.begin_nested():
+                handled = _start_bracket(session, bracket_id, now)
+        except Exception:
+            logger.exception("Bracket %s failed to start; skipped", bracket_id)
+            handled = False
+        if handled:
+            return True
+        skipped.add(bracket_id)
+
+
+def _start_bracket(session: Session, bracket_id: uuid.UUID, now: datetime) -> bool:
+    """鎖賽事後處理一個候選對戰表；鎖住前被改期、還沒到開始時間回傳 False。"""
     candidate = repository.get_bracket(session, bracket_id)
     assert candidate is not None  # 剛查到的 id
     tournament = tournaments_service.lock_tournament(
@@ -1052,7 +1069,7 @@ def start_due_tournament(session: Session) -> bool:
         m.scheduled_at for m in repository.list_matches(session, bracket_id)
     )
     if starts_at > now:
-        return False  # 鎖住前場次被改期，還沒到；回傳 False 避免同一輪重複選到
+        return False
     if tournament.status == TournamentStatus.PUBLISHED:
         tournaments_service.transition_tournament(
             session,

@@ -219,7 +219,11 @@ def find_forfeit_due(
     checked_in = (
         select(func.count())
         .select_from(CheckIn)
-        .where(CheckIn.match_id == Match.id)
+        .where(
+            CheckIn.match_id == Match.id,
+            # 只算這場目前兩隊的報到：重新比賽或頂替換隊後，舊隊伍的紀錄不算
+            col(CheckIn.team_id).in_([Match.team_a_id, Match.team_b_id]),
+        )
         .scalar_subquery()
     )
     statement = (
@@ -237,12 +241,16 @@ def find_forfeit_due(
 
 
 def find_unstarted_bracket_id(
-    session: Session, first_match_by: datetime
+    session: Session,
+    first_match_by: datetime,
+    *,
+    exclude: Collection[uuid.UUID] = (),
 ) -> uuid.UUID | None:
     """尚未處理開始、且最早場次預定時間 <= `first_match_by` 的對戰表 id（最早的先）。
 
     `first_match_by` ＝ 現在 ＋ 報到提前量，由呼叫端算；這裡只是粗篩，
-    service 鎖住後會用 `checkin.tournament_starts_at` 重新判斷。
+    service 鎖住後會用 `checkin.tournament_starts_at` 重新判斷。`exclude` 是這一輪
+    已略過的對戰表（出錯或鎖住後發現還沒到），讓後面的候選不被卡住。
     """
     statement = (
         select(Bracket.id)
@@ -253,6 +261,8 @@ def find_unstarted_bracket_id(
         .order_by(func.min(Match.scheduled_at), col(Bracket.id))
         .limit(1)
     )
+    if exclude:
+        statement = statement.where(col(Bracket.id).not_in(list(exclude)))
     return session.exec(statement).first()
 
 
