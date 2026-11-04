@@ -131,6 +131,20 @@ def test_forfeit_deadline_null_while_teams_pending(
     assert _get(client, tournament_id, ids["M5"])["forfeit_deadline"] is None
 
 
+def test_forfeit_deadline_null_when_a_side_is_cleared(
+    client: TestClient, session: Session, fake_registration: FakeRegistration
+) -> None:
+    """之後的退賽遞補或取消資格清空一方時，舊的期限不能變成報到倒數（A 在 #49 的建議）。"""
+    tournament_id, ids = _drawn(session, fake_registration)
+    m1 = session.get(Match, ids["M1"])
+    assert m1 is not None and m1.forfeit_deadline is not None
+    m1.team_b_id = None
+    session.add(m1)
+    session.commit()
+
+    assert _get(client, tournament_id, ids["M1"])["forfeit_deadline"] is None
+
+
 def test_forfeit_deadline_null_once_not_scheduled(
     client: TestClient, session: Session, fake_registration: FakeRegistration
 ) -> None:
