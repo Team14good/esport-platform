@@ -79,6 +79,16 @@ function fixtureAppealDeadline(match: PublicMatch): string | null {
   return new Date(scheduled + FIXTURE_APPEAL_WINDOW_MS).toISOString()
 }
 
+/** 假資料的申訴時限（賽事預設 30 分鐘）：開始時間＝截止－時限，與後端算法相同 */
+const FIXTURE_APPEAL_MINUTES_MS = 30 * 60 * 1000
+
+function fixtureAppealStartedAt(deadline: string | null): string | null {
+  if (deadline === null) return null
+  return new Date(
+    Date.parse(deadline) - FIXTURE_APPEAL_MINUTES_MS,
+  ).toISOString()
+}
+
 /** 由一份對戰樹推導其中一場的 PublicMatchDetail；找不到時回傳 undefined。 */
 export function matchDetailFromBracket(
   bracket: PublicBracket,
@@ -99,6 +109,7 @@ export function matchDetailFromBracket(
       .filter((m) => m.round_no === match.round_no && m.id !== match.id)
       .sort(sameRoundOrder),
     appeal_deadline: fixtureAppealDeadline(match),
+    appeal_started_at: fixtureAppealStartedAt(fixtureAppealDeadline(match)),
     updated_at: bracket.updated_at,
   }
 }

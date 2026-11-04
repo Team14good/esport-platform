@@ -31,6 +31,8 @@ export type PublicMatchDetail = PublicMatch & {
   same_round: PublicMatch[]
   /** 申訴期截止時間（ISO）；申訴期、申訴中才有值，其他狀態為 null */
   appeal_deadline: string | null
+  /** 申訴期開始時間（ISO）；與 appeal_deadline 同時有值，S4 倒數的進度條從這裡起算 */
+  appeal_started_at?: string | null
   /** ISO 時間 */
   updated_at: string
 }
