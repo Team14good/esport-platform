@@ -4,9 +4,8 @@ import {
   useQuery,
 } from "@tanstack/react-query"
 import { useState } from "react"
-
+import type { PublicMatchDetail } from "@/client"
 import { MatchNotFoundError } from "./match-source"
-import type { PublicMatchDetail } from "./match-types"
 import {
   BRACKET_CONNECTION_LOST_AFTER,
   BRACKET_POLL_INTERVAL_MS,

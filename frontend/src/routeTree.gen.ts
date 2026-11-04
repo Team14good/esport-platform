@@ -20,7 +20,6 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
 import { Route as AdminSchoolsRouteImport } from './routes/admin/schools'
-import { Route as DevMatchRouteImport } from './routes/dev/match'
 import { Route as JoinInviteTokenRouteImport } from './routes/join.$inviteToken'
 import { Route as MeTeamsRouteImport } from './routes/me_.teams'
 import { Route as OrganizerIndexRouteImport } from './routes/organizer/index'
@@ -90,11 +89,6 @@ const AdminSchoolsRoute = AdminSchoolsRouteImport.update({
   id: '/schools',
   path: '/schools',
   getParentRoute: () => AdminRouteRoute,
-} as any)
-const DevMatchRoute = DevMatchRouteImport.update({
-  id: '/dev/match',
-  path: '/dev/match',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const JoinInviteTokenRoute = JoinInviteTokenRouteImport.update({
   id: '/join/$inviteToken',
@@ -184,7 +178,6 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
-  '/dev/match': typeof DevMatchRoute
   '/join/$inviteToken': typeof JoinInviteTokenRoute
   '/me/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
@@ -212,7 +205,6 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
-  '/dev/match': typeof DevMatchRoute
   '/join/$inviteToken': typeof JoinInviteTokenRoute
   '/me/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
@@ -240,7 +232,6 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
-  '/dev/match': typeof DevMatchRoute
   '/join/$inviteToken': typeof JoinInviteTokenRoute
   '/me_/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
@@ -270,7 +261,6 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/admin/schools'
-    | '/dev/match'
     | '/join/$inviteToken'
     | '/me/teams'
     | '/organizer/apply'
@@ -298,7 +288,6 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/admin/schools'
-    | '/dev/match'
     | '/join/$inviteToken'
     | '/me/teams'
     | '/organizer/apply'
@@ -325,7 +314,6 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin/applications'
     | '/admin/schools'
-    | '/dev/match'
     | '/join/$inviteToken'
     | '/me_/teams'
     | '/organizer/apply'
@@ -352,7 +340,6 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
-  DevMatchRoute: typeof DevMatchRoute
   JoinInviteTokenRoute: typeof JoinInviteTokenRoute
   MeTeamsRoute: typeof MeTeamsRoute
   OrganizerApplyRoute: typeof OrganizerApplyRoute
@@ -443,13 +430,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/schools'
       preLoaderRoute: typeof AdminSchoolsRouteImport
       parentRoute: typeof AdminRouteRoute
-    }
-    '/dev/match': {
-      id: '/dev/match'
-      path: '/dev/match'
-      fullPath: '/dev/match'
-      preLoaderRoute: typeof DevMatchRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/join/$inviteToken': {
       id: '/join/$inviteToken'
@@ -597,7 +577,6 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   VerifyEmailRoute: VerifyEmailRoute,
-  DevMatchRoute: DevMatchRoute,
   JoinInviteTokenRoute: JoinInviteTokenRoute,
   MeTeamsRoute: MeTeamsRoute,
   OrganizerApplyRoute: OrganizerApplyRoute,
