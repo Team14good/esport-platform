@@ -29,6 +29,7 @@ def test_jobs_are_registered_in_order() -> None:
 
     assert names == [
         "open_registrations",
+        "start_due_tournaments",
         "confirm_expired_appeals",
         "dispatch_outbox",
         "send_pending_email",
