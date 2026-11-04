@@ -362,6 +362,8 @@ class PublicMatchDetail(PublicMatch):
     same_round: list[PublicMatch]
     # 只在申訴期、申訴中有值，其他狀態為 None
     appeal_deadline: datetime | None
+    # 申訴期開始時間（截止 − 賽事的申訴時限）；與 appeal_deadline 同時有值，給 S4 倒數的進度條起點
+    appeal_started_at: datetime | None = None
     # 這場與同輪其他場次 updated_at 的最大值
     updated_at: datetime
     # 兩隊的報到時間（公開）；未報到或該方未確定為 None

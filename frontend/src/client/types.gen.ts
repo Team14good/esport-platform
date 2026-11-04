@@ -920,6 +920,10 @@ export type PublicMatchDetail = {
    */
   appeal_deadline: string | null
   /**
+   * Appeal Started At
+   */
+  appeal_started_at?: string | null
+  /**
    * Updated At
    */
   updated_at: string

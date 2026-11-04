@@ -199,9 +199,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-appeal-countdown-and-banner-link.md`
   summary: B 的 `OrganizerApplyBanner.tsx`：S1「申請成為主辦方」改用 `PageBanner` 新增的連結型 action（`action: { label, to: "/organizer/apply" }`），就能中鍵開新分頁、複製連結（low）。
   evidence: 2026-11-04 A 已為 `PageBanner` 新增 `to`；使用者決定不改 B 的既有函式，交給 B。改完後 S1 的測試要從按鈕改成連結。
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-appeal-countdown-and-banner-link.md`
-  summary: 請 D 的公開單場 API 帶申訴期的開始時間（例如 `appeal_started_at`，或賽事的申訴時限），S4 把它傳給 `Countdown` 的 `startsAt`，進度條才會從滿開始（low）。
-  evidence: 2026-11-04 使用者決定先用 Countdown 預設的截止前 24 小時當起點；FR-7 的申訴期最少 30 分鐘、預設 30 分鐘，所以目前進度條一開始只有約 2%。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-s36-game-settings-and-school-list-ui.md`
   summary: （低）`GameForm` 與 `SchoolDialog` 把 `form.formState.isSubmitting` 納入送出鈕停用，防止連點重複送出，但沒有測試：拿掉 `isSubmitting` 後現有測試仍會通過。
   evidence: 2026-11-03 A（@max930000）在 PR #30 的審查。下次動到這兩個表單時補測試：讓 `createGame`／`createSchool` 回傳一個未完成的 Promise，連按兩次送出，斷言只呼叫一次，且送出中按鈕停用。
