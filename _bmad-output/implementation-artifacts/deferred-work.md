@@ -171,3 +171,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-s36-game-settings-and-school-list-ui.md`
   summary: （低）`GameForm` 與 `SchoolDialog` 把 `form.formState.isSubmitting` 納入送出鈕停用，防止連點重複送出，但沒有測試：拿掉 `isSubmitting` 後現有測試仍會通過。
   evidence: 2026-11-03 A（@max930000）在 PR #30 的審查。下次動到這兩個表單時補測試：讓 `createGame`／`createSchool` 回傳一個未完成的 Promise，連按兩次送出，斷言只呼叫一次，且送出中按鈕停用。
+
+## Deferred from: spec-7-2-e2e-tournament-drill-2.md (2026-11-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-2.md`
+  summary: 完整賽事演練目前每款遊戲只組一隊（使用者 2026-11-04 決定）；抽籤以後的步驟需要 `teamCount` 隊（特戰英豪、英雄聯盟 32 隊，星砂競技場 8 隊）各自滿編、填完參賽資料並送出報名，要等 3.3～3.6 合併後再補。
+  evidence: 每位選手都經畫面註冊並等驗證信，一隊 3～7 人就要 1～2.5 分鐘；32 隊×7 人照同樣做法太慢，補的時候要另外決定建立大量隊伍的方式（例如改用 7.1 示範資料的隊伍，或只讓少數隊伍走畫面）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-2.md`
+  summary: e2e 一次只跑 1 個測試（`playwright.config.ts` 的 `workers: 1`，`tournament.spec.ts` 另有 `describe.configure({ mode: "default" })`），完整跑一次約 22 分鐘；演練同時跑會互相拖慢，一般 API 超過 1 秒（NFR-2），甚至整個卡住。
+  evidence: 2026-11-04 實測：本機沒設 worker 上限時，16 核預設開 8 個 worker，6 個演練同時開瀏覽器、註冊帳號，`POST /accounts` 6～7 秒、`GET /accounts/me` 約 2.4 秒，之後停住超過 20 分鐘；2 個 worker 時 e2e 容器約吃 5 核；1 個 worker 時 10 passed、62 skipped（22.4 分鐘）。7.3 彙整回應時間時要知道這些數字是在什麼並行度下量的；之後要縮短時間，`WORKER_POLL_SECONDS` 最小只能設 15 秒（`core/config.py`），省不多，要另找方法（例如共用已驗證的選手帳號）。
