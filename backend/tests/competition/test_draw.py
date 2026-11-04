@@ -124,7 +124,11 @@ def test_draw_eight_teams_after_close(
     by_id = {m.id: m.code for m in bracket.matches}
 
     assert fake_registration.finalized == []
-    assert fake_registration.calls == ["list_accepted_teams", "mark_drawn"]
+    assert fake_registration.calls == [
+        "list_accepted_teams",
+        "get_team_names",
+        "mark_drawn",
+    ]
     assert {code: by_id.get(m.next_match_id) for code, m in by_code.items()} == {  # type: ignore[arg-type]
         "M1": "M5",
         "M2": "M5",
@@ -168,6 +172,34 @@ def test_draw_eight_teams_after_close(
     assert service.get_bracket(session, tournament_id=tournament.id) == bracket
 
 
+def test_same_seed_ignores_registration_order(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    """洗牌前依隊名排序：registration 回傳順序不同，同一個種子仍是同一張表。"""
+    teams = fake_registration.set_team_count(13)
+    names = {team: f"隊伍{i:02d}" for i, team in enumerate(teams)}
+    fake_registration.names = names
+    placements = []
+    for order in (teams, list(reversed(teams))):
+        fake_registration.teams = list(order)
+        organizer = make_account(session, organizer=True)
+        tournament = tournament_in(session, S.CLOSED, organizer=organizer)
+        bracket = service.draw(
+            session,
+            tournament_id=tournament.id,
+            actor_id=organizer.id,
+            rng=random.Random(7),
+        )
+        placements.append(
+            {
+                m.code: (names.get(m.team_a_id), names.get(m.team_b_id))  # type: ignore[arg-type]
+                for m in bracket.matches
+            }
+        )
+
+    assert placements[0] == placements[1]
+
+
 def test_draw_while_open_finalizes_first_and_places_byes_in_round_two(
     session: Session, fake_registration: FakeRegistration
 ) -> None:
@@ -177,6 +209,7 @@ def test_draw_while_open_finalizes_first_and_places_byes_in_round_two(
     assert fake_registration.calls == [
         "finalize_for_draw",
         "list_accepted_teams",
+        "get_team_names",
         "mark_drawn",
     ]
     assert fake_registration.finalized == [(tournament.id, tournament.organizer_id)]
