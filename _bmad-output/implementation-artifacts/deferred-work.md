@@ -152,9 +152,6 @@
   summary: 6.2 `replay_match`（B）要呼叫 `clear_for_replay` 並串完整重賽流程，目前尚未實作。
   evidence: 呼叫順序：`lock_tournament` → `clear_for_replay` → `transition_match` 回待開打 → 寫入新 `scheduled_at` → `start_forfeit_clock` → 操作紀錄 → 事件；全部在同一個交易內。操作紀錄的變更前內容用 `ReplayCleared`（報到、各局、結果、勝隊、勝局數與各期限）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
-  summary: Story 2.4 第二階段：S1、S2 的狀態改用 1.7 的 `StatusBadge`（開放報名、進行中 live＋進行中脈動、賽程已公布 brand、已取消 destructive、其餘 muted-foreground）；S1 頂部「想辦賽事？申請成為主辦方」Page banner（已登入、非主辦方、沒有待審核申請；可關閉，存 `localStorage`，連到 `/organizer/apply`）；S1 空狀態對主辦方另顯示「建立賽事」（連到 2.2 第二階段的 S26）。
-  evidence: 2026-11-02 使用者決定 2.4 拆兩階段：`StatusBadge`、申請 API 在 A 的 1.7（PR #10），主辦方身分在 1.8（PR #11），兩者都未合併。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: （低）公開賽事列表 `GET /tournaments` 沒有分頁或上限，未登入的請求一次取回所有賽事（含已結束、已取消）。
   evidence: 2026-11-02 Story 2.4 第一輪審查（Blind Hunter、Edge Case Hunter）。期中賽事數量少；賽事累積後在 S1 改為分頁（沿用 1.8 的分頁格式）或只回最近的已結束賽事。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
