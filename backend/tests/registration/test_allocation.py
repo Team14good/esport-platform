@@ -2,6 +2,7 @@
 
 import ast
 import random
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -415,3 +416,87 @@ def test_allocation_imports_only_stdlib_and_registration_models() -> None:
     }
     assert app_imports == {"app.modules.registration.models"}
     assert not any(name.startswith("app") for name in plain)
+
+
+# ── PR #28 審查補的測試 ─────────────────────────────────
+
+
+def test_priority_representative_comes_only_from_pending() -> None:
+    """同校已是候補或正取的高分隊不會變成代表隊，也不會被重新結算。"""
+    cs = [
+        cand(1, 1, 3000, status=S.WAITLISTED),
+        cand(2, 1, 2000, status=S.ACCEPTED),
+        cand(3, 1, 1000),
+        cand(4, 2, 900),
+    ]
+    result = allocate_priority_window(cs, capacity=5)
+    assert result == PriorityAllocation((uid(3), uid(4)), ())
+
+
+@pytest.mark.parametrize("phase", [FIRST, AFTER])
+def test_waitlist_order_skips_residual_pending(phase: AllocationPhase) -> None:
+    """還沒分配的 pending 不排入候補順位。"""
+    cs = [
+        cand(1, 1, 1000, minute=1, status=S.WAITLISTED),
+        cand(2, 2, 2000, minute=0),
+    ]
+    order = waitlist_order(cs, phase=phase, priority_schools=())
+    assert list(order) == [uid(1)]
+
+
+def test_story_3_5_example_first_come_positions() -> None:
+    """epics.md Story 3.5：名額已滿，候補 A（優先期有報名的學校）、B（X 校）；
+    C（X 校）、D（Y 校）依序送出 → B 第 1 位、D 第 2 位，A、C 沒有順位。"""
+    p1, p2, x, y = 1, 2, 3, 4
+    priority = {school(p1), school(p2)}
+    cs = [
+        cand(1, p1, status=S.ACCEPTED),
+        cand(2, p2, status=S.ACCEPTED),
+        cand(3, p1, minute=10, status=S.WAITLISTED),  # A
+        cand(4, x, minute=11, status=S.WAITLISTED),  # B
+    ]
+    for n, sch, minute in ((5, x, 12), (6, y, 13)):  # C、D 依序送出
+        submitted = cand(n, sch, minute=minute)
+        status = decide_first_come(
+            submitted, candidates=cs, priority_schools=priority, capacity=2
+        )
+        assert status == S.WAITLISTED
+        cs.append(cand(n, sch, minute=minute, status=status))
+
+    order = waitlist_order(cs, phase=FIRST, priority_schools=priority)
+
+    assert order[uid(4)].position == 1  # B
+    assert order[uid(6)].position == 2  # D
+    assert order[uid(3)].position is None  # A
+    assert order[uid(5)].position is None  # C
+    assert order[uid(5)].reason == WaitlistReason.LATER_THAN_SCHOOLMATE
+
+
+def test_story_3_6_example_deadline_fill() -> None:
+    """epics.md Story 3.6：剩 2 個名額，候補依積分為 E（Z 校已有 2 隊正取）、
+    F（W 校已有 1 隊正取）、G（W 校）、H（V 校沒有正取）→ F、H 補位，E、G 仍為候補。"""
+    z, w, v = 1, 2, 3
+    w8 = S.WAITLISTED
+    cs = [
+        cand(1, z, status=S.ACCEPTED),
+        cand(2, z, status=S.ACCEPTED),
+        cand(3, w, status=S.ACCEPTED),
+        cand(4, z, 4000, minute=1, status=w8),  # E
+        cand(5, w, 3000, minute=2, status=w8),  # F
+        cand(6, w, 2000, minute=3, status=w8),  # G
+        cand(7, v, 1000, minute=4, status=w8),  # H
+    ]
+
+    assert fill_from_waitlist(cs, remaining=2) == (uid(5), uid(7))
+
+    # 補位後其餘候補依報名截止後的規則：E、G 都因每校上限而沒有順位
+    after = [
+        replace(c, status=S.ACCEPTED)
+        if c.id in (uid(5), uid(7))
+        else c
+        for c in cs
+    ]
+    order = waitlist_order(after, phase=AFTER, priority_schools=())
+    lim = WaitlistReason.SCHOOL_LIMIT_REACHED
+    assert order[uid(4)] == WaitlistEntry(uid(4), None, lim)
+    assert order[uid(6)] == WaitlistEntry(uid(6), None, lim)
