@@ -1,7 +1,7 @@
+import type { PublicGame, PublicMatchDetail, ScoreType } from "@/client"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { type BracketSide, sideView } from "./match-status"
-import type { PublicGame, PublicMatchDetail, ScoreType } from "./match-types"
 
 function cellText(game: PublicGame, side: BracketSide, scoreType: ScoreType) {
   const score = side === "a" ? game.score_a : game.score_b

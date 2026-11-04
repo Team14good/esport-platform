@@ -1,71 +1,84 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import {
-  createBracketFixture,
-  FIXTURE_TOURNAMENT_ID,
-} from "@/features/competition/bracket-fixtures"
+import { CompetitionService } from "@/client"
+import { createBracketFixture } from "@/features/competition/bracket-fixtures"
 import {
   fixtureScoreType,
   gameWinners,
   matchDetailFromBracket,
 } from "@/features/competition/match-fixtures"
 import {
-  DEV_MATCH_SOURCE_TOURNAMENT_ID,
   fetchMatchDetail,
   MatchNotFoundError,
   matchPath,
+  matchQueryKey,
 } from "@/features/competition/match-source"
+import { httpError } from "./helpers"
+import { matchDetail } from "./match-detail-fixture"
+
+type ReadMatchResult = Awaited<
+  ReturnType<typeof CompetitionService.readPublicMatch>
+>
 
 describe("場次資料來源", () => {
   afterEach(() => {
-    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
   })
 
-  it("開發模式：從 32 隊「進行中」假對戰樹取得場次", async () => {
-    const detail = await fetchMatchDetail({
-      tournamentId: DEV_MATCH_SOURCE_TOURNAMENT_ID,
-      matchId: "match-M3",
-    })
+  it("呼叫公開單場 API，回傳場次資料", async () => {
+    const detail = matchDetail()
+    const read = vi
+      .spyOn(CompetitionService, "readPublicMatch")
+      .mockResolvedValue({ data: detail } as unknown as ReadMatchResult)
 
-    expect(detail).toMatchObject({
-      id: "match-M3",
-      code: "M3",
-      round_name: "32 強",
-      game_name: "特戰英豪",
-      best_of: 3,
-      tournament: { id: DEV_MATCH_SOURCE_TOURNAMENT_ID },
+    await expect(
+      fetchMatchDetail({ tournamentId: "t1", matchId: "match-M3" }),
+    ).resolves.toBe(detail)
+    expect(read).toHaveBeenCalledWith({
+      path: { tournament_id: "t1", match_id: "match-M3" },
     })
-    expect(detail.same_round).toHaveLength(15)
-    expect(detail.same_round.some((m) => m.id === detail.id)).toBe(false)
-  })
-
-  it("賽事 id 與對戰樹假資料一致", () => {
-    expect(DEV_MATCH_SOURCE_TOURNAMENT_ID).toBe(FIXTURE_TOURNAMENT_ID)
   })
 
   it.each([
-    ["不存在的場次", DEV_MATCH_SOURCE_TOURNAMENT_ID, "match-M99"],
-    ["其他賽事", "other", "match-M3"],
-  ])("%s：拋出 MatchNotFoundError", async (_, tournamentId, matchId) => {
-    await expect(
-      fetchMatchDetail({ tournamentId, matchId }),
-    ).rejects.toBeInstanceOf(MatchNotFoundError)
-  })
-
-  it("正式 build（DEV 為 false）：一律拋出 MatchNotFoundError，不回傳假資料", async () => {
-    vi.stubEnv("DEV", false)
-    await expect(
-      fetchMatchDetail({
-        tournamentId: DEV_MATCH_SOURCE_TOURNAMENT_ID,
-        matchId: "match-M3",
+    [
+      "404 MATCH_NOT_FOUND",
+      httpError(404, {
+        detail: { code: "MATCH_NOT_FOUND", message: "找不到這個場次。" },
       }),
+    ],
+    [
+      "id 不是 UUID（422）",
+      httpError(422, {
+        detail: [
+          { loc: ["path", "match_id"], msg: "Input should be a valid UUID" },
+        ],
+      }),
+    ],
+  ])("%s：拋出 MatchNotFoundError", async (_, error) => {
+    vi.spyOn(CompetitionService, "readPublicMatch").mockRejectedValue(error)
+    await expect(
+      fetchMatchDetail({ tournamentId: "t1", matchId: "nope" }),
     ).rejects.toBeInstanceOf(MatchNotFoundError)
   })
 
-  it("S4 網址", () => {
+  it("其他錯誤（伺服器錯誤、連線中斷）照原樣拋出，算連線失敗", async () => {
+    const error = httpError(500, {})
+    vi.spyOn(CompetitionService, "readPublicMatch").mockRejectedValue(error)
+    await expect(
+      fetchMatchDetail({ tournamentId: "t1", matchId: "match-M3" }),
+    ).rejects.toBe(error)
+  })
+
+  it("S4 網址與 query key", () => {
     expect(matchPath("t 1", "match-M3")).toBe(
       "/tournaments/t%201/matches/match-M3",
     )
+    expect(matchQueryKey("t1", "m1")).toEqual([
+      "competition",
+      "match",
+      "t1",
+      "m1",
+    ])
   })
 })
 

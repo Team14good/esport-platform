@@ -9,11 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { PublicMatch } from "@/client"
 import { BracketMatchCard } from "@/features/competition/BracketMatchCard"
 import { BracketTree } from "@/features/competition/BracketTree"
-import { createBracketFixture } from "@/features/competition/bracket-fixtures"
 import {
-  DEV_MATCH_SOURCE_TOURNAMENT_ID,
-  matchPath,
-} from "@/features/competition/match-source"
+  createBracketFixture,
+  FIXTURE_TOURNAMENT_ID,
+} from "@/features/competition/bracket-fixtures"
+import { matchPath } from "@/features/competition/match-source"
 import { renderInRouter } from "./render-router"
 
 const TEAM_A = { id: "team-a", name: "清大 Hydra" }
@@ -437,7 +437,7 @@ describe("場次卡連到 S4", () => {
     const { router } = await renderInRouter(
       <BracketTree
         bracket={bracket}
-        matchHref={(id) => matchPath(DEV_MATCH_SOURCE_TOURNAMENT_ID, id)}
+        matchHref={(id) => matchPath(FIXTURE_TOURNAMENT_ID, id)}
       />,
     )
 
@@ -445,7 +445,7 @@ describe("場次卡連到 S4", () => {
     fireEvent.click(card)
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(
-        `/tournaments/${DEV_MATCH_SOURCE_TOURNAMENT_ID}/matches/match-M3`,
+        `/tournaments/${FIXTURE_TOURNAMENT_ID}/matches/match-M3`,
       ),
     )
   })

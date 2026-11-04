@@ -1,8 +1,13 @@
 // S4 場次頁的假資料：從 createBracketFixture 的對戰樹推導每一場的 PublicMatchDetail，
-// 給單元測試、match-source（DEV）與 /dev/match 預覽頁共用。第二階段接上真資料後只留給測試。
-import type { PublicBracket, PublicMatch } from "@/client"
+// 只給單元測試使用（S4 已接上公開單場 API，正式畫面不再用假資料）。
+import type {
+  PublicBracket,
+  PublicGame,
+  PublicMatch,
+  PublicMatchDetail,
+  ScoreType,
+} from "@/client"
 import { type BracketSide, hasScore } from "./match-status"
-import type { PublicGame, PublicMatchDetail, ScoreType } from "./match-types"
 
 export const FIXTURE_TOURNAMENT_NAME = "2026 秋季校際盃"
 export const FIXTURE_GAME_NAME = "特戰英豪"
@@ -111,27 +116,5 @@ export function matchDetailFromBracket(
     appeal_deadline: fixtureAppealDeadline(match),
     appeal_started_at: fixtureAppealStartedAt(fixtureAppealDeadline(match)),
     updated_at: bracket.updated_at,
-  }
-}
-
-/** 模擬一次輪詢變動：進行中加登錄一局（A 勝）；待開打改為進行中；其他狀態不變。 */
-export function simulateMatchChange(
-  detail: PublicMatchDetail,
-): PublicMatchDetail {
-  const updatedAt = new Date(Date.parse(detail.updated_at) + 5000).toISOString()
-  if (detail.status === "scheduled") {
-    return { ...detail, status: "live", updated_at: updatedAt }
-  }
-  if (detail.status !== "live") return { ...detail, updated_at: updatedAt }
-  const gameNo = detail.games.length + 1
-  const game: PublicGame =
-    detail.score_type === "rounds"
-      ? { game_no: gameNo, winner_side: "a", score_a: 13, score_b: 9 }
-      : { game_no: gameNo, winner_side: "a", score_a: null, score_b: null }
-  return {
-    ...detail,
-    wins_a: detail.wins_a + 1,
-    games: [...detail.games, game],
-    updated_at: updatedAt,
   }
 }

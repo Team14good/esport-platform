@@ -1,8 +1,7 @@
 import { screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-
+import type { PublicMatchDetail } from "@/client"
 import { MatchHeader } from "@/features/competition/MatchHeader"
-import type { PublicMatchDetail } from "@/features/competition/match-types"
 import { matchDetail } from "./match-detail-fixture"
 import { renderWithRouterContext } from "./render-router"
 
