@@ -95,6 +95,19 @@ def update_my_player_profile(
     return result.detail
 
 
+@router.post("/teams/{team_id}/submission")
+def submit_registration(
+    session: SessionDep, account: VerifiedAccount, team_id: uuid.UUID
+) -> TeamDetail:
+    """S17 隊長送出報名：報名轉為「已送出・待分配」，名單鎖定並凍結學校、平均段位積分與送出時間。
+
+    不符合送出條件時回 409 `REGISTRATION_REQUIREMENTS_UNMET`，`message` 列出全部原因。
+    """
+    team = service.submit_registration(session, team_id=team_id, account_id=account.id)
+    session.commit()
+    return team
+
+
 @router.get("/accounts/me/teams")
 def list_my_teams(session: SessionDep, account: CurrentAccount) -> list[MyTeamCard]:
     """S12 我的隊伍：目前帳號加入的每支隊伍與報名狀態。"""

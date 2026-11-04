@@ -102,6 +102,10 @@ const TEAM: TeamDetail = {
   avg_rank_score: null,
   rank_filled_count: 0,
   profile_editable: true,
+  submit_blockers: [],
+  priority_end: "2099-01-01T00:00:00Z",
+  registration_end: "2099-01-08T00:00:00Z",
+  submitted_at: null,
 }
 
 describe("Invite link field", () => {

@@ -3,7 +3,7 @@
 import hashlib
 import secrets
 import uuid
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from datetime import timedelta
 from functools import cache
 from typing import Any
@@ -204,6 +204,16 @@ def get_account_contact(
     if account is None:
         return None
     return AccountContact.model_validate(account, from_attributes=True)
+
+
+def get_account_school_ids(
+    session: Session, account_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, uuid.UUID | None]:
+    """給其他模組（registration 送出報名）讀取帳號目前的學校；沒設學校為 None。
+
+    不存在的帳號不會出現在回傳的 dict 中。
+    """
+    return dict(repository.list_account_school_ids(session, list(account_ids)))
 
 
 def get_display_names(

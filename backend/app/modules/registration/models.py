@@ -2,12 +2,13 @@
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator
 from pydantic_core import PydanticCustomError
-from sqlalchemy import DateTime, Index, String, UniqueConstraint, text
+from sqlalchemy import DateTime, Index, Numeric, String, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 from app.core import clock
@@ -108,7 +109,8 @@ class TeamMember(SQLModel, table=True):
 class Registration(SQLModel, table=True):
     """報名：建立隊伍時同時產生（組隊中）；狀態只能經 `service.mark_status()` 修改。
 
-    送出時的快照欄位（學校、平均段位積分、送出時間）由 Story 3.3 加入。
+    送出時的快照（Story 3.3）：學校、全隊（含替補）平均段位積分、送出時間；組隊中為
+    null，送出後不再變動（分配只看快照，AD-12）。
     """
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -118,6 +120,10 @@ class Registration(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=clock.now, sa_type=DateTime(timezone=True)
     )
+    school_id: uuid.UUID | None = Field(default=None, foreign_key="school.id")
+    # 段位積分上限是 PostgreSQL integer 上限，numeric(6,2) 會溢位
+    avg_rank_score: Decimal | None = Field(default=None, sa_type=Numeric(12, 2))
+    submitted_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
 # ---------------------------------------------------------------- API schema
@@ -144,8 +150,9 @@ TeamNameField = Annotated[
     str, BeforeValidator(_require_str), AfterValidator(_validate_team_name)
 ]
 
-# 邀請連結的狀態：可加入、隊伍已滿（名單鎖定由 3.3 加入）
-InviteStatus = Literal["active", "full"]
+# 邀請連結的狀態：可加入、隊伍已滿、報名已截止（不在報名期間）、名單已鎖定（報名已送出）
+# 優先順序：locked > closed > full > active
+InviteStatus = Literal["active", "full", "closed", "locked"]
 
 
 class TeamCreate(BaseModel):
@@ -156,6 +163,22 @@ class TeamCreate(BaseModel):
 
 # 參賽資料缺漏的欄位代碼（固定依此順序列出）
 MissingProfileField = Literal["game_account_id", "rank_tier", "rank_screenshot"]
+
+# 不能送出報名的原因代碼；REGISTRATION_CLOSED 只用於畫面（送出時另回 409）
+SubmitBlockerCode = Literal[
+    "STARTERS_NOT_MET",
+    "PROFILE_INCOMPLETE",
+    "SCHOOL_MISSING",
+    "SCHOOL_MISMATCH",
+    "REGISTRATION_CLOSED",
+]
+
+
+class SubmitBlocker(BaseModel):
+    """S17「送出報名」停用的一項原因；`message` 與伺服器拒絕時的文字相同。"""
+
+    code: SubmitBlockerCode
+    message: str
 
 
 class TeamMemberRead(BaseModel):
@@ -196,8 +219,15 @@ class TeamDetail(BaseModel):
     # 已填段位成員（含替補）的平均段位積分，取到小數第二位；沒有人填時為 null
     avg_rank_score: float | None
     rank_filled_count: int
-    # 賽事開放報名且報名仍是組隊中時，隊員才能修改自己的參賽資料
+    # 報名期間（賽事開放且早於截止時間）且報名仍是組隊中時，隊員才能修改自己的參賽資料
     profile_editable: bool
+    # 不能送出報名的原因（固定順序）；只在組隊中計算，其他狀態為空
+    submit_blockers: list[SubmitBlocker]
+    priority_end: datetime
+    registration_end: datetime
+    # 送出報名的時間：由 `submit_registration` 寫入；組隊中、或不經送出而離開組隊中
+    # 的報名（例如撤回）為 null
+    submitted_at: datetime | None
 
 
 class TeamInvitePreview(BaseModel):
@@ -239,10 +269,18 @@ class TeamRead(BaseModel):
 
 
 class RegistrationRead(BaseModel):
-    """給其他模組使用的報名資料。"""
+    """給其他模組使用的報名資料。
+
+    `school_id`、`avg_rank_score`、`submitted_at` 是送出時的快照，由 `submit_registration`
+    寫入；組隊中為 None。不經送出而離開組隊中的報名（例如組隊中撤回、退回後回到組隊中）
+    可能沒有快照，使用前要檢查。
+    """
 
     id: uuid.UUID
     team_id: uuid.UUID
     tournament_id: uuid.UUID
     status: RegistrationStatus
     created_at: datetime
+    school_id: uuid.UUID | None
+    avg_rank_score: Decimal | None
+    submitted_at: datetime | None
