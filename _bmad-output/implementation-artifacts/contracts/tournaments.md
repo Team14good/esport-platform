@@ -47,9 +47,22 @@ class TournamentRead(BaseModel):
     score_type: ScoreType
     rank_tiers: list[RankTierRead]   # 段位對照表快照，積分由高到低
 
-class RefereeRead(BaseModel):
+class RefereeRead(BaseModel):    # 2.7 已實作
     account_id: UUID
     display_name: str
+    accepted_at: datetime            # 接受邀請的時間
+
+class RefereeInvitationRead(BaseModel):   # 2.7：主辦方看到的邀請（S31）
+    tournament_id: UUID
+    token: str                       # 明文，用來組出邀請連結
+    created_at: datetime
+    expires_at: datetime             # 產生後 7 天；重新產生時舊的設為當下
+    expired: bool                    # expires_at <= 現在
+
+class PublicRefereeInvitation(BaseModel):  # 2.7：不需登入的邀請預覽（S23，AD-19）
+    tournament_name: str
+    expires_at: datetime
+    expired: bool
 
 class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API 用（AD-19）
     id: UUID
@@ -68,6 +81,14 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 - 列舉沿用 `models.py` 既有的 `ScoreType`、`TournamentMode`、`TournamentStatus`。
 - 時間一律帶時區（UTC）。
 - 不登入就能呼叫的公開 API 用另外的 `Public*` schema（2.4 定義的 `PublicTournament`），不含 `organizer_id`、Email 與學校（AD-19）。
+- 裁判 API（2.7）：
+  - `POST /organizer/tournaments/{tournament_id}/referee-invitation`（主辦方）：產生新邀請，201 回 `RefereeInvitationRead`；同賽事尚未過期的舊邀請 `expires_at` 設為現在（不刪除）。
+  - `GET /organizer/tournaments/{tournament_id}/referee-invitation`（主辦方）：最新一筆邀請（含 `expired`），從未產生回 `null`。
+  - `GET /organizer/tournaments/{tournament_id}/referees`（主辦方）：`list[RefereeRead]`，依接受時間排序。
+  - 以上三支：不存在 404 `TOURNAMENT_NOT_FOUND`、別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；產生邀請時賽事已結束或已取消 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
+  - `GET /referee-invites/{token}`（不需登入）：`PublicRefereeInvitation`；不存在 404 `REFEREE_INVITATION_NOT_FOUND`，過期仍回 200（`expired: true`）。
+  - `POST /referee-invites/{token}/accept`（已驗證 Email）：200 回 `RefereeRead`；已是裁判回原本的資料（冪等）。不存在 404、過期或已作廢 409 `REFEREE_INVITATION_EXPIRED`、賽事已結束或已取消 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`、主辦方本人 409 `ORGANIZER_CANNOT_BE_REFEREE`、未登入 401、未驗證 403 `EMAIL_NOT_VERIFIED`。
+  - 不檢查受邀者是否為參賽隊員，由 4.4 指派裁判時檢查。
 - 公開 API（2.4，不需登入）：`GET /tournaments` 回傳所有賽事的 `list[PublicTournament]`，依開賽時間排序；`GET /tournaments/{tournament_id}` 回傳 `PublicTournament`，不存在 404 `TOURNAMENT_NOT_FOUND`，id 格式錯誤 422。
 
 ## 二、公開函式
@@ -83,10 +104,11 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `ensure_accepting_registrations(tournament: TournamentRead) -> None` | C（3.1～3.6） | 狀態不是 `open` 時拋 `REGISTRATION_CLOSED` 409。只看狀態：報名截止由 worker 轉成 `closed` | 2.2 |
 | `ensure_accepting_scores(tournament: TournamentRead) -> None` | D（5.3、5.4）、B（6.2） | 狀態不是 `published`、`ongoing` 時拋 `TOURNAMENT_NOT_ACCEPTING_SCORES` 409（已結束、已取消都拒絕） | 2.2 |
 | `bo_for_round(session, *, tournament_id, round_no) -> int` | D（4.3、5.3、5.4） | 期中一律回傳 `TournamentRead.bo`（2.3 分輪 BO 擱置）；`round_no` 從 1 起算 | 2.2 |
-| `is_referee(session, *, tournament_id, account_id) -> bool` | D（4.4） | 已接受該賽事的裁判邀請；只在該賽事有效 | 2.7 |
+| `is_referee(session, *, tournament_id, account_id) -> bool` | D（4.4） | 已接受該賽事的裁判邀請；只在該賽事有效（經 `core.authz.is_tournament_referee` 判斷） | 2.7 |
 | `list_referees(session, *, tournament_id) -> list[RefereeRead]` | D（4.4 的 S30 選單） | 依接受邀請的時間排序 | 2.7 |
+| `ensure_accepting_referees(tournament: TournamentRead) -> None` | tournaments 的裁判邀請（2.7）；其他模組需要時可呼叫 | 狀態為 `finished`、`cancelled` 時拋 `TOURNAMENT_NOT_ACCEPTING_REFEREES` 409；不碰資料庫 | 2.7 |
 
-兩個 `ensure_*` 不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
+三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
 
 期中不提供（擱置的 Story）：`update_tournament`、`cancel_tournament`（2.5、2.6）、`reset_invite_link`（3.10）、`list_audit_logs`（2.8）。registration 的「提高名額」（FR-9）同樣到期末。
 
@@ -109,6 +131,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 - **操作紀錄**：2.2 在 `audit_log.tournament_id` 加上外鍵到 `tournament.id`（`core/audit.py` 的註記）。各模組寫賽事相關的操作紀錄時帶 `tournament_id`。
 - **事件**：tournaments 期中不發其他模組需要處理的事件；之後新增時補在這裡。
 - **權限**：主辦方對自己賽事的權限，用 `TournamentRead.organizer_id` 交給 `core.authz.ensure_tournament_owner` 判斷。
+- **裁判權限**：`core.authz.is_tournament_referee(referee_tournament_ids, tournament_id)` 與 `ensure_tournament_referee(...)`（403 `TOURNAMENT_REFEREE_REQUIRED`）只比對呼叫端已載入的「該帳號擔任裁判的賽事 id」；一般情況直接呼叫 `is_referee`。
 
 ## 五、回覆 competition.md〈三〉
 
