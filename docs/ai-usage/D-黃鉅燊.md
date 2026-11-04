@@ -342,3 +342,14 @@
 - 驗證：只改文件；A 的另一項建議（取同一輪場次會先抓整張對戰表）A 說留著就好，未修改
 - 成熟度：L1（AI 依審查意見改文件）
 - 證據：#21 的審查紀錄
+
+### 2026-11-04｜審查｜代審 B 的 #40（2.7 第一階段：邀請裁判的後端）
+
+- Story／範圍：B 的 2.7 第一階段（B 請 D 代審）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 service、repository、router、models、遷移、約定與 spec Decisions，檢查上鎖順序（產生與接受都先鎖賽事）、冪等新增（ON CONFLICT DO NOTHING RETURNING）、作廢後取最新邀請的排序、檢查順序是否符合 Decisions、公開預覽是否符合 AD-19，並對照 competition 4.4 需要的 `is_referee`、`list_referees` 簽名；以 `git merge-tree` 確認與最新 main 無衝突
+- AI 產出：核准與三項不擋合併的建議：遷移與 #35、#22 同接 `a3d5e7f9b1c4`，後合的要改接；`is_referee` 可改用主鍵查一列；token 放在 URL 路徑會進 access log
+- 人做了什麼：使用者轉達 B 的請求並要求直接審
+- 驗證：送出後查證審查裡「與隊伍邀請做法一致」的說法：registration 也是 `/team-invites/{token}`，屬實。CI 由 B 的 PR 跑過（綠）
+- 成熟度：L2（AI 審查，人決定送出）
+- 證據：#40 的審查紀錄
