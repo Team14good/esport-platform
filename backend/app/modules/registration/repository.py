@@ -6,7 +6,13 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.modules.registration.models import Registration, Team, TeamMember
+from app.modules.registration.models import (
+    PriorityWindowSettlement,
+    Registration,
+    RegistrationStatus,
+    Team,
+    TeamMember,
+)
 
 MEMBER_UNIQUE_CONSTRAINT = "uq_team_member_tournament_id_account_id"
 TEAM_NAME_UNIQUE_INDEX = "ix_team_tournament_id_lower_name"
@@ -138,3 +144,44 @@ def add_registration(session: Session, registration: Registration) -> Registrati
     session.add(registration)
     session.flush()
     return registration
+
+
+def list_registrations(
+    session: Session, tournament_id: uuid.UUID
+) -> list[Registration]:
+    """某賽事的所有報名（依 id 排列，結果與資料庫的回傳順序無關）。"""
+    statement = (
+        select(Registration)
+        .where(Registration.tournament_id == tournament_id)
+        .order_by(col(Registration.id))
+    )
+    return list(session.exec(statement))
+
+
+def list_unsettled_pending_tournament_ids(session: Session) -> list[uuid.UUID]:
+    """有「已送出・待分配」報名、但還沒有優先期結算紀錄的賽事 id（依 id 排列）。"""
+    settled = select(PriorityWindowSettlement.tournament_id).where(
+        PriorityWindowSettlement.tournament_id == Registration.tournament_id
+    )
+    statement = (
+        select(Registration.tournament_id)
+        .where(Registration.status == RegistrationStatus.PENDING)
+        .where(~settled.exists())
+        .distinct()
+        .order_by(col(Registration.tournament_id))
+    )
+    return list(session.exec(statement))
+
+
+def get_settlement(
+    session: Session, tournament_id: uuid.UUID
+) -> PriorityWindowSettlement | None:
+    return session.get(PriorityWindowSettlement, tournament_id)
+
+
+def add_settlement(
+    session: Session, settlement: PriorityWindowSettlement
+) -> PriorityWindowSettlement:
+    session.add(settlement)
+    session.flush()
+    return settlement
