@@ -311,6 +311,22 @@ def test_profile_incomplete_lists_names_in_join_order(
     ]
 
 
+def test_rank_tier_without_score_counts_as_incomplete(
+    client: TestClient, session: Session
+) -> None:
+    """只有段位、沒有積分（示範資料、手動匯入）也擋在送出條件，不會在算平均時 500。"""
+    team, accounts = _team(client, session, names=FIVE)
+    member = repository.get_team_member(session, uuid.UUID(team["id"]), accounts[2].id)
+    assert member is not None
+    member.rank_score = None
+    session.add(member)
+    session.flush()
+
+    message = _unmet(_submit(client, accounts[0], team["id"]))
+
+    assert message == "尚未填完參賽資料：阿凱"
+
+
 def test_school_missing(client: TestClient, session: Session) -> None:
     team, accounts = _team(client, session, names=FIVE)
     _set_school(session, accounts[2], None)
@@ -683,6 +699,23 @@ def test_create_join_and_profile_are_closed_after_the_deadline(
     for response in (create, join, profile):
         assert response.status_code == 409, response.text
         assert _error_code(response) == "REGISTRATION_CLOSED"
+
+
+def test_join_after_submit_and_deadline_says_roster_locked(
+    client: TestClient, session: Session, frozen_clock: FrozenClock
+) -> None:
+    """已送出又已截止：加入與預覽都以名單鎖定為準（locked > closed）。"""
+    team, accounts = _team(client, session, names=FIVE)
+    assert _submit(client, accounts[0], team["id"]).status_code == 200
+    tournament = service._get_tournament(session, uuid.UUID(team["tournament_id"]))
+    frozen_clock.set(tournament.registration_end)
+
+    response = _join(client, _make_account(session), team["invite_token"])
+    preview = client.get(f"{API}/team-invites/{team['invite_token']}").json()
+
+    assert response.status_code == 409
+    assert _error_code(response) == "ROSTER_LOCKED"
+    assert preview["invite_status"] == "locked"
 
 
 def test_join_one_second_before_deadline_succeeds(

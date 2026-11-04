@@ -300,7 +300,9 @@ def _missing_fields(member: TeamMember) -> list[MissingProfileField]:
     missing: list[MissingProfileField] = []
     if member.game_account_id is None:
         missing.append("game_account_id")
-    if member.rank_tier is None:
+    # 段位與積分由 update_player_profile 一起寫入；只有其中一個（示範資料、手動匯入）
+    # 也算段位未填，送出條件才擋得住，不會在算平均時漏掉這位隊員
+    if member.rank_tier is None or member.rank_score is None:
         missing.append("rank_tier")
     if member.rank_screenshot_key is None:
         missing.append("rank_screenshot")
@@ -493,10 +495,11 @@ def join_team(session: Session, *, token: str, account_id: uuid.UUID) -> TeamDet
     if team is None:
         raise _invite_not_found()
     tournament = _lock_tournament(session, team.tournament_id)
-    _ensure_can_join(session, tournament, account_id)
-    # 鎖之後才讀報名狀態：送出與加入同時發生時，加入一定看到送出後的結果
+    # 鎖之後才讀報名狀態：送出與加入同時發生時，加入一定看到送出後的結果。
+    # 名單鎖定先於報名期間檢查，與邀請狀態的優先順序（locked > closed）一致
     if _registration_of(session, team).status != RegistrationStatus.FORMING:
         raise _roster_locked_for_join()
+    _ensure_can_join(session, tournament, account_id)
     if repository.count_members(session, team.id) >= _max_members(tournament):
         raise _team_full()
 
@@ -668,7 +671,9 @@ def submit_registration(
     school_id = entries[0].school_id
     scores = [m.rank_score for m in members if m.rank_score is not None]
     avg_rank_score = player_profile.average_rank_score_decimal(scores)
-    assert school_id is not None and avg_rank_score is not None
+    if school_id is None or avg_rank_score is None:
+        # 送出條件已保證；不用 assert（python -O 會略過而把 null 寫進快照）
+        raise RuntimeError("送出條件通過後仍缺學校或段位積分")
     submitted_at = clock.now()
     registration.school_id = school_id
     registration.avg_rank_score = avg_rank_score
