@@ -8,15 +8,39 @@ import {
 } from "./client"
 import { client } from "./client.gen"
 import type {
+  competitionCheckInData,
+  competitionCheckInErrors,
+  competitionCheckInResponses,
+  competitionDeleteGameData,
+  competitionDeleteGameErrors,
+  competitionDeleteGameResponses,
   competitionDrawData,
   competitionDrawErrors,
   competitionDrawResponses,
+  competitionListManagedMatchesData,
+  competitionListManagedMatchesErrors,
+  competitionListManagedMatchesResponses,
+  competitionReadCheckInStatusData,
+  competitionReadCheckInStatusErrors,
+  competitionReadCheckInStatusResponses,
   competitionReadPublicBracketData,
   competitionReadPublicBracketErrors,
   competitionReadPublicBracketResponses,
   competitionReadPublicMatchData,
   competitionReadPublicMatchErrors,
   competitionReadPublicMatchResponses,
+  competitionReadScoreEntryData,
+  competitionReadScoreEntryErrors,
+  competitionReadScoreEntryResponses,
+  competitionRecordGameData,
+  competitionRecordGameErrors,
+  competitionRecordGameResponses,
+  competitionRescheduleMatchData,
+  competitionRescheduleMatchErrors,
+  competitionRescheduleMatchResponses,
+  competitionSubmitResultData,
+  competitionSubmitResultErrors,
+  competitionSubmitResultResponses,
   identityApproveOrganizerApplicationData,
   identityApproveOrganizerApplicationErrors,
   identityApproveOrganizerApplicationResponses,
@@ -959,6 +983,174 @@ export class CompetitionService {
       responseType: "json",
       url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}",
       ...options,
+    })
+  }
+
+  /**
+   * Read Check In Status
+   *
+   * 登入者的報到狀態：所屬一方與不能報到的原因（None 代表可報到）。
+   */
+  public static readCheckInStatus<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadCheckInStatusData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadCheckInStatusResponses,
+      competitionReadCheckInStatusErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in",
+      ...options,
+    })
+  }
+
+  /**
+   * Check In
+   *
+   * 隊長為本隊報到（隊伍由登入者是哪一隊的隊長推得，請求不帶隊伍）。
+   */
+  public static checkIn<ThrowOnError extends boolean = true>(
+    options: Options<competitionCheckInData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      competitionCheckInResponses,
+      competitionCheckInErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Score Entry
+   *
+   * 登入者的比分登錄狀態（S4 Score entry panel）；不是記分者時 `is_scorer` 為 false、其他欄位空。
+   */
+  public static readScoreEntry<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadScoreEntryData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadScoreEntryResponses,
+      competitionReadScoreEntryErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/score-entry",
+      ...options,
+    })
+  }
+
+  /**
+   * Delete Game
+   *
+   * 刪除最後一局；只限記分者。
+   */
+  public static deleteGame<ThrowOnError extends boolean = true>(
+    options: Options<competitionDeleteGameData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<
+      competitionDeleteGameResponses,
+      competitionDeleteGameErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}",
+      ...options,
+    })
+  }
+
+  /**
+   * Record Game
+   *
+   * 登錄一局（局號＝目前局數＋1 為新增，不大於目前局數為覆寫）；只限記分者。
+   */
+  public static recordGame<ThrowOnError extends boolean = true>(
+    options: Options<competitionRecordGameData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<
+      competitionRecordGameResponses,
+      competitionRecordGameErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Submit Result
+   *
+   * 送出系列結果，場次進入申訴期；之後只能經申訴更正。只限記分者。
+   */
+  public static submitResult<ThrowOnError extends boolean = true>(
+    options: Options<competitionSubmitResultData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      competitionSubmitResultResponses,
+      competitionSubmitResultErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/submit",
+      ...options,
+    })
+  }
+
+  /**
+   * List Managed Matches
+   *
+   * S30 場次列表：每場附上能不能改時間與可選範圍；只限該賽事主辦方，尚未抽籤回 404 `BRACKET_NOT_FOUND`。
+   */
+  public static listManagedMatches<ThrowOnError extends boolean = true>(
+    options: Options<competitionListManagedMatchesData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionListManagedMatchesResponses,
+      competitionListManagedMatchesErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/manage/matches",
+      ...options,
+    })
+  }
+
+  /**
+   * Reschedule Match
+   *
+   * 修改待開打場次的預定時間；只限該賽事主辦方。
+   */
+  public static rescheduleMatch<ThrowOnError extends boolean = true>(
+    options: Options<competitionRescheduleMatchData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).patch<
+      competitionRescheduleMatchResponses,
+      competitionRescheduleMatchErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/schedule",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 }

@@ -9,10 +9,17 @@ from app.core.errors import BusinessError
 from app.modules.competition import service
 from app.modules.competition.models import (
     BracketRead,
+    CheckInRead,
+    CheckInStatus,
+    GameScoreIn,
+    ManagedMatch,
+    MatchRead,
     PublicBracket,
     PublicMatchDetail,
+    RescheduleIn,
+    ScoreEntryState,
 )
-from app.modules.identity.deps import Organizer
+from app.modules.identity.deps import CurrentAccount, Organizer
 
 router = APIRouter(tags=["competition"])
 
@@ -46,3 +53,134 @@ def read_public_match(
     return service.get_public_match(
         session, tournament_id=tournament_id, match_id=match_id
     )
+
+
+@router.post(
+    "/tournaments/{tournament_id}/matches/{match_id}/check-in",
+    status_code=status.HTTP_201_CREATED,
+)
+def check_in(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> CheckInRead:
+    """隊長為本隊報到（隊伍由登入者是哪一隊的隊長推得，請求不帶隊伍）。"""
+    result = service.check_in(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
+    )
+    session.commit()
+    return result
+
+
+@router.get("/tournaments/{tournament_id}/matches/{match_id}/check-in")
+def read_check_in_status(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> CheckInStatus:
+    """登入者的報到狀態：所屬一方與不能報到的原因（None 代表可報到）。"""
+    return service.get_check_in_status(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
+    )
+
+
+@router.get("/tournaments/{tournament_id}/matches/{match_id}/score-entry")
+def read_score_entry(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> ScoreEntryState:
+    """登入者的比分登錄狀態（S4 Score entry panel）；不是記分者時 `is_scorer` 為 false、其他欄位空。"""
+    return service.get_score_entry(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
+    )
+
+
+@router.put("/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}")
+def record_game(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    game_no: int,
+    body: GameScoreIn,
+) -> ScoreEntryState:
+    """登錄一局（局號＝目前局數＋1 為新增，不大於目前局數為覆寫）；只限記分者。"""
+    result = service.record_game(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        account_id=account.id,
+        game_no=game_no,
+        data=body,
+    )
+    session.commit()
+    return result
+
+
+@router.delete("/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}")
+def delete_game(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    game_no: int,
+) -> ScoreEntryState:
+    """刪除最後一局；只限記分者。"""
+    result = service.delete_game(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        account_id=account.id,
+        game_no=game_no,
+    )
+    session.commit()
+    return result
+
+
+@router.post("/tournaments/{tournament_id}/matches/{match_id}/submit")
+def submit_result(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> ScoreEntryState:
+    """送出系列結果，場次進入申訴期；之後只能經申訴更正。只限記分者。"""
+    result = service.submit_result(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
+    )
+    session.commit()
+    return result
+
+
+@router.get("/tournaments/{tournament_id}/manage/matches")
+def list_managed_matches(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> list[ManagedMatch]:
+    """S30 場次列表：每場附上能不能改時間與可選範圍；只限該賽事主辦方，尚未抽籤回 404 `BRACKET_NOT_FOUND`。"""
+    return service.list_managed_matches(
+        session, tournament_id=tournament_id, actor_id=organizer.id
+    )
+
+
+@router.patch("/tournaments/{tournament_id}/matches/{match_id}/schedule")
+def reschedule_match(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    body: RescheduleIn,
+) -> MatchRead:
+    """修改待開打場次的預定時間；只限該賽事主辦方。"""
+    result = service.reschedule_match(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        actor_id=organizer.id,
+        scheduled_at=body.scheduled_at,
+    )
+    session.commit()
+    return result
