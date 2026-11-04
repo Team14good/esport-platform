@@ -89,6 +89,19 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
   summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
   evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-schedule-rules.md`
+  summary: 4.3 第二階段的改時間 service 呼叫 `reschedule_window`／`check_reschedule` 時，準決賽的 `next_match_at` 要傳決賽與季軍賽中較早的那一場。
+  evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
+  summary: Story 3.4～3.6 第二階段：把純函式 `registration/allocation.py`（`allocate_priority_window`、`decide_first_come`、`waitlist_order`、`fill_from_waitlist`）接上資料庫、worker、事件與畫面。
+  evidence: 第一階段只寫純函式，因 Registration 資料表（3.1）與賽事、`lock_tournament`（2.2）尚未合併。第二階段要做：worker 工作在優先期結束與報名截止後 1 分鐘內執行，先 `lock_tournament()`、取報名快照、呼叫本模組、以 `mark_status` 改狀態、寫操作紀錄（操作者 `system`）、發 outbox 事件，重複執行結果不變（以 `frozen_clock` 推進時間測試）；優先期結算時保存「優先期有報名的學校」（結算輸入的學校集合）供先搶期的 `priority_schools` 使用；先搶期送出在鎖內呼叫 `decide_first_come`，並補 200 筆平行送出的併發測試；S17／S12 顯示「正取」「候補第 N 位」或「候補・目前不在遞補順序中」＋原因（`REASON_MESSAGES`、`REPRESENTATIVE_BACKFILL_MESSAGE`）。本模組把 `drawn` 也算進每校正取數，第二階段確認抽籤後的狀態名稱與此一致。跨人交接：registration 要提供公開函式 `fill_at_deadline`（epic-3-context；D 的 4.1 在開放報名中抽籤時呼叫，交接期限 11/12）；截止工作必須確保優先期結算已先執行，不能有 `pending` 報名被 `fill_from_waitlist` 漏掉。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
+  summary: `allocation.py` 沒有「優先期代表隊退出時，由同校平均段位積分次高的隊伍遞補」的對象函式（FR-17）。
+  evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Blind Hunter）。只在代表隊撤回或被退回時觸發（3.7、3.8 期中擱置），期中不會發生；做 3.7 或 3.8 時在本模組新增，並讓先搶期名額釋出時的遞補先處理這個情況（medium）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
+  summary: epic-3-context 要求 `AllocationPolicy` 分支覆蓋率 ≥ 90%，但 `scripts/test.sh` 沒有 `--branch`，只靠 spec 的手動指令檢查。
+  evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Verification Gap）。目前實測 100%；之後修改 `allocation.py` 時若漏測分支，一般測試仍會通過。要自動檢查時，在 CI 加一步對 `app/modules/registration/allocation.py` 以 `--branch` 量測並設 `--fail-under=90`（low）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: 4.4 指派裁判後，S4 的記分者判斷要接上：`ScoreEntryState.is_scorer` 已依 `Match.referee_account_id`（有指派時只有該裁判、未指派時為主辦方）判斷，但目前沒有任何流程會寫入 `referee_account_id`。
   evidence: 2026-11-01 5.3 第二階段。兩條路都已有測試（直接寫入 `referee_account_id` 模擬指派）。4.4 實作指派、改派、5.5 填位後取消指派時，確認 S4 面板隨之顯示或隱藏，並補一條經指派 API 的端對端測試。
@@ -107,9 +120,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-replay-clear-helper.md`
   summary: 6.2 `replay_match`（B）要呼叫 `clear_for_replay` 並串完整重賽流程，目前尚未實作。
   evidence: 呼叫順序：`lock_tournament` → `clear_for_replay` → `transition_match` 回待開打 → 寫入新 `scheduled_at` → `start_forfeit_clock` → 操作紀錄 → 事件；全部在同一個交易內。操作紀錄的變更前內容用 `ReplayCleared`（報到、各局、結果、勝隊、勝局數與各期限）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
-  summary: Story 2.4 第二階段：S1、S2 的狀態改用 1.7 的 `StatusBadge`（開放報名、進行中 live＋進行中脈動、賽程已公布 brand、已取消 destructive、其餘 muted-foreground）；S1 頂部「想辦賽事？申請成為主辦方」Page banner（已登入、非主辦方、沒有待審核申請；可關閉，存 `localStorage`，連到 `/organizer/apply`）；S1 空狀態對主辦方另顯示「建立賽事」（連到 2.2 第二階段的 S26）。
-  evidence: 2026-11-02 使用者決定 2.4 拆兩階段：`StatusBadge`、申請 API 在 A 的 1.7（PR #10），主辦方身分在 1.8（PR #11），兩者都未合併。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: （低）公開賽事列表 `GET /tournaments` 沒有分頁或上限，未登入的請求一次取回所有賽事（含已結束、已取消）。
   evidence: 2026-11-02 Story 2.4 第一輪審查（Blind Hunter、Edge Case Hunter）。期中賽事數量少；賽事累積後在 S1 改為分頁（沿用 1.8 的分頁格式）或只回最近的已結束賽事。

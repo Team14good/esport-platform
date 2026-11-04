@@ -329,3 +329,15 @@
 - 問題與修正：AI 發現 D 要的「已截止報名」和 2.2 的「報名截止必須晚於現在」互相矛盾，查到 D 的 `draw` 也接受開放報名，交給人選擇。人第一次只回答了一題，AI 沒有把其他建議值當成決定，而是再確認一次。實作子代理在驗證階段停滯 10 分鐘被中止（本機 `python` 是 Microsoft Store 空殼），主代理接手。接手後發現 A 的 `test_init_twice_keeps_demo_account_count` 失敗：它把所有含 `already exists, skipped` 的 log 都算成帳號數；沒有改 A 的測試，而是把本步驟對既有遊戲與賽事的 log 改成較準確的 `reused`。自己的兩個測試單獨跑會過、全部跑會失敗，原因是測試資料庫有併發測試提交的資料，改成只看示範資料自己的遊戲與操作紀錄。審查 14 筆：6 筆修正（包括測試與註解宣稱 savepoint 會撤銷資料，但實際上沒有東西可撤銷）、1 筆延後（保留資料庫超過 7 天會沿用過期賽事）、2 筆誤報、5 筆不處理
 - 成熟度：L4（spec → 子代理實作 → 主代理驗證 → 多個審查者 → 測試）
 - 證據：`spec-7-1-tournaments-demo-step.md` 的 Decisions、Implementation Notes、Review Triage Log；commit 未記錄
+
+### 2026-11-04｜專案管理與流程／文件｜依 D 的審查補示範資料說明
+
+- Story／範圍：7.1 tournaments 步驟（PR #42）的審查後續
+- 工具：Claude Code（Opus 5.5），未經 BMAD
+- 怎麼用：使用者問「所有留言都有看嗎」，AI 承認先前只看了開著的 PR、每則只讀前 200 字，補查今天有更新的 17 個 PR 全部留言（含行內），找出 PR #42 的 D 審查有兩點建議還沒處理
+- AI 產出：README 示範資料段落更新（遊戲與示範賽事已存在、Demo 前 `docker compose down -v`）；`demo_data/__init__.py` 擴充說明新增「略過訊息不要用 `already exists, skipped`」；刪除已完成的 2.4 第二階段延後項目
+- 人做了什麼：要求先做這個小 PR
+- 驗證：ruff check、format 通過；只改說明文字
+- 問題與修正：AI 前一次回報「所有留言都看過」時，實際只查了開著的 PR、截斷長度，也沒查行內留言與已合併 PR，漏掉 PR #42、#38 的審查內容；被使用者追問後才補查並修正
+- 成熟度：L2（AI 產出文件修改，範圍由人決定）
+- 證據：PR #42 的 D 審查；commit 未記錄

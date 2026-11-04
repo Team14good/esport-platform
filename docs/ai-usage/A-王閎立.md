@@ -389,6 +389,22 @@
 - 成熟度：L3（AI 依人提出的審查意見修改，範圍與做法由人決定）
 - 證據：spec-7-2 的 Spec Change Log（2026-11-03）
 
+### 2026-11-04｜設計、測試／架構規則寫成測試｜對照課程講義〈AI 時代的細部設計〉補後端架構測試
+
+- Story／範圍：不屬於任何 Story（`chore/architecture-tests`，從 main 開的 worktree）
+- 工具：Claude Code（Opus 5.5）＋ pptx skill ＋ bmad-build
+- 怎麼用：先請 AI 讀老師的講義（106 頁），對照 main 的程式與 ARCHITECTURE-SPINE，找出可以應用的觀念；選定講義第 28 頁「把依賴規則寫成測試」後，用 bmad-build 寫 spec 並實作
+- AI 產出：講義對照分析（已做到 6 項、可改善 4 項）；spec `spec-architecture-tests.md`；`backend/tests/test_architecture.py` 用 `ast` 檢查 AD-2、AD-3、AD-5、AD-13，共 53 個測試（掃全 `app/` 3 個、自我檢查 2 個、違規與允許案例 48 個）
+- 人做了什麼：決定先做架構測試；回答兩個規則解讀問題：AD-3 可以依序往下跳級、跨模組可以 import 對方 models 的型別但不能 import 資料表類別；核准 spec
+- 驗證：本機 `uv run pytest tests/test_architecture.py --noconftest` 53 passed；ruff、mypy 通過。反向驗證：在 `registration/service.py` 暫時加入越界 import、`datetime.now()`、`session.commit()`，三條規則各自紅燈，行號正確。Docker 恢復後在 worktree 用獨立的 compose 專案跑完整測試套件：1698 passed，覆蓋率門檻通過
+- 問題與修正：
+  - 盤點時 AI 發現 spine 的 AD-3 圖沒有畫 competition → identity，但程式有這樣呼叫；照圖寫測試會把現有程式判成違規。AI 沒有自己決定，改列成問題交給人
+  - 跨模組 import models 有 12 處，若照 AD-2 字面「只經 service」會全部判違規；AI 確認它們都是型別、沒有資料表類別後，交給人決定界線
+  - 第一版測試 mypy 報 1 個型別錯誤（`owner` 可能是 None），ruff format 也要求重排，都是跑工具後才發現並修正
+  - 第一次跑完整測試時有 1 個寄信測試失敗。AI 讀 log 後發現是只啟動了 db、backend，漏了 mailpit，補啟動後重跑全過，不是程式問題
+  - 因為 main 也改過 `A-王閎立.md`，在原本的 checkout 直接切分支會跟未提交的修改衝突；AI 改用 git worktree，不動 `story/5-8`
+- 成熟度：L3（AI 依架構文件產出測試，規則的解讀由人決定；測試本身是用 CI 擋下 AI 越界的機制，但還沒有改善前後的證據）
+- 證據：`_bmad-output/implementation-artifacts/spec-architecture-tests.md`；`backend/tests/test_architecture.py`；尚未 commit
 ### 2026-11-04｜測試｜Story 7.2 第二階段：三款遊戲的演練接上新增遊戲、建立賽事與組隊
 
 - Story／範圍：7.2 第二階段（`story/7-2-phase2`）
