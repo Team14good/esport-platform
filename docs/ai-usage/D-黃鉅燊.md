@@ -449,3 +449,14 @@
 - 問題與修正：上一輪把審查紀錄推到 5.1 後沒有再往下同步，5.3、5.2 收尾兩支少了 1 個 commit，這次核對時發現並補上
 - 成熟度：L2（AI 整合，測試與 CI 驗證）
 - 證據：#22、#25、#26、#27、#34 的 commit 與 CI 紀錄
+
+### 2026-11-04｜修正｜依 C 對 #22（5.1 第二階段）的審查修正兩個 worker 問題
+
+- Story／範圍：5.1 第二階段（#22）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：C 核准時提出 5 項。AI 判斷其中兩項是真的錯誤並修正：棄權查詢沒核對報到的是不是這場兩隊；賽事開始 worker 會被一直出錯的候選卡住，改用 savepoint 加略過集合，做法與 #20 的自動確認相同。另外讓 503 訊息依用途顯示「報到」，並補上用 registration 真實隊長報到的整合測試。第 5 項（改成 `VerifiedAccount`）查證後不改，因為建立和加入隊伍都要求已驗證帳號
+- AI 產出：`repository.find_forfeit_due`、`find_unstarted_bracket_id(exclude=)`、`service.start_due_tournament`、`registration_port` 的修改，4 個新測試，spec 的 Review Triage Log
+- 人做了什麼：C 審查提出問題；使用者決定接下來所有人的 PR 由 D 這邊審
+- 驗證：拿掉兩個修正時對應的新測試都失敗；後端全套 1513 passed、lint 通過
+- 成熟度：L3（人審查找出問題，AI 修正並驗證）
+- 證據：#22 的審查與 CI 紀錄

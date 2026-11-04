@@ -6,6 +6,7 @@
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,9 +24,15 @@ from app.modules.competition.models import (
 )
 from app.modules.identity.models import Account
 from app.modules.registration import service as registration_service
+from app.modules.tournaments import service as tournaments_service
 from app.modules.tournaments.models import Tournament, TournamentStatus
 from app.worker import jobs, run_once
-from tests.competition.conftest import FakeRegistration, FrozenClockLike, draw_with
+from tests.competition.conftest import (
+    FakeRegistration,
+    FrozenClockLike,
+    draw_with,
+    tournament_in,
+)
 from tests.helpers import API, bearer, make_account, token_for
 
 pytestmark = pytest.mark.usefixtures("frozen_clock")
@@ -320,7 +327,7 @@ def test_registration_without_is_captain_is_503(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     frozen_clock.set(OPENS)
-    # 只還原 is_captain 的替身；registration 目前沒有這個函式
+    # 還原真正的轉接函式，再拿掉 registration 的 is_captain（模擬它不存在）
     monkeypatch.setattr(registration_port, "is_captain", _REAL_IS_CAPTAIN)
     monkeypatch.delattr(registration_service, "is_captain", raising=False)
 
@@ -328,7 +335,48 @@ def test_registration_without_is_captain_is_503(
 
     assert response.status_code == 503
     assert _code(response) == "REGISTRATION_UNAVAILABLE"
+    assert "報到" in response.json()["detail"]["message"]
     assert _check_in_count(session) == 0
+
+
+def test_check_in_with_real_registration_captain(
+    client: TestClient,
+    session: Session,
+    fake_registration: FakeRegistration,
+    frozen_clock: FrozenClockLike,
+) -> None:
+    """不替換 is_captain：用 registration 真正建立的隊伍與隊長報到。"""
+    organizer = make_account(session, organizer=True)
+    tournament = tournament_in(session, TournamentStatus.OPEN, organizer=organizer)
+    captains = [make_account(session) for _ in range(2)]
+    teams = [
+        registration_service.create_team(
+            session, tournament_id=tournament.id, account_id=captain.id, name=f"隊{i}"
+        )
+        for i, captain in enumerate(captains)
+    ]
+    captain_of = {team.id: captain for team, captain in zip(teams, captains)}
+    row = session.get(Tournament, tournament.id)
+    assert row is not None
+    row.status = TournamentStatus.CLOSED
+    session.add(row)
+    fake_registration.teams = [team.id for team in teams]
+    bracket = service.draw(
+        session, tournament_id=tournament.id, actor_id=organizer.id
+    )
+    [match] = bracket.matches
+    assert match.team_a_id is not None
+    session.commit()
+    url = f"{API}/tournaments/{tournament.id}/matches/{match.id}/check-in"
+    frozen_clock.set(OPENS)
+
+    outsider = client.post(url, headers=_headers(client, make_account(session)))
+    captain = client.post(url, headers=_headers(client, captain_of[match.team_a_id]))
+
+    assert outsider.status_code == 403
+    assert _code(outsider) == "CAPTAIN_REQUIRED"
+    assert captain.status_code == 201, captain.text
+    assert captain.json()["team_id"] == str(match.team_a_id)
 
 
 def test_both_captains_check_in_without_overwriting(
@@ -596,6 +644,34 @@ def test_forfeit_due_excludes_fully_checked_in_matches(
     assert len(service.list_check_ins(session, match_id=setup.matches["M1"].id)) == 2
 
 
+def test_forfeit_due_ignores_check_ins_of_replaced_teams(
+    session: Session, setup: Setup
+) -> None:
+    """場次換了隊伍（頂替、重賽）後，舊隊伍留下的報到不算這場已報到。"""
+    match = session.get(Match, setup.matches["M1"].id)
+    assert match is not None and match.team_a_id is not None
+    assert match.team_b_id is not None
+    for side, team_id in (("a", match.team_a_id), ("b", match.team_b_id)):
+        repository.add_check_in(
+            session,
+            CheckIn(
+                match_id=match.id,
+                team_id=team_id,
+                account_id=setup.captain_of(side).id,
+                at=OPENS,
+            ),
+        )
+    replacement = setup.matches["M2"].team_a_id
+    assert replacement is not None
+    assert match.id not in service.list_forfeit_due(session, now=DEADLINE)
+
+    match.team_b_id = replacement
+    session.add(match)
+    session.flush()
+
+    assert match.id in service.list_forfeit_due(session, now=DEADLINE)
+
+
 def test_forfeit_due_skips_cancelled_tournaments(
     session: Session, setup: Setup
 ) -> None:
@@ -796,6 +872,42 @@ def test_start_skips_cancelled_or_finished(
         select(Bracket).where(Bracket.tournament_id == setup.tournament_id)
     ).one()
     assert bracket.start_handled_at is not None
+
+
+def test_start_skips_a_failing_bracket_and_starts_the_next(
+    session: Session,
+    setup: Setup,
+    fake_registration: FakeRegistration,
+    frozen_clock: FrozenClockLike,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """最早的候選一直出錯時，後面已到時間的賽事仍會轉為進行中。"""
+    later, _ = draw_with(
+        session, fake_registration, 2, start_at=SCHEDULED + timedelta(hours=1)
+    )
+    real_transition = tournaments_service.transition_tournament
+
+    def transition(session: Session, *, tournament_id: uuid.UUID, **kwargs: Any) -> Any:
+        if tournament_id == setup.tournament_id:
+            raise ValueError("broken tournament")
+        return real_transition(session, tournament_id=tournament_id, **kwargs)
+
+    monkeypatch.setattr(tournaments_service, "transition_tournament", transition)
+    frozen_clock.set(OPENS + timedelta(hours=1))  # 兩場賽事的報到都已開放
+
+    assert service.start_due_tournament(session) is True
+    assert service.start_due_tournament(session) is False
+
+    assert _tournament_status(session, later.id) == TournamentStatus.ONGOING
+    assert (
+        _tournament_status(session, setup.tournament_id) == TournamentStatus.PUBLISHED
+    )
+    broken = session.exec(
+        select(Bracket).where(Bracket.tournament_id == setup.tournament_id)
+    ).one()
+    assert broken.start_handled_at is None  # 沒有標記，修好後下一輪仍會處理
+    assert "failed to start; skipped" in caplog.text
 
 
 def test_start_uses_earliest_match_time(
