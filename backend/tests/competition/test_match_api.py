@@ -56,6 +56,8 @@ DETAIL_KEYS = {
     # 5.1：兩隊的報到時間
     "check_in_a_at",
     "check_in_b_at",
+    # A 的 #47：報到倒數
+    "forfeit_deadline",
 }
 
 
@@ -115,6 +117,31 @@ def test_first_round_match_without_token(
     assert data["team_a"]["name"].startswith("隊伍")
     assert data["team_b"]["name"].startswith("隊伍")
     assert "@" not in response.text
+    m1 = session.get(Match, ids["M1"])
+    assert m1 is not None and m1.forfeit_deadline is not None
+    assert datetime.fromisoformat(data["forfeit_deadline"]) == m1.forfeit_deadline
+
+
+def test_forfeit_deadline_null_while_teams_pending(
+    client: TestClient, session: Session, fake_registration: FakeRegistration
+) -> None:
+    tournament_id, ids = _drawn(session, fake_registration)
+    session.commit()
+
+    assert _get(client, tournament_id, ids["M5"])["forfeit_deadline"] is None
+
+
+def test_forfeit_deadline_null_once_not_scheduled(
+    client: TestClient, session: Session, fake_registration: FakeRegistration
+) -> None:
+    tournament_id, ids = _drawn(session, fake_registration)
+    m1 = session.get(Match, ids["M1"])
+    assert m1 is not None and m1.forfeit_deadline is not None
+    m1.status = MatchStatus.LIVE
+    session.add(m1)
+    session.commit()
+
+    assert _get(client, tournament_id, ids["M1"])["forfeit_deadline"] is None
 
 
 def test_every_match_equals_public_bracket_entry(
