@@ -198,6 +198,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-s30-matches-page.md`
   summary: 主辦方賽事後台側欄在子頁（例如 S30 `/organizer/tournaments/{id}/matches`）時，「總覽」（`/organizer/tournaments/{id}`）也顯示為目前位置：`BackofficeLayout` 的 `Link` 沒設 `activeOptions`，以前綴比對；「我的賽事」（`/organizer`）在所有賽事頁也同樣亮起。
   evidence: 2026-11-04 S30 實作時發現；B 的 S31 裁判頁也會遇到。修法需要改 B 的 `components/layout/BackofficeLayout.tsx`（例如 `BackofficeNavItem` 加選填的 `exact`，傳給 `activeOptions`），S30 spec 禁止改 B 的元件，交給 B 決定。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-s30-matches-page.md`
+  summary: S30 的 Manual checks 還沒做：在瀏覽器（含 375 px）走一次列表、修改時間、指派、收回。
+  evidence: 2026-11-04 A 在 #48 審查提醒。本機沒有已抽籤的賽事（抽籤要等 C 的 registration 函式，或 7.1 示範資料有已抽籤的賽事），目前只有單元測試；任一條件完成後補做。
 
 ## Deferred from: spec-5-8-real-match-data.md (2026-11-04)
 

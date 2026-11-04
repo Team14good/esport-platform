@@ -308,6 +308,20 @@ describe("S30 列表：補充", () => {
     )
   })
 
+  it("裁判清單還在載入（含重試）：場次列照常顯示，裁判欄為「—」", async () => {
+    mockList([SEMI_1])
+    vi.spyOn(TournamentsService, "listTournamentReferees").mockReturnValue(
+      new Promise(() => {}) as ReturnType<
+        typeof TournamentsService.listTournamentReferees
+      >,
+    )
+    open()
+
+    const row = await rowOf("M1")
+    expect(within(row).getByText("—")).toBeInTheDocument()
+    expect(within(row).queryByRole("combobox")).toBeNull()
+  })
+
   it("裁判清單載入失敗：顯示錯誤與重新載入，不顯示「沒有裁判」或「未知的裁判」", async () => {
     const user = userEvent.setup()
     mockList([match({ referee_account_id: "r-1" })])
@@ -463,6 +477,38 @@ describe("S30 修改時間", () => {
     )
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
     expect(screen.getByRole("dialog")).toBeInTheDocument()
+  })
+
+  it("409 重抓後起點變晚：輸入值調到新起點", async () => {
+    const user = userEvent.setup()
+    mockList(
+      [SEMI_1],
+      [
+        match({
+          reschedule: {
+            ...CAN_RESCHEDULE,
+            earliest: "2026-11-10T13:00:00Z",
+          },
+        }),
+      ],
+    )
+    mockReferees()
+    vi.spyOn(CompetitionService, "rescheduleMatch").mockRejectedValue(
+      httpError(409, {
+        detail: { code: "RESCHEDULE_BEFORE_NOW", message: "可選範圍已變更。" },
+      }),
+    )
+    open()
+
+    const row = await rowOf("M1")
+    await user.click(within(row).getByRole("button", { name: "修改時間" }))
+    const input = await screen.findByLabelText("新的開打時間（台北時間）")
+    fireEvent.change(input, { target: { value: "2026-11-10T20:30" } })
+    await user.click(screen.getByRole("button", { name: "儲存時間" }))
+
+    // 新起點是台北 21:00，20:30 低於它，調到 21:00
+    await waitFor(() => expect(input).toHaveValue("2026-11-10T21:00"))
+    expect(input).toHaveAttribute("min", "2026-11-10T21:00")
   })
 
   it("原時間早於允許起點：預填起點；沒改時間時不能儲存", async () => {

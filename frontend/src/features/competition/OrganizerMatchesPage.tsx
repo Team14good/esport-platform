@@ -180,10 +180,8 @@ export function OrganizerMatchesPage({
 
   const current = Math.min(page, lastPage)
   const start = (current - 1) * ORGANIZER_MATCHES_PAGE_SIZE
-  // 裁判清單載入前先不顯示列，避免裁判欄先閃出「未知的裁判」
-  const rows = referees.isPending
-    ? undefined
-    : sorted?.slice(start, start + ORGANIZER_MATCHES_PAGE_SIZE)
+  // 裁判清單載入前（含重試期間）也先顯示列，裁判欄為「—」（names 為 null）
+  const rows = sorted?.slice(start, start + ORGANIZER_MATCHES_PAGE_SIZE)
 
   let body: ReactNode
   if (matches.isError && !matches.data) {

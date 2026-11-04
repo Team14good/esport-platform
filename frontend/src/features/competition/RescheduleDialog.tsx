@@ -52,6 +52,12 @@ function RescheduleForm({
       : original,
   )
   const [invalid, setInvalid] = useState(false)
+  // 409 後重抓、起點變晚時，把低於新起點的值調到起點（避免瀏覽器原生驗證的非繁中提示）
+  useEffect(() => {
+    if (!earliest) return
+    const min = isoToTaipeiLocal(earliest)
+    setValue((current) => (current < min ? min : current))
+  }, [earliest])
   const reschedule = useRescheduleMatch(tournamentId, match.id)
 
   function submit(event: FormEvent) {
