@@ -3,8 +3,8 @@
 import logging
 import secrets
 import uuid
-from collections.abc import Callable
-from datetime import datetime
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -14,7 +14,7 @@ from app.core import audit, authz, clock, events
 from app.core.errors import BusinessError
 from app.modules.competition import bracket as bracket_rules
 from app.modules.competition import checkin as checkin_rules
-from app.modules.competition import progression, registration_port, repository
+from app.modules.competition import progression, registration_port, repository, scoring
 from app.modules.competition import schedule as schedule_rules
 from app.modules.competition.models import (
     Bracket,
@@ -24,20 +24,33 @@ from app.modules.competition.models import (
     CheckInRead,
     CheckInStatus,
     CheckInStatusReason,
+    GameScoreIn,
+    ManagedMatch,
     Match,
+    MatchGame,
     MatchOpponentsDecided,
     MatchOutcome,
     MatchRead,
+    MatchRescheduled,
     MatchResultConfirmed,
+    MatchResultSubmitted,
     MatchStatus,
     PublicBracket,
+    PublicGame,
     PublicMatch,
     PublicMatchDetail,
     PublicPodium,
     PublicTeamRef,
     PublicTournamentRef,
+    ReplayCleared,
+    RescheduleBlockReason,
+    RescheduleInfo,
+    ScoreEntryReason,
+    ScoreEntryState,
+    SeriesRead,
     TeamCheckedIn,
 )
+from app.modules.identity import service as identity_service
 from app.modules.tournaments import service as tournaments_service
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
 
@@ -445,7 +458,7 @@ def get_public_match(
         round_name="季軍賽"
         if match.is_third_place
         else bracket_rules.round_name(match.round_no, bracket.rounds),
-        games=[],
+        games=[_public_game(game) for game in repository.list_games(session, match.id)],
         same_round=same_round,
         appeal_deadline=match.appeal_deadline
         if match.status in _APPEAL_STATUSES
@@ -555,6 +568,40 @@ def start_forfeit_clock(session: Session, *, match: Match) -> None:
         forfeit_minutes=tournament.forfeit_minutes,
     )
     repository.set_forfeit_deadline(session, match, deadline, now)
+
+
+def clear_for_replay(session: Session, *, match: Match) -> ReplayCleared:
+    """重新比賽前清除該場的報到紀錄、逐局比分與結果欄位（6.2，B 的 `replay_match` 呼叫）。
+
+    呼叫端先 `lock_tournament`（AD-6）；這裡再 `lock_match` 取最新值，以鎖住後的
+    狀態判斷，只接受申訴中，其他狀態拋 409 `MATCH_INVALID_TRANSITION`、不改資料。
+    不轉換狀態、不改 `scheduled_at`（棄權期限等欄位會歸零），也不寫操作紀錄或事件，
+    由 `replay_match` 依情境一次寫入。整個重賽流程（清除、`transition_match`、
+    新 `scheduled_at`、`start_forfeit_clock`、操作紀錄與事件）必須在同一個交易內。
+    回傳清除前的內容。
+    """
+    match = lock_match(session, match_id=match.id)
+    if MatchStatus(match.status) != MatchStatus.APPEALED:
+        raise BusinessError(
+            "MATCH_INVALID_TRANSITION",
+            "場次目前的狀態不能進行這個操作。",
+            status_code=409,
+        )
+    cleared = ReplayCleared(
+        check_ins=list_check_ins(session, match_id=match.id),
+        games=[_public_game(g) for g in repository.list_games(session, match.id)],
+        outcome=MatchOutcome(match.outcome) if match.outcome is not None else None,
+        winner_id=match.winner_id,
+        wins_a=match.wins_a,
+        wins_b=match.wins_b,
+        submitted_by=match.submitted_by,
+        submitted_at=match.submitted_at,
+        appeal_deadline=match.appeal_deadline,
+        confirmed_at=match.confirmed_at,
+        forfeit_deadline=match.forfeit_deadline,
+    )
+    repository.clear_for_replay(session, match, clock.now())
+    return cleared
 
 
 # ---------------------------------------------------------------- 確認結果與晉級
@@ -1067,3 +1114,626 @@ def _start_bracket(session: Session, bracket_id: uuid.UUID, now: datetime) -> bo
         )
     repository.mark_start_handled(session, candidate, now)
     return True
+
+
+# ---------------------------------------------------------------- 比分登錄與送出（Story 5.3、5.4）
+
+# 已送出系列結果的場次：之後只能經申訴更正
+_SUBMITTED = frozenset(
+    {MatchStatus.APPEAL_WINDOW, MatchStatus.APPEALED, MatchStatus.CONFIRMED}
+)
+
+# 不能登錄的原因代碼（`ScoreEntryState.reason`）對應寫入 API 的錯誤碼與訊息（皆 409）
+_ENTRY_REJECTIONS: dict[ScoreEntryReason, tuple[str, str]] = {
+    "not_accepting_scores": (
+        "TOURNAMENT_NOT_ACCEPTING_SCORES",
+        "這場賽事目前不接受比分回報。",
+    ),
+    "result_submitted": (
+        "RESULT_ALREADY_SUBMITTED",
+        "系列結果已送出，無法再修改，只能經由申訴更正。",
+    ),
+    "not_recordable": ("MATCH_NOT_RECORDABLE", "這場比賽不能登錄比分。"),
+    "teams_pending": ("MATCH_TEAMS_PENDING", "對手還沒確定，暫時不能登錄比分。"),
+    "check_in_incomplete": ("CHECK_IN_INCOMPLETE", "兩隊都報到後才能登錄比分。"),
+}
+
+# `scoring.py` 的原因對應錯誤碼與訊息（皆 409）；`not_decided` 的訊息含門檻，另外組
+_SCORE_REJECTIONS: dict[scoring.ScoreReason, tuple[str, str]] = {
+    "tie": ("SCORE_TIE", "一局不能平手。"),
+    "invalid_score": ("SCORE_INVALID", "比分格式不正確。"),
+    "series_decided": ("SERIES_DECIDED", "已有隊伍達到勝局門檻，不能再新增局。"),
+    "redundant_games": (
+        "REDUNDANT_GAMES",
+        "這樣修改後，後面的局就不需要打了。請先刪除後面的局再修改。",
+    ),
+    "invalid_game_no": ("INVALID_GAME_NO", "這一局無法登錄或刪除，請重新整理頁面。"),
+    "not_last_game": ("NOT_LAST_GAME", "只能刪除最後一局。"),
+}
+
+
+def _score_rejection(reason: scoring.ScoreReason, *, wins_needed: int) -> BusinessError:
+    if reason == "not_decided":
+        return BusinessError(
+            "SERIES_NOT_DECIDED",
+            f"任一隊拿到 {wins_needed} 勝後才能送出。",
+            status_code=409,
+        )
+    code, message = _SCORE_REJECTIONS[reason]
+    return BusinessError(code, message, status_code=409)
+
+
+def _is_scorer(match: Match, tournament: TournamentRead, account_id: uuid.UUID) -> bool:
+    """記分者：有指派裁判時只有該裁判；未指派時為賽事主辦方。"""
+    if match.referee_account_id is not None:
+        return match.referee_account_id == account_id
+    return tournament.organizer_id == account_id
+
+
+def _entry_reason(
+    session: Session, *, match: Match, tournament: TournamentRead
+) -> ScoreEntryReason | None:
+    """寫入檢查的第 3、5、6 步（身分另外判斷）；可以登錄為 None。
+
+    賽事狀態沿用 tournaments 的 `ensure_accepting_scores`，兩邊不會不一致。
+    """
+    try:
+        tournaments_service.ensure_accepting_scores(tournament)
+    except BusinessError:
+        return "not_accepting_scores"
+    status = MatchStatus(match.status)
+    if status in _SUBMITTED:
+        return "result_submitted"
+    if status == MatchStatus.VOIDED:
+        return "not_recordable"
+    if match.team_a_id is None or match.team_b_id is None:
+        return "teams_pending"
+    checked_in = {c.team_id for c in repository.list_check_ins(session, match.id)}
+    if not {match.team_a_id, match.team_b_id} <= checked_in:
+        return "check_in_incomplete"
+    return None
+
+
+def _to_result(game: MatchGame) -> scoring.GameResult:
+    winner: scoring.Side = "a" if game.winner_side == "a" else "b"
+    return scoring.GameResult(winner=winner, score_a=game.score_a, score_b=game.score_b)
+
+
+def _public_game(game: MatchGame) -> PublicGame:
+    return PublicGame(
+        game_no=game.game_no,
+        winner_side="a" if game.winner_side == "a" else "b",
+        score_a=game.score_a,
+        score_b=game.score_b,
+    )
+
+
+def _game_values(game: MatchGame) -> dict[str, object]:
+    return {
+        "game_no": game.game_no,
+        "winner_side": game.winner_side,
+        "score_a": game.score_a,
+        "score_b": game.score_b,
+    }
+
+
+def _bo(session: Session, match: Match) -> int:
+    return tournaments_service.bo_for_round(
+        session, tournament_id=match.tournament_id, round_no=match.round_no
+    )
+
+
+def _series(games: Sequence[MatchGame], bo: int) -> scoring.Series:
+    return scoring.series([_to_result(game) for game in games], bo=bo)
+
+
+def _locked_for_scoring(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> tuple[Match, TournamentRead]:
+    """寫入（登錄、刪除、送出）共用的檢查 1～6；通過時回傳鎖住的場次與賽事。
+
+    順序：404 → `lock_match`（AD-6，之後才讀狀態、局與報到紀錄）→ 賽事接受比分 →
+    記分者 → 場次狀態 → 兩隊確定與報到。
+    """
+    _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    match = lock_match(session, match_id=match_id)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=match.tournament_id
+    )
+    tournaments_service.ensure_accepting_scores(tournament)
+    if not _is_scorer(match, tournament, account_id):
+        raise BusinessError(
+            "SCORER_REQUIRED",
+            "只有這場比賽的裁判（未指派時為主辦方）可以登錄比分。",
+            status_code=403,
+        )
+    reason = _entry_reason(session, match=match, tournament=tournament)
+    if reason is not None:
+        code, message = _ENTRY_REJECTIONS[reason]
+        raise BusinessError(code, message, status_code=409)
+    return match, tournament
+
+
+def _sync_wins(session: Session, match: Match, games: Sequence[MatchGame]) -> None:
+    """依 `scoring.series` 重算場次的勝局數（公開 Score display 用），一併更新 `updated_at`。"""
+    result = _series(games, _bo(session, match))
+    repository.set_match_wins(session, match, result.wins_a, result.wins_b, clock.now())
+
+
+def record_game(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    account_id: uuid.UUID,
+    game_no: int,
+    data: GameScoreIn,
+) -> ScoreEntryState:
+    """登錄第 `game_no` 局：等於目前局數＋1 為新增，不大於目前局數為覆寫。
+
+    先鎖場次再檢查（AD-6），規則交給 `scoring.py`；第一局登錄時場次轉為進行中。
+    任何拒絕都不改局、場次與操作紀錄。
+    """
+    match, tournament = _locked_for_scoring(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account_id
+    )
+    bo = _bo(session, match)
+    needed = scoring.wins_needed(bo)
+    result = scoring.make_game(
+        tournament.score_type.value,
+        winner=data.winner_side,
+        score_a=data.score_a,
+        score_b=data.score_b,
+    )
+    if not isinstance(result, scoring.GameResult):
+        raise _score_rejection(result, wins_needed=needed)
+    games = repository.list_games(session, match.id)
+    reason = scoring.check_record(
+        [_to_result(game) for game in games], bo=bo, game_no=game_no, result=result
+    )
+    if reason is not None:
+        raise _score_rejection(reason, wins_needed=needed)
+
+    now = clock.now()
+    before: dict[str, object] | None = None
+    if game_no <= len(games):
+        target = games[game_no - 1]
+        before = _game_values(target)
+        repository.update_game(
+            session,
+            target,
+            winner_side=result.winner,
+            score_a=result.score_a,
+            score_b=result.score_b,
+            recorded_by=account_id,
+            recorded_at=now,
+        )
+    else:
+        target = MatchGame(
+            match_id=match.id,
+            game_no=game_no,
+            winner_side=result.winner,
+            score_a=result.score_a,
+            score_b=result.score_b,
+            recorded_by=account_id,
+            recorded_at=now,
+        )
+        repository.add_game(session, target)
+    after: dict[str, object] = {}
+    if match.status == MatchStatus.SCHEDULED:
+        # 第一局：狀態轉換一併記進操作紀錄
+        transition_match(session, match=match, to=MatchStatus.LIVE)
+        before = {**(before or {}), "status": MatchStatus.SCHEDULED.value}
+        after["status"] = MatchStatus.LIVE.value
+    _sync_wins(session, match, repository.list_games(session, match.id))
+    audit.record(
+        session,
+        actor_id=account_id,
+        tournament_id=match.tournament_id,
+        action="match.game_recorded",
+        entity_type="match",
+        entity_id=match.id,
+        before=before,
+        after={
+            **_game_values(target),
+            "wins_a": match.wins_a,
+            "wins_b": match.wins_b,
+            **after,
+        },
+    )
+    return _score_entry(session, match=match, tournament=tournament)
+
+
+def delete_game(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    account_id: uuid.UUID,
+    game_no: int,
+) -> ScoreEntryState:
+    """刪除最後一局；刪到沒有任何局時場次維持進行中（使用者 2026-11-01 決定）。"""
+    match, tournament = _locked_for_scoring(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account_id
+    )
+    games = repository.list_games(session, match.id)
+    reason = scoring.check_delete([_to_result(game) for game in games], game_no=game_no)
+    if reason is not None:
+        raise _score_rejection(
+            reason, wins_needed=scoring.wins_needed(_bo(session, match))
+        )
+    target = games[game_no - 1]
+    removed = _game_values(target)
+    repository.delete_game(session, target)
+    _sync_wins(session, match, repository.list_games(session, match.id))
+    audit.record(
+        session,
+        actor_id=account_id,
+        tournament_id=match.tournament_id,
+        action="match.game_deleted",
+        entity_type="match",
+        entity_id=match.id,
+        before=removed,
+        after={"wins_a": match.wins_a, "wins_b": match.wins_b},
+    )
+    return _score_entry(session, match=match, tournament=tournament)
+
+
+def submit_result(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> ScoreEntryState:
+    """送出系列結果：寫 `outcome = played`、勝隊、送出者與時間、申訴截止時間，轉為申訴期。
+
+    不寫 `confirmed_at`、勝隊不晉級（申訴期滿由 `auto_confirm_expired` 確認並推進）。
+    """
+    match, tournament = _locked_for_scoring(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account_id
+    )
+    result = _series(repository.list_games(session, match.id), _bo(session, match))
+    if result.winner is None:
+        raise _score_rejection(
+            result.reason or "not_decided", wins_needed=result.wins_needed
+        )
+    winner_id = match.team_a_id if result.winner == "a" else match.team_b_id
+    assert winner_id is not None  # `_locked_for_scoring` 已確認兩隊都確定
+    before = MatchStatus(match.status)
+    transition_match(session, match=match, to=MatchStatus.APPEAL_WINDOW)
+    now = clock.now()
+    deadline = now + timedelta(minutes=tournament.appeal_minutes)
+    repository.set_match_wins(session, match, result.wins_a, result.wins_b, now)
+    repository.set_match_submission(
+        session,
+        match,
+        winner_id=winner_id,
+        submitted_by=account_id,
+        submitted_at=now,
+        appeal_deadline=deadline,
+    )
+    audit.record(
+        session,
+        actor_id=account_id,
+        tournament_id=match.tournament_id,
+        action="match.result_submitted",
+        entity_type="match",
+        entity_id=match.id,
+        before={"status": before.value},
+        after={
+            "status": MatchStatus.APPEAL_WINDOW.value,
+            "outcome": MatchOutcome.PLAYED.value,
+            "winner_id": winner_id,
+            "wins_a": result.wins_a,
+            "wins_b": result.wins_b,
+            "appeal_deadline": deadline,
+        },
+    )
+    events.publish(session, MatchResultSubmitted(match_id=match.id))
+    return _score_entry(session, match=match, tournament=tournament)
+
+
+def _score_entry(
+    session: Session, *, match: Match, tournament: TournamentRead
+) -> ScoreEntryState:
+    """記分者看到的完整狀態（呼叫端已確認是記分者）。"""
+    games = repository.list_games(session, match.id)
+    result = _series(games, _bo(session, match))
+    submitted_by_name: str | None = None
+    if match.submitted_by is not None:
+        contact = identity_service.get_account_contact(session, match.submitted_by)
+        submitted_by_name = contact.display_name if contact is not None else None
+    return ScoreEntryState(
+        is_scorer=True,
+        reason=_entry_reason(session, match=match, tournament=tournament),
+        games=[_public_game(game) for game in games],
+        series=SeriesRead(
+            wins_a=result.wins_a,
+            wins_b=result.wins_b,
+            winner=result.winner,
+            can_submit=result.can_submit,
+            wins_needed=result.wins_needed,
+            reason=result.reason,
+        ),
+        submitted_by_name=submitted_by_name,
+        submitted_at=match.submitted_at,
+    )
+
+
+def get_score_entry(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> ScoreEntryState:
+    """登入者對這場的比分登錄狀態；不是記分者時只回 `is_scorer = False`，其他欄位空。
+
+    場次不存在或不屬於該賽事拋 404 `MATCH_NOT_FOUND`。
+    """
+    match = _match_in_tournament(
+        session, tournament_id=tournament_id, match_id=match_id
+    )
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=match.tournament_id
+    )
+    if not _is_scorer(match, tournament, account_id):
+        return ScoreEntryState(is_scorer=False)
+    return _score_entry(session, match=match, tournament=tournament)
+
+
+# ---------------------------------------------------------------- 修改場次時間（4.3）
+
+# 賽事要在這兩個狀態才能改場次時間
+_RESCHEDULABLE_TOURNAMENT = frozenset(
+    {TournamentStatus.PUBLISHED, TournamentStatus.ONGOING}
+)
+
+# 不能修改的原因 -> (錯誤碼, 訊息)；皆 409
+_RESCHEDULE_BLOCKS: dict[RescheduleBlockReason, tuple[str, str]] = {
+    "tournament_not_reschedulable": (
+        "TOURNAMENT_NOT_RESCHEDULABLE",
+        "賽事目前的狀態不能修改場次時間。",
+    ),
+    "match_not_reschedulable": (
+        "MATCH_NOT_RESCHEDULABLE",
+        "只有待開打的場次可以修改時間。",
+    ),
+    "forfeit_due": (
+        "MATCH_NOT_RESCHEDULABLE",
+        "棄權期限已過，等待系統判定棄權，不能再修改時間。",
+    ),
+    "already_checked_in": (
+        "MATCH_ALREADY_CHECKED_IN",
+        "已有隊伍報到，不能再修改這場的時間。",
+    ),
+    "no_valid_time": (
+        "RESCHEDULE_NO_VALID_TIME",
+        "這場目前沒有可選的時間。",
+    ),
+}
+
+_RESCHEDULE_CODES: dict[schedule_rules.RescheduleReason, str] = {
+    "before_now": "RESCHEDULE_BEFORE_NOW",
+    "before_feeder": "RESCHEDULE_BEFORE_FEEDER",
+    "after_next_match": "RESCHEDULE_AFTER_NEXT_MATCH",
+    "no_valid_time": "RESCHEDULE_NO_VALID_TIME",
+}
+
+
+def _reschedule_block(
+    session: Session, tournament: TournamentRead, match: Match
+) -> RescheduleBlockReason | None:
+    """依序檢查賽事狀態、場次狀態、棄權期限已過未判、是否已有隊伍報到；可以修改為 None。"""
+    if tournament.status not in _RESCHEDULABLE_TOURNAMENT:
+        return "tournament_not_reschedulable"
+    if match.status != MatchStatus.SCHEDULED:
+        return "match_not_reschedulable"
+    checked_in = bool(repository.list_check_ins(session, match.id))
+    if (
+        not checked_in
+        and match.forfeit_deadline is not None
+        and match.forfeit_deadline <= clock.now()
+    ):
+        return "forfeit_due"
+    if checked_in:
+        return "already_checked_in"
+    return None
+
+
+def _reschedule_window(
+    session: Session,
+    tournament: TournamentRead,
+    match: Match,
+    matches: Sequence[Match],
+    *,
+    now: datetime,
+) -> tuple[
+    schedule_rules.RescheduleWindow,
+    Callable[[datetime], schedule_rules.RescheduleReason | None],
+]:
+    """本場修改時間的允許範圍，與檢查新時間的函式（列表與修改 API 共用，規則都在 `schedule.py`）。
+
+    下一場＝勝隊去的場次；準決賽取決賽與季軍賽中較早的一場。
+    前一輪場次＝勝隊或敗隊會進入本場的場次。
+    """
+
+    def min_gap(round_no: int) -> int:
+        return schedule_rules.round_min_gap(
+            forfeit_minutes=tournament.forfeit_minutes,
+            best_of=tournaments_service.bo_for_round(
+                session, tournament_id=tournament.id, round_no=round_no
+            ),
+            game_minutes=tournament.game_minutes,
+            appeal_minutes=tournament.appeal_minutes,
+        )
+
+    by_id = {m.id: m for m in matches}
+    next_times = [
+        by_id[next_id].scheduled_at
+        for next_id in (match.next_match_id, match.loser_next_match_id)
+        if next_id is not None
+    ]
+    feeders = [
+        m for m in matches if match.id in (m.next_match_id, m.loser_next_match_id)
+    ]
+    # 最早可選時間：現在（進位到整分）＋報到提前量，兩隊至少有完整的報到時間
+    floor = now.replace(second=0, microsecond=0)
+    if floor < now:
+        floor += timedelta(minutes=1)
+    now = floor + checkin_rules.CHECK_IN_LEAD
+    next_match_at = min(next_times) if next_times else None
+    own_min_gap = min_gap(match.round_no)
+    feeder_times = [m.scheduled_at for m in feeders]
+    feeder_min_gap = max((min_gap(m.round_no) for m in feeders), default=0)
+    window = schedule_rules.reschedule_window(
+        now=now,
+        next_match_at=next_match_at,
+        own_min_gap=own_min_gap,
+        feeder_times=feeder_times,
+        feeder_min_gap=feeder_min_gap,
+    )
+
+    def check(new_at: datetime) -> schedule_rules.RescheduleReason | None:
+        return schedule_rules.check_reschedule(
+            new_at,
+            now=now,
+            next_match_at=next_match_at,
+            own_min_gap=own_min_gap,
+            feeder_times=feeder_times,
+            feeder_min_gap=feeder_min_gap,
+        )
+
+    return window, check
+
+
+def _range_text(window: schedule_rules.RescheduleWindow) -> str:
+    start = _taipei_text(window.earliest)
+    if window.latest is None:
+        return f"{start} 起"
+    return f"{start}～{_taipei_text(window.latest)}"
+
+
+def reschedule_match(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    scheduled_at: datetime,
+) -> MatchRead:
+    """修改待開打場次的預定時間；任何拒絕都不改時間、棄權期限、操作紀錄與事件。
+
+    順序：404 -> `lock_tournament`、`lock_match`（AD-6）-> 主辦方 -> 賽事狀態 ->
+    場次狀態 -> 已報到 -> `schedule.check_reschedule`。
+    """
+    tournaments_service.get_tournament(session, tournament_id=tournament_id)
+    _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=tournament_id
+    )
+    match = lock_match(session, match_id=match_id)
+    authz.ensure_tournament_owner(tournament, actor_id)
+    block = _reschedule_block(session, tournament, match)
+    if block is not None:
+        code, message = _RESCHEDULE_BLOCKS[block]
+        raise BusinessError(code, message, status_code=409)
+    matches = repository.list_matches(session, match.bracket_id, fresh=True)
+    now = clock.now()
+    window, check = _reschedule_window(session, tournament, match, matches, now=now)
+    reason = check(scheduled_at)
+    if reason is not None:
+        if reason == "no_valid_time":
+            message = (
+                f"這場目前沒有可選的時間（最早 {_taipei_text(window.earliest)}）。"
+            )
+        else:
+            message = f"新時間不在允許範圍內，可選 {_range_text(window)}。"
+        raise BusinessError(_RESCHEDULE_CODES[reason], message, status_code=409)
+
+    before = {
+        "scheduled_at": match.scheduled_at,
+        "forfeit_deadline": match.forfeit_deadline,
+    }
+    scheduled_at = scheduled_at.astimezone(UTC)
+    if scheduled_at == match.scheduled_at:
+        return _match_to_read(match)  # 時間沒變：不寫紀錄、不發事件
+    repository.set_scheduled_at(session, match, scheduled_at, now)
+    if match.team_a_id is not None and match.team_b_id is not None:
+        start_forfeit_clock(session, match=match)
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=match.tournament_id,
+        action="match.rescheduled",
+        entity_type="match",
+        entity_id=match.id,
+        before=before,
+        after={
+            "scheduled_at": match.scheduled_at,
+            "forfeit_deadline": match.forfeit_deadline,
+        },
+    )
+    events.publish(
+        session,
+        MatchRescheduled(match_id=match.id, scheduled_at=match.scheduled_at),
+    )
+    return _match_to_read(match)
+
+
+def list_managed_matches(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> list[ManagedMatch]:
+    """S30 場次列表：依輪次、季軍賽在決賽之後；每場附上能不能改時間與可選範圍。"""
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=tournament_id
+    )
+    authz.ensure_tournament_owner(tournament, actor_id)
+    bracket = repository.get_bracket_by_tournament(session, tournament_id)
+    if bracket is None:
+        raise BusinessError(
+            "BRACKET_NOT_FOUND", "這場賽事還沒有對戰表。", status_code=404
+        )
+    matches = repository.list_matches(session, bracket.id)
+    public_matches, _team_ref = _public_matches(session, bracket, matches)
+    now = clock.now()
+    result = []
+    for match, public in zip(matches, public_matches, strict=True):
+        block = _reschedule_block(session, tournament, match)
+        earliest: datetime | None = None
+        latest: datetime | None = None
+        if block is None:
+            window, _check = _reschedule_window(
+                session, tournament, match, matches, now=now
+            )
+            earliest, latest = window.earliest, window.latest
+            if window.is_empty:
+                block = "no_valid_time"
+        result.append(
+            ManagedMatch(
+                id=match.id,
+                code=match.code,
+                round_no=match.round_no,
+                slot_no=match.slot_no,
+                is_third_place=match.is_third_place,
+                team_a=public.team_a,
+                team_b=public.team_b,
+                source_a=public.source_a,
+                source_b=public.source_b,
+                scheduled_at=match.scheduled_at,
+                status=match.status,
+                referee_account_id=match.referee_account_id,
+                reschedule=RescheduleInfo(
+                    can_reschedule=block is None,
+                    reason=block,
+                    earliest=earliest,
+                    latest=latest,
+                ),
+            )
+        )
+    return result

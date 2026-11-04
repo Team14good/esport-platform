@@ -62,6 +62,21 @@ describe("S4 場次頁路由", () => {
     )
   })
 
+  it("申訴期的場次：申訴期區塊放 Countdown（appeal 變體），截止時間只出現一次", async () => {
+    // 假資料第二輪位置 1（M18）是申訴期
+    renderAt(`/tournaments/${DEV_MATCH_SOURCE_TOURNAMENT_ID}/matches/match-M18`)
+
+    const region = await screen.findByRole("region", { name: "申訴期" })
+    const countdown = region.querySelector("[data-slot=countdown]")
+    expect(countdown).not.toBeNull()
+    expect(countdown).toHaveAttribute("data-variant", "appeal")
+    expect(region.querySelector("[data-slot=appeal-deadline]")).toBeNull()
+    expect(region.textContent?.match(/截止/g)).toHaveLength(
+      // Countdown 下方「{絕對時間} 截止」一次；已過期時另有「已截止 · 系統處理中」
+      region.textContent?.includes("已截止") ? 2 : 1,
+    )
+  })
+
   it("找不到場次：顯示 404", async () => {
     renderAt(`/tournaments/${DEV_MATCH_SOURCE_TOURNAMENT_ID}/matches/nope`)
     expect(await screen.findByText("找不到這個頁面。")).toBeInTheDocument()

@@ -12,6 +12,7 @@ from app.modules.competition.models import (
     Bracket,
     CheckIn,
     Match,
+    MatchGame,
     MatchOutcome,
     MatchStatus,
 )
@@ -41,13 +42,20 @@ def get_bracket(session: Session, bracket_id: uuid.UUID) -> Bracket | None:
     return session.get(Bracket, bracket_id)
 
 
-def list_matches(session: Session, bracket_id: uuid.UUID) -> list[Match]:
-    """依輪次、季軍賽排在決賽之後、由上到下排序。"""
+def list_matches(
+    session: Session, bracket_id: uuid.UUID, *, fresh: bool = False
+) -> list[Match]:
+    """依輪次、季軍賽排在決賽之後、由上到下排序。
+
+    `fresh` 為 True 時以資料庫最新值覆蓋 identity map（不加鎖；已鎖賽事後讀相鄰場次用）。
+    """
     statement = (
         select(Match)
         .where(Match.bracket_id == bracket_id)
         .order_by(col(Match.round_no), col(Match.is_third_place), col(Match.slot_no))
     )
+    if fresh:
+        statement = statement.execution_options(populate_existing=True)
     return list(session.exec(statement))
 
 
@@ -90,6 +98,15 @@ def set_forfeit_deadline(
     session: Session, match: Match, deadline: datetime, at: datetime
 ) -> None:
     match.forfeit_deadline = deadline
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def set_scheduled_at(
+    session: Session, match: Match, scheduled_at: datetime, at: datetime
+) -> None:
+    match.scheduled_at = scheduled_at
     match.updated_at = at
     session.add(match)
     session.flush()
@@ -252,4 +269,99 @@ def find_unstarted_bracket_id(
 def mark_start_handled(session: Session, bracket: Bracket, at: datetime) -> None:
     bracket.start_handled_at = at
     session.add(bracket)
+    session.flush()
+
+
+# ---------------------------------------------------------------- 逐局比分（5.3、5.4）
+
+
+def list_games(session: Session, match_id: uuid.UUID) -> list[MatchGame]:
+    """依局號排序。"""
+    statement = (
+        select(MatchGame)
+        .where(MatchGame.match_id == match_id)
+        .order_by(col(MatchGame.game_no))
+    )
+    return list(session.exec(statement))
+
+
+def add_game(session: Session, game: MatchGame) -> None:
+    session.add(game)
+    session.flush()
+
+
+def update_game(
+    session: Session,
+    game: MatchGame,
+    *,
+    winner_side: str,
+    score_a: int | None,
+    score_b: int | None,
+    recorded_by: uuid.UUID,
+    recorded_at: datetime,
+) -> None:
+    game.winner_side = winner_side
+    game.score_a = score_a
+    game.score_b = score_b
+    game.recorded_by = recorded_by
+    game.recorded_at = recorded_at
+    session.add(game)
+    session.flush()
+
+
+def delete_game(session: Session, game: MatchGame) -> None:
+    session.delete(game)
+    session.flush()
+
+
+def set_match_wins(
+    session: Session, match: Match, wins_a: int, wins_b: int, at: datetime
+) -> None:
+    match.wins_a = wins_a
+    match.wins_b = wins_b
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def set_match_submission(
+    session: Session,
+    match: Match,
+    *,
+    winner_id: uuid.UUID,
+    submitted_by: uuid.UUID,
+    submitted_at: datetime,
+    appeal_deadline: datetime,
+) -> None:
+    """寫入送出的系列結果（`outcome = played`）；不寫 `confirmed_at`。"""
+    match.outcome = MatchOutcome.PLAYED
+    match.winner_id = winner_id
+    match.submitted_by = submitted_by
+    match.submitted_at = submitted_at
+    match.appeal_deadline = appeal_deadline
+    match.updated_at = submitted_at
+    session.add(match)
+    session.flush()
+
+
+def clear_for_replay(session: Session, match: Match, at: datetime) -> None:
+    """刪除該場所有報到紀錄與逐局比分，並把結果相關欄位歸零（6.2 重新比賽）。
+
+    不改狀態、`scheduled_at` 與結構欄位。
+    """
+    for check_in in list_check_ins(session, match.id):
+        session.delete(check_in)
+    for game in list_games(session, match.id):
+        session.delete(game)
+    match.outcome = None
+    match.winner_id = None
+    match.submitted_by = None
+    match.submitted_at = None
+    match.appeal_deadline = None
+    match.confirmed_at = None
+    match.forfeit_deadline = None
+    match.wins_a = 0
+    match.wins_b = 0
+    match.updated_at = at
+    session.add(match)
     session.flush()
