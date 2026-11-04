@@ -39,7 +39,11 @@ docker compose up -d --build --wait
 | 隊長 | `captain@example.com` | `DEMO_PASSWORD` | 目前只有帳號，隊伍待之後補上 |
 | 選手 | `player@example.com` | `DEMO_PASSWORD` | 目前只有帳號 |
 
-舊的 `.env` 沒有 `DEMO_PASSWORD` 時只建立第一個平台管理員，backend log 會提示補上設定；從 `.env.example` 補上 `DEMO_PASSWORD`、`DEMO_EMAIL_DOMAIN` 後重新啟動即可。遊戲、隊伍與已抽籤的賽事等示範資料，會在各模組完成後加進來。
+舊的 `.env` 沒有 `DEMO_PASSWORD` 時只建立第一個平台管理員，backend log 會提示補上設定；從 `.env.example` 補上 `DEMO_PASSWORD`、`DEMO_EMAIL_DOMAIN` 後重新啟動即可。
+
+帳號之後接著建立《英雄聯盟》《特戰英豪》兩款遊戲（含段位對照表），以及一場 32 隊、開放報名的校園賽「FLOW 校園盃 特戰英豪」（主辦方為上表的主辦方，開賽在啟動後 7 天）。隊伍與抽籤會在 registration 步驟完成後加進來。
+
+**Demo 前請先清空資料庫再啟動**：`docker compose down -v && docker compose up -d --build --wait`。示範賽事的時間在第一次建立時固定；保留資料庫、超過 7 天後再啟動時會沿用已過開賽時間的賽事，抽籤會被拒絕。
 
 | 服務 | 說明 | 網址／埠號 |
 | --- | --- | --- |

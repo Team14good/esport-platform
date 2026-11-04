@@ -17,6 +17,9 @@
 2. 把 `seed` 依呼叫方向的反序加進下面的 `STEPS`：
    identity → tournaments → registration → competition。
 3. 在 `backend/tests/<模組>/` 補上「呼叫兩次不重複建立」的測試。
+4. 資料已存在時的 log 不要用 `already exists, skipped`：這句保留給示範帳號，
+   `tests/identity/test_demo_data.py` 以它計算帳號數。沿用既有資料可寫
+   `already exists, reused`（tournaments 步驟），或其他不含這句的訊息。
 """
 
 import logging
