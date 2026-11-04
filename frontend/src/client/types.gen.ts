@@ -945,6 +945,26 @@ export type PublicPodium = {
 }
 
 /**
+ * PublicRefereeInvitation
+ *
+ * 不需登入的邀請預覽（AD-19）：不含主辦方或任何帳號資料。
+ */
+export type PublicRefereeInvitation = {
+  /**
+   * Tournament Name
+   */
+  tournament_name: string
+  /**
+   * Expires At
+   */
+  expires_at: string
+  /**
+   * Expired
+   */
+  expired: boolean
+}
+
+/**
  * PublicSchool
  */
 export type PublicSchool = {
@@ -1061,6 +1081,54 @@ export type RankTierRead = {
    * Score
    */
   score: number
+}
+
+/**
+ * RefereeInvitationRead
+ *
+ * 主辦方看到的裁判邀請（含明文 token，用來組出邀請連結）。
+ */
+export type RefereeInvitationRead = {
+  /**
+   * Tournament Id
+   */
+  tournament_id: string
+  /**
+   * Token
+   */
+  token: string
+  /**
+   * Created At
+   */
+  created_at: string
+  /**
+   * Expires At
+   */
+  expires_at: string
+  /**
+   * Expired
+   */
+  expired: boolean
+}
+
+/**
+ * RefereeRead
+ *
+ * 已接受邀請的裁判。
+ */
+export type RefereeRead = {
+  /**
+   * Account Id
+   */
+  account_id: string
+  /**
+   * Display Name
+   */
+  display_name: string
+  /**
+   * Accepted At
+   */
+  accepted_at: string
 }
 
 /**
@@ -2362,6 +2430,170 @@ export type tournamentsReadMyTournamentResponses = {
 
 export type tournamentsReadMyTournamentResponse =
   tournamentsReadMyTournamentResponses[keyof tournamentsReadMyTournamentResponses]
+
+export type tournamentsReadRefereeInvitationData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/referee-invitation"
+}
+
+export type tournamentsReadRefereeInvitationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsReadRefereeInvitationError =
+  tournamentsReadRefereeInvitationErrors[keyof tournamentsReadRefereeInvitationErrors]
+
+export type tournamentsReadRefereeInvitationResponses = {
+  /**
+   * Response Tournaments-Read Referee Invitation
+   *
+   * Successful Response
+   */
+  200: RefereeInvitationRead | null
+}
+
+export type tournamentsReadRefereeInvitationResponse =
+  tournamentsReadRefereeInvitationResponses[keyof tournamentsReadRefereeInvitationResponses]
+
+export type tournamentsCreateRefereeInvitationData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/referee-invitation"
+}
+
+export type tournamentsCreateRefereeInvitationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsCreateRefereeInvitationError =
+  tournamentsCreateRefereeInvitationErrors[keyof tournamentsCreateRefereeInvitationErrors]
+
+export type tournamentsCreateRefereeInvitationResponses = {
+  /**
+   * Successful Response
+   */
+  201: RefereeInvitationRead
+}
+
+export type tournamentsCreateRefereeInvitationResponse =
+  tournamentsCreateRefereeInvitationResponses[keyof tournamentsCreateRefereeInvitationResponses]
+
+export type tournamentsListTournamentRefereesData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/referees"
+}
+
+export type tournamentsListTournamentRefereesErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsListTournamentRefereesError =
+  tournamentsListTournamentRefereesErrors[keyof tournamentsListTournamentRefereesErrors]
+
+export type tournamentsListTournamentRefereesResponses = {
+  /**
+   * Response Tournaments-List Tournament Referees
+   *
+   * Successful Response
+   */
+  200: Array<RefereeRead>
+}
+
+export type tournamentsListTournamentRefereesResponse =
+  tournamentsListTournamentRefereesResponses[keyof tournamentsListTournamentRefereesResponses]
+
+export type tournamentsPreviewRefereeInvitationData = {
+  body?: never
+  path: {
+    /**
+     * Token
+     */
+    token: string
+  }
+  query?: never
+  url: "/api/v1/referee-invites/{token}"
+}
+
+export type tournamentsPreviewRefereeInvitationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsPreviewRefereeInvitationError =
+  tournamentsPreviewRefereeInvitationErrors[keyof tournamentsPreviewRefereeInvitationErrors]
+
+export type tournamentsPreviewRefereeInvitationResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicRefereeInvitation
+}
+
+export type tournamentsPreviewRefereeInvitationResponse =
+  tournamentsPreviewRefereeInvitationResponses[keyof tournamentsPreviewRefereeInvitationResponses]
+
+export type tournamentsAcceptRefereeInvitationData = {
+  body?: never
+  path: {
+    /**
+     * Token
+     */
+    token: string
+  }
+  query?: never
+  url: "/api/v1/referee-invites/{token}/accept"
+}
+
+export type tournamentsAcceptRefereeInvitationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsAcceptRefereeInvitationError =
+  tournamentsAcceptRefereeInvitationErrors[keyof tournamentsAcceptRefereeInvitationErrors]
+
+export type tournamentsAcceptRefereeInvitationResponses = {
+  /**
+   * Successful Response
+   */
+  200: RefereeRead
+}
+
+export type tournamentsAcceptRefereeInvitationResponse =
+  tournamentsAcceptRefereeInvitationResponses[keyof tournamentsAcceptRefereeInvitationResponses]
 
 export type registrationCreateTeamData = {
   body: TeamCreate
