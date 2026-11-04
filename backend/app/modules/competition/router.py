@@ -16,6 +16,7 @@ from app.modules.competition.models import (
     MatchRead,
     PublicBracket,
     PublicMatchDetail,
+    RefereeAssignIn,
     RescheduleIn,
     ScoreEntryState,
 )
@@ -181,6 +182,44 @@ def reschedule_match(
         match_id=match_id,
         actor_id=organizer.id,
         scheduled_at=body.scheduled_at,
+    )
+    session.commit()
+    return result
+
+
+@router.put("/tournaments/{tournament_id}/matches/{match_id}/referee")
+def assign_referee(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    body: RefereeAssignIn,
+) -> MatchRead:
+    """指派或改派場次的裁判；只限該賽事主辦方。"""
+    result = service.assign_referee(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        actor_id=organizer.id,
+        referee_account_id=body.account_id,
+    )
+    session.commit()
+    return result
+
+
+@router.delete("/tournaments/{tournament_id}/matches/{match_id}/referee")
+def unassign_referee(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> MatchRead:
+    """收回場次的裁判，之後由主辦方代登；只限該賽事主辦方。"""
+    result = service.unassign_referee(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        actor_id=organizer.id,
     )
     session.commit()
     return result

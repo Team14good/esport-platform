@@ -1,8 +1,7 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
-
+import type { PublicMatchDetail } from "@/client"
 import { MatchScoreDisplay } from "@/features/competition/MatchScoreDisplay"
-import type { PublicMatchDetail } from "@/features/competition/match-types"
 import { matchDetail, TEAM_A, TEAM_B } from "./match-detail-fixture"
 
 function renderScore(detail: PublicMatchDetail, flash = false) {

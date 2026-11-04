@@ -426,6 +426,14 @@ export type ManagedMatch = {
    */
   referee_account_id: string | null
   reschedule: RescheduleInfo
+  /**
+   * Assignable Referee Ids
+   */
+  assignable_referee_ids: Array<string>
+  /**
+   * Can Assign Referee
+   */
+  can_assign_referee: boolean
 }
 
 /**
@@ -550,6 +558,26 @@ export type MemberRole = "captain" | "player"
  * S12 我的隊伍：每支隊伍一張 Registration status card。
  */
 export type MyTeamCard = {
+  /**
+   * Waitlist Position
+   */
+  waitlist_position: number | null
+  /**
+   * Waitlist Reason
+   */
+  waitlist_reason:
+    | "SCHOOL_NOT_ELIGIBLE"
+    | "LATER_THAN_SCHOOLMATE"
+    | "SCHOOL_LIMIT_REACHED"
+    | null
+  /**
+   * Representative Backfill
+   */
+  representative_backfill: boolean | null
+  /**
+   * Waitlist Phase
+   */
+  waitlist_phase: "first_come" | "after_deadline" | null
   /**
    * Team Id
    */
@@ -1088,6 +1116,18 @@ export type RankTierRead = {
 }
 
 /**
+ * RefereeAssignIn
+ *
+ * 指派裁判的請求。
+ */
+export type RefereeAssignIn = {
+  /**
+   * Account Id
+   */
+  account_id: string
+}
+
+/**
  * RefereeInvitationRead
  *
  * 主辦方看到的裁判邀請（含明文 token，用來組出邀請連結）。
@@ -1346,6 +1386,26 @@ export type TeamCreate = {
  * S17 隊伍頁：只有隊員看得到（含邀請 token）。
  */
 export type TeamDetail = {
+  /**
+   * Waitlist Position
+   */
+  waitlist_position: number | null
+  /**
+   * Waitlist Reason
+   */
+  waitlist_reason:
+    | "SCHOOL_NOT_ELIGIBLE"
+    | "LATER_THAN_SCHOOLMATE"
+    | "SCHOOL_LIMIT_REACHED"
+    | null
+  /**
+   * Representative Backfill
+   */
+  representative_backfill: boolean | null
+  /**
+   * Waitlist Phase
+   */
+  waitlist_phase: "first_come" | "after_deadline" | null
   /**
    * Id
    */
@@ -3240,3 +3300,75 @@ export type competitionRescheduleMatchResponses = {
 
 export type competitionRescheduleMatchResponse =
   competitionRescheduleMatchResponses[keyof competitionRescheduleMatchResponses]
+
+export type competitionUnassignRefereeData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/referee"
+}
+
+export type competitionUnassignRefereeErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionUnassignRefereeError =
+  competitionUnassignRefereeErrors[keyof competitionUnassignRefereeErrors]
+
+export type competitionUnassignRefereeResponses = {
+  /**
+   * Successful Response
+   */
+  200: MatchRead
+}
+
+export type competitionUnassignRefereeResponse =
+  competitionUnassignRefereeResponses[keyof competitionUnassignRefereeResponses]
+
+export type competitionAssignRefereeData = {
+  body: RefereeAssignIn
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/referee"
+}
+
+export type competitionAssignRefereeErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionAssignRefereeError =
+  competitionAssignRefereeErrors[keyof competitionAssignRefereeErrors]
+
+export type competitionAssignRefereeResponses = {
+  /**
+   * Successful Response
+   */
+  200: MatchRead
+}
+
+export type competitionAssignRefereeResponse =
+  competitionAssignRefereeResponses[keyof competitionAssignRefereeResponses]

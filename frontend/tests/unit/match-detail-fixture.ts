@@ -1,5 +1,4 @@
-import type { PublicMatch } from "@/client"
-import type { PublicMatchDetail } from "@/features/competition/match-types"
+import type { PublicMatch, PublicMatchDetail } from "@/client"
 
 export const TEAM_A = { id: "team-a", name: "成大 Kraken" }
 export const TEAM_B = { id: "team-b", name: "北科 Ember" }

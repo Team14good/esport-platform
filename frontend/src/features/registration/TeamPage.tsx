@@ -13,7 +13,7 @@ import {
 } from "./PlayerProfileDialog"
 import { teamInviteUrl, teamQueryOptions } from "./queries"
 import { RosterList } from "./RosterList"
-import { RegistrationStatusBadge } from "./registration-status"
+import { RegistrationStatusBadge, WaitlistDetails } from "./registration-status"
 import { SubmitRegistrationSection } from "./SubmitRegistrationSection"
 import { useUpdatePlayerProfile } from "./useUpdatePlayerProfile"
 
@@ -84,8 +84,12 @@ export function TeamPage({ teamId }: { teamId: string }) {
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="break-words text-heading-lg">{data.name}</h1>
-          <RegistrationStatusBadge status={data.registration_status} />
+          <RegistrationStatusBadge
+            status={data.registration_status}
+            waitlist={data}
+          />
         </div>
+        <WaitlistDetails status={data.registration_status} waitlist={data} />
       </header>
       <section
         aria-labelledby="team-invite-heading"

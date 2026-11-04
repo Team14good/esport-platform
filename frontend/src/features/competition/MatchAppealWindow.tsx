@@ -1,9 +1,8 @@
 import { type ReactNode, useId } from "react"
-import type { MatchStatus } from "@/client"
+import type { MatchStatus, PublicMatchDetail } from "@/client"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { formatMatchDateTime } from "./match-time"
-import type { PublicMatchDetail } from "./match-types"
 
 /** 顯示申訴期區塊的狀態：申訴中也顯示，因為另一隊在期限內仍可申訴（FR-30） */
 const APPEAL_WINDOW_STATUSES: ReadonlySet<MatchStatus> = new Set([

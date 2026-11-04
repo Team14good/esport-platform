@@ -518,3 +518,50 @@
 - 驗證：單場 API 測試涵蓋 6 種狀態的開始時間；前端 biome 通過、相關 110 個單元測試通過；其餘以 CI 為準
 - 成熟度：L2（AI 實作與驗證）
 - 證據：本 PR 的 CI 紀錄
+
+### 2026-11-04｜審查／合併｜第二輪代審：解 #35 衝突與遷移鏈、審 #44 架構測試與 #45
+
+- Story／範圍：A 的 #41、#44，B 的 #45，C 的 #28、#35；D 的 #43
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：#40 合併後 #35 與 main 衝突（`authz.py`、`identity/service.py` 兩邊各加一個函式），遷移也與 #40 接在同一個 head。AI 兩邊都保留，把 3.3 遷移的 `down_revision` 改接 2.7，本機跑完整後端測試後推上並留言給 C。審 A 的 #44（AST 架構測試）時，AI 另外寫了幾種繞法實測，找到兩個 AI 繞得過的洞：新開的模組資料夾整個被當成進入點略過、相對 import 不檢查，附改法寫在審查。#45 逐點對照 #42 程式與 sprint-status 才核准
+- AI 產出：#35、#28 的衝突解法與同步、3 份審查（#44、#45 核准；#44 附兩個洞與改法）、6 支 PR 依序合併（每合一支就把 main 合進其餘 PR 再等 CI）
+- 人做了什麼：使用者授權「這邊你都處理好就行」；A 說明 #44 的用途是 AI 寫完後的第二道檢查
+- 驗證：#35 合併前本機後端 1747 passed、`alembic heads` 只有一個；#44 在 Docker 跑 53 passed，繞法用探測腳本實際執行確認；最後 main（a469f95）CI 綠
+- 問題與修正：第一次在 worktree 跑 compose 失敗（worktree 沒有 `.env`），改在主 repo 執行並掛載 worktree
+- 成熟度：L2（AI 審查與整合，人決定授權範圍）
+- 證據：#28、#35、#41、#43、#44、#45 的審查、留言與合併紀錄
+
+### 2026-11-04｜實作／測試｜Story 4.4 指派裁判到場次（後端）
+
+- Story／範圍：4.4（D），含 5.5 留下的晉級後裁判衝突
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；實作與三個審查員（Blind Hunter、Edge Case Hunter、Verification Gap）都是子代理
+- 怎麼用：AI 先對照 Line 討論與 spec-2-7 的 Decisions，確認「主辦方不能兼任裁判、沒有裁判時主辦方代登」已有定案；再查 epics、架構與 contracts（事件 `RefereeAssigned`／`RefereeUnassigned` 早已定義），寫 spec，範圍由使用者選「只做後端」
+- AI 產出：`spec-4-4-assign-referee-backend.md`；`PUT`／`DELETE .../matches/{match_id}/referee`、S30 列表的 `assignable_referee_ids`／`can_assign_referee`、`advance` 填位後自動收回；`test_assign_referee.py` 30 個測試；contracts、deferred-work、sprint-status（順便修正 4.1、4.3、5.1、5.3、5.4 過時的「待合併」註記）；重新產生 client
+- 人做了什麼：使用者決定範圍（只做後端）、確認照 2.7 文件（選手自行登錄比分期中不做）
+- 驗證：後端全套 1867 passed、覆蓋率 97%、lint 通過；前端 biome 通過
+- 問題與修正：審查共 17 項，修 9 項、駁回 8 項（理由記在 spec 的 Review Triage Log）。實際修正的錯誤：賽事進行中能指派沒有測試、真正的 `registration_port.is_member` 轉接沒被測到、已取消場次的錯誤訊息寫成「已送出結果」；實作子代理的列表測試把同時接受邀請的兩位裁判順序寫死，跑一次就失敗，改比對集合。AI 自己更新 sprint-status 時把 `last_updated` 寫成另一種日期格式，又因 Git Bash 不認 `Asia/Taipei` 而寫成 UTC 時間，對照原值後改正
+- 成熟度：L3（AI 實作、審查與修正，人決定範圍）
+- 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
+
+### 2026-11-04｜審查｜審 A 的 #47（S4 接上真資料、報到與比分面板）
+
+- Story／範圍：5.8 第二階段（A），使用 D 的 `CheckInPanel`、`ScoreEntryPanel` 與單場、報到、比分 API
+- 工具：Claude Code（Opus 5.5），一個審查子代理讀 diff、spec 與 contracts，AI 再回到後端原始碼查證
+- 怎麼用：A 點名請 D 看錯誤碼對照與 `forfeit_deadline`。AI 對照 contracts 確認 7 個錯誤碼一致，逐條核對 #47 刪除的延後項目確實完成；審查子代理找到 4 個問題，AI 查證最嚴重的一個：score-entry 的 query key 只看 `updated_at`，但後端 `repository.add_check_in` 不更新 `match.updated_at`，記分者面板在兩隊報到後會停在「等待雙方報到」
+- AI 產出：核准審查（附 4 點：報到不觸發重抓由 D 在後端修、`keepPreviousData` 跨場次、時鐘偏差、e2e 改 `page.route`）
+- 人做了什麼：A 指定審查重點
+- 驗證：問題 1 由 AI 讀 `repository.add_check_in` 與 `MatchScoreEntry.tsx` 確認；單元測試的 harness 在 refresh 時改 `updated_at`，所以 A 的測試沒抓到
+- 成熟度：L2（AI 審查，人決定合併）
+- 證據：#47 的審查紀錄
+
+### 2026-11-04｜實作／測試｜S30 場次管理頁：修改時間與指派裁判（4.3、4.4 前端）
+
+- Story／範圍：4.3 S30 頁面、4.4 S30 指派選單（D）
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；前端調查、實作與三個審查員都是子代理
+- 怎麼用：AI 調查 B 的主辦方後台寫法（側欄、`DataTable`、錯誤處理、測試方式）後寫 spec；UX 文件沒定的部分（裁判選定即送出、停用原因文字、不做狀態篩選）寫成 Design Notes，由使用者核准
+- AI 產出：`spec-4-3-s30-matches-page.md`；`OrganizerMatchesPage`、`RescheduleDialog`、`RefereeSelect`、`organizer-matches-queries.ts`、路由與側欄「場次管理」；`roundName` 從假資料檔移到 `round-name.ts`；`isoToTaipeiLocal`；`organizer-matches.test.tsx` 等 3 個測試檔共 26 個測試
+- 人做了什麼：使用者核准 spec 與 Design Notes
+- 驗證：新測試 26 個通過、biome 通過、typecheck 只剩本機映像過舊的 2 個已知錯誤；本機全套前端單元測試因映像缺 `@radix-ui/react-alert-dialog` 與冷啟動逾時大量失敗，以 CI 為準。瀏覽器實測未做：本機沒有已抽籤的賽事（抽籤要等 C 的 registration 函式）
+- 問題與修正：審查 22 項，修 8 項、駁回 13 項、延後 1 項。修正的錯誤包括：裁判清單載入失敗時誤顯示「還沒有裁判接受邀請」與「未知的裁判」、Dialog 被 `open && can` 遮住後會自己重開、預定時間早於可選範圍時預填值不合法、收回裁判的測試用了後端不會回傳的資料。兩個審查員都說「最早時間只取到分會被後端拒絕」，AI 查 contracts（最早＝現在進位到整分＋30 分鐘）判定為誤報。實作者發現側欄「總覽」在子頁也亮起，是 B 的 `BackofficeLayout` 用前綴比對，記入延後項目交給 B
+- 成熟度：L3（AI 實作、審查與修正，人核准設計）
+- 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄

@@ -18,6 +18,7 @@ import {
 } from "@/client"
 import { BRACKET_PENDING_TEXT } from "@/features/competition/BracketPending"
 import { createBracketFixture } from "@/features/competition/bracket-fixtures"
+import { matchDetailFromBracket } from "@/features/competition/match-fixtures"
 import { BRACKET_ABSENT_TEXT } from "@/features/competition/TournamentBracketPage"
 import { BRACKET_POLL_INTERVAL_MS } from "@/features/competition/use-bracket-polling"
 import { renderApp } from "./auth-fixtures"
@@ -293,11 +294,17 @@ describe("S3 對戰表", () => {
   })
 
   it("從 S3 進入 S4：分頁標題換成場次的標題，不被 S3 還原成舊標題", async () => {
-    // 開發模式的 S4 只認假對戰樹的賽事 id
     mockTournament(tournament({ id: "tournament-fixture" }))
-    mockBracket({
-      ...createBracketFixture({ teamCount: 32, scenario: "in_progress" }),
+    const fixture = createBracketFixture({
+      teamCount: 32,
+      scenario: "in_progress",
     })
+    mockBracket(fixture)
+    vi.spyOn(CompetitionService, "readPublicMatch").mockResolvedValue({
+      data: matchDetailFromBracket(fixture, "match-M3"),
+    } as unknown as Awaited<
+      ReturnType<typeof CompetitionService.readPublicMatch>
+    >)
     const router = renderApp("/tournaments/tournament-fixture/bracket")
     await vi.waitFor(() => expect(document.title).toBe("期中盃 · FLOW"))
 

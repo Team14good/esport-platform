@@ -1,11 +1,10 @@
 import type { ReactNode } from "react"
-
+import type { PublicMatchDetail } from "@/client"
 import { cn } from "@/lib/utils"
 import { MatchAppealWindow } from "./MatchAppealWindow"
 import { MatchGameList } from "./MatchGameList"
 import { MatchHeader } from "./MatchHeader"
 import { MatchScoreDisplay } from "./MatchScoreDisplay"
-import type { PublicMatchDetail } from "./match-types"
 import { SameRoundMatches } from "./SameRoundMatches"
 
 // 連續兩次輪詢比分都有變動時，class 沒有改變，動畫不會重播。
@@ -27,25 +26,36 @@ type MatchSpectatorViewProps = {
   detail: PublicMatchDetail
   /** 輪詢時比分或狀態有變動（useMatchPolling 的 changed）：Score display flash 一次 */
   changed?: boolean
-  /** 申訴期區塊的倒數插槽：B 的 Countdown（`appeal` 變體）做好後由 S4 路由傳入 */
+  /** 申訴期區塊的倒數插槽：S4 路由傳入 Countdown（`appeal` 變體） */
   appealCountdown?: ReactNode
+  /** 報到面板（MatchCheckIn）：右欄最上方 */
+  checkIn?: ReactNode
+  /** 比分登錄面板（記分者才有）：有值時取代左欄的公開各局列表 */
+  scoreEntry?: ReactNode
   className?: string
 }
 
 /**
- * S4 觀眾檢視（EXPERIENCE.md〈場次頁（S4）〉）：
- * - `≥ lg` 兩欄：左欄 Score display、各局列表；右欄申訴期（最上方）、同輪其他場次（最下方）。
- * - `< lg` 單欄：頁首、Score display、申訴期、各局列表、同輪其他場次。
+ * S4 場次頁（EXPERIENCE.md〈場次頁（S4）〉）：
+ * - `≥ lg` 兩欄：左欄 Score display、各局列表（記分者為比分登錄面板）；
+ *   右欄報到（最上方）、申訴期、同輪其他場次（最下方）。
+ * - `< lg` 單欄：頁首、Score display、目前動作區（比分登錄、報到、申訴期）、各局列表、同輪其他場次。
  *
- * 每個區塊只渲染一次：`< lg` 時兩欄的容器是 `display: contents`，四個區塊直接成為外層 grid 的項目，
- * 再用 `order` 把申訴期排到 Score display 與各局列表之間；`≥ lg` 時容器恢復成兩欄。
+ * 每個區塊只渲染一次：`< lg` 時兩欄的容器是 `display: contents`，各區塊直接成為外層 grid 的項目，
+ * 再用 `order` 把動作區排到 Score display 與各局列表之間；`≥ lg` 時容器恢復成兩欄。
  */
 export function MatchSpectatorView({
   detail,
   changed = false,
   appealCountdown,
+  checkIn,
+  scoreEntry,
   className,
 }: MatchSpectatorViewProps) {
+  const hasScoreEntry =
+    scoreEntry !== undefined && scoreEntry !== null && scoreEntry !== false
+  const hasCheckIn =
+    checkIn !== undefined && checkIn !== null && checkIn !== false
   return (
     <div
       data-slot="match-spectator-view"
@@ -63,12 +73,26 @@ export function MatchSpectatorView({
             flash={changed}
             className="min-w-0 max-lg:order-1"
           />
-          <MatchGameList detail={detail} className="min-w-0 max-lg:order-3" />
+          {hasScoreEntry ? (
+            <div
+              data-slot="match-score-entry"
+              className="min-w-0 max-lg:order-2"
+            >
+              {scoreEntry}
+            </div>
+          ) : (
+            <MatchGameList detail={detail} className="min-w-0 max-lg:order-3" />
+          )}
         </div>
         <aside
           data-slot="match-aside"
           className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-4 lg:empty:hidden"
         >
+          {hasCheckIn && (
+            <div data-slot="match-check-in" className="min-w-0 max-lg:order-2">
+              {checkIn}
+            </div>
+          )}
           <MatchAppealWindow
             detail={detail}
             countdown={appealCountdown}

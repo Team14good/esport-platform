@@ -12,6 +12,7 @@ from app.modules.competition.forfeit_adapter import SERVICE_FORFEIT_PORTS
 from app.modules.competition.forfeit_job import make_forfeit_job
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.email import EmailSender, SmtpEmailSender
+from app.modules.registration import service as registration_service
 from app.modules.tournaments import service as tournaments_service
 from app.worker import Job
 
@@ -44,6 +45,11 @@ def start_due_tournaments(session: Session) -> bool:
     return competition_service.start_due_tournament(session)
 
 
+def allocate_priority_windows(session: Session) -> bool:
+    """結算一場優先期已結束的校園賽：分配正取與候補（Story 3.4，操作者為系統）。"""
+    return registration_service.allocate_due_priority_window(session)
+
+
 # 判一場逾時未報到的棄權（Story 5.2；函式名稱為 `judge_forfeits`）
 judge_forfeits = make_forfeit_job(SERVICE_FORFEIT_PORTS)
 
@@ -55,6 +61,7 @@ def confirm_expired_appeals(session: Session) -> bool:
 
 JOBS: list[Job] = [
     open_registrations,
+    allocate_priority_windows,
     start_due_tournaments,
     judge_forfeits,
     confirm_expired_appeals,

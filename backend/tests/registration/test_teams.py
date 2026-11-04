@@ -596,6 +596,15 @@ def test_unknown_team_is_404(client: TestClient, session: Session) -> None:
     assert _error_code(response) == "TEAM_NOT_FOUND"
 
 
+# 候補資訊（Story 3.4）只在候補時有值
+NO_WAITLIST = {
+    "waitlist_position": None,
+    "waitlist_reason": None,
+    "representative_backfill": None,
+    "waitlist_phase": None,
+}
+
+
 def test_my_teams_lists_every_team_with_status(
     client: TestClient,
     session: Session,
@@ -626,6 +635,7 @@ def test_my_teams_lists_every_team_with_status(
             "tournament_name": "清大盃",
             "game_name": "英雄聯盟",
             "registration_status": "forming",
+            **NO_WAITLIST,
         },
         {
             "team_id": team_a["id"],
@@ -634,6 +644,7 @@ def test_my_teams_lists_every_team_with_status(
             "tournament_name": "政大校園盃",
             "game_name": "特戰英豪",
             "registration_status": "forming",
+            **NO_WAITLIST,
         },
     ]
     assert client.get(url).status_code == 401

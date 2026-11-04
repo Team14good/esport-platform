@@ -1,4 +1,4 @@
-// 對戰樹的假資料產生器，給單元測試、match-source（DEV）與 /dev/match 共用。
+// 對戰樹的假資料產生器，給單元測試使用。
 // 結構照 D 的 backend/app/modules/competition/bracket.py（origin/story/4-1）：P＝不小於隊數的最小 2 的次方，
 // 輪空位置以位元反轉平均分散，第一輪輪空的位置留空號，只編實際存在的場次，正取 4 隊以上才有季軍賽。
 
@@ -10,6 +10,7 @@ import type {
   PublicTeamRef,
 } from "@/client"
 import type { BracketSide } from "./match-status"
+import { roundName } from "./round-name"
 
 export type BracketScenario =
   /** 剛抽籤：全部待開打 */
@@ -95,11 +96,6 @@ function byePairs(size: number, byeCount: number): Set<number> {
   const upper = order.slice(0, Math.min(byeCount, quarter))
   const lower = byeCount > quarter ? order.slice(0, byeCount - quarter) : []
   return new Set([...upper.map((j) => 2 * j), ...lower.map((j) => 2 * j + 1)])
-}
-
-export function roundName(roundNo: number, rounds: number): string {
-  const teamsLeft = 2 ** (rounds - roundNo + 1)
-  return teamsLeft === 2 ? "決賽" : `${teamsLeft} 強`
 }
 
 function planBracket(teamCount: number) {

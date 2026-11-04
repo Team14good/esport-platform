@@ -106,7 +106,19 @@ const TEAM: TeamDetail = {
   priority_end: "2099-01-01T00:00:00Z",
   registration_end: "2099-01-08T00:00:00Z",
   submitted_at: null,
+  waitlist_position: null,
+  waitlist_reason: null,
+  representative_backfill: null,
+  waitlist_phase: null,
 }
+
+/** 不是候補時，候補資訊全為 null。 */
+const NO_WAITLIST = {
+  waitlist_position: null,
+  waitlist_reason: null,
+  representative_backfill: null,
+  waitlist_phase: null,
+} satisfies Partial<MyTeamCard>
 
 const INVITE: TeamInvitePreview = {
   team_id: "team-1",
@@ -611,6 +623,7 @@ describe("我的隊伍（S12）", () => {
         tournament_name: "政大校園盃",
         game_name: "特戰英豪",
         registration_status: "forming",
+        ...NO_WAITLIST,
       },
     ]
     vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
@@ -998,5 +1011,206 @@ describe("送出報名（S17、S19）", () => {
       "href",
       "/tournaments/tour-1",
     )
+  })
+})
+
+describe("名額分配結果（S17、S12）", () => {
+  const inMs = (ms: number) => new Date(Date.now() + ms).toISOString()
+  const ALLOCATED: TeamDetail = {
+    ...TEAM,
+    my_role: "captain",
+    invite_status: "locked",
+    profile_editable: false,
+    submitted_at: "2026-11-03T10:00:00Z",
+    priority_end: inMs(-60 * 60 * 1000),
+  }
+  const UNRANKED_REASON =
+    "先搶期只遞補優先期沒有報名、目前也沒有正取的學校；報名截止後改依平均段位積分排序。"
+  const BACKFILL = "本校代表隊退出時，由本校平均段位積分次高的隊伍遞補。"
+  const FIRST_COME_RULE =
+    "先搶期由優先期沒有報名、目前也沒有正取的學校，依送出先後遞補。"
+  const AFTER_DEADLINE_RULE =
+    "報名截止後依平均段位積分由高到低遞補，每校最多 2 隊正取。"
+
+  it("S17 候補沒有順位：徽章、原因、代表隊補充與先搶期的遞補規則", async () => {
+    signInAs()
+    mockReadTeam({
+      ...ALLOCATED,
+      registration_status: "waitlisted",
+      waitlist_position: null,
+      waitlist_reason: "SCHOOL_NOT_ELIGIBLE",
+      representative_backfill: true,
+      waitlist_phase: "first_come",
+    })
+    renderApp("/teams/team-1")
+
+    const header = (
+      await screen.findByRole("heading", { level: 1, name: "夜貓隊" })
+    ).closest("header") as HTMLElement
+    expect(
+      within(header).getByText("候補・目前不在遞補順序中"),
+    ).toBeInTheDocument()
+    const details = within(header)
+      .getByText(UNRANKED_REASON)
+      .closest<HTMLElement>("[data-slot=waitlist-details]") as HTMLElement
+    expect(
+      Array.from(details.children).map((line) => line.textContent),
+    ).toEqual([UNRANKED_REASON, BACKFILL, FIRST_COME_RULE])
+    // 候補不顯示倒數
+    expect(screen.queryByText("報名截止")).toBeNull()
+  })
+
+  it.each([
+    [
+      "LATER_THAN_SCHOOLMATE",
+      "先搶期每校只遞補最早送出的一隊，本校已有更早送出的候補。",
+      "first_come",
+      FIRST_COME_RULE,
+    ],
+    [
+      "SCHOOL_LIMIT_REACHED",
+      "每校最多 2 隊正取：本校正取加上排在前面的本校候補已達 2 隊。",
+      "after_deadline",
+      AFTER_DEADLINE_RULE,
+    ],
+  ] as const)(
+    "S17 候補原因 %s：原因與當下階段的遞補規則",
+    async (reason, message, phase, rule) => {
+      signInAs()
+      mockReadTeam({
+        ...ALLOCATED,
+        registration_status: "waitlisted",
+        waitlist_position: null,
+        waitlist_reason: reason,
+        representative_backfill: false,
+        waitlist_phase: phase,
+      })
+      renderApp("/teams/team-1")
+
+      const details = (await screen.findByText(message)).closest<HTMLElement>(
+        "[data-slot=waitlist-details]",
+      ) as HTMLElement
+      expect(
+        Array.from(details.children).map((line) => line.textContent),
+      ).toEqual([message, rule])
+    },
+  )
+
+  it("S17 候補有順位：「候補第 N 位」＋截止後的遞補規則，不顯示原因", async () => {
+    signInAs()
+    mockReadTeam({
+      ...ALLOCATED,
+      registration_status: "waitlisted",
+      waitlist_position: 3,
+      waitlist_reason: null,
+      representative_backfill: false,
+      waitlist_phase: "after_deadline",
+    })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("候補第 3 位")).toBeInTheDocument()
+    const details = screen
+      .getByText(AFTER_DEADLINE_RULE)
+      .closest<HTMLElement>("[data-slot=waitlist-details]") as HTMLElement
+    expect(details.children).toHaveLength(1)
+    expect(screen.queryByText(UNRANKED_REASON)).toBeNull()
+  })
+
+  it("S17 正取：「正取」與報名截止倒數", async () => {
+    signInAs()
+    mockReadTeam({
+      ...ALLOCATED,
+      registration_status: "accepted",
+      registration_end: inMs(3 * 24 * 60 * 60 * 1000),
+    })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("正取")).toBeInTheDocument()
+    const countdown = screen
+      .getByText("報名截止")
+      .closest<HTMLElement>("[data-slot=countdown]")
+    expect(countdown).not.toBeNull()
+    expect(screen.queryByText("優先期結束後分配名額")).toBeNull()
+    expect(document.querySelector("[data-slot=waitlist-details]")).toBeNull()
+  })
+
+  it("S17 正取、報名已截止：不顯示倒數", async () => {
+    signInAs()
+    mockReadTeam({
+      ...ALLOCATED,
+      registration_status: "accepted",
+      registration_end: inMs(-60_000),
+    })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("正取")).toBeInTheDocument()
+    expect(screen.queryByText("報名截止")).toBeNull()
+  })
+
+  it("S12 卡片：候補顯示順位或原因，正取只顯示徽章", async () => {
+    signInAs()
+    const base = {
+      tournament_id: "tour-1",
+      tournament_name: "政大校園盃",
+      game_name: "特戰英豪",
+    }
+    const cards: MyTeamCard[] = [
+      {
+        ...base,
+        team_id: "team-1",
+        team_name: "夜貓隊",
+        registration_status: "waitlisted",
+        waitlist_position: null,
+        waitlist_reason: "SCHOOL_NOT_ELIGIBLE",
+        representative_backfill: true,
+        waitlist_phase: "first_come",
+      },
+      {
+        ...base,
+        team_id: "team-2",
+        team_name: "晨鳥隊",
+        registration_status: "waitlisted",
+        waitlist_position: 2,
+        waitlist_reason: null,
+        representative_backfill: false,
+        waitlist_phase: "first_come",
+      },
+      {
+        ...base,
+        team_id: "team-3",
+        team_name: "午茶隊",
+        registration_status: "accepted",
+        ...NO_WAITLIST,
+      },
+    ]
+    vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
+      data: cards,
+    } as MyTeamsResult)
+    renderApp("/me/teams")
+
+    const unranked = await screen.findByRole("link", { name: /夜貓隊/ })
+    expect(
+      within(unranked).getByText("候補・目前不在遞補順序中"),
+    ).toBeInTheDocument()
+    expect(within(unranked).getByText(UNRANKED_REASON)).toBeInTheDocument()
+    expect(within(unranked).getByText(BACKFILL)).toBeInTheDocument()
+    expect(within(unranked).getByText(FIRST_COME_RULE)).toBeInTheDocument()
+    // 說明放在隊名與徽章那一列的下方、用卡片全寬（375 px 時才不會被長徽章擠窄）
+    const details = unranked.querySelector("[data-slot=waitlist-details]")
+    expect(details?.parentElement).toBe(unranked)
+    expect(
+      unranked.querySelector(
+        "[data-slot=card-row] [data-slot=waitlist-details]",
+      ),
+    ).toBeNull()
+
+    const ranked = screen.getByRole("link", { name: /晨鳥隊/ })
+    expect(within(ranked).getByText("候補第 2 位")).toBeInTheDocument()
+    expect(within(ranked).getByText(FIRST_COME_RULE)).toBeInTheDocument()
+    expect(within(ranked).queryByText(UNRANKED_REASON)).toBeNull()
+
+    const accepted = screen.getByRole("link", { name: /午茶隊/ })
+    expect(within(accepted).getByText("正取")).toBeInTheDocument()
+    expect(accepted.querySelector("[data-slot=waitlist-details]")).toBeNull()
   })
 })

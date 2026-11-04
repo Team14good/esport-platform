@@ -78,3 +78,14 @@ export function taipeiLocalToIso(value: string): string | null {
   const utcMs = wallMs - taipeiOffsetMs(wallMs - taipeiOffsetMs(wallMs))
   return new Date(utcMs).toISOString()
 }
+
+/**
+ * UTC 的 ISO 字串轉成 `datetime-local` 的值（台北時間，例如 `2026-11-10T19:00`），
+ * `taipeiLocalToIso` 的反向；秒以下捨去，無法解析時回傳空字串。
+ */
+export function isoToTaipeiLocal(value: string): string {
+  const ms = new Date(value).getTime()
+  if (Number.isNaN(ms)) return ""
+  const shifted = new Date(ms + taipeiOffsetMs(ms))
+  return shifted.toISOString().slice(0, 16)
+}

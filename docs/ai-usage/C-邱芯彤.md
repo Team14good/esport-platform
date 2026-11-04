@@ -237,3 +237,39 @@
 - 問題與修正：調查發現兩個 spec 必須處理的坑：registration 依架構規則不能直接查賽事表，所以設計結算表兼作「已結算」標記，不必動 B 的模組；3.5 還沒接上前，先搶期送出的報名也會是 `pending`，所以限定只結算 `submitted_at <= priority_end` 的報名。另外 AI 發現 EXPERIENCE.md 要求的「遞補規則說明」沒有固定字串，沒有自行假設，提出給人決定
 - 成熟度：L4（固定流程，子代理調查，人在拆分、字串與核准的 checkpoint 決策）
 - 證據：_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md（Decisions）；deferred-work.md；commit 未記錄（尚未 commit）
+
+### 2026-11-04｜程式／程式生成｜Story 3.4 第二階段：優先期結束自動分配
+
+- Story／範圍：3.4 第二階段（分支 story/3-4-phase2，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：bmad-build 把 spec 交給沒有對話脈絡的實作子代理，主流程再自己讀 diff，逐項對照 Tasks、驗收條件與 I/O 矩陣
+- AI 產出：後端新增優先期結算表與 Alembic 遷移、事件 `RegistrationAllocated`、`settle_priority_window`／`allocate_due_priority_window`、worker 工作 `allocate_priority_windows`，S17／S12 回應加上候補順位、原因代碼、代表隊補充與階段；前端候補徽章、原因與遞補規則說明、正取的報名截止倒數；EXPERIENCE.md 新增兩則固定字串；新增後端測試檔 1 個（審查後共 22 個測試），前端單元測試寫在 2 個既有檔案
+- 人做了什麼：spec 有矛盾時選 (甲)，完全沒有報名的賽事不寫結算紀錄，並要求先確認 3.5、3.6 與抽籤不依賴這一點；正式確認保留 `waitlist_phase`、`waitlist_reason` 只回代碼
+- 驗證：實作後後端 1879 個測試全過、lint 通過；前端單元測試全量有 2～3 個失敗（見下）
+- 問題與修正：主流程做 I/O 矩陣檢查時發現，凍結區塊寫「沒有任何報名的賽事也要寫結算紀錄」，Design Notes 卻規定 worker 只從有 `pending` 的賽事找候選，子代理照後者做而偏離凍結規則；沒有自己決定，停下來問人，改寫 spec 並補一個測試。子代理把前端失敗判斷成「全量平行時的不穩定、與本 Story 無關」，沒有查原因；主流程到 main 跑全量 761 個全過，才找到原因：分支開在 #47 之前，少了 `setup.ts` 的 `asyncUtilTimeout: 5000` 與 `testTimeout: 15000`。主流程第一次比較時，掛載了本機 Windows 的 `node_modules`，條件不同，改成不含 `node_modules` 的複製版本後才公平，套上 main 的兩個檔後 732 個全過。子代理自訂、spec 沒寫的兩點（多一個 API 欄位、原因只回代碼）有主動列出請人確認
+- 成熟度：L4（固定流程，子代理實作，主流程依 diff 與矩陣驗證，人在 spec 矛盾與 API 設計的 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md（Decisions、Implementation Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-04｜測試／程式審查｜Story 3.4 第二階段審查、合併 main 與完整驗證
+
+- Story／範圍：3.4 第二階段（分支 story/3-4-phase2，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap 三個審查子代理）
+- 怎麼用：三個審查子代理平行讀 diff，主流程逐項查證（讀呼叫端、狀態轉換表、notifications 分派、唯一鍵），寫進 spec 的 Review Triage Log；修正交回原本的實作子代理；之後以 `git merge --no-commit origin/main` 合併 3 個新 PR（#46～#48），重新產生 client 並跑完整驗證
+- AI 產出：審查發現 Blind Hunter 14 項、Edge Case Hunter 7 項、Verification Gap 2 項＋1 項其他，合併為 21 列：patch 3、defer 2、駁回 16（其中 8 列查證為不成立）；新增 2 個測試（未到期候選固定排在前面、自訂模式不結算）；deferred-work 新增 2 項
+- 人做了什麼：決定先審查、再合併 main，合併後重跑全部驗證，不 commit、不 push
+- 驗證：合併後後端 1913 個測試全過（含 test_migrations、test_architecture，覆蓋率 97%），mypy、ty、ruff 通過；前端 typecheck、biome 通過，單元測試 61 個檔案 798 個全過；重新產生的 client 與合併結果相同，所有變更檔為 LF，main 沒有新的 Alembic 遷移
+- 問題與修正：Verification Gap 抓到實作子代理的多賽事測試用隨機 uuid，未到期候選只有約 1/3 機率排在前面，「遇到未到期就停」的回歸多半仍會通過，改成固定排序。Blind Hunter 抓到刪除舊 deferred 項目時，「`pending` 不能被 `fill_from_waitlist` 漏掉」沒有轉移到 3.6，而開發順序 3.4 → 3.6 → 3.5 正好會遇到。主流程查證 Edge Case Hunter 的「沒結算就抽籤」時，發現 competition 實際呼叫的是 `finalize_for_draw`，主流程先前寫進 Decisions 的只有 `fill_at_deadline`，已更正。合併時 `git stash` 因先前 `git add -N` 標記的新檔失敗，改為先取消標記再備份
+- 成熟度：L4（多個獨立審查者加自動測試，主流程查證每一項，人決定流程與合併時機）
+- 證據：_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md（Review Triage Log）；deferred-work.md；commit 未記錄（尚未 commit）
+
+### 2026-11-04｜測試／瀏覽器實測｜Story 3.4 第二階段：S12、S17 分配結果（桌機與 375 px）
+
+- Story／範圍：3.4 第二階段（分支 story/3-4-phase2，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ Playwright（專案的 e2e 容器）
+- 怎麼用：AI 用 SQL 在開發資料庫建兩場名額 3 的校園賽（先搶期、截止後）、4 校 6 隊與 6 個帳號，報名寫成「已送出・待分配」，由實際的 worker 結算；再寫一個沿用專案 Playwright 設定的實測 spec（不放進 repo），以 4 個帳號在桌機與 375 px 登入檢查 S12、S17，最後人工看截圖
+- AI 產出：資料準備 SQL、實測 spec 與設定、22 張截圖；8 個情境全部通過（正取、「候補第 1／2 位」、「候補・目前不在遞補順序中」＋兩種原因、代表隊補充、兩則階段規則說明逐字相同，正取倒數截止前顯示、截止後不顯示，沒有橫向捲軸）；修正 `RegistrationStatusCard.tsx` 的版面並補 1 項單元測試斷言
+- 人做了什麼：要求先做瀏覽器實測再 commit；在三種版面方案中選「說明移到整列下方」
+- 驗證：worker 在 20 秒內結算兩場（各 1 筆摘要、6 筆狀態變更、合計 12 個事件），結果與分配規則一致；修正後瀏覽器實測 8/8、前端單元測試 798 個全過、biome 與 typecheck 通過
+- 問題與修正：自動檢查第一次就全過，但 AI 看 375 px 截圖時發現 S12 的長徽章「候補・目前不在遞補順序中」設了不換行、不縮小，占約 170 px，說明欄只剩約 100 px、卡片被拉長到約 350 px；審查與單元測試都沒抓到。AI 列出三種方案請人決定，修正後縮到約 220 px。另外，既有資料裡有一筆沒有送出快照的 `pending` 報名，審查時判定「不會發生」的缺快照情況實際存在於開發資料庫；實測確認結算會略過它、寫入空紀錄，worker 沒有錯誤。AI 補新測試斷言時一次沒有照 biome 格式，biome 擋下後修正
+- 成熟度：L3（AI 準備資料、自動化實測並看截圖找出問題，人決定版面方案）
+- 證據：_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md（Decisions、Implementation Notes）；commit 未記錄（尚未 commit）
