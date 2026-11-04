@@ -260,6 +260,17 @@
 - 成熟度：L3（AI 依人的審查意見修正，並以突變檢查驗證）
 - 證據：PR #32 的 review、spec 的 Implementation Notes
 
+### 2026-11-04｜程式／程式生成｜Story 2.4 第二階段第 3 項：S1 空狀態對主辦方顯示「建立賽事」
+
+- Story／範圍：2.4 第二階段第 3 項（PR 未開）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（oneshot 路線、Blind Hunter 審查），由另一個 Claude Code session 轉交
+- 怎麼用：PR #31（S26）合併後，依 deferred-work 那筆與 EXPERIENCE.md〈通用狀態〉以 oneshot spec 實作，主辦方判斷沿用 banner 的帳號查詢
+- AI 產出：`spec-2-4-s1-empty-create-tournament.md`；新增 `CreateTournamentButton.tsx`（從 S25 抽出共用）；修改 `TournamentList.tsx`、`OrganizerTournamentsPage.tsx`；測試檔 1 個、5 個測試
+- 人做了什麼：決定開始做第 3 項，指定至少涵蓋主辦方、一般帳號、未登入三種身分
+- 驗證：突變檢查（按鈕改為一律顯示時 2 個測試失敗）；typecheck、biome、build 通過；單元測試 703 個中 701 個通過，失敗的 2 個（2.1、2.2 的第一個測試）是本機負載下的冷啟動逾時，單獨跑全過
+- 問題與修正：AI 第一版在 S1 手刻空狀態，Blind Hunter 指出 S25 與 UX-DR17 都用共用的 `EmptyState`，改用後所有人看到的 S1 空狀態也一併統一；另補上「帳號載入失敗」的測試、刪掉多餘的 re-export。審查共 9 筆：3 筆修正、6 筆不處理（理由在 spec）
+- 成熟度：L4（spec → 實作 → 審查者 → 突變檢查與自動測試）
+- 證據：spec 的 Implementation Notes、Review Triage Log
 ### 2026-11-03｜測試／程式審查｜Story 2.1 依組長審查補測試與無障礙名稱
 
 - Story／範圍：2.1 第二階段的審查後續（PR #30 已合併，另開修正 PR）
