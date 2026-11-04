@@ -725,8 +725,12 @@ def accept_invitation(
 def is_referee(
     session: Session, *, tournament_id: uuid.UUID, account_id: uuid.UUID
 ) -> bool:
-    """帳號已接受該賽事的裁判邀請；只在該賽事有效（由 `core.authz` 判斷）。"""
-    referee_tournament_ids = repository.list_referee_tournament_ids(session, account_id)
+    """帳號已接受該賽事的裁判邀請；只在該賽事有效（由 `core.authz` 判斷）。
+
+    以主鍵 (tournament_id, account_id) 只查一列，4.4 每次指派與登錄比分都會呼叫。
+    """
+    referee = repository.get_referee(session, tournament_id, account_id)
+    referee_tournament_ids = [referee.tournament_id] if referee is not None else []
     return authz.is_tournament_referee(referee_tournament_ids, tournament_id)
 
 

@@ -290,13 +290,3 @@ def list_referees(
         .order_by(col(TournamentReferee.accepted_at), col(TournamentReferee.account_id))
     )
     return list(session.exec(statement))
-
-
-def list_referee_tournament_ids(
-    session: Session, account_id: uuid.UUID
-) -> list[uuid.UUID]:
-    """帳號擔任裁判的所有賽事 id。"""
-    statement = select(TournamentReferee.tournament_id).where(
-        TournamentReferee.account_id == account_id
-    )
-    return list(session.exec(statement))

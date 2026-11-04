@@ -118,7 +118,7 @@ context:
 | 9 | Blind | 合約把 `ensure_accepting_referees` 標成內部，說明仍寫「兩個 `ensure_*`」 | low | patch |
 | 10 | Blind | 預覽與接受的 `token` 路徑參數沒有長度上限 | low：`Path(max_length=64)` 直接擋 | patch |
 | 11 | Blind | diff 裡沒有 `frontend/src/client` | false：審查 diff 刻意排除產生檔；client 已以 `generate-client.sh` 重新產生（382 行新增），typecheck 通過 | 不處理 |
-| 12 | Blind | `is_referee` 先載入帳號所有裁判賽事 id 再比對 | low：凍結區塊要求經 `core.authz` 判斷；資料量小 | 不處理 |
+| 12 | Blind | `is_referee` 先載入帳號所有裁判賽事 id 再比對 | low：凍結區塊要求經 `core.authz` 判斷；資料量小 | 不處理。2026-11-04 D 在 PR #40 審查再提，使用者決定修正：改以主鍵 `get_referee` 只查一列，再把結果交給 `authz.is_tournament_referee`（兩者兼顧）；刪除不再使用的 `repository.list_referee_tournament_ids` |
 | 13 | Blind | `invitation_id` 外鍵沒有索引 | low：沒有依 invitation_id 的查詢 | 不處理 |
 | 14 | Blind | 重新產生時作廢舊邀請沒有寫操作紀錄 | low：凍結區塊只要求產生與接受各一筆；新邀請的紀錄已能推知舊邀請作廢 | 不處理 |
 | 15 | Blind | `get_latest_invitation` 依賴「最新邀請到期最晚」的不變式 | low：效期是常數，期中不做自訂效期 | 不處理 |
