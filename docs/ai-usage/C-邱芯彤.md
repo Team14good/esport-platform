@@ -225,3 +225,15 @@
 - 問題與修正：三個審查者共提出 15 項，修正 8 項、延後 1 項、駁回 6 項（其中 3 項查證為誤報，例如「優先期內有 pending 會高估空位」：優先期內不會有候補，結果必為空）。AI 實作的錯誤：超額測試只有 1 個有順位候補，拿掉 `max(…, 0)` 測試仍會通過（Verification Gap 抓到，補測資後實際拿掉確認會失敗）；改寫 docstring 時把舊契約涵蓋的撤回、退回、提高名額漏掉；epics.md 新句子與原有括號重複；沒寫明只能在抽籤前呼叫。審查也發現新流程讓「代表隊被取消資格時應由同校遞補」在期中變得可能發生，延後處理。另外，主流程一開始以為審查建議 2、3 還沒做，查 git 才發現使用者已在 `4b30a23` 補上但尚未推送；實作子代理做突變驗證時，因容器掛載可寫入，曾暫時改到本機的 `allocation.py`，它自己改回，主流程再確認
 - 成熟度：L4（固定流程，子代理實作、多個獨立審查者加自動測試，人只在規則選擇與 spec 核准時決策）
 - 證據：_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md（Decisions、Review Triage Log）；deferred-work.md；commit 未記錄（尚未 commit）
+
+### 2026-11-04｜需求／設計｜Story 3.4 第二階段 spec：優先期結束自動分配
+
+- Story／範圍：3.4 第二階段（分支 story/3-4-phase2，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（兩個調查子代理）
+- 怎麼用：#28 合併後，AI 從 main 開新分支並 cherry-pick 審查修正的 commit；bmad-build 的單一目標檢查發現 deferred 的「第二階段」其實涵蓋 3.4、3.5、3.6 三個可各自合併的目標，提出拆分與順序；兩個子代理分別調查後端（worker、tournaments、registration、core）與前端（S17、S12、UX 字串），主流程寫出 spec
+- AI 產出：spec-3-4-priority-window-allocation.md（I/O 矩陣 9 列、8 項 Tasks）；deferred-work 新增 3.5、3.6 第二階段各 1 項
+- 人做了什麼：選擇拆分並依 3.4 → 3.6 → 3.5 的順序做；決定新增兩則「當下階段遞補規則說明」固定字串；決定保留約 2,500 tokens 的完整 spec；核准 spec 並先停在 ready-for-dev
+- 驗證：未記錄（尚未實作；spec 未經審查子代理審查）
+- 問題與修正：調查發現兩個 spec 必須處理的坑：registration 依架構規則不能直接查賽事表，所以設計結算表兼作「已結算」標記，不必動 B 的模組；3.5 還沒接上前，先搶期送出的報名也會是 `pending`，所以限定只結算 `submitted_at <= priority_end` 的報名。另外 AI 發現 EXPERIENCE.md 要求的「遞補規則說明」沒有固定字串，沒有自行假設，提出給人決定
+- 成熟度：L4（固定流程，子代理調查，人在拆分、字串與核准的 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md（Decisions）；deferred-work.md；commit 未記錄（尚未 commit）

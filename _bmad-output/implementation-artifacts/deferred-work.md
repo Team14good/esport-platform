@@ -240,3 +240,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
   summary: （中）先搶期釋出的是優先期代表隊（期中由 6.5 抽籤前取消資格觸發）時，`backfill_vacancies` 依先搶期順位把名額給別校，沒有依 FR-17「由同校平均段位積分次高的隊伍遞補」。
   evidence: 2026-11-04 PR #28 審查修正的 Code Review（Blind Hunter）。3.4 第一階段的 deferred 項目寫「代表隊退出只在撤回、退回時觸發，期中不會發生」，但期中 6.5 可在先搶期取消優先期代表隊的資格，之後分配時就會走到這條路；同校候補的 `representative_backfill` 也會因代表隊不再是正取而變成 False。修正需在本模組新增同校遞補規則（需確認 `priority_schools` 中哪一隊是代表隊），並讓 `backfill_vacancies` 先處理。
+- source_spec: none
+  summary: Story 3.6 第二階段：報名截止 worker 工作（賽事轉為「報名截止」並以 `backfill_vacancies(AFTER_DEADLINE)`／`fill_from_waitlist` 補位、操作紀錄、事件）、公開函式 `fill_at_deadline` 給 D 的 4.1 呼叫、S2「抽籤準備中」。
+  evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.4～3.6 第二階段拆開，依序 3.4 → 3.6 → 3.5。3.6 可獨立合併；跨人交接期限 11/12（D 的 4.1、B 的 6.5 在等），排在 3.4 之後第一個做；截止工作須確保優先期結算已執行。
+- source_spec: none
+  summary: Story 3.5 第二階段：先搶期送出時，在 3.3 `submit_registration` 的 `lock_tournament()` 鎖內先呼叫 `backfill_vacancies(FIRST_COME)` 遞補，再以 `decide_first_come` 判定正取或候補，回應直接帶結果與候補順位；補 200 筆平行送出的併發整合測試。
+  evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.4～3.6 第二階段拆開。3.5 只改送出流程與併發測試，可獨立合併，排在 3.6 之後；沿用 3.4 第二階段建立的「優先期有報名的學校」與 S17／S12 狀態顯示。
