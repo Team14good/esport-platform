@@ -1,25 +1,34 @@
 """tournaments 的業務規則、資源層級權限、狀態轉換、操作紀錄與事件；不得 commit 或 rollback。"""
 
+import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlmodel import Session
 
-from app.core import audit, clock
+from app.core import audit, authz, clock
 from app.core.errors import BusinessError, FieldError
+from app.modules.identity import service as identity_service
 from app.modules.tournaments import repository
 from app.modules.tournaments.models import (
+    REFEREE_INVITATION_DAYS,
+    REFEREE_INVITATION_TOKEN_BYTES,
     GameIn,
     GameRead,
     GameTitle,
+    PublicRefereeInvitation,
     PublicTournament,
     RankTier,
     RankTierRead,
+    RefereeInvitation,
+    RefereeInvitationRead,
+    RefereeRead,
     Tournament,
     TournamentCreate,
     TournamentMode,
     TournamentRead,
+    TournamentReferee,
     TournamentStatus,
 )
 
@@ -530,3 +539,203 @@ def open_due_registration(session: Session) -> bool:
             actor_id=None,
         )
     return True
+
+
+# ---------------------------------------------------------------- 裁判
+# 邀請 7 天有效，`expires_at <= clock.now()` 即過期。重新產生時，同賽事尚未過期的
+# 舊邀請 `expires_at` 設為當下。產生與接受都先 `lock_tournament` 再碰邀請列（鎖的順序
+# 一致，不會死結），所以接受不會用到已作廢的邀請，也不會與賽事轉為已結束／已取消交錯。
+
+_REFEREE_CLOSED_STATUSES = frozenset(
+    {TournamentStatus.FINISHED, TournamentStatus.CANCELLED}
+)
+
+
+def _invitation_not_found() -> BusinessError:
+    return BusinessError(
+        "REFEREE_INVITATION_NOT_FOUND", "找不到這個裁判邀請。", status_code=404
+    )
+
+
+def _is_expired(invitation: RefereeInvitation, now: datetime) -> bool:
+    return invitation.expires_at <= now
+
+
+def _invitation_to_read(
+    invitation: RefereeInvitation, now: datetime
+) -> RefereeInvitationRead:
+    return RefereeInvitationRead(
+        tournament_id=invitation.tournament_id,
+        token=invitation.token,
+        created_at=invitation.created_at,
+        expires_at=invitation.expires_at,
+        expired=_is_expired(invitation, now),
+    )
+
+
+def ensure_accepting_referees(
+    tournament: TournamentRead,
+    *,
+    message: str = "這場賽事已結束或已取消，不能再邀請裁判。",
+) -> None:
+    """賽事不是已結束或已取消；否則拋 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
+
+    產生與接受裁判邀請前檢查；不碰資料庫。`message` 讓接受邀請時換成給受邀者的說明。
+    """
+    if tournament.status in _REFEREE_CLOSED_STATUSES:
+        raise BusinessError(
+            "TOURNAMENT_NOT_ACCEPTING_REFEREES", message, status_code=409
+        )
+
+
+def invite_referee(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> RefereeInvitationRead:
+    """主辦方產生新的裁判邀請（7 天有效），同賽事尚未過期的舊邀請立即作廢。
+
+    寫 `referee_invitation.created`（不記 token）。不存在拋 404、不是主辦方本人拋 403、
+    已結束或已取消拋 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
+    """
+    tournament = lock_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, actor_id)
+    ensure_accepting_referees(tournament)
+
+    now = clock.now()
+    repository.expire_active_invitations(session, tournament_id, now)
+    invitation = RefereeInvitation(
+        tournament_id=tournament_id,
+        token=secrets.token_urlsafe(REFEREE_INVITATION_TOKEN_BYTES),
+        created_by=actor_id,
+        created_at=now,
+        expires_at=now + timedelta(days=REFEREE_INVITATION_DAYS),
+    )
+    repository.add_invitation(session, invitation)
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=tournament_id,
+        action="referee_invitation.created",
+        entity_type="referee_invitation",
+        entity_id=invitation.id,
+        before=None,
+        after={"expires_at": invitation.expires_at},
+    )
+    return _invitation_to_read(invitation, now)
+
+
+def get_current_invitation(
+    session: Session, *, tournament_id: uuid.UUID
+) -> RefereeInvitationRead | None:
+    """同賽事最新的一筆邀請（含是否過期）；從未產生過回 None。權限由呼叫端檢查。"""
+    invitation = repository.get_latest_invitation(session, tournament_id)
+    if invitation is None:
+        return None
+    return _invitation_to_read(invitation, clock.now())
+
+
+def preview_invitation(session: Session, *, token: str) -> PublicRefereeInvitation:
+    """不需登入的邀請預覽：賽事名稱、到期時間、是否過期（AD-19，不含帳號資料）。
+
+    不存在拋 404 `REFEREE_INVITATION_NOT_FOUND`。
+    """
+    invitation = repository.get_invitation_by_token(session, token)
+    if invitation is None:
+        raise _invitation_not_found()
+    tournament = get_tournament(session, tournament_id=invitation.tournament_id)
+    return PublicRefereeInvitation(
+        tournament_name=tournament.name,
+        expires_at=invitation.expires_at,
+        expired=_is_expired(invitation, clock.now()),
+    )
+
+
+def _referee_to_read(referee: TournamentReferee, display_name: str) -> RefereeRead:
+    return RefereeRead(
+        account_id=referee.account_id,
+        display_name=display_name,
+        accepted_at=referee.accepted_at,
+    )
+
+
+def accept_invitation(
+    session: Session, *, token: str, account_id: uuid.UUID
+) -> RefereeRead:
+    """受邀者（已驗證帳號，由 router 檢查）接受邀請，成為該賽事的裁判。
+
+    依序檢查：不存在 404 `REFEREE_INVITATION_NOT_FOUND`、過期或已作廢 409
+    `REFEREE_INVITATION_EXPIRED`、已結束或已取消 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`、
+    主辦方本人 409 `ORGANIZER_CANNOT_BE_REFEREE`。已是裁判時回傳原本的資料（冪等），
+    只有第一次接受寫 `referee.accepted`（不記 token）。
+    """
+    found = repository.get_invitation_by_token(session, token)
+    if found is None:
+        raise _invitation_not_found()
+    # 與重新產生相同的鎖順序：先鎖賽事，再以 FOR SHARE 重新讀邀請列（取得最新的到期時間）
+    tournament = lock_tournament(session, tournament_id=found.tournament_id)
+    invitation = repository.get_invitation_by_token(session, token, for_share=True)
+    if invitation is None:  # 邀請不會被刪除
+        raise _invitation_not_found()
+    now = clock.now()
+    if _is_expired(invitation, now):
+        raise BusinessError(
+            "REFEREE_INVITATION_EXPIRED",
+            "此裁判邀請已過期，請向主辦方索取新連結。",
+            status_code=409,
+        )
+    ensure_accepting_referees(
+        tournament, message="這場賽事已結束或已取消，無法接受裁判邀請。"
+    )
+    if tournament.organizer_id == account_id:
+        raise BusinessError(
+            "ORGANIZER_CANNOT_BE_REFEREE",
+            "主辦方不能擔任自己賽事的裁判。",
+            status_code=409,
+        )
+
+    created = repository.add_referee(
+        session,
+        TournamentReferee(
+            tournament_id=tournament.id,
+            account_id=account_id,
+            invitation_id=invitation.id,
+            accepted_at=now,
+        ),
+    )
+    referee = repository.get_referee(session, tournament.id, account_id)
+    if referee is None:  # 剛新增或原本就存在，不會發生
+        raise RuntimeError("tournament_referee row missing after insert")
+    if created:
+        audit.record(
+            session,
+            actor_id=account_id,
+            tournament_id=tournament.id,
+            action="referee.accepted",
+            entity_type="tournament_referee",
+            entity_id=account_id,
+            before=None,
+            after={
+                "invitation_id": invitation.id,
+                "accepted_at": referee.accepted_at,
+            },
+        )
+    names = identity_service.get_display_names(session, account_ids=[account_id])
+    return _referee_to_read(referee, names[account_id])
+
+
+def is_referee(
+    session: Session, *, tournament_id: uuid.UUID, account_id: uuid.UUID
+) -> bool:
+    """帳號已接受該賽事的裁判邀請；只在該賽事有效（由 `core.authz` 判斷）。"""
+    referee_tournament_ids = repository.list_referee_tournament_ids(session, account_id)
+    return authz.is_tournament_referee(referee_tournament_ids, tournament_id)
+
+
+def list_referees(session: Session, *, tournament_id: uuid.UUID) -> list[RefereeRead]:
+    """某賽事的裁判（含顯示名稱），依接受邀請的時間排序。"""
+    referees = repository.list_referees(session, tournament_id)
+    names = identity_service.get_display_names(
+        session, account_ids=[referee.account_id for referee in referees]
+    )
+    return [
+        _referee_to_read(referee, names[referee.account_id]) for referee in referees
+    ]

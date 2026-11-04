@@ -6,14 +6,17 @@ from datetime import datetime
 from typing import Any
 
 import psycopg
-from sqlalchemy import func
+from sqlalchemy import func, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.modules.tournaments.models import (
     GameTitle,
     RankTier,
+    RefereeInvitation,
     Tournament,
+    TournamentReferee,
     TournamentStatus,
 )
 
@@ -190,3 +193,110 @@ def set_tournament_status(
     session.add(tournament)
     session.flush()
     return tournament
+
+
+# ---------------------------------------------------------------- 裁判
+
+
+def expire_active_invitations(
+    session: Session, tournament_id: uuid.UUID, now: datetime
+) -> None:
+    """把同賽事尚未過期的邀請 `expires_at` 設為 `now`（不刪除）。
+
+    UPDATE 會鎖住這些列，與接受邀請時的 FOR SHARE 互斥。
+    """
+    session.connection().execute(
+        update(RefereeInvitation)
+        .where(col(RefereeInvitation.tournament_id) == tournament_id)
+        .where(col(RefereeInvitation.expires_at) > now)
+        .values(expires_at=now)
+    )
+
+
+def add_invitation(
+    session: Session, invitation: RefereeInvitation
+) -> RefereeInvitation:
+    session.add(invitation)
+    session.flush()
+    return invitation
+
+
+def get_latest_invitation(
+    session: Session, tournament_id: uuid.UUID
+) -> RefereeInvitation | None:
+    """同賽事最新的一筆邀請。
+
+    最新的邀請 `expires_at` 一定最大（舊的不是較早到期，就是被設為產生新邀請的當下），
+    以它排序；同一時間點產生時（凍結時鐘）也不會選到已作廢的那筆。
+    """
+    statement = (
+        select(RefereeInvitation)
+        .where(RefereeInvitation.tournament_id == tournament_id)
+        .order_by(
+            col(RefereeInvitation.expires_at).desc(),
+            col(RefereeInvitation.created_at).desc(),
+        )
+        .limit(1)
+        # 同一交易內剛以 UPDATE 作廢過時，不要用 identity map 裡的舊值
+        .execution_options(populate_existing=True)
+    )
+    return session.exec(statement).first()
+
+
+def get_invitation_by_token(
+    session: Session, token: str, *, for_share: bool = False
+) -> RefereeInvitation | None:
+    # for_share 時 SELECT … FOR SHARE，並以資料庫的最新值覆蓋 identity map 裡的同一筆
+    statement = select(RefereeInvitation).where(RefereeInvitation.token == token)
+    if for_share:
+        statement = statement.with_for_update(read=True).execution_options(
+            populate_existing=True
+        )
+    return session.exec(statement).first()
+
+
+def add_referee(session: Session, referee: TournamentReferee) -> bool:
+    """新增裁判；已存在（同賽事同帳號）時不做任何事。回傳是否真的新增。"""
+    statement = (
+        insert(TournamentReferee)
+        .values(
+            tournament_id=referee.tournament_id,
+            account_id=referee.account_id,
+            invitation_id=referee.invitation_id,
+            accepted_at=referee.accepted_at,
+        )
+        .on_conflict_do_nothing(index_elements=["tournament_id", "account_id"])
+        # 有衝突時不回傳任何列；以 RETURNING 判斷，不依賴 rowcount
+        .returning(col(TournamentReferee.account_id))
+    )
+    return session.connection().execute(statement).first() is not None
+
+
+def get_referee(
+    session: Session, tournament_id: uuid.UUID, account_id: uuid.UUID
+) -> TournamentReferee | None:
+    return session.get(
+        TournamentReferee, (tournament_id, account_id), populate_existing=True
+    )
+
+
+def list_referees(
+    session: Session, tournament_id: uuid.UUID
+) -> list[TournamentReferee]:
+    """某賽事的裁判，依接受邀請的時間排序。"""
+    statement = (
+        select(TournamentReferee)
+        .where(TournamentReferee.tournament_id == tournament_id)
+        .order_by(col(TournamentReferee.accepted_at), col(TournamentReferee.account_id))
+    )
+    return list(session.exec(statement))
+
+
+def list_referee_tournament_ids(
+    session: Session, account_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """帳號擔任裁判的所有賽事 id。"""
+    statement = select(TournamentReferee.tournament_id).where(
+        TournamentReferee.account_id == account_id
+    )
+    return list(session.exec(statement))

@@ -39,6 +39,13 @@ def get_account(
     )
 
 
+def list_accounts(session: Session, account_ids: Sequence[uuid.UUID]) -> list[Account]:
+    """一次讀取多個帳號（不存在的 id 略過）；順序不保證。"""
+    if not account_ids:
+        return []
+    return list(session.exec(select(Account).where(col(Account.id).in_(account_ids))))
+
+
 def get_account_by_email(
     session: Session, email: str, *, for_update: bool = False
 ) -> Account | None:

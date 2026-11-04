@@ -1,22 +1,32 @@
 """tournaments 的 HTTP 端點：帳號層級權限、開啟並提交交易（router 才能 commit）。"""
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Path, status
 
 from app.core import authz
 from app.core.db import SessionDep
-from app.modules.identity.deps import Organizer, PlatformAdmin
+from app.modules.identity.deps import Organizer, PlatformAdmin, VerifiedAccount
 from app.modules.tournaments import service
 from app.modules.tournaments.models import (
+    REFEREE_INVITATION_TOKEN_MAX_LENGTH,
     GameIn,
     GameRead,
+    PublicRefereeInvitation,
     PublicTournament,
+    RefereeInvitationRead,
+    RefereeRead,
     TournamentCreate,
     TournamentRead,
 )
 
 router = APIRouter(tags=["tournaments"])
+
+# 裁判邀請 token（公開預覽也會用到）；超過欄位長度的不可能存在，直接 422
+RefereeToken = Annotated[
+    str, Path(min_length=1, max_length=REFEREE_INVITATION_TOKEN_MAX_LENGTH)
+]
 
 
 @router.get("/admin/games")
@@ -107,3 +117,70 @@ def read_my_tournament(
     tournament = service.get_tournament(session, tournament_id=tournament_id)
     authz.ensure_tournament_owner(tournament, organizer.id)
     return tournament
+
+
+# ---------------------------------------------------------------- 裁判
+
+
+@router.post(
+    "/organizer/tournaments/{tournament_id}/referee-invitation",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_referee_invitation(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> RefereeInvitationRead:
+    """產生新的裁判邀請（7 天有效），舊的未過期邀請立即作廢。
+
+    不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；已結束或已取消 409
+    `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
+    """
+    invitation = service.invite_referee(
+        session, tournament_id=tournament_id, actor_id=organizer.id
+    )
+    session.commit()
+    return invitation
+
+
+@router.get("/organizer/tournaments/{tournament_id}/referee-invitation")
+def read_referee_invitation(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> RefereeInvitationRead | None:
+    """目前（最新一筆）的裁判邀請，含是否過期；從未產生過回 `null`。"""
+    tournament = service.get_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, organizer.id)
+    return service.get_current_invitation(session, tournament_id=tournament_id)
+
+
+@router.get("/organizer/tournaments/{tournament_id}/referees")
+def list_tournament_referees(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> list[RefereeRead]:
+    """已接受邀請的裁判，依接受時間排序。"""
+    tournament = service.get_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, organizer.id)
+    return service.list_referees(session, tournament_id=tournament_id)
+
+
+@router.get("/referee-invites/{token}")
+def preview_referee_invitation(
+    session: SessionDep, token: RefereeToken
+) -> PublicRefereeInvitation:
+    """裁判邀請預覽；不需登入，只回賽事名稱、到期時間與是否過期。
+
+    不存在 404 `REFEREE_INVITATION_NOT_FOUND`。
+    """
+    return service.preview_invitation(session, token=token)
+
+
+@router.post("/referee-invites/{token}/accept")
+def accept_referee_invitation(
+    session: SessionDep, account: VerifiedAccount, token: RefereeToken
+) -> RefereeRead:
+    """接受裁判邀請（需已驗證 Email）；已是裁判時回原本的資料。
+
+    過期或已作廢 409 `REFEREE_INVITATION_EXPIRED`；主辦方本人 409
+    `ORGANIZER_CANNOT_BE_REFEREE`；已結束或已取消 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
+    """
+    referee = service.accept_invitation(session, token=token, account_id=account.id)
+    session.commit()
+    return referee
