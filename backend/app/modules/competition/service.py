@@ -42,6 +42,8 @@ from app.modules.competition.models import (
     PublicPodium,
     PublicTeamRef,
     PublicTournamentRef,
+    RefereeAssigned,
+    RefereeUnassigned,
     ReplayCleared,
     RescheduleBlockReason,
     RescheduleInfo,
@@ -733,6 +735,7 @@ def advance(session: Session, *, match: Match) -> None:
                 repository.set_match_team(
                     session, by_code[code], side, team, clock.now()
                 )
+                _unassign_if_member(session, match=by_code[code], team_id=team)
             case progression.ConfirmWalkover(code=code, winner=winner):
                 _confirm(
                     session,
@@ -749,6 +752,47 @@ def advance(session: Session, *, match: Match) -> None:
                 events.publish(session, MatchOpponentsDecided(match_id=target.id))
             case progression.TournamentFinished(podium=result):
                 _finish(session, tournament=tournament, result=result)
+
+
+def _unassign_if_member(
+    session: Session, *, match: Match, team_id: uuid.UUID | None
+) -> None:
+    """晉級填位後，指派的裁判若是新填入隊伍的隊員就自動收回（操作者為系統）。"""
+    referee_id = match.referee_account_id
+    if team_id is None or referee_id is None:
+        return
+    if not registration_port.is_member(session, team_id=team_id, account_id=referee_id):
+        return
+    _set_referee(session, match=match, referee_id=None, actor_id=None)
+    events.publish(
+        session, RefereeUnassigned(match_id=match.id, referee_account_id=referee_id)
+    )
+
+
+def _set_referee(
+    session: Session,
+    *,
+    match: Match,
+    referee_id: uuid.UUID | None,
+    actor_id: uuid.UUID | None,
+) -> None:
+    """寫入裁判並記操作紀錄（`match.referee_assigned`／`match.referee_unassigned`）。"""
+    before = match.referee_account_id
+    repository.set_referee(session, match, referee_id, clock.now())
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=match.tournament_id,
+        action=(
+            "match.referee_assigned"
+            if referee_id is not None
+            else "match.referee_unassigned"
+        ),
+        entity_type="match",
+        entity_id=match.id,
+        before={"referee_account_id": before},
+        after={"referee_account_id": referee_id},
+    )
 
 
 def _void(session: Session, *, match: Match) -> None:
@@ -1711,8 +1755,23 @@ def list_managed_matches(
     matches = repository.list_matches(session, bracket.id)
     public_matches, _team_ref = _public_matches(session, bracket, matches)
     now = clock.now()
+    referees = tournaments_service.list_referees(session, tournament_id=tournament_id)
+    member_cache: dict[tuple[uuid.UUID, uuid.UUID], bool] = {}
     result = []
     for match, public in zip(matches, public_matches, strict=True):
+        can_assign = _can_assign(tournament, match)
+        assignable: list[uuid.UUID] = []
+        for referee in referees if can_assign else []:
+            blocked = False
+            for team_id in _match_teams(match):
+                key = (team_id, referee.account_id)
+                if key not in member_cache:
+                    member_cache[key] = registration_port.is_member(
+                        session, team_id=team_id, account_id=referee.account_id
+                    )
+                blocked = blocked or member_cache[key]
+            if not blocked:
+                assignable.append(referee.account_id)
         block = _reschedule_block(session, tournament, match)
         earliest: datetime | None = None
         latest: datetime | None = None
@@ -1743,6 +1802,131 @@ def list_managed_matches(
                     earliest=earliest,
                     latest=latest,
                 ),
+                assignable_referee_ids=assignable,
+                can_assign_referee=can_assign,
             )
         )
     return result
+
+
+# 可以指派／收回裁判的狀態
+_ASSIGNABLE_TOURNAMENT = frozenset(
+    {TournamentStatus.PUBLISHED, TournamentStatus.ONGOING}
+)
+_ASSIGNABLE_MATCH = frozenset({MatchStatus.SCHEDULED, MatchStatus.LIVE})
+
+
+def _can_assign(tournament: TournamentRead, match: Match) -> bool:
+    return (
+        tournament.status in _ASSIGNABLE_TOURNAMENT
+        and MatchStatus(match.status) in _ASSIGNABLE_MATCH
+    )
+
+
+def _ensure_assignable(tournament: TournamentRead, match: Match) -> None:
+    if tournament.status not in _ASSIGNABLE_TOURNAMENT:
+        raise BusinessError(
+            "TOURNAMENT_NOT_ASSIGNABLE",
+            "賽事目前的狀態不能指派裁判。",
+            status_code=409,
+        )
+    if MatchStatus(match.status) not in _ASSIGNABLE_MATCH:
+        raise BusinessError(
+            "MATCH_REFEREE_LOCKED",
+            "這場已送出結果或已取消，不能再更動裁判。",
+            status_code=409,
+        )
+
+
+def _match_teams(match: Match) -> list[uuid.UUID]:
+    return [t for t in (match.team_a_id, match.team_b_id) if t is not None]
+
+
+def _locked_for_referee(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    actor_id: uuid.UUID,
+) -> Match:
+    """404 -> `lock_tournament`、`lock_match`（AD-6）-> 主辦方 -> 賽事與場次狀態。"""
+    tournaments_service.get_tournament(session, tournament_id=tournament_id)
+    _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=tournament_id
+    )
+    match = lock_match(session, match_id=match_id)
+    authz.ensure_tournament_owner(tournament, actor_id)
+    _ensure_assignable(tournament, match)
+    return match
+
+
+def assign_referee(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    referee_account_id: uuid.UUID,
+) -> MatchRead:
+    """指派或改派場次的裁判；任何拒絕都不改資料、不寫紀錄、不發事件。
+
+    順序：404 -> 鎖（AD-6）-> 主辦方 -> 賽事狀態 -> 場次狀態 -> 同一人直接回傳 ->
+    必須是賽事裁判 -> 不能是已確定隊伍的隊員。
+    """
+    match = _locked_for_referee(
+        session, tournament_id=tournament_id, match_id=match_id, actor_id=actor_id
+    )
+    previous = match.referee_account_id
+    if previous == referee_account_id:
+        return _match_to_read(match)
+    if not tournaments_service.is_referee(
+        session, tournament_id=tournament_id, account_id=referee_account_id
+    ):
+        raise BusinessError(
+            "NOT_TOURNAMENT_REFEREE",
+            "這個帳號不是這場賽事的裁判。",
+            status_code=409,
+        )
+    if any(
+        registration_port.is_member(
+            session, team_id=team_id, account_id=referee_account_id
+        )
+        for team_id in _match_teams(match)
+    ):
+        raise BusinessError(
+            "REFEREE_IS_TEAM_MEMBER",
+            "裁判是這場參賽隊伍的隊員，不能指派。",
+            status_code=409,
+        )
+    _set_referee(session, match=match, referee_id=referee_account_id, actor_id=actor_id)
+    if previous is not None:
+        events.publish(
+            session, RefereeUnassigned(match_id=match.id, referee_account_id=previous)
+        )
+    events.publish(
+        session,
+        RefereeAssigned(match_id=match.id, referee_account_id=referee_account_id),
+    )
+    return _match_to_read(match)
+
+
+def unassign_referee(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    actor_id: uuid.UUID,
+) -> MatchRead:
+    """收回裁判，之後由主辦方代登；沒有裁判時直接回傳。"""
+    match = _locked_for_referee(
+        session, tournament_id=tournament_id, match_id=match_id, actor_id=actor_id
+    )
+    previous = match.referee_account_id
+    if previous is None:
+        return _match_to_read(match)
+    _set_referee(session, match=match, referee_id=None, actor_id=actor_id)
+    events.publish(
+        session, RefereeUnassigned(match_id=match.id, referee_account_id=previous)
+    )
+    return _match_to_read(match)

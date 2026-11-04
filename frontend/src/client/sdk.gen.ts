@@ -8,6 +8,9 @@ import {
 } from "./client"
 import { client } from "./client.gen"
 import type {
+  competitionAssignRefereeData,
+  competitionAssignRefereeErrors,
+  competitionAssignRefereeResponses,
   competitionCheckInData,
   competitionCheckInErrors,
   competitionCheckInResponses,
@@ -41,6 +44,9 @@ import type {
   competitionSubmitResultData,
   competitionSubmitResultErrors,
   competitionSubmitResultResponses,
+  competitionUnassignRefereeData,
+  competitionUnassignRefereeErrors,
+  competitionUnassignRefereeResponses,
   identityApproveOrganizerApplicationData,
   identityApproveOrganizerApplicationErrors,
   identityApproveOrganizerApplicationResponses,
@@ -1293,6 +1299,50 @@ export class CompetitionService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/schedule",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Unassign Referee
+   *
+   * 收回場次的裁判，之後由主辦方代登；只限該賽事主辦方。
+   */
+  public static unassignReferee<ThrowOnError extends boolean = true>(
+    options: Options<competitionUnassignRefereeData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<
+      competitionUnassignRefereeResponses,
+      competitionUnassignRefereeErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/referee",
+      ...options,
+    })
+  }
+
+  /**
+   * Assign Referee
+   *
+   * 指派或改派場次的裁判；只限該賽事主辦方。
+   */
+  public static assignReferee<ThrowOnError extends boolean = true>(
+    options: Options<competitionAssignRefereeData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<
+      competitionAssignRefereeResponses,
+      competitionAssignRefereeErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/referee",
       ...options,
       headers: {
         "Content-Type": "application/json",

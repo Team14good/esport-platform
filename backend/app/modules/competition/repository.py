@@ -112,6 +112,15 @@ def set_scheduled_at(
     session.flush()
 
 
+def set_referee(
+    session: Session, match: Match, referee_account_id: uuid.UUID | None, at: datetime
+) -> None:
+    match.referee_account_id = referee_account_id
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
 def lock_bracket_matches(session: Session, bracket_id: uuid.UUID) -> list[Match]:
     """依 id 遞增 `SELECT … FOR UPDATE` 鎖住對戰表的全部場次（AD-6），回傳最新值。"""
     statement = (
