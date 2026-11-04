@@ -47,15 +47,6 @@
   summary: 上傳 API 沒有請求大小上限，5 MB 在 multipart 整個收完後才由 `core.storage` 檢查。
   evidence: 2026-10-30 Story 3.2 第一段 Code Review（Blind Hunter）。Starlette 會先把整個 body spool 到暫存檔，超大請求仍會被完整接收；第二段建 multipart API 時要決定請求大小上限（例如檢查 `Content-Length`）（medium）。
 
-## Deferred from: spec-3-1-tournament-integration.md (2026-11-02)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`
-  summary: A 的 `frontend/tests/unit/admin-applications.test.tsx`（「不是平台管理員：顯示 S38 的 403，不呼叫審核 API」）偶發失敗，CI 可能因此偶爾失敗；請 A 確認原因並修正（medium，未證實）。
-  evidence: 2026-11-02 3.1 收尾時前端全部單元測試連跑 3 次，失敗 1 次，其他 2 次全過。同次在 `team-pages.test.tsx` 量到的原因是路由以 `autoCodeSplitting` 延遲載入，路由第一次渲染要 930～1006 ms，超過 `findBy` 預設的 1000 ms；以 `beforeAll` 呼叫 `router.loadRouteChunk` 先載入路由後連跑 10 次全過。A 的檔案是否同因未查證：在該檔加同樣的預先載入後連跑 10 次即可確認。不是本 Story 造成。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-tournament-integration.md`
-  summary: A 的 `frontend/tests/unit/login.test.tsx`（「有 redirect：登入後回到原頁（包含查詢參數）」，找不到標題「帳號資料」）與 B 的 `frontend/tests/unit/tournament-pages.test.tsx`（「標題列、總覽分頁與賽事資訊；未登入也能看」）也會偶發失敗；可能和上一項同一個原因，要請 A、B 各自確認（medium，未證實）。
-  evidence: 2026-11-02 story/3-1 合併 origin/main（含 #29、#13、#12）後，前端全部單元測試跑 1 次，這兩個測試各失敗 1 次；只重跑這兩個檔 3 次，`login.test.tsx` 失敗 1 次、其他全過，`main` 最近 4 次 CI 都通過。兩個測試失敗的都是「進入另一個路由後第一次 `findBy`」。不是本 Story 造成；確認方法同上一項。
-
 ## Deferred from: spec-5-2-forfeit-rules.md (2026-10-30)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-forfeit-rules.md`
@@ -66,33 +57,14 @@
     - S4 顯示哪一隊棄權（雙方棄權時兩隊都標示）與申訴期倒數。
     - 確認 D 的場次狀態轉換表允許「待開打 → 申訴期」；若不允許，請 D 在轉換表新增，不由 5.2 修改。
 
-## Deferred from: Story 5.8 第一階段（2026-10-30）
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-match-page-results.md`
-  summary: S4 場次頁目前只在開發模式以假資料顯示，正式 build 一律 404；要換成真資料，需要公開的單場 API 與以下四件事。
-  evidence: Story 5.8 Decisions（使用者 2026-10-30 定案）：相依的 D 5.1、5.5 與公開單場 API 尚未合併，所以 `features/competition/match-source.ts` 的 `fetchMatchDetail` 只在 `import.meta.env.DEV` 時回傳由對戰樹假資料推導的場次。換成真資料的範圍：
-  (1) 請 D 在 `contracts/competition.md` 補上公開的單場 API（例如 `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}`，公開、找不到回 404），回傳形狀見 `frontend/src/features/competition/match-types.ts` 的 `PublicMatchDetail`（`PublicMatch`＋賽事 id／名稱、遊戲名、本輪 BO、比分型態、輪次名稱、已登錄的局、同輪其他場次、`updated_at`）；
-  (2) 後端測試確認段位截圖不出現在任何公開 API（AD-19）；
-  (3) 把 `fetchMatchDetail` 換成呼叫產生的 client（404 時拋 `MatchNotFoundError`），刪除 `match-types.ts`、`routes/dev/match.tsx`，`match-fixtures.ts` 只留給測試；S4 路由的 loader 為了頁面標題會多抓一次，接上後可改為共用 TanStack Query 快取；
-  (4) S3 路由（4.6 第二階段）完成後，`MatchHeader` 的返回連結（目前是一般的 `<a href="/tournaments/{id}/bracket">`）改為 TanStack `Link` 就能用。
-
 ## Deferred from: Story 5.2（S4 申訴期區塊，2026-10-30）
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-appeal-window-display.md`
-  summary: S4 的申訴期區塊目前只顯示「{絕對時間} 截止」，倒數插槽是空的；公開單場 API 與 B 的 Countdown 都還沒有，以下三件事要在上游完成後補上。
-  evidence: Story 5.2 Decisions（使用者 2026-10-30 定案）：先顯示截止時間，加一個倒數插槽，B 的 Countdown 做好後再放進去。
-  (1) 公開單場 API 的提議形狀（見上方 5.8 第一階段一項）要多一個 `appeal_deadline`（ISO，申訴期、申訴中才有值，其他狀態為 null），對應 `frontend/src/features/competition/match-types.ts` 的 `PublicMatchDetail.appeal_deadline`；
-  (2) B 的 Countdown（2.4，`appeal` 變體，帶進度條）做好後，由 S4 路由 `frontend/src/routes/tournaments/$tournamentId/matches/$matchId.tsx` 把它傳給 `MatchSpectatorView` 的 `appealCountdown`，`MatchAppealWindow` 不重做倒數；
-  (3) 到期後要顯示「已截止 · 系統處理中」（EXPERIENCE.md〈倒數與時間〉到期行為），由 Countdown 負責；`MatchAppealWindow` 目前不讀裝置時鐘、不判斷是否到期。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-game-settings-and-school-list.md`
   summary: （低）Pydantic 內建的 422 訊息是英文：缺欄位、列舉值不合法（例如 `score_type`）、型別不是 list／object 時，`detail[].msg` 不是繁中，前端直接顯示會出現英文。
   evidence: 2026-10-29 Story 2.1 第一階段審查（Edge Case Hunter）。既有問題，identity 的 API 也一樣（`core/errors.py` 沒有翻譯 `RequestValidationError`）。處理時在 core 加一個 `RequestValidationError` handler，依 `type`（missing、enum、list_type 等）換成繁中訊息，並補測試。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-create-tournament.md`
   summary: （中）目前沒有任何工作把賽事從 `open` 轉成 `closed`，`ensure_accepting_registrations` 也只看狀態；在 C 的 3.6 完成前，報名截止時間過後仍可報名。
   evidence: 2026-10-30 Story 2.2 第一階段審查（Blind Hunter）。依 `contracts/tournaments.md`〈三〉，`open` → `closed` 由 3.6 在截止補位之後呼叫 `transition_tournament`。3.6 實作時要確認截止工作會轉換狀態；若 3.6 延後，改由 `ensure_accepting_registrations` 另外比對 `registration_end` 與 `clock.now()`，並同步修改約定。
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-panel.md`
-  summary: （中）前端單元測試在容器冷啟動時不穩定：`login`、`signup`、`account`、`auth`、`forgot-password` 等走路由的舊測試，在 frontend 容器裡第一次執行會有 4～32 個因等不到元素（預設 1 秒）失敗，同一個容器第二次執行全部通過。CI 若遇到機器忙碌也可能偶發失敗。
-  evidence: 2026-10-29 在沒有任何前端改動的分支（story/5-5）上重現：第一次 14 failed／162，第二次 162 passed；與本 Story 的新測試無關。可能的修法：路由測試的 `findBy*` 加長 timeout，或在 `vitest.config.ts` 設 `testTimeout`／預先載入路由，修好後以冷啟動連跑多次確認。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-schedule-rules.md`
   summary: （低）competition 純函式（schedule.py；4.1 合併後的 bracket.py、5.5 的 progression.py 也適用）要求的 90% 分支覆蓋率只靠 spec 的手動指令驗證，CI 沒有強制。
@@ -109,9 +81,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-public-match-api.md`
   summary: （低）賽事取消後，停在申訴期或申訴中的場次，公開單場 API 仍會回傳 `appeal_deadline`，但 worker 已不再自動確認（未驗證，若為真屬 low）。
   evidence: 2026-10-31 公開單場 API 審查（Edge Case Hunter、Blind Hunter）。期中不能取消賽事（2.6 擱置），已結束的賽事也不會有停在申訴期的場次，所以目前不會發生。2.6 實作取消時，要決定公開頁對這類場次顯示什麼，並在 `get_public_match` 加上賽事狀態判斷。
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-panel.md`
-  summary: （中）前端單元測試在容器冷啟動時不穩定：`login`、`signup`、`account`、`auth`、`forgot-password` 等走路由的舊測試，在 frontend 容器裡第一次執行會有 4～32 個因等不到元素（預設 1 秒）失敗，同一個容器第二次執行全部通過。CI 若遇到機器忙碌也可能偶發失敗。
-  evidence: 2026-10-29 在沒有任何前端改動的分支（story/5-5）上重現：第一次 14 failed／162，第二次 162 passed；與本 Story 的新測試無關。可能的修法：路由測試的 `findBy*` 加長 timeout，或在 `vitest.config.ts` 設 `testTimeout`／預先載入路由，修好後以冷啟動連跑多次確認。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
   summary: （低）報到只鎖場次、讀賽事狀態不加鎖；2.6 做取消賽事時，取消與報到同時發生可能寫入一筆已取消賽事的報到紀錄。
@@ -134,9 +103,6 @@
   summary: epic-3-context 要求 `AllocationPolicy` 分支覆蓋率 ≥ 90%，但 `scripts/test.sh` 沒有 `--branch`，只靠 spec 的手動指令檢查。
   evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Verification Gap）。目前實測 100%；之後修改 `allocation.py` 時若漏測分支，一般測試仍會通過。要自動檢查時，在 CI 加一步對 `app/modules/registration/allocation.py` 以 `--branch` 量測並設 `--fail-under=90`（low）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
-  summary: S4 接上 `ScoreEntryPanel`（A 的工作）：用重新產生的 client 呼叫 `GET .../score-entry`、`PUT`／`DELETE .../games/{game_no}`、`POST .../submit`，把錯誤碼轉回面板吃的小寫原因代碼。
-  evidence: 2026-11-01 5.3 第二階段只做後端與重新產生 client。對照：`SCORE_TIE`→`tie`、`SCORE_INVALID`→`invalid_score`、`SERIES_DECIDED`→`series_decided`、`REDUNDANT_GAMES`→`redundant_games`、`INVALID_GAME_NO`→`invalid_game_no`、`NOT_LAST_GAME`→`not_last_game`、`SERIES_NOT_DECIDED`→`not_decided`；`ScoreEntryState.reason` 非 null 時面板停用（`check_in_incomplete` 對應「等待雙方報到」），`submitted_by_name`、`submitted_at` 給已送出的唯讀列。
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
   evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
 
@@ -155,9 +121,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md`
   summary: A 的 identity：註冊時 email 的 @ 前面含中文（例如 `主辦方@example.com`）會被接受，但驗證信寄不出去，帳號無法完成驗證（low，未確認是否要擋）。
   evidence: 2026-11-02 3.1 瀏覽器實測準備資料時發現，worker 記錄 `Email delivery ... failed (attempt 1): UnicodeEncodeError: 'ascii' codec can't encode characters`；改用英文 email 後正常。不是本 Story 造成。處理方式二擇一：註冊時以 422 擋下非 ASCII 的本地部分，或寄信時啟用 SMTPUTF8。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md`
-  summary: 前端單元測試的偶發逾時擴及更多檔案：D 的 `match-route.test.tsx`（第一個測試最常失敗，單獨跑該檔也會失敗）、A 的 `identity-switcher.test.tsx`、`organizer-apply.test.tsx`；全部一起跑時一次最多 9 個失敗，CI 可能因此失敗（medium）。
-  evidence: 2026-11-03 story/3-1 合併 #19 後在本機容器跑前端全部單元測試：第一次 9 個失敗、第二次 1 個；只跑這 5 個檔仍有 `match-route` 1 個失敗。失敗的都是路由第一次渲染時的 `findBy`。可能和上面兩項同一個原因（路由以 `autoCodeSplitting` 延遲載入，第一次轉譯超過 1000 ms），本機只在 `team-pages.test.tsx` 證實過；比較根本的修法是在共用的測試設定預先載入所有路由，或調高 `asyncUtilTimeout`，但那是共用設定，要組員一起決定。
 
 ## Deferred from: spec-2-4-status-badge-and-organizer-banner.md (2026-11-03)
 
@@ -235,3 +198,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-s30-matches-page.md`
   summary: 主辦方賽事後台側欄在子頁（例如 S30 `/organizer/tournaments/{id}/matches`）時，「總覽」（`/organizer/tournaments/{id}`）也顯示為目前位置：`BackofficeLayout` 的 `Link` 沒設 `activeOptions`，以前綴比對；「我的賽事」（`/organizer`）在所有賽事頁也同樣亮起。
   evidence: 2026-11-04 S30 實作時發現；B 的 S31 裁判頁也會遇到。修法需要改 B 的 `components/layout/BackofficeLayout.tsx`（例如 `BackofficeNavItem` 加選填的 `exact`，傳給 `activeOptions`），S30 spec 禁止改 B 的元件，交給 B 決定。
+
+## Deferred from: spec-5-8-real-match-data.md (2026-11-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`
+  summary: （中）S4 報到倒數過了預定開始時間後應改為「棄權期限」（`appeal`）倒數，但公開單場（`PublicMatchDetail`）與報到狀態（`CheckInStatus`）都沒有 `forfeit_deadline`，前端拿不到期限，目前過了預定時間就不顯示倒數。
+  evidence: 2026-11-04 實作 5.8 第二階段時發現，spec 的 Always 寫「過預定時間『棄權期限』→ `forfeit_deadline`」，但 `frontend/src/client/types.gen.ts` 只有主辦方的 `MatchRead` 有這個欄位；spec 禁止改後端。需要 D 在 `PublicMatchDetail`（或 `CheckInStatus`）加上 `forfeit_deadline`，重新產生 client 後，把 `features/competition/MatchCheckIn.tsx` 傳給 `checkInCountdownPhase` 的 `forfeitDeadline: null` 換成該欄位（階段判斷與測試已寫好）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`
+  summary: 觀眾 e2e（`frontend/tests/e2e/spectator.spec.ts`）的 S3、S4 目前以 `page.route` 回傳假對戰樹（`support/match-api.ts`），沒有走真的後端；7.1 示範資料有已抽籤的賽事後，要補一份從真賽事 S2「對戰表」分頁進入、走真 API 的版本。
+  evidence: 2026-11-04 使用者依 D 在 PR #47 審查的建議，決定先改用 `page.route`，不等 7.1。假資料只驗證前端流程與版面（含 375 px），測不到公開 API 的實際回應與 NFR-2 回應時間。

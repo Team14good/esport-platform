@@ -1,4 +1,4 @@
-// 對戰樹的假資料產生器，給單元測試、match-source（DEV）與 /dev/match 共用。
+// 對戰樹的假資料產生器，給單元測試使用。
 // 結構照 D 的 backend/app/modules/competition/bracket.py（origin/story/4-1）：P＝不小於隊數的最小 2 的次方，
 // 輪空位置以位元反轉平均分散，第一輪輪空的位置留空號，只編實際存在的場次，正取 4 隊以上才有季軍賽。
 
