@@ -57,12 +57,13 @@ function MatchPage({
     })
 
   if (notFound) return <NotFoundPage />
-  // 申訴期倒數（appeal 變體，帶進度條）；歸零後由 Countdown 每 5 秒呼叫 onExpire 重抓，直到伺服器回傳新狀態
+  // 申訴期倒數（appeal 變體，進度條從申訴期開始時間起算）；歸零後由 Countdown 每 5 秒呼叫 onExpire 重抓，直到伺服器回傳新狀態
   const appealDeadline = detail?.appeal_deadline
   const appealCountdown = appealDeadline ? (
     <Countdown
       label="剩餘時間"
       deadline={appealDeadline}
+      startsAt={detail?.appeal_started_at ?? undefined}
       variant="appeal"
       onExpire={() => void queryClient.invalidateQueries({ queryKey })}
     />

@@ -164,7 +164,7 @@ class PublicBracket(BaseModel):
 | 方法與路徑 | 權限 | 回傳 |
 | --- | --- | --- |
 | `GET /api/v1/tournaments/{tournament_id}/bracket` | 公開 | `PublicBracket`；尚未抽籤回 404 `BRACKET_NOT_FOUND` |
-| `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}` | 公開 | `PublicMatchDetail`（5.8）；賽事不存在、尚未抽籤、場次不存在、場次不屬於該賽事，一律 404 `MATCH_NOT_FOUND`（回應 `{"detail":{"code":"MATCH_NOT_FOUND","message":"找不到這個場次。"}}`；尚未抽籤也回這個碼而非 `BRACKET_NOT_FOUND`，不透露是哪一種）；`tournament_id`、`match_id` 不是 UUID 格式時回 FastAPI 預設的 422。`same_round` 的項目是一般 `PublicMatch`，不含單場的延伸欄位；`games` 依 `game_no` 遞增列出已登錄的局（5.3 第二階段起；不含登錄者，送出者也不出現在公開 API） |
+| `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}` | 公開 | `PublicMatchDetail`（5.8）；賽事不存在、尚未抽籤、場次不存在、場次不屬於該賽事，一律 404 `MATCH_NOT_FOUND`（回應 `{"detail":{"code":"MATCH_NOT_FOUND","message":"找不到這個場次。"}}`；尚未抽籤也回這個碼而非 `BRACKET_NOT_FOUND`，不透露是哪一種）；`tournament_id`、`match_id` 不是 UUID 格式時回 FastAPI 預設的 422。`appeal_started_at`（申訴期開始時間＝`appeal_deadline`－賽事的 `appeal_minutes`）與 `appeal_deadline` 同時有值，給 S4 倒數的進度條起點。`same_round` 的項目是一般 `PublicMatch`，不含單場的延伸欄位；`games` 依 `game_no` 遞增列出已登錄的局（5.3 第二階段起；不含登錄者，送出者也不出現在公開 API） |
 | `POST /api/v1/tournaments/{tournament_id}/draw` | 該賽事主辦方 | 201 `BracketRead` |
 | `GET /api/v1/tournaments/{tournament_id}/manage/matches` | 該賽事主辦方 | `list[ManagedMatch]`（4.3，S30）；依輪次、季軍賽在決賽之後；尚未抽籤 404 `BRACKET_NOT_FOUND`、賽事不存在 404 `TOURNAMENT_NOT_FOUND`、非主辦方 403 `TOURNAMENT_OWNER_REQUIRED`（一般帳號 403 `ORGANIZER_REQUIRED`） |
 | `PATCH /api/v1/tournaments/{tournament_id}/matches/{match_id}/schedule` | 該賽事主辦方 | 200 `MatchRead`（4.3）；body `RescheduleIn`；範圍與列表的 `RescheduleInfo` 同一套計算（`schedule.reschedule_window`／`check_reschedule`） |
