@@ -22,6 +22,10 @@ import {
   profileStatusText,
   RosterList,
 } from "@/features/registration/RosterList"
+import {
+  registrationStatusLabel,
+  WaitlistDetails,
+} from "@/features/registration/registration-status"
 import { ACCOUNT, signInAs } from "./auth-fixtures"
 import { httpError } from "./helpers"
 import { renderRouter } from "./render-router"
@@ -106,6 +110,10 @@ const TEAM: TeamDetail = {
   priority_end: "2099-01-01T00:00:00Z",
   registration_end: "2099-01-08T00:00:00Z",
   submitted_at: null,
+  waitlist_position: null,
+  waitlist_reason: null,
+  representative_backfill: null,
+  waitlist_phase: null,
 }
 
 describe("Invite link field", () => {
@@ -373,5 +381,46 @@ describe("建立隊伍（S16）", () => {
       await screen.findByText("完成 Email 驗證後才能建立隊伍。"),
     ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "建立隊伍" })).toBeDisabled()
+  })
+})
+
+describe("Status badge（候補）", () => {
+  const WAITLIST = {
+    waitlist_position: null,
+    waitlist_reason: null,
+    representative_backfill: null,
+    waitlist_phase: null,
+  } as const
+
+  it("沒有候補資訊時用狀態名；有順位、沒有順位各自的文字", () => {
+    expect(registrationStatusLabel("waitlisted")).toBe("候補")
+    expect(registrationStatusLabel("waitlisted", WAITLIST)).toBe("候補")
+    expect(
+      registrationStatusLabel("waitlisted", {
+        ...WAITLIST,
+        waitlist_position: 1,
+        representative_backfill: false,
+        waitlist_phase: "first_come",
+      }),
+    ).toBe("候補第 1 位")
+    expect(
+      registrationStatusLabel("waitlisted", {
+        ...WAITLIST,
+        waitlist_reason: "SCHOOL_LIMIT_REACHED",
+        representative_backfill: false,
+        waitlist_phase: "after_deadline",
+      }),
+    ).toBe("候補・目前不在遞補順序中")
+    expect(registrationStatusLabel("accepted", WAITLIST)).toBe("正取")
+  })
+
+  it("不是候補時不顯示說明", () => {
+    const { container } = render(
+      <WaitlistDetails
+        status="accepted"
+        waitlist={{ ...WAITLIST, waitlist_phase: "first_come" }}
+      />,
+    )
+    expect(container).toBeEmptyDOMElement()
   })
 })

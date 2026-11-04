@@ -94,9 +94,6 @@
   evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
-  summary: Story 3.4～3.6 第二階段：把純函式 `registration/allocation.py`（`allocate_priority_window`、`decide_first_come`、`waitlist_order`、`fill_from_waitlist`）接上資料庫、worker、事件與畫面。
-  evidence: 第一階段只寫純函式，因 Registration 資料表（3.1）與賽事、`lock_tournament`（2.2）尚未合併。第二階段要做：worker 工作在優先期結束與報名截止後 1 分鐘內執行，先 `lock_tournament()`、取報名快照、呼叫本模組、以 `mark_status` 改狀態、寫操作紀錄（操作者 `system`）、發 outbox 事件，重複執行結果不變（以 `frozen_clock` 推進時間測試）；優先期結算時保存「優先期有報名的學校」（結算輸入的學校集合）供先搶期的 `priority_schools` 使用；先搶期送出在鎖內呼叫 `decide_first_come`，並補 200 筆平行送出的併發測試；S17／S12 顯示「正取」「候補第 N 位」或「候補・目前不在遞補順序中」＋原因（`REASON_MESSAGES`、`REPRESENTATIVE_BACKFILL_MESSAGE`）。本模組把 `drawn` 也算進每校正取數，第二階段確認抽籤後的狀態名稱與此一致。跨人交接：registration 要提供公開函式 `fill_at_deadline`（epic-3-context；D 的 4.1 在開放報名中抽籤時呼叫，交接期限 11/12）；截止工作必須確保優先期結算已先執行，不能有 `pending` 報名被 `fill_from_waitlist` 漏掉。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
   summary: `allocation.py` 沒有「優先期代表隊退出時，由同校平均段位積分次高的隊伍遞補」的對象函式（FR-17）。
   evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Blind Hunter）。只在代表隊撤回或被退回時觸發（3.7、3.8 期中擱置），期中不會發生；做 3.7 或 3.8 時在本模組新增，並讓先搶期名額釋出時的遞補先處理這個情況（medium）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
@@ -189,6 +186,18 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
   summary: 示範資料的 tournaments 步驟已建立「FLOW 校園盃 特戰英豪」並寫入 `context.tournament_to_draw`（開放報名、開賽在啟動後 7 天），competition 步驟會嘗試抽籤；但目前沒有 registration 步驟建立 32 隊正取，registration 也還沒提供抽籤用的 `finalize_for_draw`、`list_accepted_teams` 等函式，實際啟動會記錄 `REGISTRATION_UNAVAILABLE` 並略過抽籤。
   evidence: 2026-11-04 Story 7.1 tournaments 步驟（B）完成後，以 compose 實際啟動確認的 log。剩下的是 C 的 registration 步驟（32 隊正取，放在 `STEPS` 的 tournaments 之後、competition 之前）與 contracts/competition.md〈二〉的四個函式；賽事維持 `open`，所以 `draw` 會先呼叫 `finalize_for_draw`（spec-7-1-tournaments-demo-step.md Decisions）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
+  summary: （中）Story 3.4～3.6 第二階段：先搶期送出與截止補位時，在同一個 `lock_tournament()` 鎖與交易內先呼叫 `backfill_vacancies` 讓有順位的候補遞補（以 `mark_status` 改為正取、寫操作紀錄、發事件），再以更新後的報名呼叫 `decide_first_come` 判定新送出的報名。
+  evidence: 2026-11-04 OG-Matcha 在 PR #28 的審查建議 1。期中抽籤前取消資格不立即遞補（epics.md 規則 6），先搶期會出現空位；不先遞補時新送出的隊伍會插到「候補第 1 位」前面（`test_backfill_without_backfill_new_submission_would_jump_queue`）。截止補位階段 `backfill_vacancies(phase=AFTER_DEADLINE)` 與 `fill_from_waitlist(remaining=空位)` 相同，擇一呼叫即可。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
+  summary: （中）先搶期釋出的是優先期代表隊（期中由 6.5 抽籤前取消資格觸發）時，`backfill_vacancies` 依先搶期順位把名額給別校，沒有依 FR-17「由同校平均段位積分次高的隊伍遞補」。
+  evidence: 2026-11-04 PR #28 審查修正的 Code Review（Blind Hunter）。3.4 第一階段的 deferred 項目寫「代表隊退出只在撤回、退回時觸發，期中不會發生」，但期中 6.5 可在先搶期取消優先期代表隊的資格，之後分配時就會走到這條路；同校候補的 `representative_backfill` 也會因代表隊不再是正取而變成 False。修正需在本模組新增同校遞補規則（需確認 `priority_schools` 中哪一隊是代表隊），並讓 `backfill_vacancies` 先處理。
+- source_spec: none
+  summary: Story 3.6 第二階段：報名截止 worker 工作（賽事轉為「報名截止」並以 `backfill_vacancies(AFTER_DEADLINE)`／`fill_from_waitlist` 補位、操作紀錄、事件）、公開函式 `fill_at_deadline` 給 D 的 4.1 呼叫、S2「抽籤準備中」。
+  evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.4～3.6 第二階段拆開，依序 3.4 → 3.6 → 3.5。3.6 可獨立合併；跨人交接期限 11/12（D 的 4.1、B 的 6.5 在等），排在 3.4 之後第一個做；截止工作須確保優先期結算已執行。
+- source_spec: none
+  summary: Story 3.5 第二階段：先搶期送出時，在 3.3 `submit_registration` 的 `lock_tournament()` 鎖內先呼叫 `backfill_vacancies(FIRST_COME)` 遞補，再以 `decide_first_come` 判定正取或候補，回應直接帶結果與候補順位；補 200 筆平行送出的併發整合測試。
+  evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.4～3.6 第二階段拆開。3.5 只改送出流程與併發測試，可獨立合併，排在 3.6 之後；沿用 3.4 第二階段建立的「優先期有報名的學校」與 S17／S12 狀態顯示。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
   summary: S4 要隨 `is_scorer` 顯示或隱藏比分登錄面板：指派、改派、收回後（含晉級衝突自動收回），`ScoreEntryState.is_scorer` 會改變，S4 需重抓 `GET .../score-entry`（A 的 S4 工作）。
   evidence: 2026-11-04 承接已刪除的 5.3 項目；後端端對端測試已在 `test_assign_referee.py`（指派／收回後 `is_scorer` 切換、晉級衝突收回），前端尚未接上。
@@ -213,3 +222,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-s13-referee-matches.md`
   summary: `Match.referee_account_id` 沒有索引，`GET /me/referee/matches` 會掃整張場次表；資料變多時要加索引，並另開一支 Alembic 遷移。
   evidence: 2026-11-04 S13 實作與審查第 1 輪；期中規模可接受，且 `tests/test_migrations.py` 要求遷移與模型一致，所以這個 Story 沒動 schema。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
+  summary: Story 3.6 第二階段：確認抽籤後的報名狀態名稱與 `allocation.py` 一致——`allocation.py` 把 `drawn`（已參賽）也算進每校正取數（FR-17「含抽籤後」），3.4 第二階段的 S17／S12 候補順位也把 `drawn` 當正取。
+  evidence: 2026-11-04 Story 3.4 第二階段刪除第一階段的「Story 3.4～3.6 第二階段」項目時，該項目裡的這項檢查沒寫進 3.6 的新項目，依 spec 補上。3.6 接上 D 的 4.1（抽籤時把報名標為已參賽）時，確認 4.1 呼叫的 registration 函式寫入的狀態就是 `drawn`。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
+  summary: Story 3.6 第二階段：截止補位與 4.1 的 `finalize_for_draw`（開放報名中提前抽籤）都要先在鎖內呼叫 `settle_priority_window`，並處理優先期後送出、仍為 `pending` 的報名，不能讓它們被 `fill_from_waitlist` 漏掉或在抽籤後留在 `pending`。
+  evidence: 2026-11-04 Story 3.4 第二階段審查（Blind Hunter、Edge Case Hunter）。刪除第一階段的「Story 3.4～3.6 第二階段」項目時，「不能有 `pending` 報名被 `fill_from_waitlist` 漏掉」沒寫進 3.6 的新項目；而開發順序是 3.4 → 3.6 → 3.5，3.6 做的時候優先期後送出的報名仍會維持 `pending`（本 Story 刻意不處理）。另外 `competition/service.py` 的抽籤可以把賽事由 `open` 直接轉成 `published`，`registration_port.finalize_for_draw` 是 D 呼叫的入口；若優先期剛結束、worker 還沒結算就抽籤，優先期內的 `pending` 會留下。目前 registration 還沒提供 `finalize_for_draw`，抽籤回 503，所以現在不會發生。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
+  summary: 補 API 層測試：同校已有 2 隊 `drawn` 時，同校候補在 S17／S12 回 `waitlist_reason == "SCHOOL_LIMIT_REACHED"`、`waitlist_phase == "after_deadline"`（驗證 `_ORDER_STATUSES` 把 `drawn` 當正取）。
+  evidence: 2026-11-04 Story 3.4 第二階段審查（Verification Gap）。`allocation.py` 的純函式測試有測 `drawn`，但沒有測試讓 `drawn` 報名經過 `service._waitlist_fields` 的狀態篩選；從 `_ORDER_STATUSES` 拿掉 `DRAWN`，現有測試仍全過。目前沒有正式程式會把報名設成 `drawn`（`mark_drawn` 尚未提供），在 3.6 提供 `mark_drawn` 時補。

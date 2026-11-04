@@ -20,6 +20,7 @@ from app.modules.registration.allocation import (
     WaitlistEntry,
     WaitlistReason,
     allocate_priority_window,
+    backfill_vacancies,
     decide_first_come,
     fill_from_waitlist,
     sort_key,
@@ -500,3 +501,208 @@ def test_story_3_6_example_deadline_fill() -> None:
     lim = WaitlistReason.SCHOOL_LIMIT_REACHED
     assert order[uid(4)] == WaitlistEntry(uid(4), None, lim)
     assert order[uid(6)] == WaitlistEntry(uid(6), None, lim)
+
+
+# ── 遞補空位 backfill_vacancies（PR #28 審查建議 1）─────────────
+
+
+def test_backfill_review_example_then_new_submission_waitlisted() -> None:
+    """名額 2，A 被取消資格、B 正取，X1 候補第 1 位（先搶期）→ 先遞補 X1；
+    之後 Y1 送出 → 候補，不會插到 X1 前面。"""
+    p, x, y = 1, 2, 3
+    priority = {school(p)}
+    cs = [
+        cand(1, p, status=S.DISQUALIFIED),  # A
+        cand(2, 4, status=S.ACCEPTED),  # B
+        cand(3, x, minute=10, status=S.WAITLISTED),  # X1
+    ]
+    assert (
+        waitlist_order(cs, phase=FIRST, priority_schools=priority)[uid(3)].position == 1
+    )
+
+    filled = backfill_vacancies(cs, phase=FIRST, priority_schools=priority, capacity=2)
+    assert filled == (uid(3),)
+
+    cs = [replace(c, status=S.ACCEPTED) if c.id in filled else c for c in cs]
+    y1 = cand(4, y, minute=11)
+    status = decide_first_come(y1, candidates=cs, priority_schools=priority, capacity=2)
+    assert status == S.WAITLISTED
+
+
+def test_backfill_without_backfill_new_submission_would_jump_queue() -> None:
+    """對照：不先遞補時 decide_first_come 會讓 Y1 正取（呼叫端契約的理由）。"""
+    cs = [
+        cand(1, 1, status=S.DISQUALIFIED),
+        cand(2, 4, status=S.ACCEPTED),
+        cand(3, 2, minute=10, status=S.WAITLISTED),
+    ]
+    y1 = cand(4, 3, minute=11)
+    status = decide_first_come(
+        y1, candidates=cs, priority_schools={school(1)}, capacity=2
+    )
+    assert status == S.ACCEPTED
+
+
+@pytest.mark.parametrize("phase", [FIRST, AFTER])
+def test_backfill_no_vacancy_returns_empty(phase: AllocationPhase) -> None:
+    cs = [
+        cand(1, 1, status=S.ACCEPTED),
+        cand(2, 2, status=S.DRAWN),
+        cand(3, 3, minute=5, status=S.WAITLISTED),
+    ]
+    assert backfill_vacancies(cs, phase=phase, priority_schools=(), capacity=2) == ()
+
+
+@pytest.mark.parametrize("phase", [FIRST, AFTER])
+def test_backfill_over_capacity_returns_empty(phase: AllocationPhase) -> None:
+    cs = [
+        cand(1, 1, status=S.ACCEPTED),
+        cand(2, 2, status=S.ACCEPTED),
+        cand(3, 3, status=S.ACCEPTED),
+        cand(4, 4, minute=5, status=S.WAITLISTED),
+        cand(5, 5, minute=6, status=S.WAITLISTED),
+        cand(6, 6, minute=7, status=S.WAITLISTED),
+    ]
+    assert backfill_vacancies(cs, phase=phase, priority_schools=(), capacity=2) == ()
+
+
+def test_backfill_more_vacancies_than_positioned_keeps_rest() -> None:
+    """空位 3、有順位候補 1 → 只回傳那 1 隊。"""
+    priority = {school(1)}
+    cs = [
+        cand(1, 1, minute=1, status=S.WAITLISTED),  # 優先期學校：無順位
+        cand(2, 2, minute=2, status=S.WAITLISTED),  # 有順位
+        cand(3, 2, minute=3, status=S.WAITLISTED),  # 同校較晚：無順位
+    ]
+    assert backfill_vacancies(
+        cs, phase=FIRST, priority_schools=priority, capacity=3
+    ) == (uid(2),)
+
+
+def test_backfill_first_come_multiple_in_position_order() -> None:
+    """先搶期一次遞補多隊時依送出先後，且不受同校其他候補影響。"""
+    cs = [
+        cand(1, 1, status=S.ACCEPTED),
+        cand(2, 2, minute=3, status=S.WAITLISTED),
+        cand(3, 3, minute=1, status=S.WAITLISTED),
+        cand(4, 3, minute=2, status=S.WAITLISTED),
+        cand(5, 4, minute=4, status=S.WAITLISTED),
+    ]
+    assert backfill_vacancies(cs, phase=FIRST, priority_schools=(), capacity=3) == (
+        uid(3),
+        uid(2),
+    )
+
+
+def test_backfill_after_deadline_matches_fill_from_waitlist() -> None:
+    w8 = S.WAITLISTED
+    cs = [
+        cand(1, 1, status=S.ACCEPTED),
+        cand(2, 1, status=S.ACCEPTED),
+        cand(3, 2, status=S.DRAWN),
+        cand(4, 1, 4000, minute=1, status=w8),
+        cand(5, 2, 3000, minute=2, status=w8),
+        cand(6, 2, 2000, minute=3, status=w8),
+        cand(7, 3, 1000, minute=4, status=w8),
+        cand(8, 4, 500, minute=5, status=w8),
+    ]
+    capacity = 5
+    vacancies = capacity - 3
+    expected = fill_from_waitlist(cs, remaining=vacancies)
+    assert expected == (uid(5), uid(7))
+    assert (
+        backfill_vacancies(cs, phase=AFTER, priority_schools=(), capacity=capacity)
+        == expected
+    )
+
+
+@pytest.mark.parametrize("phase", [FIRST, AFTER])
+@pytest.mark.parametrize("seed", range(5))
+def test_backfill_independent_of_input_order(phase: AllocationPhase, seed: int) -> None:
+    priority = {school(1)}
+    cs = [
+        cand(1, 1, 3000, status=S.ACCEPTED),
+        cand(2, 1, 2500, minute=1, status=S.WAITLISTED),
+        cand(3, 2, 2000, minute=2, status=S.WAITLISTED),
+        cand(4, 3, 1500, minute=3, status=S.WAITLISTED),
+        cand(5, 3, 1800, minute=4, status=S.WAITLISTED),
+        cand(6, 4, 900, minute=5, status=S.DISQUALIFIED),
+    ]
+    # 先搶期：學校 1 是優先期學校；學校 2、3 各取最早送出的一隊（4 早於 5）
+    # 截止後：依積分 2（2500）、3（2000），學校 1 正取加候補 2 未超過 2 隊
+    expected = {FIRST: (uid(3), uid(4)), AFTER: (uid(2), uid(3))}[phase]
+    assert (
+        backfill_vacancies(
+            shuffled(cs, seed), phase=phase, priority_schools=priority, capacity=3
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize("phase", [FIRST, AFTER])
+def test_backfill_all_at_once_equals_one_by_one(phase: AllocationPhase) -> None:
+    """一次遞補多隊，與每次只遞補 1 隊直到空位用完的累積結果相同。"""
+    priority = {school(1)}
+    w8 = S.WAITLISTED
+    cs = [
+        cand(1, 1, 3000, status=S.ACCEPTED),
+        cand(2, 1, 2900, minute=1, status=w8),
+        cand(3, 2, 2800, minute=2, status=w8),
+        cand(4, 2, 2700, minute=3, status=w8),
+        cand(5, 2, 2600, minute=4, status=w8),
+        cand(6, 3, 2500, status=S.ACCEPTED),
+        cand(7, 3, 2400, minute=5, status=w8),
+        cand(8, 3, 2300, minute=6, status=w8),
+        cand(9, 4, 2200, minute=7, status=w8),
+        cand(10, 5, 2100, minute=8, status=w8),
+    ]
+    capacity = 6
+    at_once = backfill_vacancies(
+        cs, phase=phase, priority_schools=priority, capacity=capacity
+    )
+
+    one_by_one: list[UUID] = []
+    current = list(cs)
+    while (n := sum(c.status == S.ACCEPTED for c in current)) < capacity:
+        step = backfill_vacancies(
+            current, phase=phase, priority_schools=priority, capacity=n + 1
+        )
+        if not step:
+            break
+        assert len(step) == 1
+        one_by_one.extend(step)
+        current = [
+            replace(c, status=S.ACCEPTED) if c.id in step else c for c in current
+        ]
+
+    assert len(at_once) >= 2
+    assert at_once == tuple(one_by_one)
+
+
+def test_backfill_leaves_vacancy_for_new_submission() -> None:
+    """審查範例但名額 3：遞補 X1 後仍有 1 個空位，Y1 送出 → 正取。"""
+    p, x, y = 1, 2, 3
+    priority = {school(p)}
+    cs = [
+        cand(1, p, status=S.DISQUALIFIED),  # A
+        cand(2, 4, status=S.ACCEPTED),  # B
+        cand(3, x, minute=10, status=S.WAITLISTED),  # X1
+    ]
+    filled = backfill_vacancies(cs, phase=FIRST, priority_schools=priority, capacity=3)
+    assert filled == (uid(3),)
+
+    cs = [replace(c, status=S.ACCEPTED) if c.id in filled else c for c in cs]
+    y1 = cand(4, y, minute=11)
+    status = decide_first_come(y1, candidates=cs, priority_schools=priority, capacity=3)
+    assert status == S.ACCEPTED
+
+
+def test_backfill_rejects_negative_capacity() -> None:
+    with pytest.raises(ValueError, match="capacity"):
+        backfill_vacancies([], phase=FIRST, priority_schools=(), capacity=-1)
+
+
+def test_backfill_rejects_duplicate_ids() -> None:
+    cs = [cand(1, 1, status=S.WAITLISTED), cand(1, 2, status=S.WAITLISTED)]
+    with pytest.raises(ValueError, match="重複"):
+        backfill_vacancies(cs, phase=AFTER, priority_schools=(), capacity=3)

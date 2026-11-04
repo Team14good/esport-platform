@@ -8,10 +8,21 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator
 from pydantic_core import PydanticCustomError
-from sqlalchemy import DateTime, Index, Numeric, String, UniqueConstraint, text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Index,
+    Numeric,
+    String,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel import Field, SQLModel
 
 from app.core import clock
+from app.core.events import Event
 from app.modules.tournaments.models import RankTierRead
 
 
@@ -126,6 +137,34 @@ class Registration(SQLModel, table=True):
     submitted_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
+class PriorityWindowSettlement(SQLModel, table=True):
+    """優先期結算紀錄（Story 3.4）：一場賽事一筆，存在就代表已結算，worker 不再處理。
+
+    `priority_school_ids`＝參加優先期結算的報名的學校（可為空），先搶期的候補順位用它
+    判斷「優先期有報名的學校」（FR-15、FR-17）。
+    """
+
+    __tablename__ = "priority_window_settlement"
+
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id", primary_key=True)
+    settled_at: datetime = Field(sa_type=DateTime(timezone=True))
+    priority_school_ids: list[uuid.UUID] = Field(
+        sa_column=Column(ARRAY(Uuid()), nullable=False)
+    )
+
+
+# ---------------------------------------------------------------- 事件
+
+
+class RegistrationAllocated(Event):
+    """報名已分配為正取或候補（3.4 優先期結算；3.5、3.6 沿用）。"""
+
+    registration_id: uuid.UUID
+    team_id: uuid.UUID
+    tournament_id: uuid.UUID
+    status: RegistrationStatus
+
+
 # ---------------------------------------------------------------- API schema
 
 
@@ -174,6 +213,28 @@ SubmitBlockerCode = Literal[
 ]
 
 
+# 候補沒有順位的原因代碼與計算順位時的階段；值與 `allocation.WaitlistReason`、
+# `allocation.AllocationPhase` 相同（allocation 會 import 本檔，所以這裡用 Literal）
+WaitlistReasonCode = Literal[
+    "SCHOOL_NOT_ELIGIBLE", "LATER_THAN_SCHOOLMATE", "SCHOOL_LIMIT_REACHED"
+]
+WaitlistPhase = Literal["first_come", "after_deadline"]
+
+
+class WaitlistFields(BaseModel):
+    """S17、S12 共用的候補資訊（Story 3.4），只在 `waitlisted` 時有值，其他狀態皆為 null。
+
+    `waitlist_position`：候補第 N 位，沒有順位時為 null 並帶 `waitlist_reason`；
+    `representative_backfill`：代表隊退出時由同校遞補的補充；`waitlist_phase`：計算順位
+    的階段（報名截止前為先搶期，之後為截止後），畫面依此顯示當下階段的遞補規則說明。
+    """
+
+    waitlist_position: int | None
+    waitlist_reason: WaitlistReasonCode | None
+    representative_backfill: bool | None
+    waitlist_phase: WaitlistPhase | None
+
+
 class SubmitBlocker(BaseModel):
     """S17「送出報名」停用的一項原因；`message` 與伺服器拒絕時的文字相同。"""
 
@@ -196,7 +257,7 @@ class TeamMemberRead(BaseModel):
     missing_fields: list[MissingProfileField]
 
 
-class TeamDetail(BaseModel):
+class TeamDetail(WaitlistFields):
     """S17 隊伍頁：只有隊員看得到（含邀請 token）。"""
 
     id: uuid.UUID
@@ -243,7 +304,7 @@ class TeamInvitePreview(BaseModel):
     invite_status: InviteStatus
 
 
-class MyTeamCard(BaseModel):
+class MyTeamCard(WaitlistFields):
     """S12 我的隊伍：每支隊伍一張 Registration status card。"""
 
     team_id: uuid.UUID

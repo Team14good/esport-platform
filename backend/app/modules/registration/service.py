@@ -12,16 +12,18 @@ from typing import BinaryIO
 
 from sqlmodel import Session
 
-from app.core import audit, authz, clock, storage
+from app.core import audit, authz, clock, events, storage
 from app.core.errors import BusinessError, FieldError
 from app.modules.identity import service as identity_service
-from app.modules.registration import player_profile, repository
+from app.modules.registration import allocation, player_profile, repository
 from app.modules.registration.models import (
     InviteStatus,
     MemberRole,
     MissingProfileField,
     MyTeamCard,
+    PriorityWindowSettlement,
     Registration,
+    RegistrationAllocated,
     RegistrationRead,
     RegistrationStatus,
     SubmitBlocker,
@@ -32,9 +34,14 @@ from app.modules.registration.models import (
     TeamMemberRead,
     TeamMemberRole,
     TeamRead,
+    WaitlistFields,
 )
 from app.modules.tournaments import service as tournaments_service
-from app.modules.tournaments.models import TournamentRead, TournamentStatus
+from app.modules.tournaments.models import (
+    TournamentMode,
+    TournamentRead,
+    TournamentStatus,
+)
 
 INVITE_TOKEN_BYTES = 24
 
@@ -347,6 +354,73 @@ def _registration_closed_blocker() -> SubmitBlocker:
     return SubmitBlocker(code="REGISTRATION_CLOSED", message="已截止")
 
 
+def _candidate(registration: Registration) -> allocation.Candidate:
+    """報名快照轉成 `allocation.Candidate`；送出後三個快照必有值（`submit_registration`）。"""
+    if (
+        registration.school_id is None
+        or registration.avg_rank_score is None
+        or registration.submitted_at is None
+    ):
+        # 不用 assert（python -O 會略過）；目前沒有路徑會產生沒有快照的已送出報名
+        raise RuntimeError(f"報名 {registration.id} 沒有送出時的快照")
+    return allocation.Candidate(
+        id=registration.id,
+        school_id=registration.school_id,
+        avg_rank_score=registration.avg_rank_score,
+        submitted_at=registration.submitted_at,
+        status=registration.status,
+    )
+
+
+def _current_phase(tournament: TournamentRead) -> allocation.AllocationPhase:
+    """依當下時間判斷候補順位的階段：報名截止前為先搶期，之後（含抽籤後）為截止後。"""
+    if clock.now() < tournament.registration_end:
+        return allocation.AllocationPhase.FIRST_COME
+    return allocation.AllocationPhase.AFTER_DEADLINE
+
+
+# 計算候補順位時參考的狀態：正取（含已參賽）決定學校資格與每校上限，候補是排序對象
+_ORDER_STATUSES = frozenset(
+    {
+        RegistrationStatus.ACCEPTED,
+        RegistrationStatus.DRAWN,
+        RegistrationStatus.WAITLISTED,
+    }
+)
+
+
+def _waitlist_fields(
+    session: Session, registration: Registration, tournament: TournamentRead
+) -> WaitlistFields:
+    """S17、S12 的候補資訊：只在 `waitlisted` 時計算，順位只由 `allocation.waitlist_order` 決定。"""
+    if registration.status != RegistrationStatus.WAITLISTED:
+        return WaitlistFields(
+            waitlist_position=None,
+            waitlist_reason=None,
+            representative_backfill=None,
+            waitlist_phase=None,
+        )
+    settlement = repository.get_settlement(session, tournament.id)
+    priority_schools = (
+        frozenset(settlement.priority_school_ids) if settlement else frozenset()
+    )
+    phase = _current_phase(tournament)
+    candidates = [
+        _candidate(r)
+        for r in repository.list_registrations(session, tournament.id)
+        if r.status in _ORDER_STATUSES
+    ]
+    entry = allocation.waitlist_order(
+        candidates, phase=phase, priority_schools=priority_schools
+    )[registration.id]
+    return WaitlistFields(
+        waitlist_position=entry.position,
+        waitlist_reason=None if entry.reason is None else entry.reason.value,
+        representative_backfill=entry.representative_backfill,
+        waitlist_phase=phase.value,
+    )
+
+
 def _build_detail(
     session: Session, team: Team, tournament: TournamentRead, viewer: TeamMember
 ) -> TeamDetail:
@@ -407,6 +481,7 @@ def _build_detail(
         priority_end=tournament.priority_end,
         registration_end=tournament.registration_end,
         submitted_at=registration.submitted_at,
+        **_waitlist_fields(session, registration, tournament).model_dump(),
     )
 
 
@@ -709,6 +784,7 @@ def list_my_teams(session: Session, *, account_id: uuid.UUID) -> list[MyTeamCard
         team = repository.get_team(session, membership.team_id)
         assert team is not None  # 外鍵保證隊伍存在
         tournament = _get_tournament(session, team.tournament_id)
+        registration = _registration_of(session, team)
         cards.append(
             MyTeamCard(
                 team_id=team.id,
@@ -716,10 +792,109 @@ def list_my_teams(session: Session, *, account_id: uuid.UUID) -> list[MyTeamCard
                 tournament_id=team.tournament_id,
                 tournament_name=tournament.name,
                 game_name=tournament.game_name,
-                registration_status=_registration_of(session, team).status,
+                registration_status=registration.status,
+                **_waitlist_fields(session, registration, tournament).model_dump(),
             )
         )
     return cards
+
+
+# ---------------------------------------------------------------- 優先期結算（Story 3.4）
+
+
+def _priority_window_due(tournament: TournamentRead) -> bool:
+    """校園賽、開放報名中，且優先期已結束。"""
+    return (
+        tournament.status == TournamentStatus.OPEN
+        and tournament.mode == TournamentMode.CAMPUS
+        and tournament.priority_end <= clock.now()
+    )
+
+
+def settle_priority_window(session: Session, *, tournament_id: uuid.UUID) -> bool:
+    """優先期結算（FR-14）：鎖住賽事，在同一個鎖與交易內完成；回傳這次是否結算。
+
+    鎖內重新檢查：已有結算紀錄、賽事不是開放中的校園賽、或優先期還沒結束時不做任何事
+    （回傳 False），所以重複呼叫結果不變。只有 `pending` 且在優先期內（`submitted_at <=
+    priority_end`）送出的報名參加結算；優先期後送出的 `pending` 維持原狀（3.5 處理）。
+    結果依 `allocation.allocate_priority_window`，逐筆以 `mark_status` 改狀態（操作者為
+    系統）並發 `RegistrationAllocated`，再寫結算紀錄（保存優先期有報名的學校，可為空）
+    與一筆 `registration.priority_window_settled` 摘要。3.6 截止補位前也會呼叫本函式。
+    """
+    tournament = _lock_tournament(session, tournament_id)
+    if repository.get_settlement(session, tournament.id) is not None:
+        return False
+    if not _priority_window_due(tournament):
+        return False
+
+    registrations = {
+        r.id: r
+        for r in repository.list_registrations(session, tournament.id)
+        if r.status == RegistrationStatus.PENDING
+        and r.submitted_at is not None
+        and r.submitted_at <= tournament.priority_end
+    }
+    candidates = [_candidate(r) for r in registrations.values()]
+    result = allocation.allocate_priority_window(
+        candidates, capacity=tournament.capacity
+    )
+    outcomes = [
+        *((i, RegistrationStatus.ACCEPTED) for i in result.accepted),
+        *((i, RegistrationStatus.WAITLISTED) for i in result.waitlisted),
+    ]
+    for registration_id, status in outcomes:
+        registration = registrations[registration_id]
+        mark_status(session, registration=registration, to=status, actor_id=None)
+        events.publish(
+            session,
+            RegistrationAllocated(
+                registration_id=registration.id,
+                team_id=registration.team_id,
+                tournament_id=registration.tournament_id,
+                status=status,
+            ),
+        )
+
+    priority_school_ids = sorted({c.school_id for c in candidates})
+    repository.add_settlement(
+        session,
+        PriorityWindowSettlement(
+            tournament_id=tournament.id,
+            settled_at=clock.now(),
+            priority_school_ids=priority_school_ids,
+        ),
+    )
+    audit.record(
+        session,
+        actor_id=None,
+        tournament_id=tournament.id,
+        action="registration.priority_window_settled",
+        entity_type="tournament",
+        entity_id=tournament.id,
+        before=None,
+        after={
+            "capacity": tournament.capacity,
+            "accepted": list(result.accepted),
+            "waitlisted": list(result.waitlisted),
+            "priority_school_ids": priority_school_ids,
+        },
+    )
+    session.flush()
+    return True
+
+
+def allocate_due_priority_window(session: Session) -> bool:
+    """worker 用：結算一場優先期已結束、尚未結算的賽事；回傳是否結算了一場。
+
+    候選是「有 `pending`、尚未結算」的賽事（registration 不能直接查賽事表），以
+    `get_tournament` 篩出到期的，再交給 `settle_priority_window` 在鎖內重新檢查。
+    沒有到期的候選時回傳 False，worker 才會換下一個工作。
+    """
+    for tournament_id in repository.list_unsettled_pending_tournament_ids(session):
+        if _priority_window_due(_get_tournament(session, tournament_id)):
+            if settle_priority_window(session, tournament_id=tournament_id):
+                return True
+    return False
 
 
 # ---------------------------------------------------------------- 公開函式（給其他模組）
