@@ -85,7 +85,7 @@ development_status:
   epic-4-retrospective: optional
 
   epic-5: in-progress
-  5-1-場次頁與隊長報到: in-progress  # 負責：D；第一階段（checkin.py、CheckInPanel）完成；第二階段後端（報到 API、賽事開始 worker）完成，待 C 的 is_captain 與 A 的 S4 接上
+  5-1-場次頁與隊長報到: in-progress  # 負責：D；第一階段（checkin.py、CheckInPanel）完成；第二階段後端（報到 API、賽事開始 worker）完成待合併（#22），S4 接上待 A
   5-2-逾時判棄權: in-progress  # 負責：A
   5-3-裁判逐局登錄比分: in-progress  # 負責：D；第一階段（scoring.py 純函式，含 5.4 規則）完成；第二階段後端（逐局資料表、登錄／刪除／送出 API）完成待合併，S4 接面板待 A、記分者接指派待 4.4
   5-4-送出系列結果: in-progress  # 負責：D；系列結果與送出條件已在 5.3 的 scoring.py；第二階段與 5.3 合併做（spec-5-3-referee-score-backend.md），後端完成待合併
