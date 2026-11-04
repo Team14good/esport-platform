@@ -416,3 +416,74 @@
   - 全部測試一起跑時 `organizer-tournaments` 失敗，AI 在 main 上與修改後各跑數次確認是偶發逾時，不是這次造成的
 - 成熟度：L3（AI 實作，人決定範圍與三個介面問題）
 - 證據：spec 的 Implementation Notes；尚未 commit
+### 2026-10-31｜測試／程式審查｜審查 D 的 Story 4.3 第一階段（schedule.py）
+
+- Story／範圍：4.3 第一階段（`origin/story/4-3`，`fb22692..fbf7554`），審查別人的 PR
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review 的準備步驟；人決定不派子代理，由主對話一個 AI 自己審
+- 怎麼用：AI 把 diff、commit 訊息與 spec 抽到暫存資料夾，對照 spec 的 I/O 矩陣、epics 的 Story 4.3 與 FR-23 逐行審 `schedule.py` 與測試；用分支上的 `schedule.py` 寫小程式驗證可疑情境；在容器裡掛載分支的 backend 跑 spec 的 Verification 指令
+- AI 產出：3 點審查意見（1 點需要先討論、2 點建議），整理成可以直接貼到 PR 的文字
+- 人做了什麼：選擇審查方式（不用子代理）；決定是否貼到 PR
+- 驗證：`tests/competition` 83 passed；`schedule.py` 分支覆蓋率 100%（69 行、28 個分支）；ruff check、ruff format、mypy 通過，與 D 在 spec 記錄的結果一致
+- 問題與修正：
+  - 審查找到的主要問題：準決賽的修改上限只看勝隊要去的決賽，沒看敗隊要去的季軍賽。先把季軍賽改到 17:00、再把準決賽改到 16:30，兩次 `check_reschedule` 都允許，但準決賽要到 17:55 才結束。這是 spec 凍結區與 FR-23 都只寫「勝隊的下一場」造成的需求缺口，要由 D 與組員決定
+  - AI 這次沒有出錯的紀錄；審查只有單一 AI，沒有多個獨立審查者交叉確認
+- 成熟度：L3（AI 審查並實際執行驗證，人決定方式與是否採用）
+- 證據：審查意見在對話中；尚未貼到 PR、尚未 commit
+
+### 2026-11-02｜程式／程式審查｜審查 B 的 Story 2.2 第一階段（建立賽事的後端）
+
+- Story／範圍：2.2 第一階段（`origin/story/2-1...origin/story/2-2`，20 個檔案、+2063／−26 行，不含產生檔），審查別人的 PR
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review 的準備步驟；人為了省 token 決定不派子代理，由主對話一個 AI 自己審
+- 怎麼用：AI 找出 PR #9（2.1）還沒合併、#14 已合併，把範圍定成 2.1 到 2.2 的差異；開暫時的工作目錄讀分支上的程式，對照 spec 的 I/O 矩陣與 `contracts/tournaments.md` 逐行審正式程式（service、repository、router、models、遷移、`core/authz.py`、`identity/deps.py`、`worker/jobs.py`），測試只比對名稱與 I/O 矩陣
+- AI 產出：審查結論「沒有擋合併的問題」與 3 筆低風險建議：
+  - `require_organizer` 沒要求 Email 已驗證
+  - `contracts/tournaments.md`〈二〉與〈三〉對誰把賽事轉成 `closed` 的寫法不一致
+  - `bo_for_round` 收到 `round_no < 1` 時拋 `ValueError`
+- 人做了什麼：選擇輕量的審查方式（不用子代理）；決定是否轉給 B
+- 驗證：只讀程式，沒有在本機重跑測試；PR 說明的 463 個測試與 95% 覆蓋率是作者的結果，未另外確認
+- 問題與修正：
+  - 這台機器沒有 `gh`，AI 讀不到 PR 本身，審查範圍是從遠端分支推出來的
+  - AI 這次沒有出錯的紀錄；審查只有單一 AI，也沒有逐行讀測試，沒有多個獨立審查者交叉確認
+- 成熟度：L3（AI 依 spec 與約定審查，人決定方式與是否採用）
+- 證據：審查意見在對話中；沒有寫進 spec（spec 屬於 B 的分支），尚未 commit
+
+### 2026-11-04｜專案管理與流程／進度盤點｜盤點主線 A 剩餘 Story 能不能做
+
+- Story／範圍：A 的主線 1.7、1.8、4.6、5.2、5.8、7.1、7.2、7.3
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：請 AI 依目前已合併的 PR 判斷我剩下的 Story 能不能完成；AI 比對 `origin/main` 的合併紀錄、`refs/pull/*` 推出的開啟中 PR、sprint-status、各 spec 狀態與 deferred-work
+- AI 產出：每個 Story 的狀態表（已完成 3 個、5.2 只差收尾、5.8 第二階段上游齊全、7.1～7.3 部分卡在 C 的 3.4～3.6），以及建議順序
+- 人做了什麼：依建議決定先做 5.8 第二階段，並和偶發失敗的測試一起做
+- 驗證：狀態都對照 main 上的 commit 與 spec 的 status 欄位；這台機器沒有 `gh`，PR 狀態是從遠端 refs 推出來的，沒有直接讀 PR
+- 問題與修正：AI 一開始用 `git rev-list` 算分支領先 main 的 commit 數，但 PR 是 Squash merge，已合併的分支也會顯示領先，數字沒有意義；改用 main 的 commit 訊息裡的 PR 編號判斷
+- 成熟度：L3（AI 依 repo 的實際紀錄整理，人決定下一步）
+- 證據：本對話；沒有產出檔案
+
+### 2026-11-04｜測試／debug｜前端單元測試偶發失敗的根因
+
+- Story／範圍：deferred-work 點名 A 的偶發失敗測試（`admin-applications`、`login`、`identity-switcher`、`organizer-apply` 與冷啟動逾時），併入 5.8 第二階段
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 先重現再修。閒置時連跑兩次都全過，改成同時跑 3 份製造負載後重現；再用 Vitest 的 JSON 報表量每個測試的時間
+- AI 產出：根因分析與修正：`asyncUtilTimeout` 5000、`testTimeout` 15000，不改任何測試的斷言、不跳過測試
+- 人做了什麼：同意和 5.8 一起做；核准 spec
+- 驗證：修正前同時跑 3 份有 47～53 個失敗（23 個 `findBy*` 等不到、23 個撞 5 秒上限）；閒置時已有 57 個測試超過 1 秒、最慢 3.7 秒。修正後同時跑 3 份，三份都是 757 passed
+- 問題與修正：
+  - 開工時後端起不來：本機資料庫是舊分支建的，1.7 的遷移直接接在 1.5 後面，main 後來把 2.1 插在中間，`game_title` 沒建。AI 先查 `alembic_version` 和 2.1 遷移的內容，只補跑 2.1 再升到 head，沒有用 `down -v` 清資料
+  - deferred-work 原本猜「可能是同一個原因」但未證實，這次以量測確認是逾時太緊，而不是測試本身有競態
+- 成熟度：L3（AI 重現、量測並修正，人決定範圍）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`；尚未 commit
+
+### 2026-11-04｜程式／程式生成｜Story 5.8 第二階段：S4 接上真資料、報到與比分登錄面板
+
+- Story／範圍：5.8 第二階段（分支 `story/5-8-real-api`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（spec → 子代理實作 → 主對話核對 diff）；依我的決定跳過 code review
+- 怎麼用：AI 讀 epic 5 context、5.8 第一階段與公開單場 API 的 spec、contract、UX 文件寫 spec；我回答開放問題後核准；子代理只依 spec 實作
+- AI 產出：新增 `MatchCheckIn.tsx`、`MatchScoreEntry.tsx`，改 S4 路由與 `MatchSpectatorView`，刪除 `match-types.ts`、`/dev/match`；新增 2 個測試檔，改寫 4 個既有測試檔；共 31 個檔案
+- 人做了什麼：決定觀眾 e2e 的 S4 測試改成 `test.fixme`、完全移除開發模式假資料；核准 spec
+- 驗證：typecheck、biome（239 個檔案）、build 通過；`dist/assets` 不含假資料字串；單元測試 58 個檔案、757 個全過
+- 問題與修正：
+  - 子代理在任何狀態都顯示報到面板，已取消的季軍賽與輪空場次會出現「待定」「未報到」，與 UX「已取消沒有任何動作」不符；主對話讀 diff 時發現，補上 `showsCheckIn()` 與 3 個測試
+  - 主對話補的測試用了不存在的狀態 `"cancelled"`（實際是 `voided`），typecheck 抓到後修正
+  - spec 漏了棄權期限：要求顯示「棄權期限」倒數，但公開 API 沒有 `forfeit_deadline`，子代理回報後記入 deferred-work，等 D 補欄位
+- 成熟度：L3（依 BMAD 流程規劃、子代理實作、主對話核對並自動驗證，人只在 checkpoint 決策；跳過了多審查者的 code review，所以不算 L4）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`；尚未 commit

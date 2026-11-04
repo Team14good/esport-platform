@@ -7,10 +7,9 @@ import {
 import { act, renderHook } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-
+import type { PublicMatchDetail } from "@/client"
 import { MatchSpectatorView } from "@/features/competition/MatchSpectatorView"
 import { MatchNotFoundError } from "@/features/competition/match-source"
-import type { PublicMatchDetail } from "@/features/competition/match-types"
 import {
   isMatchScoreChanged,
   MATCH_POLL_INTERVAL_MS,

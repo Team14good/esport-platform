@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-04-2026 15:13
+last_updated: 2026-11-04
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -92,7 +92,7 @@ development_status:
   5-5-申訴期滿自動確認與一般晉級: in-progress  # 負責：D；第一階段（progression.py）完成；第二階段（確認、晉級、申訴期滿自動確認、賽事結束）後端完成
   5-6-季軍賽-雙方棄權與賽事結束: in-progress  # 負責：D；規則在 progression.py，寫入資料庫與賽事結束在 5.5 第二階段完成，待 S2／S3 顯示名次
   5-7-勝隊上傳結算截圖: backlog  # 擱置（期中後）
-  5-8-場次頁與對戰樹結果標示: in-progress  # 負責：A
+  5-8-場次頁與對戰樹結果標示: review  # 負責：A；第一階段（#12）、公開單場 API（#21）、第二階段接真資料與報到、比分面板（spec-5-8-real-match-data.md）完成，待統一 code review
   epic-5-retrospective: optional
 
   epic-6: backlog

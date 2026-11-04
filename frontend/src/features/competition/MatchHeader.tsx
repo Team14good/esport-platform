@@ -1,10 +1,9 @@
 import { Link } from "@tanstack/react-router"
-
+import type { PublicMatchDetail } from "@/client"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { cn } from "@/lib/utils"
 import { MATCH_STATUS_BADGES, THIRD_PLACE_LABEL } from "./match-status"
 import { formatMatchDateTime } from "./match-time"
-import type { PublicMatchDetail } from "./match-types"
 
 /** S4 標題：「32 強 · M3」「決賽 · M31」；季軍賽只寫「季軍賽」。頁面 head 也用同一句。 */
 export function matchTitle(

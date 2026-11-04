@@ -1,10 +1,18 @@
 import { createMemoryHistory, createRouter } from "@tanstack/react-router"
 import { fireEvent, screen, waitFor } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
+import {
+  CompetitionService,
+  type PublicMatchDetail,
+  type ScoreEntryState,
+} from "@/client"
 import { RouteErrorPage } from "@/components/layout/ErrorPage"
-import { DEV_MATCH_SOURCE_TOURNAMENT_ID } from "@/features/competition/match-source"
+import { createBracketFixture } from "@/features/competition/bracket-fixtures"
+import { matchDetailFromBracket } from "@/features/competition/match-fixtures"
 import { routeTree } from "@/routeTree.gen"
+import { signInAs } from "./auth-fixtures"
+import { httpError } from "./helpers"
 import { renderRouter } from "./render-router"
 
 // 開發工具在測試裡不需要
@@ -14,6 +22,38 @@ vi.mock("@tanstack/react-router-devtools", () => ({
 vi.mock("@tanstack/react-query-devtools", () => ({
   ReactQueryDevtools: () => null,
 }))
+
+type ReadScoreEntryResult = Awaited<
+  ReturnType<typeof CompetitionService.readScoreEntry>
+>
+type ReadStatusResult = Awaited<
+  ReturnType<typeof CompetitionService.readCheckInStatus>
+>
+
+// 單元測試的場次資料：32 隊「進行中」對戰樹推導（match-fixtures 只給測試用）
+const BRACKET = createBracketFixture({ teamCount: 32, scenario: "in_progress" })
+const TOURNAMENT_ID = BRACKET.tournament_id
+
+function detailOf(matchId: string): PublicMatchDetail | undefined {
+  return matchDetailFromBracket(BRACKET, matchId)
+}
+
+const NOT_FOUND = httpError(404, {
+  detail: { code: "MATCH_NOT_FOUND", message: "找不到這個場次。" },
+})
+
+/** 公開單場 API：依 match_id 回傳推導出的場次，找不到回 404 */
+function mockPublicMatch(
+  override?: (detail: PublicMatchDetail) => PublicMatchDetail,
+) {
+  return vi
+    .spyOn(CompetitionService, "readPublicMatch")
+    .mockImplementation((async ({ path }: { path: { match_id: string } }) => {
+      const detail = detailOf(path.match_id)
+      if (!detail) throw NOT_FOUND
+      return { data: override ? override(detail) : detail }
+    }) as unknown as typeof CompetitionService.readPublicMatch)
+}
 
 function renderAt(path: string) {
   const router = createRouter({
@@ -25,19 +65,20 @@ function renderAt(path: string) {
   return router
 }
 
-const M3 = `/tournaments/${DEV_MATCH_SOURCE_TOURNAMENT_ID}/matches/match-M3`
+const matchUrl = (matchId: string) =>
+  `/tournaments/${TOURNAMENT_ID}/matches/${matchId}`
 
 describe("S4 場次頁路由", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs()
-  })
-
-  it("開發模式：顯示標題、比分、各局與同輪場次，頁面標題含賽事名稱", async () => {
-    renderAt(M3)
+  it("顯示標題、比分、各局與同輪場次，頁面標題含賽事名稱", async () => {
+    const read = mockPublicMatch()
+    renderAt(matchUrl("match-M3"))
 
     expect(
       await screen.findByRole("heading", { level: 1, name: "32 強 · M3" }),
     ).toBeInTheDocument()
+    expect(read).toHaveBeenCalledWith({
+      path: { tournament_id: TOURNAMENT_ID, match_id: "match-M3" },
+    })
     expect(document.querySelector("[data-slot=score-display]")).not.toBeNull()
     expect(document.querySelector("[data-slot=game-list]")).not.toBeNull()
     expect(
@@ -48,8 +89,20 @@ describe("S4 場次頁路由", () => {
     )
   })
 
+  it("返回連結指向賽事的對戰表", async () => {
+    mockPublicMatch()
+    renderAt(matchUrl("match-M3"))
+
+    const back = await screen.findByRole("link", { name: /^← / })
+    expect(back).toHaveAttribute(
+      "href",
+      `/tournaments/${TOURNAMENT_ID}/bracket`,
+    )
+  })
+
   it("點同輪其他場次可以切到另一場", async () => {
-    const router = renderAt(M3)
+    mockPublicMatch()
+    const router = renderAt(matchUrl("match-M3"))
 
     const link = await screen.findByRole("link", { name: /^M4/ })
     fireEvent.click(link)
@@ -57,14 +110,13 @@ describe("S4 場次頁路由", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "32 強 · M4" }),
     ).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe(
-      `/tournaments/${DEV_MATCH_SOURCE_TOURNAMENT_ID}/matches/match-M4`,
-    )
+    expect(router.state.location.pathname).toBe(matchUrl("match-M4"))
   })
 
   it("申訴期的場次：申訴期區塊放 Countdown（appeal 變體），截止時間只出現一次", async () => {
+    mockPublicMatch()
     // 假資料第二輪位置 1（M18）是申訴期
-    renderAt(`/tournaments/${DEV_MATCH_SOURCE_TOURNAMENT_ID}/matches/match-M18`)
+    renderAt(matchUrl("match-M18"))
 
     const region = await screen.findByRole("region", { name: "申訴期" })
     const countdown = region.querySelector("[data-slot=countdown]")
@@ -77,15 +129,107 @@ describe("S4 場次頁路由", () => {
     )
   })
 
-  it("找不到場次：顯示 404", async () => {
-    renderAt(`/tournaments/${DEV_MATCH_SOURCE_TOURNAMENT_ID}/matches/nope`)
+  it("找不到場次（API 404）：顯示 404", async () => {
+    mockPublicMatch()
+    renderAt(matchUrl("nope"))
     expect(await screen.findByText("找不到這個頁面。")).toBeInTheDocument()
   })
 
-  it("正式 build（DEV 為 false）：任何 S4 網址都顯示 404，沒有假資料", async () => {
-    vi.stubEnv("DEV", false)
-    renderAt(M3)
-    expect(await screen.findByText("找不到這個頁面。")).toBeInTheDocument()
-    expect(screen.queryByText("32 強 · M3")).toBeNull()
+  it("未登入觀眾：報到面板在右欄最上方，沒有按鈕，不呼叫報到與比分登錄 API", async () => {
+    const readStatus = vi.spyOn(CompetitionService, "readCheckInStatus")
+    const readScore = vi.spyOn(CompetitionService, "readScoreEntry")
+    mockPublicMatch((detail) => ({
+      ...detail,
+      status: "scheduled",
+      outcome: null,
+      winner_id: null,
+      wins_a: 0,
+      wins_b: 0,
+      games: [],
+    }))
+    renderAt(matchUrl("match-M3"))
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "報到" }),
+    ).toBeInTheDocument()
+    const aside = document.querySelector("[data-slot=match-aside]")
+    expect(aside?.firstElementChild).toHaveAttribute(
+      "data-slot",
+      "match-check-in",
+    )
+    expect(screen.queryByRole("button", { name: "報到" })).toBeNull()
+    expect(readStatus).not.toHaveBeenCalled()
+    expect(readScore).not.toHaveBeenCalled()
+  })
+
+  it("記分者：左欄是比分登錄面板，不顯示公開各局列表", async () => {
+    signInAs()
+    mockPublicMatch()
+    vi.spyOn(CompetitionService, "readCheckInStatus").mockResolvedValue({
+      data: {
+        side: null,
+        reason: "not_captain",
+        opens_at: "2026-10-18T04:30:00Z",
+      },
+    } as unknown as ReadStatusResult)
+    const state: ScoreEntryState = {
+      is_scorer: true,
+      reason: null,
+      games: [{ game_no: 1, winner_side: "a", score_a: 13, score_b: 9 }],
+      series: {
+        wins_a: 1,
+        wins_b: 0,
+        winner: null,
+        can_submit: false,
+        wins_needed: 2,
+        reason: "not_decided",
+      },
+      submitted_by_name: null,
+      submitted_at: null,
+    }
+    vi.spyOn(CompetitionService, "readScoreEntry").mockResolvedValue({
+      data: state,
+    } as unknown as ReadScoreEntryResult)
+    // 假資料第二輪第一場（M17）是進行中、有已登錄的局
+    renderAt(matchUrl("match-M17"))
+
+    expect(
+      await screen.findByRole("heading", { name: "比分登錄" }),
+    ).toBeInTheDocument()
+    expect(document.querySelector("[data-slot=game-list]")).toBeNull()
+  })
+
+  it("非記分者登入：只有觀眾檢視", async () => {
+    signInAs()
+    mockPublicMatch()
+    vi.spyOn(CompetitionService, "readCheckInStatus").mockResolvedValue({
+      data: {
+        side: null,
+        reason: "not_captain",
+        opens_at: "2026-10-18T04:30:00Z",
+      },
+    } as unknown as ReadStatusResult)
+    const readScore = vi
+      .spyOn(CompetitionService, "readScoreEntry")
+      .mockResolvedValue({
+        data: { is_scorer: false, games: [], series: null },
+      } as unknown as ReadScoreEntryResult)
+    renderAt(matchUrl("match-M17"))
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "16 強 · M17" }),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(readScore).toHaveBeenCalled())
+    expect(document.querySelector("[data-slot=game-list]")).not.toBeNull()
+    expect(screen.queryByRole("heading", { name: "比分登錄" })).toBeNull()
+  })
+
+  it("API 回傳的資料直接顯示，不經過任何假資料", async () => {
+    mockPublicMatch((detail) => ({
+      ...detail,
+      tournament: { ...detail.tournament, name: "真資料盃" },
+    }))
+    renderAt(matchUrl("match-M3"))
+    expect(await screen.findByText("← 真資料盃")).toBeInTheDocument()
   })
 })

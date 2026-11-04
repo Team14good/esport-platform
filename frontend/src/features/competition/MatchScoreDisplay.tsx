@@ -1,3 +1,4 @@
+import type { PublicMatchDetail } from "@/client"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { BracketMarkTag } from "./BracketMarkTag"
@@ -8,7 +9,6 @@ import {
   type SideView,
   sideView,
 } from "./match-status"
-import type { PublicMatchDetail } from "./match-types"
 
 function TeamName({ view, side }: { view: SideView; side: BracketSide }) {
   return (

@@ -1,17 +1,17 @@
 // UJ-4（期中版）：觀眾不登入瀏覽對戰樹與場次頁。
-// 4.6 第二階段已接上真的 S3 並刪除 /dev/bracket，但還沒有已抽籤的真賽事可看，單場 API（#21）也還沒合併：
-// 場次頁先直接開開發模式的假資料（tournament-fixture，32 隊「進行中」）；
-// 從 S3 點場次卡進入的步驟以 test.fixme 列出，等示範資料有已抽籤的賽事、5.8 第二階段接上單場 API 後再接上。
+// 5.8 第二階段已把 S4 接上公開單場 API，並移除開發模式的假資料（tournament-fixture）；
+// 目前還沒有已抽籤的真賽事可看，所以兩個測試都以 test.fixme 列出，
+// 等 7.1 示範資料有已抽籤的賽事後，改成從那場賽事的 S3 進入再接上（見 deferred-work.md 7.2）。
 import { identitySwitcher } from "./support/accounts"
 import { expect, test } from "./support/fixtures"
 import { expectNoHorizontalScroll } from "./support/layout"
 
-/** 假資料的賽事 id（frontend/src/features/competition/match-source.ts） */
+/** 原本的開發模式假資料賽事 id；接上時改成示範資料已抽籤賽事的 id */
 const FIXTURE_TOURNAMENT_ID = "tournament-fixture"
-/** 打開的場次：第二輪（16 強）進行中的一場；假資料的場次 id 是「match-<代碼>」 */
+/** 打開的場次：第二輪（16 強）進行中的一場；接上時改成示範資料的場次 */
 const MATCH_CODE = "M17"
 
-test("未登入的觀眾開啟場次頁、換到同輪另一場，返回連結指向賽事的對戰表", {
+test.fixme("未登入的觀眾開啟場次頁、換到同輪另一場，返回連結指向賽事的對戰表（等 7.1 示範資料的已抽籤賽事）", {
   tag: ["@story-5.8", "@story-7.2", "@FR-36", "@NFR-7"],
 }, async ({ page }) => {
   await test.step("開啟場次頁", async () => {
@@ -49,7 +49,7 @@ test("未登入的觀眾開啟場次頁、換到同輪另一場，返回連結�
   })
 })
 
-test.fixme("未登入的觀眾在 S3 對戰表點場次卡進入場次頁，再回到對戰表（等示範資料的已抽籤賽事與 #21）", {
+test.fixme("未登入的觀眾在 S3 對戰表點場次卡進入場次頁，再回到對戰表（等 7.1 示範資料的已抽籤賽事）", {
   tag: [
     "@story-4.6",
     "@story-5.8",
