@@ -1,36 +1,47 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { TrophyIcon } from "lucide-react"
+import { useCallback } from "react"
 
-import { EmptyState } from "@/components/common/EmptyState"
-import {
-  BackofficeLayout,
-  type BackofficeNavItem,
-} from "@/components/layout/BackofficeLayout"
+import { BackofficeLayout } from "@/components/layout/BackofficeLayout"
 import { AccountGate } from "@/features/identity/AccountGate"
+import { parsePage } from "@/features/identity/admin-applications"
 import { requireSignedIn } from "@/features/identity/auth"
+import { OrganizerTournamentsPage } from "@/features/tournaments/OrganizerTournamentsPage"
+import {
+  ORGANIZER_BACKOFFICE_TITLE,
+  ORGANIZER_NAV,
+} from "@/features/tournaments/organizer-nav"
 
-const NO_TOURNAMENTS_TEXT = "你還沒有建立賽事。"
-
-// 主辦方後台的側欄第一層；Story 2.2 接手這個檔案，加入「建立賽事」與賽事清單
-const ORGANIZER_NAV: BackofficeNavItem[] = [
-  { to: "/organizer", label: "我的賽事", icon: TrophyIcon },
-]
+type OrganizerSearch = { page?: number }
 
 export const Route = createFileRoute("/organizer/")({
+  // 頁碼寫在網址；第 1 頁不出現在網址上
+  validateSearch: (search: Record<string, unknown>): OrganizerSearch => ({
+    page: parsePage(search.page),
+  }),
   beforeLoad: requireSignedIn,
   head: () => ({ meta: [{ title: "我的賽事 · FLOW" }] }),
   component: OrganizerHome,
 })
 
-/** S25 我的賽事（佔位頁）：只有主辦方能看，其他帳號顯示 S38 的 403。 */
+/** S25 我的賽事：只有主辦方能看，其他帳號顯示 S38 的 403。 */
 function OrganizerHome() {
+  const { page } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const onPageChange = useCallback(
+    (next: number, replace = false) =>
+      navigate({ search: { page: next > 1 ? next : undefined }, replace }),
+    [navigate],
+  )
   return (
     <AccountGate allow={(account) => account.is_organizer}>
-      <BackofficeLayout title="主辦方後台" items={ORGANIZER_NAV}>
-        <section className="flex min-w-0 flex-col gap-6">
-          <h1 className="text-heading-lg">我的賽事</h1>
-          <EmptyState title={NO_TOURNAMENTS_TEXT} />
-        </section>
+      <BackofficeLayout
+        title={ORGANIZER_BACKOFFICE_TITLE}
+        items={ORGANIZER_NAV}
+      >
+        <OrganizerTournamentsPage
+          page={page ?? 1}
+          onPageChange={onPageChange}
+        />
       </BackofficeLayout>
     </AccountGate>
   )
