@@ -11,8 +11,10 @@ from app.modules.competition.models import (
     BracketRead,
     CheckInRead,
     CheckInStatus,
+    GameScoreIn,
     PublicBracket,
     PublicMatchDetail,
+    ScoreEntryState,
 )
 from app.modules.identity.deps import CurrentAccount, Organizer
 
@@ -79,3 +81,73 @@ def read_check_in_status(
     return service.get_check_in_status(
         session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
     )
+
+
+@router.get("/tournaments/{tournament_id}/matches/{match_id}/score-entry")
+def read_score_entry(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> ScoreEntryState:
+    """登入者的比分登錄狀態（S4 Score entry panel）；不是記分者時 `is_scorer` 為 false、其他欄位空。"""
+    return service.get_score_entry(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
+    )
+
+
+@router.put("/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}")
+def record_game(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    game_no: int,
+    body: GameScoreIn,
+) -> ScoreEntryState:
+    """登錄一局（局號＝目前局數＋1 為新增，不大於目前局數為覆寫）；只限記分者。"""
+    result = service.record_game(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        account_id=account.id,
+        game_no=game_no,
+        data=body,
+    )
+    session.commit()
+    return result
+
+
+@router.delete("/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}")
+def delete_game(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    game_no: int,
+) -> ScoreEntryState:
+    """刪除最後一局；只限記分者。"""
+    result = service.delete_game(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        account_id=account.id,
+        game_no=game_no,
+    )
+    session.commit()
+    return result
+
+
+@router.post("/tournaments/{tournament_id}/matches/{match_id}/submit")
+def submit_result(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> ScoreEntryState:
+    """送出系列結果，場次進入申訴期；之後只能經申訴更正。只限記分者。"""
+    result = service.submit_result(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
+    )
+    session.commit()
+    return result
