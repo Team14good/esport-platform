@@ -4,7 +4,7 @@
 tournament_referee（已接受邀請的裁判；主鍵 (tournament_id, account_id)）。
 
 Revision ID: 3274615001c8
-Revises: a3d5e7f9b1c4
+Revises: d8e2f4a6b1c3
 Create Date: 2026-11-04 12:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = "3274615001c8"
-down_revision = "a3d5e7f9b1c4"
+down_revision = "d8e2f4a6b1c3"
 branch_labels = None
 depends_on = None
 

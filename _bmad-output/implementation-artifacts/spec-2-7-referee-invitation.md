@@ -91,7 +91,7 @@ context:
 
 ## Implementation Notes
 
-- 遷移 `3274615001c8_story_2_7_referee.py`，`down_revision = "a3d5e7f9b1c4"`。
+- 遷移 `3274615001c8_story_2_7_referee.py`，原本 `down_revision = "a3d5e7f9b1c4"`。2026-11-04 D 的 5.1 第二階段（PR #22）先合併，它的 `b5c7e9a1d3f2` 也接在 `a3d5e7f9b1c4` 之後；緊接著 D 的 5.3、5.4 第二階段（PR #25）也合併，`d8e2f4a6b1c3` 接在 `b5c7e9a1d3f2` 之後；依 CONTRIBUTING 第 4 節由後合併的本 PR 改為 `down_revision = "d8e2f4a6b1c3"`。
 - `accept_invitation` 的檢查順序：邀請不存在 404 → 過期或已作廢 409 → 賽事已結束／已取消 409 → 主辦方本人 409 → 已是裁判回原資料（冪等）。所以已是裁判的人用過期連結再接受一次會得到 409，而不是 200；只有第一次接受寫 `referee.accepted`。
 - 併發：重新產生是「`lock_tournament`（FOR UPDATE）→ UPDATE 舊邀請」，接受是「以 token 查出賽事 → `lock_tournament` → FOR SHARE 重新讀邀請 → 檢查」；兩邊都先鎖賽事再碰邀請列，不會死結，賽事狀態也是在鎖內檢查。（最初版本接受時只以 FOR SHARE 讀邀請、不鎖賽事，審查指出新增 tournament_referee／audit_log 的外鍵檢查會對賽事列取 FOR KEY SHARE，與重新產生持有的 FOR UPDATE 交叉等待而死結，且賽事狀態在鎖外檢查；已改正。）兩種先後順序各有一個以兩條真的連線、輪詢 `pg_stat_activity` 確認對方卡在鎖上的測試。
 - 「最新一筆邀請」以 `expires_at DESC, created_at DESC` 排序：最新的邀請到期時間一定最大，凍結時鐘下兩次產生在同一時間點也不會選到已作廢的那筆。
