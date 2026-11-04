@@ -282,3 +282,15 @@
 - 問題與修正：A 在審查中指出，S36 審查時補的測試只涵蓋「第一次載入就失敗」，沒有涵蓋 PR 說明中標為風險最高的「已載入後背景重抓失敗」，把判斷順序改回去，現有測試仍全部通過。AI 先前把兩種情境當成同一件事，主代理核對時也沒有發現。這次 AI 寫的新測試，第一版用「表單元素存在」當作等待條件，但表單本來就在畫面上，等於沒有等到重抓的錯誤，自行檢查後改成等請求結束、畫面重新渲染。另外 Biome 抓到一處換行格式不合規則
 - 成熟度：L3（AI 依人的審查意見修正，並以故意改壞程式碼的方式確認測試有效）
 - 證據：PR #30 的 A 審查意見；commit 未記錄
+
+### 2026-11-04｜程式／程式生成｜Story 7.1 示範資料的 tournaments 步驟
+
+- Story／範圍：7.1 第二階段的 tournaments 步驟（B 負責；分支 `story/7-1-tournaments`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理、Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：D 請 B 補上建立示範賽事並寫入 `context.tournament_to_draw` 的步驟；AI 查 planning 文件後列出 4 個開放問題（每題附建議值），人決定後由子代理實作，主代理接手驗證，三個審查者審查
+- AI 產出：`demo_data/tournaments.py`（兩款遊戲＋段位表＋「FLOW 校園盃 特戰英豪」）；`STEPS` 新增一行；測試 1 個檔案；`deferred-work.md` 拆出只剩 C 的 registration 那一筆，並新增 1 筆延後項目
+- 人做了什麼：決定示範賽事維持開放報名（不照 D 原本說的「已截止報名」，避免狀態和未來的截止時間矛盾）、不放直播連結（與 7.1 AC 不同，理由是一般賽事通常沒有）、遊戲與段位數值與賽事時間採 AI 的建議值；核准 spec
+- 驗證：以 compose 實際啟動，log 顯示建立兩款遊戲與賽事，competition 步驟從「No demo tournament to draw」變成 `REGISTRATION_UNAVAILABLE`（等 C）；後端 1477 個測試全過、覆蓋率 97%，lint 通過
+- 問題與修正：AI 發現 D 要的「已截止報名」和 2.2 的「報名截止必須晚於現在」互相矛盾，查到 D 的 `draw` 也接受開放報名，交給人選擇。人第一次只回答了一題，AI 沒有把其他建議值當成決定，而是再確認一次。實作子代理在驗證階段停滯 10 分鐘被中止（本機 `python` 是 Microsoft Store 空殼），主代理接手。接手後發現 A 的 `test_init_twice_keeps_demo_account_count` 失敗：它把所有含 `already exists, skipped` 的 log 都算成帳號數；沒有改 A 的測試，而是把本步驟對既有遊戲與賽事的 log 改成較準確的 `reused`。自己的兩個測試單獨跑會過、全部跑會失敗，原因是測試資料庫有併發測試提交的資料，改成只看示範資料自己的遊戲與操作紀錄。審查 14 筆：6 筆修正（包括測試與註解宣稱 savepoint 會撤銷資料，但實際上沒有東西可撤銷）、1 筆延後（保留資料庫超過 7 天會沿用過期賽事）、2 筆誤報、5 筆不處理
+- 成熟度：L4（spec → 子代理實作 → 主代理驗證 → 多個審查者 → 測試）
+- 證據：`spec-7-1-tournaments-demo-step.md` 的 Decisions、Implementation Notes、Review Triage Log；commit 未記錄
