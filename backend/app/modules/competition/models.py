@@ -326,6 +326,22 @@ class PublicGame(BaseModel):
     score_b: int | None
 
 
+class ReplayCleared(BaseModel):
+    """重新比賽清除前的內容（供 6.2 寫操作紀錄的變更前後）。"""
+
+    check_ins: list[CheckInRead]
+    games: list[PublicGame]
+    outcome: MatchOutcome | None
+    winner_id: uuid.UUID | None
+    wins_a: int
+    wins_b: int
+    submitted_by: uuid.UUID | None
+    submitted_at: datetime | None
+    appeal_deadline: datetime | None
+    confirmed_at: datetime | None
+    forfeit_deadline: datetime | None
+
+
 class PublicTournamentRef(BaseModel):
     id: uuid.UUID
     name: str
