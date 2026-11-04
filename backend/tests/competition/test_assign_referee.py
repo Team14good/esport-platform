@@ -510,6 +510,44 @@ def test_advance_without_conflict_keeps_referee(
     assert _events(session, "RefereeUnassigned") == []
 
 
+def test_semifinal_loser_into_third_place_unassigns_referee(
+    client: TestClient, session: Session, setup: Setup
+) -> None:
+    """準決賽敗隊進季軍賽（`loser_next_match_id`）時也要檢查衝突（A 在 #46 的建議）。"""
+    referee = setup.referee()
+    third = next(code for code, m in setup.matches.items() if m.is_third_place)
+    assert _put(client, setup, third, referee).status_code == 200
+    semi = setup.row("M5")
+    assert semi.loser_next_match_id == setup.matches[third].id
+    winner, loser = setup.team("M1", "a"), setup.team("M2", "a")
+    setup.members.add((loser, referee.id))
+    semi.team_a_id, semi.team_b_id = winner, loser
+    semi.status = MatchStatus.APPEAL_WINDOW
+    semi.outcome = MatchOutcome.PLAYED
+    semi.winner_id = winner
+    session.add(semi)
+    session.flush()
+    tournaments_service.lock_tournament(session, tournament_id=setup.tournament_id)
+    locked = service.lock_match(session, match_id=semi.id)
+    service.confirm_match(
+        session,
+        match=locked,
+        outcome=MatchOutcome.PLAYED,
+        winner_id=winner,
+        actor_id=None,
+    )
+    session.commit()
+
+    row = setup.row(third)
+    assert loser in (row.team_a_id, row.team_b_id)
+    assert row.referee_account_id is None
+    (log,) = _logs(session, "match.referee_unassigned")
+    assert log.actor_id is None
+    assert [e["referee_account_id"] for e in _events(session, "RefereeUnassigned")] == [
+        str(referee.id)
+    ]
+
+
 def test_ongoing_tournament_assignable(
     client: TestClient, session: Session, setup: Setup
 ) -> None:

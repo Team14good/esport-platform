@@ -477,6 +477,14 @@ def get_public_match(
         updated_at=max(m.updated_at for m in round_matches),
         check_in_a_at=check_in_at.get(match.team_a_id) if match.team_a_id else None,
         check_in_b_at=check_in_at.get(match.team_b_id) if match.team_b_id else None,
+        # 報到截止只對兩隊都確定的待開打場次有意義；其他情況的值可能已過期，不給前端以免顯示倒數
+        forfeit_deadline=(
+            match.forfeit_deadline
+            if match.status == MatchStatus.SCHEDULED
+            and match.team_a_id is not None
+            and match.team_b_id is not None
+            else None
+        ),
     )
 
 
@@ -1047,6 +1055,8 @@ def check_in(
     )
     if not inserted:  # 唯一鍵是最後防線：重複報到不能變成 500
         raise _rejection("already_checked_in", match.scheduled_at)
+    # 公開單場的 updated_at 取自場次，報到不更新它，前端就不會重抓（#47）
+    repository.touch_match(session, match, now)
     both = len(repository.list_check_ins(session, match.id)) >= 2
     audit.record(
         session,
