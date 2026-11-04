@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-03-2026 23:16
+last_updated: 11-04-2026 15:13
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -56,7 +56,7 @@ development_status:
   2-4-公開賽事列表與賽事頁: done  # 負責：B；第一階段（API、S1、S2 總覽、Countdown、Page banner，PR #29）、第二階段狀態徽章與申請主辦方 banner（PR #32）已合併；第二階段第 3 項 S1 空狀態對主辦方的「建立賽事」（PR #38，spec-2-4-s1-empty-create-tournament.md）已合併
   2-5-抽籤前修改賽事: backlog  # 擱置（期中後）
   2-6-取消賽事: backlog  # 擱置（期中後）
-  2-7-邀請裁判: backlog  # 負責：B
+  2-7-邀請裁判: in-progress  # 負責：B；第一階段（後端，PR #40）完成，第二階段（S31、S23 畫面）待做
   2-8-主辦方查閱操作紀錄: backlog  # 擱置（期中後）
   epic-2-retrospective: optional
 
@@ -80,7 +80,7 @@ development_status:
   4-3-排定與修改場次時間: in-progress  # 負責：D；第一階段（schedule.py 純函式）完成；第二階段後端（S30 列表與改時間 API）完成待合併，S30 頁面待 B 的主辦方版面
   4-4-指派裁判到場次: backlog  # 負責：D
   4-5-抽籤後退賽與候補遞補: backlog  # 擱置（期中後）
-  4-6-視覺化對戰樹: review  # 負責：A
+  4-6-視覺化對戰樹: done  # 負責：A；第一階段（PR #13）、第二階段（S3，PR #33）完成
   4-7-對戰樹隊伍搜尋與晉級路徑: backlog  # 擱置（期中後）
   epic-4-retrospective: optional
 

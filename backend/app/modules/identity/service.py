@@ -3,7 +3,7 @@
 import hashlib
 import secrets
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import timedelta
 from functools import cache
 from typing import Any
@@ -214,6 +214,14 @@ def get_account_school_ids(
     不存在的帳號不會出現在回傳的 dict 中。
     """
     return dict(repository.list_account_school_ids(session, list(account_ids)))
+
+
+def get_display_names(
+    session: Session, *, account_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """一次查多個帳號的顯示名稱（避免 N+1）；不存在的帳號不會出現在結果裡。"""
+    accounts = repository.list_accounts(session, list(set(account_ids)))
+    return {account.id: account.display_name for account in accounts}
 
 
 def _school_not_found() -> FieldError:

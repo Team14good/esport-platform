@@ -5,7 +5,7 @@ null）。平均段位積分用 numeric(12,2)：段位積分上限是 PostgreSQL
 numeric(6,2) 會溢位。
 
 Revision ID: d7e2a5c9b4f1
-Revises: d8e2f4a6b1c3
+Revises: 3274615001c8
 Create Date: 2026-11-03 18:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "d7e2a5c9b4f1"
-down_revision = "d8e2f4a6b1c3"
+down_revision = "3274615001c8"
 branch_labels = None
 depends_on = None
 

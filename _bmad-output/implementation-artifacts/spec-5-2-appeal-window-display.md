@@ -41,6 +41,7 @@ context:
 **Decisions（使用者 2026-10-30 定案）:**
 - 先顯示截止時間，加一個倒數插槽；B 的 Countdown 做好後再放進去。
 - 不做 code review（沿用使用者的決定）。
+- 有倒數時只留 Countdown 的「{絕對時間} 截止」，申訴期區塊不重複顯示（2026-11-04 使用者決定，見 `spec-5-2-appeal-countdown-and-banner-link.md`）。
 
 ## I/O & Edge-Case Matrix
 
@@ -48,7 +49,7 @@ context:
 |----------|--------------|---------------------------|----------------|
 | 申訴期 | `appeal_window`、截止 2026-10-18T06:22:00Z | 顯示「申訴期」與「10/18（日）14:22 截止」 | N/A |
 | 申訴中 | `appealed`、有截止時間 | 同上 | N/A |
-| 有倒數插槽 | 傳入 `countdown` | 插槽在標題與截止時間之間 | N/A |
+| 有倒數插槽 | 傳入 `countdown` | 插槽緊接在標題後，不另外顯示截止時間（由 Countdown 下方那一行顯示；2026-11-04 使用者決定） | N/A |
 | 其他狀態 | 待開打、進行中、已確認、已取消 | 不顯示區塊 | N/A |
 | 缺截止時間 | `appeal_window`、`appeal_deadline` 為 null | 不顯示區塊 | N/A |
 | 手機順序 | `< lg`、申訴期 | 頁首 → Score display → 申訴期 → 各局 → 同輪 | N/A |
