@@ -42,13 +42,20 @@ def get_bracket(session: Session, bracket_id: uuid.UUID) -> Bracket | None:
     return session.get(Bracket, bracket_id)
 
 
-def list_matches(session: Session, bracket_id: uuid.UUID) -> list[Match]:
-    """依輪次、季軍賽排在決賽之後、由上到下排序。"""
+def list_matches(
+    session: Session, bracket_id: uuid.UUID, *, fresh: bool = False
+) -> list[Match]:
+    """依輪次、季軍賽排在決賽之後、由上到下排序。
+
+    `fresh` 為 True 時以資料庫最新值覆蓋 identity map（不加鎖；已鎖賽事後讀相鄰場次用）。
+    """
     statement = (
         select(Match)
         .where(Match.bracket_id == bracket_id)
         .order_by(col(Match.round_no), col(Match.is_third_place), col(Match.slot_no))
     )
+    if fresh:
+        statement = statement.execution_options(populate_existing=True)
     return list(session.exec(statement))
 
 
@@ -91,6 +98,15 @@ def set_forfeit_deadline(
     session: Session, match: Match, deadline: datetime, at: datetime
 ) -> None:
     match.forfeit_deadline = deadline
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def set_scheduled_at(
+    session: Session, match: Match, scheduled_at: datetime, at: datetime
+) -> None:
+    match.scheduled_at = scheduled_at
     match.updated_at = at
     session.add(match)
     session.flush()
@@ -324,5 +340,28 @@ def set_match_submission(
     match.submitted_at = submitted_at
     match.appeal_deadline = appeal_deadline
     match.updated_at = submitted_at
+    session.add(match)
+    session.flush()
+
+
+def clear_for_replay(session: Session, match: Match, at: datetime) -> None:
+    """刪除該場所有報到紀錄與逐局比分，並把結果相關欄位歸零（6.2 重新比賽）。
+
+    不改狀態、`scheduled_at` 與結構欄位。
+    """
+    for check_in in list_check_ins(session, match.id):
+        session.delete(check_in)
+    for game in list_games(session, match.id):
+        session.delete(game)
+    match.outcome = None
+    match.winner_id = None
+    match.submitted_by = None
+    match.submitted_at = None
+    match.appeal_deadline = None
+    match.confirmed_at = None
+    match.forfeit_deadline = None
+    match.wins_a = 0
+    match.wins_b = 0
+    match.updated_at = at
     session.add(match)
     session.flush()
