@@ -94,23 +94,11 @@
   (2) B 的 Countdown（2.4，`appeal` 變體，帶進度條）做好後，由 S4 路由 `frontend/src/routes/tournaments/$tournamentId/matches/$matchId.tsx` 把它傳給 `MatchSpectatorView` 的 `appealCountdown`，`MatchAppealWindow` 不重做倒數；
   (3) 到期後要顯示「已截止 · 系統處理中」（EXPERIENCE.md〈倒數與時間〉到期行為），由 Countdown 負責；`MatchAppealWindow` 目前不讀裝置時鐘、不判斷是否到期。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-game-settings-and-school-list.md`
-  summary: Story 2.1 第二階段：S36 遊戲設定（列表、新增／編輯頁、段位表）與學校清單分頁的前端畫面，含側欄入口、375 px 卡片版面，以及學校異動後讓 `["identity","schools"]` 查詢失效。
-  evidence: 2026-10-29 使用者決定 2.1 拆兩階段：後台 Sidebar 版面、Data table 由 A 的 1.8 提供（11/1），第一階段只做後端以趕上 2.2 的 10/31 期限。1.8 合併後另寫 spec 實作，並驗收 epics.md Story 2.1 的 S36 相關 AC。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-1-game-settings-and-school-list.md`
   summary: （低）Pydantic 內建的 422 訊息是英文：缺欄位、列舉值不合法（例如 `score_type`）、型別不是 list／object 時，`detail[].msg` 不是繁中，前端直接顯示會出現英文。
   evidence: 2026-10-29 Story 2.1 第一階段審查（Edge Case Hunter）。既有問題，identity 的 API 也一樣（`core/errors.py` 沒有翻譯 `RequestValidationError`）。處理時在 core 加一個 `RequestValidationError` handler，依 `type`（missing、enum、list_type 等）換成繁中訊息，並補測試。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-create-tournament.md`
-  summary: Story 2.2 第二階段：S25 我的賽事（列表、狀態徽章、空狀態「你還沒有建立賽事。」）、S26 建立賽事表單（選遊戲帶入預設值、每輪間隔不足時顯示最小間隔、欄位錯誤顯示）、S27 賽事總覽（主辦方賽事後台側欄「查看賽事頁」「總覽」、狀態徽章、模式、報名期間、優先期結束、開賽時間），以及接手 1.8 的 `routes/organizer/index.tsx`。
-  evidence: 2026-10-30 使用者決定 2.2 拆兩階段：主辦方後台版面、`/organizer` 路由、Data table、狀態徽章由 A 的 1.8（PR #11）提供，第一階段只做後端以趕上 10/31 的交接期限。1.8 合併後另寫 spec，並驗收 epics.md Story 2.2 的畫面 AC；時間輸入需要新增以 Asia/Taipei 輸入、送出 UTC 的處理。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-create-tournament.md`
-  summary: Story 2.2 第二階段的 S26 表單：名額超過 128 時，送出前彈出提醒「名額超過 128 隊，請確認沒有輸入錯誤」，主辦方確認後才送出（後端不限制 128）。
-  evidence: 2026-10-30 使用者決定：128 是提醒門檻、不是上限，避免誤輸入極大值又不擋住真的需要的大型賽事。第一階段後端只擋 < 2 與超過資料庫整數上限。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-create-tournament.md`
   summary: （中）目前沒有任何工作把賽事從 `open` 轉成 `closed`，`ensure_accepting_registrations` 也只看狀態；在 C 的 3.6 完成前，報名截止時間過後仍可報名。
   evidence: 2026-10-30 Story 2.2 第一階段審查（Blind Hunter）。依 `contracts/tournaments.md`〈三〉，`open` → `closed` 由 3.6 在截止補位之後呼叫 `transition_tournament`。3.6 實作時要確認截止工作會轉換狀態；若 3.6 延後，改由 `ensure_accepting_registrations` 另外比對 `registration_end` 與 `clock.now()`，並同步修改約定。
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-score-rules.md`
-  summary: （低）`rounds` 型態的回合數沒有上限，純函式 `scoring.make_game` 接受任意大的非負整數；寫入資料庫的整數欄位時可能溢位。
-  evidence: 2026-10-29 Story 5.3 第一階段審查（Edge Case Hunter、Blind Hunter）。第二階段寫 `record_game` 的 API schema 時，以 `Field(ge=0, le=...)` 設定合理範圍（例如 999），回 422。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-panel.md`
   summary: （中）前端單元測試在容器冷啟動時不穩定：`login`、`signup`、`account`、`auth`、`forgot-password` 等走路由的舊測試，在 frontend 容器裡第一次執行會有 4～32 個因等不到元素（預設 1 秒）失敗，同一個容器第二次執行全部通過。CI 若遇到機器忙碌也可能偶發失敗。
   evidence: 2026-10-29 在沒有任何前端改動的分支（story/5-5）上重現：第一次 14 failed／162，第二次 162 passed；與本 Story 的新測試無關。可能的修法：路由測試的 `findBy*` 加長 timeout，或在 `vitest.config.ts` 設 `testTimeout`／預先載入路由，修好後以冷啟動連跑多次確認。
@@ -119,6 +107,32 @@
   summary: （低）competition 純函式（schedule.py；4.1 合併後的 bracket.py、5.5 的 progression.py 也適用）要求的 90% 分支覆蓋率只靠 spec 的手動指令驗證，CI 沒有強制。
   evidence: CI 在 backend 容器內執行 `scripts/test.sh`，其中 `coverage run` 沒有 `--branch`，全域門檻是 `fail_under = 85`。CI 要另加一步 `coverage run --branch -m pytest tests/competition` 再 `coverage report --include=... --fail-under=90`；若改成全域開 branch，要先確認整體覆蓋率仍高於 85%。
 
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-5-confirm-advance.md`
+  summary: `confirm_walkover` 不檢查空缺方是否真的確定不會有隊伍，6.5 呼叫前要自己確認（未驗證，若為真屬 medium）。
+  evidence: Edge Case Hunter：空缺方的來源場次還沒定案時就以輪空確認，來源的勝隊之後會發現下一場已定案而被丟掉。要確認 6.5 的呼叫時機，或在 `confirm_walkover` 用 progression 的來源推導擋下。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-5-confirm-advance.md`
+  summary: 6.2 更正已結束賽事或季軍賽已開打後的準決賽時，`VoidMatch`、名次與賽事狀態怎麼處理還沒定（未驗證，若為真屬 medium）。
+  evidence: `_void` 只能從待開打轉 voided；`_finish` 對已結束的賽事不再動作，但名次從場次重算，會和 `tournament.podium` 操作紀錄不一致。6.2 實作時要決定規則並補測試。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-public-match-api.md`
+  summary: （低）賽事取消後，停在申訴期或申訴中的場次，公開單場 API 仍會回傳 `appeal_deadline`，但 worker 已不再自動確認（未驗證，若為真屬 low）。
+  evidence: 2026-10-31 公開單場 API 審查（Edge Case Hunter、Blind Hunter）。期中不能取消賽事（2.6 擱置），已結束的賽事也不會有停在申訴期的場次，所以目前不會發生。2.6 實作取消時，要決定公開頁對這類場次顯示什麼，並在 `get_public_match` 加上賽事狀態判斷。
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-panel.md`
+  summary: （中）前端單元測試在容器冷啟動時不穩定：`login`、`signup`、`account`、`auth`、`forgot-password` 等走路由的舊測試，在 frontend 容器裡第一次執行會有 4～32 個因等不到元素（預設 1 秒）失敗，同一個容器第二次執行全部通過。CI 若遇到機器忙碌也可能偶發失敗。
+  evidence: 2026-10-29 在沒有任何前端改動的分支（story/5-5）上重現：第一次 14 failed／162，第二次 162 passed；與本 Story 的新測試無關。可能的修法：路由測試的 `findBy*` 加長 timeout，或在 `vitest.config.ts` 設 `testTimeout`／預先載入路由，修好後以冷啟動連跑多次確認。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （中）6.2「重新比賽」把場次從申訴中轉回待開打時，舊的報到紀錄還在，會讓重賽回 `ALREADY_CHECKED_IN`，且兩隊都有紀錄時 `list_forfeit_due` 永遠不會選到它（未驗證，若為真屬 medium）。
+  evidence: 2026-11-01 5.1 第二階段審查（Edge Case Hunter）。FR-31 規定重新比賽要清除報到紀錄、依新時間重新起算棄權期限。6.2 實作時需要 competition 提供清除報到紀錄的公開函式（由 D 新增），並在轉回待開打後呼叫 `start_forfeit_clock`。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （低）報到只鎖場次、讀賽事狀態不加鎖；2.6 做取消賽事時，取消與報到同時發生可能寫入一筆已取消賽事的報到紀錄。
+  evidence: 2026-11-01 5.1 第二階段審查（Blind Hunter、Edge Case Hunter）。期中不能取消賽事（2.6 擱置），所以目前不會發生。2.6 實作時改成先 `lock_tournament` 再 `lock_match`（AD-6 順序），或由取消流程鎖住所有場次。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
+  summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
+  evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-schedule-rules.md`
   summary: 4.3 第二階段的改時間 service 呼叫 `reschedule_window`／`check_reschedule` 時，準決賽的 `next_match_at` 要傳決賽與季軍賽中較早的那一場。
   evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
@@ -132,6 +146,20 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
   summary: epic-3-context 要求 `AllocationPolicy` 分支覆蓋率 ≥ 90%，但 `scripts/test.sh` 沒有 `--branch`，只靠 spec 的手動指令檢查。
   evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Verification Gap）。目前實測 100%；之後修改 `allocation.py` 時若漏測分支，一般測試仍會通過。要自動檢查時，在 CI 加一步對 `app/modules/registration/allocation.py` 以 `--branch` 量測並設 `--fail-under=90`（low）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
+  summary: （中）6.2「重新比賽」把場次轉回待開打時，要清掉該場的 `match_game`，並把 `wins_a`、`wins_b`、`outcome`、`winner_id`、`submitted_by`、`submitted_at`、`appeal_deadline`、`confirmed_at` 歸零；否則重賽的第一局會被當成覆寫或 `SERIES_DECIDED`。
+  evidence: 2026-11-01 5.3 第二階段。`match_game` 只有 competition 能寫；6.2 實作時需要 D 在 competition 提供清除逐局比分的公開函式（與報到紀錄的清除一起）。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
+  summary: 4.4 指派裁判後，S4 的記分者判斷要接上：`ScoreEntryState.is_scorer` 已依 `Match.referee_account_id`（有指派時只有該裁判、未指派時為主辦方）判斷，但目前沒有任何流程會寫入 `referee_account_id`。
+  evidence: 2026-11-01 5.3 第二階段。兩條路都已有測試（直接寫入 `referee_account_id` 模擬指派）。4.4 實作指派、改派、5.5 填位後取消指派時，確認 S4 面板隨之顯示或隱藏，並補一條經指派 API 的端對端測試。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
+  summary: S4 接上 `ScoreEntryPanel`（A 的工作）：用重新產生的 client 呼叫 `GET .../score-entry`、`PUT`／`DELETE .../games/{game_no}`、`POST .../submit`，把錯誤碼轉回面板吃的小寫原因代碼。
+  evidence: 2026-11-01 5.3 第二階段只做後端與重新產生 client。對照：`SCORE_TIE`→`tie`、`SCORE_INVALID`→`invalid_score`、`SERIES_DECIDED`→`series_decided`、`REDUNDANT_GAMES`→`redundant_games`、`INVALID_GAME_NO`→`invalid_game_no`、`NOT_LAST_GAME`→`not_last_game`、`SERIES_NOT_DECIDED`→`not_decided`；`ScoreEntryState.reason` 非 null 時面板停用（`check_in_incomplete` 對應「等待雙方報到」），`submitted_by_name`、`submitted_at` 給已送出的唯讀列。
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
+  summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
+  evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: Story 2.4 第二階段：S1、S2 的狀態改用 1.7 的 `StatusBadge`（開放報名、進行中 live＋進行中脈動、賽程已公布 brand、已取消 destructive、其餘 muted-foreground）；S1 頂部「想辦賽事？申請成為主辦方」Page banner（已登入、非主辦方、沒有待審核申請；可關閉，存 `localStorage`，連到 `/organizer/apply`）；S1 空狀態對主辦方另顯示「建立賽事」（連到 2.2 第二階段的 S26）。
   evidence: 2026-11-02 使用者決定 2.4 拆兩階段：`StatusBadge`、申請 API 在 A 的 1.7（PR #10），主辦方身分在 1.8（PR #11），兩者都未合併。
@@ -154,6 +182,11 @@
   summary: 3.3 送出報名時，`join_team`（service.py:328）與 `_invite_status`（service.py:196）要補檢查報名狀態仍是 `forming`；否則已送出的隊伍仍可透過邀請連結加入，S19 預覽也會顯示連結有效（medium）。
   evidence: 2026-11-02 A 在 PR #23 的審查。3.1 只有 `forming` 狀態，目前不會出錯；epic-3-context 規定「送出報名後名單鎖定、邀請連結失效」。
 
+## Deferred from: spec-2-4-status-badge-and-organizer-banner.md (2026-11-03)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-status-badge-and-organizer-banner.md`
+  summary: （低）`PageBanner` 的 `action` 只支援 `onClick`，S1「申請成為主辦方」按鈕以程式導向，不能中鍵開新分頁或複製連結；需要 A 為 `PageBanner` 新增連結型的 action。
+  evidence: 2026-11-03 Story 2.4 第二階段審查（Blind Hunter）。`PageBanner.tsx` 是 A 的元件，本 Story 只 import 不修改。
 ## Deferred from: spec-3-2-player-registration-info-2.md (2026-11-03)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info-2.md`
@@ -171,3 +204,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill.md`
   summary: `tournament.spec.ts`「觀眾未登入瀏覽公開賽事列表與賽事頁的正取隊伍」仍是 `test.fixme`；2.4（#29）已合併，但正取隊伍要有 3.x 的報名資料。
   evidence: 2026-11-03 D 在 7.2 第一階段審查中提出可以接上；使用者決定留到第二階段，跟報名步驟一起做。
+
+## Deferred from: Story 7.1 第二階段 competition 步驟（2026-11-03）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-demo-seed-data.md`
+  summary: competition 步驟（`demo_data/competition.py`）已會替 `context.tournament_to_draw` 指定的賽事抽籤，但目前沒有上游步驟寫入這個欄位，實際啟動只會記錄「No demo tournament to draw」並略過。
+  evidence: 要等 B 的 tournaments 步驟建立「已截止報名、開賽在未來、主辦方為 `context.accounts["organizer"]`」的校園賽事並寫入 `context.tournament_to_draw`，以及 C 的 registration 步驟建立 32 隊正取、registration 提供抽籤用的 `list_accepted_teams` 等四個函式（contracts/competition.md〈二〉）。開賽時間要離啟動夠遠：時間已過時抽籤會被拒絕並略過。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-organizer-tournament-ui.md`
+  summary: （低）主辦方賽事清單的查詢在兩處各定義一次：`features/tournaments/organizer-queries.ts` 的 `myTournamentsQueryOptions` 與 C 的 `features/registration/CreateTeamEntry.tsx` 的 `organizerTournamentsQueryOptions`，都用查詢鍵 `["tournaments","organizer","list"]`；之後只改其中一邊（例如 `queryFn` 或回傳型別），兩邊的快取會互相污染。
+  evidence: 2026-11-03 A（@max930000）在 PR #31 的審查。處理時請 C 把 `CreateTeamEntry.tsx` 改成 import `myTournamentsQueryOptions`，刪掉自己的定義（registration 模組只新增 import，不改 tournaments 的檔案）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-1-s36-game-settings-and-school-list-ui.md`
+  summary: （低）`GameForm` 與 `SchoolDialog` 把 `form.formState.isSubmitting` 納入送出鈕停用，防止連點重複送出，但沒有測試：拿掉 `isSubmitting` 後現有測試仍會通過。
+  evidence: 2026-11-03 A（@max930000）在 PR #30 的審查。下次動到這兩個表單時補測試：讓 `createGame`／`createSchool` 回傳一個未完成的 Promise，連按兩次送出，斷言只呼叫一次，且送出中按鈕停用。

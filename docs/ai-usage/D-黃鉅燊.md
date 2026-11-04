@@ -225,3 +225,166 @@
 - 問題與修正：第 1 輪的 Verification Gap 審查代理指出，性質測試只檢查「發出起算訊號時兩隊都在」，沒檢查「該發的都有發」；若程式漏掉連鎖輪空後湊齊的場次，測試仍全綠，那場比賽就永遠不會自動判棄權。重做時改成比對「新湊齊的場次集合＝起算訊號集合」
 - 成熟度：L5（用性質測試、mutation 與獨立審查代理檢驗測試本身）
 - 證據：PR #6、`spec-5-5-progression-rules.md` 的 Verification 結果
+
+### 2026-10-31｜程式／後端實作｜Story 5.5、5.6 第二階段：確認結果、晉級推進、申訴期滿自動確認與賽事結束
+
+- Story／範圍：Story 5.5、5.6（第二階段），分支 `story/5-5-confirm`（疊在 4.1 第二階段 #19 上）
+- 工具：Claude Code（Opus 5.5）、BMAD `bmad-build`、實作子代理、3 個平行審查子代理
+- 怎麼用：AI 寫 spec、人核准；子代理把第一階段 `progression.py` 算出的變更寫進資料庫，加上 worker 工作
+- AI 產出：`confirm_match`、`advance`、`confirm_walkover`、`auto_confirm_expired`、`get_podium`；`Match.confirmed_at` 遷移與索引；`MatchResultConfirmed`、`MatchOpponentsDecided` 事件；公開對戰樹加名次；2、3、8、13 隊從抽籤到賽事結束的整合測試
+- 人做了什麼：核准 spec
+- 驗證：容器內全套 907 個測試通過，lint 通過，competition 分支覆蓋率 99%；突變檢查（不套用起算棄權期限、拿掉期限條件）各有 6 個測試失敗
+- 問題與修正：子代理把「待開打的場次能不能 `confirm_match`」當成待確認問題，其實 spec 已寫明要擋，主代理直接答覆。審查抓到兩個測試全綠卻存在的問題：(1) 申訴期滿但沒有結果的場次會永遠排在最前面，worker 每輪都卡在它，原本的測試用 monkeypatch 只回一次候選而遮住問題；(2) 呼叫端照約定先鎖場次、`advance` 才鎖賽事，和 worker 的加鎖順序相反，可能死結。兩者都改掉並補上用真查詢的測試
+- 成熟度：L4（spec → 子代理實作 → 多代理審查 → 修正）
+- 證據：`spec-5-5-confirm-advance.md` 的 Review Triage Log（15 項）與 Implementation Notes
+
+### 2026-10-31｜審查回應｜回應 A 對 #5～#8 的審查並修正
+
+- Story／範圍：PR #5（4.3）、#6（5.5）、#7（5.1）、#8（5.3）第一階段
+- 工具：Claude Code（Opus 5.5）、容器內的測試與突變檢查
+- 怎麼用：逐條查證 A 的審查意見，能直接修的就修並證明測試抓得到
+- AI 產出：#5 補兩個測試並註明準決賽改時間要考慮季軍賽（記入 deferred-work）；#7 拿掉 list 上不被支援的 `aria-disabled`；#8 把列內錯誤改成依內容清除，避免第二階段輪詢時錯誤訊息消失
+- 人做了什麼：無（授權 AI 處理）
+- 驗證：A 指出改錯也不會失敗的兩處，補測試後在容器裡實際改錯，各有 1 個測試失敗；score-entry-panel 46 個、check-in-panel 20 個測試通過，build 通過
+- 問題與修正：A 發現第一階段的測試有盲點：兩個最小間隔在測試裡剛好都是 85 分，把其中一個換成另一個測試仍全過。這是 AI 寫測試時用了相同數值造成的，說明測試資料要刻意讓不同參數取不同值
+- 成熟度：L4（人審查加上 AI 查證與突變驗證）
+- 證據：PR #5～#8 的留言與 commit
+
+### 2026-10-31｜程式／後端實作｜Story 5.8 後端：公開單場 API
+
+- Story／範圍：5.8（A 的 S4 場次頁需要的後端），分支 `story/5-8-api`（疊在 #20 上）
+- 工具：Claude Code（Opus 5.5）、BMAD `bmad-build`、實作子代理、3 個平行審查子代理
+- 怎麼用：依 A 在 deferred-work 的請求與 A 前端的 `PublicMatchDetail` 型別寫 spec，人核准後子代理實作
+- AI 產出：`GET /tournaments/{id}/matches/{id}`、`PublicMatchDetail` 等 schema、從公開對戰樹抽出共用的 `PublicMatch` 組法、12 個 API 測試、重新產生前端 client、約定文件
+- 人做了什麼：核准 spec
+- 驗證：容器內全套 919 個測試通過，lint 通過；突變檢查（同輪列表納入自己、拿掉場次所屬賽事檢查、同輪不過濾輪次）分別有 4、1、4 個測試失敗
+- 問題與修正：審查指出測試只用 8 隊與 2 隊，都沒有輪空；而單場 API 只拿同輪場次去組隊名與來源，最容易在有輪空的對戰表出錯。補上 3、5、6 隊的對照測試（單場與整棵對戰樹逐欄相同）。其餘 10 點審查意見逐條判定駁回或延後，理由記在 spec
+- 成熟度：L4（spec → 子代理實作 → 多代理審查 → 修正）
+- 證據：`spec-5-8-public-match-api.md` 的 Review Triage Log（11 項）
+
+### 2026-11-01｜程式／後端實作｜Story 5.1 第二階段：報到 API、給 5.2 的查詢與賽事開始 worker
+
+- Story／範圍：5.1（第二階段），分支 `story/5-1-checkin`（疊在 #21 上）
+- 工具：Claude Code（Opus 5.5）、BMAD `bmad-build`、實作子代理、3 個平行審查子代理
+- 怎麼用：AI 寫 spec，列出兩個需要人決定的問題（報到時間是否公開、棄權候選是否排除兩隊都已報到）；人選定後子代理實作
+- AI 產出：CheckIn 資料表與遷移、`POST`／`GET .../check-in`、`list_check_ins`、`list_forfeit_due`、worker 工作 `start_due_tournaments`、公開單場帶出報到時間、39 個測試、client 與約定文件
+- 人做了什麼：回答兩個需求問題、核准 spec；授權 AI 合併已核准的 #5～#8
+- 驗證：後端全套 1132 個測試通過、lint 通過；突變檢查（棄權候選不排除兩隊都報到、不捕捉唯一鍵衝突、不依期限排序）各有 1～2 個測試失敗
+- 問題與修正：審查抓到三個測試全綠卻存在的問題：(1) 狀態查詢回傳大寫 API 錯誤碼，但第一階段的報到面板吃小寫原因代碼，直接接上會全部顯示成預設文字；(2) 重複送出撞唯一鍵時回 500；(3) 場次缺棄權期限時規則函式拋錯變成 500。另外，子代理回報一次無法重現的 3 個測試失敗，查明是主代理同時在另一個 worktree 跑測試、共用同一個測試資料庫造成，之後改成不同時跑
+- 成熟度：L4（spec → 子代理實作 → 多代理審查 → 修正 → 突變驗證）
+- 證據：`spec-5-1-check-in-backend.md` 的 Review Triage Log（18 項）
+
+### 2026-11-01｜程式／後端實作｜Story 5.3、5.4 第二階段：逐局比分資料表、登錄／刪除／送出 API
+
+- Story／範圍：5.3、5.4（第二階段），分支 `story/5-3-referee`（疊在 #22 上）
+- 工具：Claude Code（Opus 5.5）、BMAD `bmad-build`、實作子代理、3 個平行審查子代理
+- 怎麼用：AI 讀第一階段規則與現有程式後寫 spec，列出兩個需要人決定的問題（刪光所有局後場次狀態、回合數上限）；人選定後子代理實作
+- AI 產出：`match_game` 資料表與遷移、`GET .../score-entry`、`PUT`／`DELETE .../games/{game_no}`、`POST .../submit`、公開單場帶出各局、75 個測試、client 與約定文件
+- 人做了什麼：決定刪光後維持進行中、回合數上限 0–99；核准 spec
+- 驗證：後端全套 1210 個測試通過、lint 通過；前端 239 個單元測試、biome、build 通過；5 種突變（拿掉報到檢查、不加鎖、送出不轉申訴期、BO 寫死 3、第一局不轉進行中）各有 2～8 個測試失敗
+- 問題與修正：(1) 審查發現測試全部用 BO3，BO 讀錯也不會失敗，補上 BO1、BO5 測試後，`_bo` 寫死 3 的突變才被抓到；(2) 賽事不接受比分時，記分者讀面板的路徑沒有測試；(3) 一個測試名稱自稱測了併發，其實只是先後兩次請求，已改名。另外主代理自己做突變測試時，第一次的 sed 改到 5.1 報到裡同名的程式碼、另一條縮排不對，兩個突變都沒有生效卻顯示「全過」；逐行比對差異後才發現，修正後兩個突變都被測試抓到
+- 成熟度：L4（spec → 子代理實作 → 多代理審查 → 修正 → 突變驗證）
+- 證據：`spec-5-3-referee-score-backend.md` 的 Review Triage Log（17 項）
+### 2026-11-03｜程式／測試｜依 A 對 #20（5.5、5.6）的 Request changes 修正自動確認
+
+- Story／範圍：5.5 第二階段的 `auto_confirm_expired`、5.5 spec
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：A 指出一場結果不自洽的場次會讓所有賽事的自動確認永遠停住。AI 讀 `progression` 確認它拋的是 `ValueError`、`confirm_match` 本身不擋，改成每個候選在 savepoint 內確認，出錯就退回、記錄並排除，再找下一場；補 A 要求的兩個測試，並依 A 的清單更新 spec 與 PR 說明
+- AI 產出：`auto_confirm_expired` 與 `find_expired_appeal_id(exclude_matches=)`；壞資料不擋其他賽事的測試、`confirm_match`／`confirm_walkover` 先鎖賽事的測試；spec 的 Code Map、已被取代的決定、驗證數字說明、第 2 輪 triage
+- 人做了什麼：A 審查並提出修正項目；使用者要求確認最新狀況後處理
+- 驗證：全部後端 1337 個測試通過、lint 通過、單一 Alembic head；`service.py` 分支覆蓋率 99%。突變：拿掉 `ValueError` 處理，壞資料測試失敗；拿掉兩個函式開頭的鎖，兩個鎖測試都失敗
+- 問題與修正：第 1 輪 AI 審查時把這個問題判成「那一輪停在它、駁回」，低估了 worker rollback 後下一輪會重選同一場，是 A 的人工審查抓到的。A 建議用第二個 session 的 `FOR UPDATE NOWAIT` 驗證鎖，但測試的所有 session 共用同一條連線與外層交易，另一條連線看不到未 commit 的資料，AI 改成記錄呼叫順序。第一版鎖測試只檢查「有呼叫過 `lock_tournament`」，突變時仍然通過，因為後面的 `advance` 也會鎖；改成斷言第一個動作就是鎖賽事後才抓到
+- 成熟度：L3（人審查找出問題，AI 修正並驗證）
+- 證據：#20 的審查與 CI 紀錄
+
+### 2026-11-03｜除錯｜#33 合併後 D 的 7 支 PR 前端建置失敗
+
+- Story／範圍：D 的 #20～#27、#34 與 main（含 A 的 #33）同步後的前端建置
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 CI 失敗 log，找出唯一的型別錯誤，在本機前端容器跑 `typecheck` 與 `tsconfig.build.json` 確認修好，並檢查 3 支分支上沒有其他直接建立 `PublicBracket` 的地方
+- AI 產出：`bracket-fixtures.ts` 補 `podium: null`，傳到 7 支分支
+- 人做了什麼：無（使用者要求確認狀況時發現）
+- 驗證：本機 typecheck 只剩映像過舊造成的「找不到 `@radix-ui/react-alert-dialog`」（套件已在 package.json，CI 會重建映像），`podium` 錯誤消失；以 CI 為最終依據
+- 問題與修正：這正是 AI 審 #33 時說「合併後不會編譯失敗」的那種衝突。D 的 5.5 在 `PublicBracket` 加了必填的 `podium`，#33 讓假資料改用 client 型別，缺了這個欄位。當時 AI 用 Python 正則比對 main 與 D 鏈尾的型別定義，兩邊都沒比對到（回傳 None），`None == None` 被印成「same」，於是在 #33 的審查與 AI 紀錄裡寫了錯誤的結論。教訓：比對腳本找不到目標時要報錯，不能預設成相同；之後改用實際建置驗證整合，而不是比對文字
+- 成熟度：L2（AI 除錯修正；先前的錯誤判斷由 CI 抓到）
+- 證據：#20～#27、#34 的 CI 紀錄
+
+### 2026-11-03｜整合｜#24（3.2）先合併後 #20 的遷移分岔
+
+- Story／範圍：D 的 #20（5.5）與 main 同步
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 發現 #20 已核准但落後 main，main 新合的 3.2 遷移 `a3f6b9d2c8e1` 與 5.5 的 `a3d5e7f9b1c4` 都接在 3.1 的 `c5d2e8a4f913` 後面，會變成兩個 head；合 main 後把 5.5 改接 3.2，並更新 spec 的 Code Map
+- AI 產出：`a3d5e7f9b1c4` 的 `down_revision` 改成 `a3f6b9d2c8e1`
+- 人做了什麼：無（使用者要求確認狀況時發現）
+- 驗證：容器內 `alembic heads` 只有一個 head，後端全套測試與 lint 通過，再以 CI 為準
+- 問題與修正：原本約定 #20 先合、#24 再改接，結果 #24 先合，改由 #20 這邊改接，結果相同
+- 成熟度：L2（AI 整合，CI 驗證）
+- 證據：#20 的 commit 與 CI 紀錄
+
+### 2026-11-03｜實作｜Story 7.1 第二階段：示範資料的 competition 步驟
+
+- Story／範圍：7.1（A 的 Story）裡 D 負責的 competition 示範資料，依 7.1 腳本骨架的擴充方式新增步驟檔
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 7.1 spec、`demo_data` 擴充說明與 4.1 的 `draw`，新增 `demo_data/competition.py`：替 `context.tournament_to_draw` 指定的賽事抽籤（固定亂數種子），沒有指定、已抽過、或抽籤被業務規則拒絕時記錄並略過；抽籤放在 savepoint 裡，失敗不會讓整段示範資料回滾
+- AI 產出：`demo_data/competition.py`、`DemoContext.tournament_to_draw` 欄位、`STEPS` 加入 competition、7 個測試、deferred-work 一項
+- 人做了什麼：使用者決定先做這項
+- 驗證：後端全套 1456 passed、lint 通過；突變測試 3 項（拿掉「已抽過」檢查、拿掉固定種子、改成不攔截業務錯誤）都會讓測試失敗，已還原
+- 問題與修正：第一次在容器裡跑測試時，指令經過管線過濾輸出而卡住 10 分鐘，改成把輸出寫進檔案、加上 timeout 後正常。本機用 `ruff check tests` 會把 `app.*` 當第三方套件，提出錯誤的 import 排序建議；CI 只 lint `app/`，所以不採用
+- 成熟度：L2（AI 實作，測試與突變驗證）
+- 證據：本 PR 的 CI 紀錄
+
+### 2026-11-04｜修正｜依 A 對 #36 的審查讓抽籤不受報名回傳順序影響
+
+- Story／範圍：#36（7.1 competition 步驟）與 4.1 的 `draw`
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：A 指出固定種子只保證「同樣的輸入順序得到同樣結果」，C 的 `list_accepted_teams` 若依 UUID 或無 ORDER BY 回傳，示範對戰表每次會不同，而測試用固定順序的替身測不出來。AI 採用 A 的第二個做法：`draw` 洗牌前依隊名（相同再比 id）排序，並補「registration 回傳順序相反時同種子得到同一張表」的測試
+- AI 產出：`service.draw` 多呼叫一次 `get_team_names` 並排序；`rng` 說明改為測試與示範資料都會用；兩個測試的呼叫順序與 13 隊完整賽事的季軍預期值隨之更新
+- 人做了什麼：A 審查時提出問題
+- 驗證：後端全套 1457 passed、lint 通過；拿掉排序時新測試失敗，已還原
+- 問題與修正：13 隊完整賽事測試的季軍從隊伍4 變隊伍2，因為替身隊名「隊伍10」排在「隊伍2」前面，洗牌輸入順序改變；這是固定種子的預期值，不是規則改變
+- 成熟度：L3（人審查找出問題，AI 修正並驗證）
+- 證據：#36 的審查與 CI 紀錄
+### 2026-11-04｜文件｜依 A 對 #21 的建議補充 id 格式錯誤的回應
+
+- Story／範圍：#21（5.8 公開單場 API）的約定 `contracts/competition.md`
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：A 核准時建議約定補一句：id 不是 UUID 時 FastAPI 回 422 而不是 404。AI 在單場 API 那一列補上，寫法比照 tournaments.md 的公開 API
+- AI 產出：約定一句說明
+- 人做了什麼：A 審查時提出
+- 驗證：只改文件；A 的另一項建議（取同一輪場次會先抓整張對戰表）A 說留著就好，未修改
+- 成熟度：L1（AI 依審查意見改文件）
+- 證據：#21 的審查紀錄
+
+### 2026-11-04｜審查｜代審 B 的 #40（2.7 第一階段：邀請裁判的後端）
+
+- Story／範圍：B 的 2.7 第一階段（B 請 D 代審）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 service、repository、router、models、遷移、約定與 spec Decisions，檢查上鎖順序（產生與接受都先鎖賽事）、冪等新增（ON CONFLICT DO NOTHING RETURNING）、作廢後取最新邀請的排序、檢查順序是否符合 Decisions、公開預覽是否符合 AD-19，並對照 competition 4.4 需要的 `is_referee`、`list_referees` 簽名；以 `git merge-tree` 確認與最新 main 無衝突
+- AI 產出：核准與三項不擋合併的建議：遷移與 #35、#22 同接 `a3d5e7f9b1c4`，後合的要改接；`is_referee` 可改用主鍵查一列；token 放在 URL 路徑會進 access log
+- 人做了什麼：使用者轉達 B 的請求並要求直接審
+- 驗證：送出後查證審查裡「與隊伍邀請做法一致」的說法：registration 也是 `/team-invites/{token}`，屬實。CI 由 B 的 PR 跑過（綠）
+- 成熟度：L2（AI 審查，人決定送出）
+- 證據：#40 的審查紀錄
+
+### 2026-11-04｜整合｜#21、#36 合併後同步 5.x PR 鏈，並核對程式與文件
+
+- Story／範圍：D 的 #22、#25、#26、#27、#34（5.1、5.3／5.4、4.3、6.2 前置、5.2 收尾）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：#21、#36 squash 合併後，AI 依序把 main 合進鏈上各分支（#21 的 squash 先確認與分支樹相同再以 `-s ours` 吸收）；`contracts/competition.md` 的單場 API 一列，5.3 加的 `games` 說明與 5.8 補的 422 說明衝突，兩者都保留。#36 改了抽籤洗牌順序，推送前在鏈尾跑後端全套確認沒有測試依賴舊順序。使用者問為何不一次開放審查後，把 #25、#26、#27、#34 一起改為可審查；再核對各分支是否包含上游、`sprint-status` 與 PR 說明是否過時
+- AI 產出：5 支分支的合併 commit；`sprint-status` 的 5.1 說明移除已合併的「待 C 的 is_captain」；4 支 PR 說明的「維持 Draft」改成目前的審查方式
+- 人做了什麼：使用者決定一次開放全部審查，並要求核對同步
+- 驗證：鏈尾（含 5.1、5.3、4.3、6.2）後端全套 1636 passed、lint 通過；每支分支只有一個 Alembic head、沒有衝突標記；CI 全綠
+- 問題與修正：上一輪把審查紀錄推到 5.1 後沒有再往下同步，5.3、5.2 收尾兩支少了 1 個 commit，這次核對時發現並補上
+- 成熟度：L2（AI 整合，測試與 CI 驗證）
+- 證據：#22、#25、#26、#27、#34 的 commit 與 CI 紀錄
+
+### 2026-11-04｜修正｜依 C 對 #22（5.1 第二階段）的審查修正兩個 worker 問題
+
+- Story／範圍：5.1 第二階段（#22）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：C 核准時提出 5 項。AI 判斷其中兩項是真的錯誤並修正：棄權查詢沒核對報到的是不是這場兩隊；賽事開始 worker 會被一直出錯的候選卡住，改用 savepoint 加略過集合，做法與 #20 的自動確認相同。另外讓 503 訊息依用途顯示「報到」，並補上用 registration 真實隊長報到的整合測試。第 5 項（改成 `VerifiedAccount`）查證後不改，因為建立和加入隊伍都要求已驗證帳號
+- AI 產出：`repository.find_forfeit_due`、`find_unstarted_bracket_id(exclude=)`、`service.start_due_tournament`、`registration_port` 的修改，4 個新測試，spec 的 Review Triage Log
+- 人做了什麼：C 審查提出問題；使用者決定接下來所有人的 PR 由 D 這邊審
+- 驗證：拿掉兩個修正時對應的新測試都失敗；後端全套 1513 passed、lint 通過
+- 成熟度：L3（人審查找出問題，AI 修正並驗證）
+- 證據：#22 的審查與 CI 紀錄
