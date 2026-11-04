@@ -943,6 +943,10 @@ export type PublicMatchDetail = {
    * Check In B At
    */
   check_in_b_at?: string | null
+  /**
+   * Forfeit Deadline
+   */
+  forfeit_deadline?: string | null
 }
 
 /**

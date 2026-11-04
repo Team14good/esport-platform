@@ -142,6 +142,36 @@ def test_check_in_succeeds_and_status_shows_it(
     assert status["reason"] == "already_checked_in"
 
 
+def test_check_in_bumps_public_updated_at(
+    client: TestClient, session: Session, setup: Setup, frozen_clock: FrozenClockLike
+) -> None:
+    """公開單場的 `updated_at` 要變，S4 的 query key 才會重抓（#47）。"""
+    url = f"{API}/tournaments/{setup.tournament_id}/matches/{setup.matches['M1'].id}"
+    before = client.get(url).json()["updated_at"]
+    frozen_clock.set(OPENS + timedelta(minutes=5))
+
+    response = client.post(setup.url(), headers=_headers(client, setup.captain_of("a")))
+
+    assert response.status_code == 201, response.text
+    after = client.get(url).json()
+    assert after["updated_at"] != before
+    assert after["updated_at"].startswith("2026-10-26T10:35:00")
+    assert after["check_in_a_at"] == response.json()["at"]
+
+
+def test_rejected_check_in_does_not_bump_updated_at(
+    client: TestClient, session: Session, setup: Setup, frozen_clock: FrozenClockLike
+) -> None:
+    url = f"{API}/tournaments/{setup.tournament_id}/matches/{setup.matches['M1'].id}"
+    before = client.get(url).json()["updated_at"]
+    frozen_clock.set(OPENS - timedelta(minutes=1))
+
+    response = client.post(setup.url(), headers=_headers(client, setup.captain_of("a")))
+
+    assert response.status_code == 409
+    assert client.get(url).json()["updated_at"] == before
+
+
 def test_check_in_exactly_at_opening(
     client: TestClient, setup: Setup, frozen_clock: FrozenClockLike
 ) -> None:
