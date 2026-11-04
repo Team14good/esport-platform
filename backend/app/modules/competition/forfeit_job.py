@@ -5,10 +5,8 @@
 `MatchForfeited`，回傳 True。全部略過時回傳 False。交易由 `app.worker.run_once`
 負責，這裡不 commit 也不 rollback（AD-5）。
 
-用到的 D（competition）與 B（tournaments）函式尚未合併，所以透過 `ForfeitPorts`
-注入，不直接 import。`get_match`、`lock_match`、`transition_match`、`lock_tournament`
-在 D 的 4.1 第二階段（PR #19）；`list_forfeit_due`、`list_check_ins` 在 5.1 第二階段。
-合併後要寫的轉接層，各方法對應如下（D 已於 2026-11-02 確認簽名相同）：
+用到的 D（competition）與 B（tournaments）函式透過 `ForfeitPorts` 注入，不直接 import；
+正式實作在 `forfeit_adapter.ServiceForfeitPorts`，各方法對應如下：
 
 - `list_forfeit_due` → competition `service.list_forfeit_due(session, now=now)`
 - `get_tournament_id` → competition `service.get_match(session, match_id=...)` 的
@@ -23,7 +21,7 @@
   `service.transition_match(session, match=match, to=MatchStatus.APPEAL_WINDOW)`；
   D 的轉換表已允許「待開打 → 申訴期」（`test_match_transitions.py` 固定）
 
-轉接層寫好後，把 `make_forfeit_job(轉接層)` 加進 `app/worker/jobs.py` 的 `JOBS`。
+`app/worker/jobs.py` 以 `make_forfeit_job(SERVICE_FORFEIT_PORTS)` 註冊為 `judge_forfeits`。
 """
 
 import logging
