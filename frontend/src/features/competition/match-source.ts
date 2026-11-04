@@ -38,7 +38,7 @@ export function samePlaceholder(matchId: string) {
 
 /**
  * 面板查詢 key 的變動部分：場次 `updated_at` 加上兩隊報到時間。
- * 後端報到時不一定更新 `updated_at`，加上報到時間，報到後一定會重抓。
+ * 後端報到成功會更新 `updated_at`（#49）；仍帶上報到時間，不靠單一欄位判斷要不要重抓。
  */
 export function matchVersion(detail: {
   updated_at: string

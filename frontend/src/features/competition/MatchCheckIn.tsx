@@ -132,13 +132,13 @@ export function MatchCheckIn({ detail, refresh }: MatchCheckInProps) {
   const opensAt =
     checkIn?.opens_at ??
     new Date(Date.parse(detail.scheduled_at) - CHECK_IN_LEAD_MS).toISOString()
-  // 公開單場與報到狀態都沒有棄權期限，過了預定時間就不顯示倒數（見 deferred-work）
+  // 過了預定時間改倒數棄權期限（公開單場的 `forfeit_deadline`，只在待開打時有值）；沒有值就不顯示倒數
   const phase =
     isScheduled && !teamsPending
       ? checkInCountdownPhase({
           opensAt,
           scheduledAt: detail.scheduled_at,
-          forfeitDeadline: null,
+          forfeitDeadline: detail.forfeit_deadline ?? null,
           now,
         })
       : null

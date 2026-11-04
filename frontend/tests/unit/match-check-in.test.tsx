@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor, within } from "@testing-library/react"
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
@@ -292,6 +298,22 @@ describe("S4 報到面板的資料轉接", () => {
     expect(
       screen.getAllByText(`${formatMatchDateTime(opensAt)} 起可報到`).length,
     ).toBeGreaterThanOrEqual(1)
+  })
+
+  it("過了預定時間：倒數改為公開單場的棄權期限；沒有棄權期限就不顯示倒數", async () => {
+    const forfeitDeadline = iso(Date.now() + 10 * MINUTE)
+    renderCheckIn(
+      scheduledIn(-5 * MINUTE, { forfeit_deadline: forfeitDeadline }),
+    )
+    expect(screen.getByText("棄權期限")).toBeInTheDocument()
+    expect(
+      screen.getByText(`${formatMatchDateTime(forfeitDeadline)} 截止`),
+    ).toBeInTheDocument()
+    cleanup()
+
+    renderCheckIn(scheduledIn(-5 * MINUTE, { forfeit_deadline: null }))
+    expect(screen.queryByText("棄權期限")).toBeNull()
+    expect(screen.queryByText("距預定開始")).toBeNull()
   })
 
   it("兩隊未確定：面板停用、說明「對手確定後才能報到」，不顯示倒數", async () => {

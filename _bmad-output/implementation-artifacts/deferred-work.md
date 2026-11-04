@@ -214,9 +214,6 @@
 ## Deferred from: spec-5-8-real-match-data.md (2026-11-04)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`
-  summary: （中）S4 報到倒數過了預定開始時間後應改為「棄權期限」（`appeal`）倒數，但公開單場（`PublicMatchDetail`）與報到狀態（`CheckInStatus`）都沒有 `forfeit_deadline`，前端拿不到期限，目前過了預定時間就不顯示倒數。
-  evidence: 2026-11-04 實作 5.8 第二階段時發現，spec 的 Always 寫「過預定時間『棄權期限』→ `forfeit_deadline`」，但 `frontend/src/client/types.gen.ts` 只有主辦方的 `MatchRead` 有這個欄位；spec 禁止改後端。需要 D 在 `PublicMatchDetail`（或 `CheckInStatus`）加上 `forfeit_deadline`，重新產生 client 後，把 `features/competition/MatchCheckIn.tsx` 傳給 `checkInCountdownPhase` 的 `forfeitDeadline: null` 換成該欄位（階段判斷與測試已寫好）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`
   summary: 觀眾 e2e（`frontend/tests/e2e/spectator.spec.ts`）的 S3、S4 目前以 `page.route` 回傳假對戰樹（`support/match-api.ts`），沒有走真的後端；7.1 示範資料有已抽籤的賽事後，要補一份從真賽事 S2「對戰表」分頁進入、走真 API 的版本。
   evidence: 2026-11-04 使用者依 D 在 PR #47 審查的建議，決定先改用 `page.route`，不等 7.1。假資料只驗證前端流程與版面（含 375 px），測不到公開 API 的實際回應與 NFR-2 回應時間。
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
