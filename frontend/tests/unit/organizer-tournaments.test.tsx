@@ -750,10 +750,15 @@ describe("S27 賽事總覽", () => {
     expect(links.map((link) => link.textContent)).toEqual([
       "查看賽事頁",
       "總覽",
+      "場次管理",
     ])
     expect(links[0]).toHaveAttribute("href", "/tournaments/t-1")
     expect(links[1]).toHaveAttribute("href", "/organizer/tournaments/t-1")
     expect(links[1]).toHaveAttribute("data-status", "active")
+    expect(links[2]).toHaveAttribute(
+      "href",
+      "/organizer/tournaments/t-1/matches",
+    )
 
     expect(screen.getByText("開放報名")).toHaveAttribute("data-tone", "live")
     const details = within(
