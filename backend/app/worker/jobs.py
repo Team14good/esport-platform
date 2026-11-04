@@ -8,6 +8,8 @@ from sqlmodel import Session
 
 from app.core import events
 from app.modules.competition import service as competition_service
+from app.modules.competition.forfeit_adapter import SERVICE_FORFEIT_PORTS
+from app.modules.competition.forfeit_job import make_forfeit_job
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.email import EmailSender, SmtpEmailSender
 from app.modules.tournaments import service as tournaments_service
@@ -42,6 +44,10 @@ def start_due_tournaments(session: Session) -> bool:
     return competition_service.start_due_tournament(session)
 
 
+# 判一場逾時未報到的棄權（Story 5.2；函式名稱為 `judge_forfeits`）
+judge_forfeits = make_forfeit_job(SERVICE_FORFEIT_PORTS)
+
+
 def confirm_expired_appeals(session: Session) -> bool:
     """確認一場申訴期滿的場次並推進晉級（操作者為系統）。"""
     return competition_service.auto_confirm_expired(session)
@@ -50,6 +56,7 @@ def confirm_expired_appeals(session: Session) -> bool:
 JOBS: list[Job] = [
     open_registrations,
     start_due_tournaments,
+    judge_forfeits,
     confirm_expired_appeals,
     dispatch_outbox,
     make_send_email_job(SmtpEmailSender()),
