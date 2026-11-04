@@ -201,6 +201,51 @@ export type BracketRead = {
 }
 
 /**
+ * CheckInRead
+ */
+export type CheckInRead = {
+  /**
+   * Match Id
+   */
+  match_id: string
+  /**
+   * Team Id
+   */
+  team_id: string
+  /**
+   * At
+   */
+  at: string
+}
+
+/**
+ * CheckInStatus
+ *
+ * 登入者對某場次的報到狀態（S4 Check-in panel 用，和報到 API 同一套檢查）。
+ */
+export type CheckInStatus = {
+  /**
+   * Side
+   */
+  side: "a" | "b" | null
+  /**
+   * Reason
+   */
+  reason:
+    | "teams_pending"
+    | "already_checked_in"
+    | "too_early"
+    | "closed"
+    | "not_checkable"
+    | "not_captain"
+    | null
+  /**
+   * Opens At
+   */
+  opens_at: string
+}
+
+/**
  * EmailVerificationCreate
  */
 export type EmailVerificationCreate = {
@@ -278,6 +323,29 @@ export type GameRead = {
    * Rank Tiers
    */
   rank_tiers: Array<RankTierRead>
+}
+
+/**
+ * GameScoreIn
+ *
+ * 登錄一局的比分。`win_loss` 只給 `winner_side`；`rounds` 只給 `score_a`、`score_b`。
+ *
+ * 型態不符（例如 `win_loss` 給數字）由 `scoring.make_game` 判斷，回 409 `SCORE_INVALID`。
+ * 名稱避開 tournaments 的 `GameIn`（遊戲設定），以免 OpenAPI schema 重名。
+ */
+export type GameScoreIn = {
+  /**
+   * Winner Side
+   */
+  winner_side?: "a" | "b" | null
+  /**
+   * Score A
+   */
+  score_a?: number | null
+  /**
+   * Score B
+   */
+  score_b?: number | null
 }
 
 /**
@@ -628,6 +696,30 @@ export type PublicBracket = {
 }
 
 /**
+ * PublicGame
+ *
+ * 已登錄的一局（公開）；段位截圖不出現在公開 API（AD-19）。
+ */
+export type PublicGame = {
+  /**
+   * Game No
+   */
+  game_no: number
+  /**
+   * Winner Side
+   */
+  winner_side: "a" | "b"
+  /**
+   * Score A
+   */
+  score_a: number | null
+  /**
+   * Score B
+   */
+  score_b: number | null
+}
+
+/**
  * PublicMatch
  *
  * 公開 API 用（AD-19）：不含 Email、學校、截圖鍵值。
@@ -689,6 +781,108 @@ export type PublicMatch = {
    * Wins B
    */
   wins_b: number
+}
+
+/**
+ * PublicMatchDetail
+ *
+ * 公開單場（5.8 S4 場次頁）：`PublicMatch` 加上賽事、輪次與同輪場次。
+ */
+export type PublicMatchDetail = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Code
+   */
+  code: string
+  /**
+   * Round No
+   */
+  round_no: number
+  /**
+   * Slot No
+   */
+  slot_no: number
+  /**
+   * Is Third Place
+   */
+  is_third_place: boolean
+  team_a: PublicTeamRef | null
+  team_b: PublicTeamRef | null
+  /**
+   * Source A
+   */
+  source_a: string | null
+  /**
+   * Source B
+   */
+  source_b: string | null
+  /**
+   * Bye A
+   */
+  bye_a: boolean
+  /**
+   * Bye B
+   */
+  bye_b: boolean
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+  status: MatchStatus
+  outcome: MatchOutcome | null
+  /**
+   * Winner Id
+   */
+  winner_id: string | null
+  /**
+   * Wins A
+   */
+  wins_a: number
+  /**
+   * Wins B
+   */
+  wins_b: number
+  tournament: PublicTournamentRef
+  /**
+   * Game Name
+   */
+  game_name: string
+  /**
+   * Best Of
+   */
+  best_of: number
+  score_type: ScoreType
+  /**
+   * Round Name
+   */
+  round_name: string
+  /**
+   * Games
+   */
+  games: Array<PublicGame>
+  /**
+   * Same Round
+   */
+  same_round: Array<PublicMatch>
+  /**
+   * Appeal Deadline
+   */
+  appeal_deadline: string | null
+  /**
+   * Updated At
+   */
+  updated_at: string
+  /**
+   * Check In A At
+   */
+  check_in_a_at?: string | null
+  /**
+   * Check In B At
+   */
+  check_in_b_at?: string | null
 }
 
 /**
@@ -780,6 +974,20 @@ export type PublicTournament = {
 }
 
 /**
+ * PublicTournamentRef
+ */
+export type PublicTournamentRef = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+}
+
+/**
  * RankTierIn
  */
 export type RankTierIn = {
@@ -862,11 +1070,80 @@ export type SchoolIn = {
 }
 
 /**
+ * ScoreEntryState
+ *
+ * 登入者對某場次的比分登錄狀態（S4 Score entry panel 用）。
+ *
+ * 不是記分者時 `is_scorer` 為 False，其他欄位都是空值（不洩漏送出者）。
+ */
+export type ScoreEntryState = {
+  /**
+   * Is Scorer
+   */
+  is_scorer: boolean
+  /**
+   * Reason
+   */
+  reason?:
+    | "not_accepting_scores"
+    | "result_submitted"
+    | "not_recordable"
+    | "teams_pending"
+    | "check_in_incomplete"
+    | null
+  /**
+   * Games
+   */
+  games?: Array<PublicGame>
+  series?: SeriesRead | null
+  /**
+   * Submitted By Name
+   */
+  submitted_by_name?: string | null
+  /**
+   * Submitted At
+   */
+  submitted_at?: string | null
+}
+
+/**
  * ScoreType
  *
  * 比分型態（AD-18）。
  */
 export type ScoreType = "win_loss" | "rounds"
+
+/**
+ * SeriesRead
+ *
+ * 系列結果（`scoring.series` 的結果）。
+ */
+export type SeriesRead = {
+  /**
+   * Wins A
+   */
+  wins_a: number
+  /**
+   * Wins B
+   */
+  wins_b: number
+  /**
+   * Winner
+   */
+  winner: "a" | "b" | null
+  /**
+   * Can Submit
+   */
+  can_submit: boolean
+  /**
+   * Wins Needed
+   */
+  wins_needed: number
+  /**
+   * Reason
+   */
+  reason: "not_decided" | "redundant_games" | null
+}
 
 /**
  * TeamCreate
@@ -2238,3 +2515,263 @@ export type competitionReadPublicBracketResponses = {
 
 export type competitionReadPublicBracketResponse =
   competitionReadPublicBracketResponses[keyof competitionReadPublicBracketResponses]
+
+export type competitionReadPublicMatchData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}"
+}
+
+export type competitionReadPublicMatchErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadPublicMatchError =
+  competitionReadPublicMatchErrors[keyof competitionReadPublicMatchErrors]
+
+export type competitionReadPublicMatchResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicMatchDetail
+}
+
+export type competitionReadPublicMatchResponse =
+  competitionReadPublicMatchResponses[keyof competitionReadPublicMatchResponses]
+
+export type competitionReadCheckInStatusData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in"
+}
+
+export type competitionReadCheckInStatusErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadCheckInStatusError =
+  competitionReadCheckInStatusErrors[keyof competitionReadCheckInStatusErrors]
+
+export type competitionReadCheckInStatusResponses = {
+  /**
+   * Successful Response
+   */
+  200: CheckInStatus
+}
+
+export type competitionReadCheckInStatusResponse =
+  competitionReadCheckInStatusResponses[keyof competitionReadCheckInStatusResponses]
+
+export type competitionCheckInData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in"
+}
+
+export type competitionCheckInErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionCheckInError =
+  competitionCheckInErrors[keyof competitionCheckInErrors]
+
+export type competitionCheckInResponses = {
+  /**
+   * Successful Response
+   */
+  201: CheckInRead
+}
+
+export type competitionCheckInResponse =
+  competitionCheckInResponses[keyof competitionCheckInResponses]
+
+export type competitionReadScoreEntryData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/score-entry"
+}
+
+export type competitionReadScoreEntryErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadScoreEntryError =
+  competitionReadScoreEntryErrors[keyof competitionReadScoreEntryErrors]
+
+export type competitionReadScoreEntryResponses = {
+  /**
+   * Successful Response
+   */
+  200: ScoreEntryState
+}
+
+export type competitionReadScoreEntryResponse =
+  competitionReadScoreEntryResponses[keyof competitionReadScoreEntryResponses]
+
+export type competitionDeleteGameData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+    /**
+     * Game No
+     */
+    game_no: number
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}"
+}
+
+export type competitionDeleteGameErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionDeleteGameError =
+  competitionDeleteGameErrors[keyof competitionDeleteGameErrors]
+
+export type competitionDeleteGameResponses = {
+  /**
+   * Successful Response
+   */
+  200: ScoreEntryState
+}
+
+export type competitionDeleteGameResponse =
+  competitionDeleteGameResponses[keyof competitionDeleteGameResponses]
+
+export type competitionRecordGameData = {
+  body: GameScoreIn
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+    /**
+     * Game No
+     */
+    game_no: number
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}"
+}
+
+export type competitionRecordGameErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionRecordGameError =
+  competitionRecordGameErrors[keyof competitionRecordGameErrors]
+
+export type competitionRecordGameResponses = {
+  /**
+   * Successful Response
+   */
+  200: ScoreEntryState
+}
+
+export type competitionRecordGameResponse =
+  competitionRecordGameResponses[keyof competitionRecordGameResponses]
+
+export type competitionSubmitResultData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/submit"
+}
+
+export type competitionSubmitResultErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionSubmitResultError =
+  competitionSubmitResultErrors[keyof competitionSubmitResultErrors]
+
+export type competitionSubmitResultResponses = {
+  /**
+   * Successful Response
+   */
+  200: ScoreEntryState
+}
+
+export type competitionSubmitResultResponse =
+  competitionSubmitResultResponses[keyof competitionSubmitResultResponses]

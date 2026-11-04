@@ -5,9 +5,17 @@ from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Literal
 
-from sqlmodel import Session, col, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, col, func, or_, select
 
-from app.modules.competition.models import Bracket, Match, MatchOutcome, MatchStatus
+from app.modules.competition.models import (
+    Bracket,
+    CheckIn,
+    Match,
+    MatchGame,
+    MatchOutcome,
+    MatchStatus,
+)
 
 
 def add_bracket(session: Session, bracket: Bracket, matches: Sequence[Match]) -> None:
@@ -164,5 +172,157 @@ def clear_match_result(session: Session, match: Match, at: datetime) -> None:
     match.winner_id = None
     match.forfeit_deadline = None
     match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def add_check_in(session: Session, check_in: CheckIn) -> bool:
+    """新增報到紀錄；撞 `(match_id, team_id)` 唯一鍵回 False（外層交易不受影響）。"""
+    try:
+        with session.begin_nested():
+            session.add(check_in)
+    except IntegrityError:
+        return False
+    return True
+
+
+def list_check_ins(session: Session, match_id: uuid.UUID) -> list[CheckIn]:
+    """依報到時間排序（同時間依 id）。"""
+    statement = (
+        select(CheckIn)
+        .where(CheckIn.match_id == match_id)
+        .order_by(col(CheckIn.at), col(CheckIn.id))
+    )
+    return list(session.exec(statement))
+
+
+def find_forfeit_due(
+    session: Session, now: datetime
+) -> list[tuple[uuid.UUID, uuid.UUID]]:
+    """待開打、`forfeit_deadline <= now`、且不是兩隊都已報到的（場次 id, 賽事 id），依期限排序。"""
+    checked_in = (
+        select(func.count())
+        .select_from(CheckIn)
+        .where(
+            CheckIn.match_id == Match.id,
+            # 只算這場目前兩隊的報到：重新比賽或頂替換隊後，舊隊伍的紀錄不算
+            col(CheckIn.team_id).in_([Match.team_a_id, Match.team_b_id]),
+        )
+        .scalar_subquery()
+    )
+    statement = (
+        select(Match.id, Match.tournament_id)
+        .where(
+            Match.status == MatchStatus.SCHEDULED,
+            col(Match.forfeit_deadline) <= now,
+            checked_in < 2,
+        )
+        .order_by(col(Match.forfeit_deadline), col(Match.id))
+    )
+    return [
+        (match_id, tournament_id) for match_id, tournament_id in session.exec(statement)
+    ]
+
+
+def find_unstarted_bracket_id(
+    session: Session,
+    first_match_by: datetime,
+    *,
+    exclude: Collection[uuid.UUID] = (),
+) -> uuid.UUID | None:
+    """尚未處理開始、且最早場次預定時間 <= `first_match_by` 的對戰表 id（最早的先）。
+
+    `first_match_by` ＝ 現在 ＋ 報到提前量，由呼叫端算；這裡只是粗篩，
+    service 鎖住後會用 `checkin.tournament_starts_at` 重新判斷。`exclude` 是這一輪
+    已略過的對戰表（出錯或鎖住後發現還沒到），讓後面的候選不被卡住。
+    """
+    statement = (
+        select(Bracket.id)
+        .join(Match, col(Match.bracket_id) == col(Bracket.id))
+        .where(col(Bracket.start_handled_at).is_(None))
+        .group_by(col(Bracket.id))
+        .having(func.min(Match.scheduled_at) <= first_match_by)
+        .order_by(func.min(Match.scheduled_at), col(Bracket.id))
+        .limit(1)
+    )
+    if exclude:
+        statement = statement.where(col(Bracket.id).not_in(list(exclude)))
+    return session.exec(statement).first()
+
+
+def mark_start_handled(session: Session, bracket: Bracket, at: datetime) -> None:
+    bracket.start_handled_at = at
+    session.add(bracket)
+    session.flush()
+
+
+# ---------------------------------------------------------------- 逐局比分（5.3、5.4）
+
+
+def list_games(session: Session, match_id: uuid.UUID) -> list[MatchGame]:
+    """依局號排序。"""
+    statement = (
+        select(MatchGame)
+        .where(MatchGame.match_id == match_id)
+        .order_by(col(MatchGame.game_no))
+    )
+    return list(session.exec(statement))
+
+
+def add_game(session: Session, game: MatchGame) -> None:
+    session.add(game)
+    session.flush()
+
+
+def update_game(
+    session: Session,
+    game: MatchGame,
+    *,
+    winner_side: str,
+    score_a: int | None,
+    score_b: int | None,
+    recorded_by: uuid.UUID,
+    recorded_at: datetime,
+) -> None:
+    game.winner_side = winner_side
+    game.score_a = score_a
+    game.score_b = score_b
+    game.recorded_by = recorded_by
+    game.recorded_at = recorded_at
+    session.add(game)
+    session.flush()
+
+
+def delete_game(session: Session, game: MatchGame) -> None:
+    session.delete(game)
+    session.flush()
+
+
+def set_match_wins(
+    session: Session, match: Match, wins_a: int, wins_b: int, at: datetime
+) -> None:
+    match.wins_a = wins_a
+    match.wins_b = wins_b
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
+def set_match_submission(
+    session: Session,
+    match: Match,
+    *,
+    winner_id: uuid.UUID,
+    submitted_by: uuid.UUID,
+    submitted_at: datetime,
+    appeal_deadline: datetime,
+) -> None:
+    """寫入送出的系列結果（`outcome = played`）；不寫 `confirmed_at`。"""
+    match.outcome = MatchOutcome.PLAYED
+    match.winner_id = winner_id
+    match.submitted_by = submitted_by
+    match.submitted_at = submitted_at
+    match.appeal_deadline = appeal_deadline
+    match.updated_at = submitted_at
     session.add(match)
     session.flush()
