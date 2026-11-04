@@ -219,12 +219,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`
   summary: 觀眾 e2e（`frontend/tests/e2e/spectator.spec.ts`）的 S3、S4 目前以 `page.route` 回傳假對戰樹（`support/match-api.ts`），沒有走真的後端；7.1 示範資料有已抽籤的賽事後，要補一份從真賽事 S2「對戰表」分頁進入、走真 API 的版本。
   evidence: 2026-11-04 使用者依 D 在 PR #47 審查的建議，決定先改用 `page.route`，不等 7.1。假資料只驗證前端流程與版面（含 375 px），測不到公開 API 的實際回應與 NFR-2 回應時間。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
-  summary: Story 3.6 第二階段：確認抽籤後的報名狀態名稱與 `allocation.py` 一致——`allocation.py` 把 `drawn`（已參賽）也算進每校正取數（FR-17「含抽籤後」），3.4 第二階段的 S17／S12 候補順位也把 `drawn` 當正取。
-  evidence: 2026-11-04 Story 3.4 第二階段刪除第一階段的「Story 3.4～3.6 第二階段」項目時，該項目裡的這項檢查沒寫進 3.6 的新項目，依 spec 補上。3.6 接上 D 的 4.1（抽籤時把報名標為已參賽）時，確認 4.1 呼叫的 registration 函式寫入的狀態就是 `drawn`。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
-  summary: Story 3.6 第二階段：截止補位與 4.1 的 `finalize_for_draw`（開放報名中提前抽籤）都要先在鎖內呼叫 `settle_priority_window`，並處理優先期後送出、仍為 `pending` 的報名，不能讓它們被 `fill_from_waitlist` 漏掉或在抽籤後留在 `pending`。
-  evidence: 2026-11-04 Story 3.4 第二階段審查（Blind Hunter、Edge Case Hunter）。刪除第一階段的「Story 3.4～3.6 第二階段」項目時，「不能有 `pending` 報名被 `fill_from_waitlist` 漏掉」沒寫進 3.6 的新項目；而開發順序是 3.4 → 3.6 → 3.5，3.6 做的時候優先期後送出的報名仍會維持 `pending`（本 Story 刻意不處理）。另外 `competition/service.py` 的抽籤可以把賽事由 `open` 直接轉成 `published`，`registration_port.finalize_for_draw` 是 D 呼叫的入口；若優先期剛結束、worker 還沒結算就抽籤，優先期內的 `pending` 會留下。目前 registration 還沒提供 `finalize_for_draw`，抽籤回 503，所以現在不會發生。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
-  summary: 補 API 層測試：同校已有 2 隊 `drawn` 時，同校候補在 S17／S12 回 `waitlist_reason == "SCHOOL_LIMIT_REACHED"`、`waitlist_phase == "after_deadline"`（驗證 `_ORDER_STATUSES` 把 `drawn` 當正取）。
-  evidence: 2026-11-04 Story 3.4 第二階段審查（Verification Gap）。`allocation.py` 的純函式測試有測 `drawn`，但沒有測試讓 `drawn` 報名經過 `service._waitlist_fields` 的狀態篩選；從 `_ORDER_STATUSES` 拿掉 `DRAWN`，現有測試仍全過。目前沒有正式程式會把報名設成 `drawn`（`mark_drawn` 尚未提供），在 3.6 提供 `mark_drawn` 時補。
+- source_spec: none
+  summary: Story 3.6 第二階段之二：報名截止 worker 工作——截止後 1 分鐘內鎖住賽事、轉為「報名截止」，呼叫「給抽籤用的函式」那份 spec 建立的截止補位（先 `settle_priority_window`、處理優先期後送出的 `pending`、再 `fill_from_waitlist`），操作者為 system，重複執行結果不變；自訂模式只轉狀態不補位。
+  evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.6 第二階段拆成兩份：先做給 D 抽籤用的四個函式（`finalize_for_draw`、`list_accepted_teams`、`mark_drawn`、`get_team_names`，目前抽籤回 503，期限 11/12），截止 worker 沿用同一段補位邏輯，排在之後。S2「抽籤準備中」B 已在 `TournamentOverview.tsx` 做好，不在範圍內。
