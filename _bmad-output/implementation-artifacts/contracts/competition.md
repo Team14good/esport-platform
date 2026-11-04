@@ -114,7 +114,7 @@ class PublicBracket(BaseModel):
 | 方法與路徑 | 權限 | 回傳 |
 | --- | --- | --- |
 | `GET /api/v1/tournaments/{tournament_id}/bracket` | 公開 | `PublicBracket`；尚未抽籤回 404 `BRACKET_NOT_FOUND` |
-| `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}` | 公開 | `PublicMatchDetail`（5.8）；賽事不存在、尚未抽籤、場次不存在、場次不屬於該賽事，一律 404 `MATCH_NOT_FOUND`（回應 `{"detail":{"code":"MATCH_NOT_FOUND","message":"找不到這個場次。"}}`；尚未抽籤也回這個碼而非 `BRACKET_NOT_FOUND`，不透露是哪一種）。`same_round` 的項目是一般 `PublicMatch`，不含單場的延伸欄位；`games` 依 `game_no` 遞增（5.3 前固定為 `[]`） |
+| `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}` | 公開 | `PublicMatchDetail`（5.8）；賽事不存在、尚未抽籤、場次不存在、場次不屬於該賽事，一律 404 `MATCH_NOT_FOUND`（回應 `{"detail":{"code":"MATCH_NOT_FOUND","message":"找不到這個場次。"}}`；尚未抽籤也回這個碼而非 `BRACKET_NOT_FOUND`，不透露是哪一種）；`tournament_id`、`match_id` 不是 UUID 格式時回 FastAPI 預設的 422。`same_round` 的項目是一般 `PublicMatch`，不含單場的延伸欄位；`games` 依 `game_no` 遞增（5.3 前固定為 `[]`） |
 | `POST /api/v1/tournaments/{tournament_id}/draw` | 該賽事主辦方 | 201 `BracketRead` |
 | `POST /api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in` | 登入者（須為該場兩隊之一的隊長） | 201 `CheckInRead`（5.1）；隊伍由登入者是哪一隊的隊長推得，請求不帶內容；一隊一場一次、不能取消 |
 | `GET /api/v1/tournaments/{tournament_id}/matches/{match_id}/check-in` | 登入者 | `CheckInStatus`（5.1）；場次不存在或不屬於該賽事回 404 `MATCH_NOT_FOUND` |
