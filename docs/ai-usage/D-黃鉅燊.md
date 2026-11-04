@@ -542,3 +542,15 @@
 - 問題與修正：審查共 17 項，修 9 項、駁回 8 項（理由記在 spec 的 Review Triage Log）。實際修正的錯誤：賽事進行中能指派沒有測試、真正的 `registration_port.is_member` 轉接沒被測到、已取消場次的錯誤訊息寫成「已送出結果」；實作子代理的列表測試把同時接受邀請的兩位裁判順序寫死，跑一次就失敗，改比對集合。AI 自己更新 sprint-status 時把 `last_updated` 寫成另一種日期格式，又因 Git Bash 不認 `Asia/Taipei` 而寫成 UTC 時間，對照原值後改正
 - 成熟度：L3（AI 實作、審查與修正，人決定範圍）
 - 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
+
+### 2026-11-04｜實作／測試｜公開單場加報到截止、報到更新 updated_at、季軍賽裁判衝突測試
+
+- Story／範圍：5.8 公開單場 API（D）後續；#47、#46 審查時承諾的後端
+- 工具：Claude Code（Opus 5.5）；審查用一個子代理（Sonnet）只看 diff
+- 怎麼用：審 A 的 #47 時，AI 查到 `repository.add_check_in` 只插入報到紀錄、不動 `match.updated_at`，而 S4 面板的 query key 只看 `updated_at`，所以兩隊報到後面板不會解鎖；A 的單元測試 harness 在重抓時會改 `updated_at`，才沒抓到。這支 PR 讓報到成功時更新場次 `updated_at`，並在公開單場加 `forfeit_deadline` 給 S4 報到倒數
+- AI 產出：`repository.touch_match`、`PublicMatchDetail.forfeit_deadline`；5 個新測試（欄位值、待定與非待開打為 null、報到後 `updated_at` 變成報到時間、被拒絕的報到不變、準決賽敗隊進季軍賽時收回裁判）；contracts 補欄位與「6.2、6.5 改隊伍也要重新檢查裁判衝突」；重新產生 client
+- 人做了什麼：使用者指示「先把自己能做的事情做」
+- 驗證：後端全套 1872 passed、覆蓋率 97%、lint 通過
+- 問題與修正：審查子代理指出 `forfeit_deadline` 在比賽中、申訴期仍回傳舊的過期值，前端可能顯示錯的倒數，改成只在待開打時給並補測試；也指出約定新寫的「6.2、6.5 要重新檢查」目前沒有實作，會被誤讀成現況，改標「目前只有 `advance` 實作」。AI 第一次套用修正時，取代字串在 `service.py` 出現 3 次而失敗，卻在同一個指令裡接著跑了全套測試（跑的是沒修正的版本），發現後停掉重跑
+- 成熟度：L2（AI 實作與驗證）
+- 證據：本 PR 的 CI 紀錄
