@@ -21,6 +21,7 @@ import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
 import { Route as AdminSchoolsRouteImport } from './routes/admin/schools'
 import { Route as JoinInviteTokenRouteImport } from './routes/join.$inviteToken'
+import { Route as MeRefereeRouteImport } from './routes/me_.referee'
 import { Route as MeTeamsRouteImport } from './routes/me_.teams'
 import { Route as OrganizerIndexRouteImport } from './routes/organizer/index'
 import { Route as OrganizerApplyRouteImport } from './routes/organizer/apply'
@@ -94,6 +95,11 @@ const AdminSchoolsRoute = AdminSchoolsRouteImport.update({
 const JoinInviteTokenRoute = JoinInviteTokenRouteImport.update({
   id: '/join/$inviteToken',
   path: '/join/$inviteToken',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MeRefereeRoute = MeRefereeRouteImport.update({
+  id: '/me_/referee',
+  path: '/me/referee',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MeTeamsRoute = MeTeamsRouteImport.update({
@@ -186,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
   '/join/$inviteToken': typeof JoinInviteTokenRoute
+  '/me/referee': typeof MeRefereeRoute
   '/me/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
   '/join/$inviteToken': typeof JoinInviteTokenRoute
+  '/me/referee': typeof MeRefereeRoute
   '/me/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/admin/applications': typeof AdminApplicationsRoute
   '/admin/schools': typeof AdminSchoolsRoute
   '/join/$inviteToken': typeof JoinInviteTokenRoute
+  '/me_/referee': typeof MeRefereeRoute
   '/me_/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
     | '/admin/applications'
     | '/admin/schools'
     | '/join/$inviteToken'
+    | '/me/referee'
     | '/me/teams'
     | '/organizer/apply'
     | '/teams/$teamId'
@@ -300,6 +310,7 @@ export interface FileRouteTypes {
     | '/admin/applications'
     | '/admin/schools'
     | '/join/$inviteToken'
+    | '/me/referee'
     | '/me/teams'
     | '/organizer/apply'
     | '/teams/$teamId'
@@ -327,6 +338,7 @@ export interface FileRouteTypes {
     | '/admin/applications'
     | '/admin/schools'
     | '/join/$inviteToken'
+    | '/me_/referee'
     | '/me_/teams'
     | '/organizer/apply'
     | '/teams/$teamId'
@@ -354,6 +366,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   JoinInviteTokenRoute: typeof JoinInviteTokenRoute
+  MeRefereeRoute: typeof MeRefereeRoute
   MeTeamsRoute: typeof MeTeamsRoute
   OrganizerApplyRoute: typeof OrganizerApplyRoute
   TeamsTeamIdRoute: typeof TeamsTeamIdRoute
@@ -449,6 +462,13 @@ declare module '@tanstack/react-router' {
       path: '/join/$inviteToken'
       fullPath: '/join/$inviteToken'
       preLoaderRoute: typeof JoinInviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/me_/referee': {
+      id: '/me_/referee'
+      path: '/me/referee'
+      fullPath: '/me/referee'
+      preLoaderRoute: typeof MeRefereeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/me_/teams': {
@@ -601,6 +621,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   JoinInviteTokenRoute: JoinInviteTokenRoute,
+  MeRefereeRoute: MeRefereeRoute,
   MeTeamsRoute: MeTeamsRoute,
   OrganizerApplyRoute: OrganizerApplyRoute,
   TeamsTeamIdRoute: TeamsTeamIdRoute,

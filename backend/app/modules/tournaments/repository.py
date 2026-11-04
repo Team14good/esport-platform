@@ -280,6 +280,16 @@ def get_referee(
     )
 
 
+def has_any_referee_row(session: Session, account_id: uuid.UUID) -> bool:
+    """帳號在任一賽事有裁判列（走 account_id 索引）。"""
+    statement = (
+        select(col(TournamentReferee.account_id))
+        .where(TournamentReferee.account_id == account_id)
+        .limit(1)
+    )
+    return session.exec(statement).first() is not None
+
+
 def list_referees(
     session: Session, tournament_id: uuid.UUID
 ) -> list[TournamentReferee]:

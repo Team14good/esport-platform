@@ -1,9 +1,10 @@
 """identity 的業務規則、資源層級權限、狀態轉換、操作紀錄與事件；不得 commit 或 rollback。"""
 
 import hashlib
+import logging
 import secrets
 import uuid
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from datetime import timedelta
 from functools import cache
 from typing import Any
@@ -551,17 +552,47 @@ def get_current_account(session: Session, token: str) -> AccountRead:
     return AccountRead.model_validate(account, from_attributes=True)
 
 
-def list_identities(session: Session, account: AccountRead) -> list[Identity]:  # noqa: ARG001
-    """身分切換器的身分清單，只依帳號資料產生；切換身分不改變權限。
+logger = logging.getLogger(__name__)
 
-    順序依 UX-DR8：瀏覽賽事、主辦方後台、平台管理。之後的 Story 在這裡加入
-    「我的隊伍」「裁判」（會用到 session 查詢）。
+# 「這個帳號是不是任一賽事的裁判」的查詢；identity 是最底層，不能呼叫 tournaments，
+# 由組裝層（`app/api/main.py`）在啟動時註冊。沒註冊時身分清單沒有「裁判」。
+_referee_lookup: Callable[[Session, uuid.UUID], bool] | None = None
+
+
+def register_referee_lookup(
+    lookup: Callable[[Session, uuid.UUID], bool] | None,
+) -> None:
+    """註冊裁判身分的查詢函式（後註冊的取代先前的；傳 None 清除）。"""
+    global _referee_lookup  # noqa: PLW0603
+    _referee_lookup = lookup
+
+
+def _is_referee(session: Session, account_id: uuid.UUID) -> bool:
+    """查詢失敗不能拖垮每個頁面都會呼叫的身分清單：記錄後視為不是裁判。"""
+    if _referee_lookup is None:
+        return False
+    try:
+        return _referee_lookup(session, account_id)
+    except Exception:
+        logger.exception("查詢裁判身分失敗：account_id=%s", account_id)
+        return False
+
+
+def list_identities(session: Session, account: AccountRead) -> list[Identity]:
+    """身分切換器的身分清單；切換身分不改變權限。
+
+    順序依 UX-DR8：瀏覽賽事、我的隊伍、裁判、主辦方後台、平台管理。
+    「裁判」只在註冊了查詢函式且帳號是任一賽事的裁判時出現，多個賽事合併為一項。
     """
     identities = [
         Identity(key=IdentityKey.BROWSE, label="瀏覽賽事", home_path="/"),
         # Story 3.1：所有登入帳號都顯示（沒有隊伍時 S12 顯示空狀態）
         Identity(key=IdentityKey.MY_TEAMS, label="我的隊伍", home_path="/me/teams"),
     ]
+    if _is_referee(session, account.id):
+        identities.append(
+            Identity(key=IdentityKey.REFEREE, label="裁判", home_path="/me/referee")
+        )
     if account.is_organizer:
         identities.append(
             Identity(

@@ -155,6 +155,14 @@ class ManagedMatch(BaseModel):   # 4.3：S30 場次列表的一列（只給主�
 class RefereeAssignIn(BaseModel): # 4.4：PUT .../referee 的請求內容
     account_id: UUID
 
+class RefereeMatch(PublicMatch):      # 4.4 S13：「我執法的場次」的一列
+    round_name: str                   # 季軍賽為「季軍賽」，其他為決賽、4 強、8 強…
+    both_checked_in: bool             # 兩隊都已確定且都已報到；前端在 status=scheduled 時標「可開始」
+
+class RefereeTournamentMatches(BaseModel):  # 4.4 S13：依賽事分組
+    tournament: PublicTournamentRef
+    matches: list[RefereeMatch]       # 依 scheduled_at、code
+
 class PublicBracket(BaseModel):
     tournament_id: UUID
     rounds: int
@@ -179,6 +187,7 @@ class PublicBracket(BaseModel):
 | `PUT /api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}` | 記分者 | 200 `ScoreEntryState`（5.3）；body `GameScoreIn`；局號＝目前局數＋1 為新增、≤ 目前局數為覆寫；第一局登錄時場次由待開打轉為進行中 |
 | `DELETE /api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}` | 記分者 | 200 `ScoreEntryState`（5.3）；只能刪最後一局；刪到沒有任何局時場次維持進行中 |
 | `POST /api/v1/tournaments/{tournament_id}/matches/{match_id}/submit` | 記分者 | 200 `ScoreEntryState`（5.4）；寫 `outcome=played`、勝隊、送出者與時間、`appeal_deadline`＝現在＋申訴時限，轉為申訴期並發 `MatchResultSubmitted`；不寫 `confirmed_at`、勝隊不晉級（5.5 申訴期滿才確認並推進） |
+| `GET /api/v1/me/referee/matches` | 登入者 | `list[RefereeTournamentMatches]`（4.4，S13）；只列 `referee_account_id` 為登入者、狀態不是 `voided` 的場次（含已結束）；沒有指派（或不是裁判）回 `[]`；所屬賽事為 `cancelled` 的場次不列出（取消賽事不會把場次改成 `voided`；`finished` 仍列出）。排序：組內依 `scheduled_at`、再依 `code`；各賽事依組內最早的 `scheduled_at`、再依賽事名稱；未登入 401。收回、改派後該場不再出現 |
 | `PUT /api/v1/tournaments/{tournament_id}/matches/{match_id}/referee` | 該賽事主辦方 | 200 `MatchRead`（4.4）；body `RefereeAssignIn`；指派或改派 |
 | `DELETE /api/v1/tournaments/{tournament_id}/matches/{match_id}/referee` | 該賽事主辦方 | 200 `MatchRead`（4.4）；收回後由主辦方代登，已登錄的局保留 |
 

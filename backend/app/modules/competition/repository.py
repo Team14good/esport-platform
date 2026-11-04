@@ -73,6 +73,31 @@ def list_team_matches(
     return list(session.exec(statement))
 
 
+def list_referee_matches(session: Session, account_id: uuid.UUID) -> list[Match]:
+    """指派給某帳號、未取消的場次（跨賽事），依預定時間、代號排序。"""
+    statement = (
+        select(Match)
+        .where(
+            Match.referee_account_id == account_id,
+            Match.status != MatchStatus.VOIDED,
+        )
+        .order_by(col(Match.scheduled_at), col(Match.code))
+    )
+    return list(session.exec(statement))
+
+
+def list_check_in_pairs(
+    session: Session, match_ids: Collection[uuid.UUID]
+) -> set[tuple[uuid.UUID, uuid.UUID]]:
+    """這些場次已報到的 (match_id, team_id)。"""
+    if not match_ids:
+        return set()
+    statement = select(CheckIn.match_id, CheckIn.team_id).where(
+        col(CheckIn.match_id).in_(match_ids)
+    )
+    return {(match_id, team_id) for match_id, team_id in session.exec(statement)}
+
+
 def get_match(
     session: Session, match_id: uuid.UUID, *, for_update: bool = False
 ) -> Match | None:
