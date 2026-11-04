@@ -3,14 +3,16 @@
 import uuid
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel
+from pydantic import Field as PydanticField
 from sqlalchemy import DateTime, Index, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from app.core import clock
 from app.core.events import Event
+from app.modules.competition.scoring import SeriesReason
 from app.modules.tournaments.models import ScoreType
 
 
@@ -113,6 +115,32 @@ class Match(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=clock.now, sa_type=DateTime(timezone=True)
     )
+    # 送出系列結果的記分者與時間（5.4）；判棄權、輪空確認時為 None
+    submitted_by: uuid.UUID | None = Field(default=None, foreign_key="account.id")
+    submitted_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+
+
+class MatchGame(SQLModel, table=True):
+    """逐局比分（5.3）；`(match_id, game_no)` 唯一鍵是併發的最後防線。
+
+    規則由 `scoring.py` 判斷；`win_loss` 型態兩個比分為 None。
+    """
+
+    __tablename__ = "match_game"
+    __table_args__ = (
+        UniqueConstraint("match_id", "game_no", name="uq_match_game_match_game_no"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    match_id: uuid.UUID = Field(foreign_key="match.id")
+    # 1 起算、連續
+    game_no: int
+    winner_side: str = Field(sa_type=String(1))
+    score_a: int | None = Field(default=None)
+    score_b: int | None = Field(default=None)
+    # 最後一次登錄（新增或覆寫）的記分者與時間
+    recorded_by: uuid.UUID = Field(foreign_key="account.id")
+    recorded_at: datetime = Field(sa_type=DateTime(timezone=True))
 
 
 class CheckIn(SQLModel, table=True):
@@ -150,6 +178,12 @@ class MatchResultConfirmed(Event):
 
 class MatchOpponentsDecided(Event):
     """晉級填位後這一場的兩隊都已確定（通知兩隊隊長下一場對手）。"""
+
+    match_id: uuid.UUID
+
+
+class MatchResultSubmitted(Event):
+    """記分者送出系列結果，場次進入申訴期（5.4）。"""
 
     match_id: uuid.UUID
 
@@ -310,3 +344,63 @@ class PublicMatchDetail(PublicMatch):
     # 兩隊的報到時間（公開）；未報到或該方未確定為 None
     check_in_a_at: datetime | None = None
     check_in_b_at: datetime | None = None
+
+
+# ---------------------------------------------------------------- 比分登錄（5.3、5.4）
+
+# 回合數範圍（使用者 2026-11-01 決定）；超出由 schema 回 422
+ROUND_SCORE_MAX = 99
+
+RoundScore = Annotated[int, PydanticField(ge=0, le=ROUND_SCORE_MAX, strict=True)]
+
+
+class GameScoreIn(BaseModel):
+    """登錄一局的比分。`win_loss` 只給 `winner_side`；`rounds` 只給 `score_a`、`score_b`。
+
+    型態不符（例如 `win_loss` 給數字）由 `scoring.make_game` 判斷，回 409 `SCORE_INVALID`。
+    名稱避開 tournaments 的 `GameIn`（遊戲設定），以免 OpenAPI schema 重名。
+    """
+
+    winner_side: Literal["a", "b"] | None = None
+    score_a: RoundScore | None = None
+    score_b: RoundScore | None = None
+
+
+class SeriesRead(BaseModel):
+    """系列結果（`scoring.series` 的結果）。"""
+
+    wins_a: int
+    wins_b: int
+    # 達到勝局門檻的一方；未達（或有多餘的局）為 None
+    winner: Literal["a", "b"] | None
+    can_submit: bool
+    # 勝局門檻＝（BO＋1）÷ 2
+    wins_needed: int
+    # 不能送出的原因：`not_decided`（搭配門檻顯示）或 `redundant_games`；能送出為 None
+    reason: SeriesReason | None
+
+
+ScoreEntryReason = Literal[
+    "not_accepting_scores",
+    "result_submitted",
+    "not_recordable",
+    "teams_pending",
+    "check_in_incomplete",
+]
+
+
+class ScoreEntryState(BaseModel):
+    """登入者對某場次的比分登錄狀態（S4 Score entry panel 用）。
+
+    不是記分者時 `is_scorer` 為 False，其他欄位都是空值（不洩漏送出者）。
+    """
+
+    is_scorer: bool
+    # 現在不能登錄的原因（和寫入 API 同一套檢查，比分規則的原因不在這裡）；可以登錄為 None
+    reason: ScoreEntryReason | None = None
+    # 已登錄的局，依局號
+    games: list[PublicGame] = []
+    series: SeriesRead | None = None
+    # 送出者的顯示名稱與送出時間；尚未送出為 None
+    submitted_by_name: str | None = None
+    submitted_at: datetime | None = None
