@@ -39,6 +39,13 @@ def get_account(
     )
 
 
+def list_accounts(session: Session, account_ids: Sequence[uuid.UUID]) -> list[Account]:
+    """一次讀取多個帳號（不存在的 id 略過）；順序不保證。"""
+    if not account_ids:
+        return []
+    return list(session.exec(select(Account).where(col(Account.id).in_(account_ids))))
+
+
 def get_account_by_email(
     session: Session, email: str, *, for_update: bool = False
 ) -> Account | None:
@@ -59,6 +66,18 @@ def add_account(session: Session, account: Account) -> Account:
             raise DuplicateEmailError from exc
         raise
     return account
+
+
+def list_account_school_ids(
+    session: Session, account_ids: Sequence[uuid.UUID]
+) -> list[tuple[uuid.UUID, uuid.UUID | None]]:
+    """（帳號 id, 學校 id）；不存在的帳號不會出現在結果中。"""
+    if not account_ids:
+        return []
+    rows = session.exec(
+        select(Account.id, Account.school_id).where(col(Account.id).in_(account_ids))
+    )
+    return [(account_id, school_id) for account_id, school_id in rows]
 
 
 def get_school(session: Session, school_id: uuid.UUID) -> School | None:

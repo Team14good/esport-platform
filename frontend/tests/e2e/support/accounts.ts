@@ -104,3 +104,28 @@ export async function registerVerifiedAccount(
   await verifyEmail(page, account)
   await logIn(page, account)
 }
+
+/**
+ * 一次註冊多個帳號（`pages[i]` 對應 `accounts[i]`）並全部驗證、登入。
+ * 註冊與登入都要做密碼雜湊，同時送出會互相拖慢、超過 1 秒（NFR-2），所以逐一送出；
+ * 只有等驗證信（worker 輪詢）同時進行。
+ */
+export async function registerVerifiedAccounts(
+  pages: Page[],
+  accounts: TestAccount[],
+) {
+  for (const [index, account] of accounts.entries()) {
+    await signUp(pages[index], account)
+  }
+  const links = await Promise.all(
+    accounts.map((account) => waitForVerificationLink(account.email)),
+  )
+  for (const [index, account] of accounts.entries()) {
+    const page = pages[index]
+    await page.goto(links[index])
+    await expect(
+      page.getByRole("heading", { name: "Email 驗證完成", level: 1 }),
+    ).toBeVisible()
+    await logIn(page, account)
+  }
+}

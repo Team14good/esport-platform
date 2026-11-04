@@ -57,6 +57,10 @@ MIN_APPEAL_MINUTES = 30
 DEFAULT_PRIORITY_HOURS = 24
 # 名額不設上限（128 只是第二階段畫面的提醒門檻），只檢查 ≥ 2 與資料庫整數上限
 MIN_CAPACITY = 2
+# 裁判邀請：7 天有效；token 為 secrets.token_urlsafe(32)（43 字元）
+REFEREE_INVITATION_DAYS = 7
+REFEREE_INVITATION_TOKEN_BYTES = 32
+REFEREE_INVITATION_TOKEN_MAX_LENGTH = 64
 
 
 # ---------------------------------------------------------------- 資料表
@@ -150,6 +154,39 @@ class Tournament(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=clock.now, sa_type=DateTime(timezone=True)
     )
+
+
+class RefereeInvitation(SQLModel, table=True):
+    """裁判邀請連結。S31 要能再次顯示目前的連結，所以 token 明文儲存（UNIQUE）。
+
+    `expires_at <= clock.now()` 即過期；重新產生時，同賽事尚未過期的舊邀請
+    `expires_at` 設為當下（不刪除）。
+    """
+
+    __tablename__ = "referee_invitation"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id", index=True)
+    token: str = Field(max_length=REFEREE_INVITATION_TOKEN_MAX_LENGTH, unique=True)
+    created_by: uuid.UUID = Field(foreign_key="account.id")
+    created_at: datetime = Field(
+        default_factory=clock.now, sa_type=DateTime(timezone=True)
+    )
+    expires_at: datetime = Field(sa_type=DateTime(timezone=True))
+
+
+class TournamentReferee(SQLModel, table=True):
+    """已接受邀請的裁判；裁判身分只在該賽事有效。"""
+
+    __tablename__ = "tournament_referee"
+
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id", primary_key=True)
+    # is_referee 以帳號查詢；主鍵 (tournament_id, account_id) 無法用於只查 account_id
+    account_id: uuid.UUID = Field(
+        foreign_key="account.id", primary_key=True, index=True
+    )
+    invitation_id: uuid.UUID = Field(foreign_key="referee_invitation.id")
+    accepted_at: datetime = Field(sa_type=DateTime(timezone=True))
 
 
 # ---------------------------------------------------------------- API schema
@@ -417,3 +454,33 @@ class PublicTournament(BaseModel):
     start_at: datetime
     round_interval_minutes: int
     livestream_url: str | None
+
+
+# ---------------------------------------------------------------- 裁判
+
+
+class RefereeInvitationRead(BaseModel):
+    """主辦方看到的裁判邀請（含明文 token，用來組出邀請連結）。"""
+
+    tournament_id: uuid.UUID
+    token: str
+    created_at: datetime
+    expires_at: datetime
+    # expires_at <= 現在（含被重新產生而作廢的邀請）
+    expired: bool
+
+
+class PublicRefereeInvitation(BaseModel):
+    """不需登入的邀請預覽（AD-19）：不含主辦方或任何帳號資料。"""
+
+    tournament_name: str
+    expires_at: datetime
+    expired: bool
+
+
+class RefereeRead(BaseModel):
+    """已接受邀請的裁判。"""
+
+    account_id: uuid.UUID
+    display_name: str
+    accepted_at: datetime

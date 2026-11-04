@@ -105,12 +105,21 @@ import type {
   registrationReadTeamData,
   registrationReadTeamErrors,
   registrationReadTeamResponses,
+  registrationSubmitRegistrationData,
+  registrationSubmitRegistrationErrors,
+  registrationSubmitRegistrationResponses,
   registrationUpdateMyPlayerProfileData,
   registrationUpdateMyPlayerProfileErrors,
   registrationUpdateMyPlayerProfileResponses,
+  tournamentsAcceptRefereeInvitationData,
+  tournamentsAcceptRefereeInvitationErrors,
+  tournamentsAcceptRefereeInvitationResponses,
   tournamentsCreateGameData,
   tournamentsCreateGameErrors,
   tournamentsCreateGameResponses,
+  tournamentsCreateRefereeInvitationData,
+  tournamentsCreateRefereeInvitationErrors,
+  tournamentsCreateRefereeInvitationResponses,
   tournamentsCreateTournamentData,
   tournamentsCreateTournamentErrors,
   tournamentsCreateTournamentResponses,
@@ -122,6 +131,12 @@ import type {
   tournamentsListMyTournamentsResponses,
   tournamentsListPublicTournamentsData,
   tournamentsListPublicTournamentsResponses,
+  tournamentsListTournamentRefereesData,
+  tournamentsListTournamentRefereesErrors,
+  tournamentsListTournamentRefereesResponses,
+  tournamentsPreviewRefereeInvitationData,
+  tournamentsPreviewRefereeInvitationErrors,
+  tournamentsPreviewRefereeInvitationResponses,
   tournamentsReadGameData,
   tournamentsReadGameErrors,
   tournamentsReadGameResponses,
@@ -131,6 +146,9 @@ import type {
   tournamentsReadPublicTournamentData,
   tournamentsReadPublicTournamentErrors,
   tournamentsReadPublicTournamentResponses,
+  tournamentsReadRefereeInvitationData,
+  tournamentsReadRefereeInvitationErrors,
+  tournamentsReadRefereeInvitationResponses,
   tournamentsUpdateGameData,
   tournamentsUpdateGameErrors,
   tournamentsUpdateGameResponses,
@@ -793,6 +811,113 @@ export class TournamentsService {
       ...options,
     })
   }
+
+  /**
+   * Read Referee Invitation
+   *
+   * 目前（最新一筆）的裁判邀請，含是否過期；從未產生過回 `null`。
+   */
+  public static readRefereeInvitation<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsReadRefereeInvitationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      tournamentsReadRefereeInvitationResponses,
+      tournamentsReadRefereeInvitationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/referee-invitation",
+      ...options,
+    })
+  }
+
+  /**
+   * Create Referee Invitation
+   *
+   * 產生新的裁判邀請（7 天有效），舊的未過期邀請立即作廢。
+   *
+   * 不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；已結束或已取消 409
+   * `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
+   */
+  public static createRefereeInvitation<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsCreateRefereeInvitationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      tournamentsCreateRefereeInvitationResponses,
+      tournamentsCreateRefereeInvitationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/referee-invitation",
+      ...options,
+    })
+  }
+
+  /**
+   * List Tournament Referees
+   *
+   * 已接受邀請的裁判，依接受時間排序。
+   */
+  public static listTournamentReferees<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsListTournamentRefereesData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      tournamentsListTournamentRefereesResponses,
+      tournamentsListTournamentRefereesErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/referees",
+      ...options,
+    })
+  }
+
+  /**
+   * Preview Referee Invitation
+   *
+   * 裁判邀請預覽；不需登入，只回賽事名稱、到期時間與是否過期。
+   *
+   * 不存在 404 `REFEREE_INVITATION_NOT_FOUND`。
+   */
+  public static previewRefereeInvitation<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsPreviewRefereeInvitationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      tournamentsPreviewRefereeInvitationResponses,
+      tournamentsPreviewRefereeInvitationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/referee-invites/{token}",
+      ...options,
+    })
+  }
+
+  /**
+   * Accept Referee Invitation
+   *
+   * 接受裁判邀請（需已驗證 Email）；已是裁判時回原本的資料。
+   *
+   * 過期或已作廢 409 `REFEREE_INVITATION_EXPIRED`；主辦方本人 409
+   * `ORGANIZER_CANNOT_BE_REFEREE`；已結束或已取消 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
+   */
+  public static acceptRefereeInvitation<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsAcceptRefereeInvitationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      tournamentsAcceptRefereeInvitationResponses,
+      tournamentsAcceptRefereeInvitationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/referee-invites/{token}/accept",
+      ...options,
+    })
+  }
 }
 
 export class RegistrationService {
@@ -903,6 +1028,28 @@ export class RegistrationService {
         "Content-Type": null,
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * Submit Registration
+   *
+   * S17 隊長送出報名：報名轉為「已送出・待分配」，名單鎖定並凍結學校、平均段位積分與送出時間。
+   *
+   * 不符合送出條件時回 409 `REGISTRATION_REQUIREMENTS_UNMET`，`message` 列出全部原因。
+   */
+  public static submitRegistration<ThrowOnError extends boolean = true>(
+    options: Options<registrationSubmitRegistrationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationSubmitRegistrationResponses,
+      registrationSubmitRegistrationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/submission",
+      ...options,
     })
   }
 

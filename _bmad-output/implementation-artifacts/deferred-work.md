@@ -156,13 +156,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-entry.md`
   summary: 前端單元測試的偶發逾時擴及更多檔案：D 的 `match-route.test.tsx`（第一個測試最常失敗，單獨跑該檔也會失敗）、A 的 `identity-switcher.test.tsx`、`organizer-apply.test.tsx`；全部一起跑時一次最多 9 個失敗，CI 可能因此失敗（medium）。
   evidence: 2026-11-03 story/3-1 合併 #19 後在本機容器跑前端全部單元測試：第一次 9 個失敗、第二次 1 個；只跑這 5 個檔仍有 `match-route` 1 個失敗。失敗的都是路由第一次渲染時的 `findBy`。可能和上面兩項同一個原因（路由以 `autoCodeSplitting` 延遲載入，第一次轉譯超過 1000 ms），本機只在 `team-pages.test.tsx` 證實過；比較根本的修法是在共用的測試設定預先載入所有路由，或調高 `asyncUtilTimeout`，但那是共用設定，要組員一起決定。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-create-team-and-invite-members.md`
-  summary: 3.3 送出報名時，`join_team`（service.py:328）與 `_invite_status`（service.py:196）要補檢查報名狀態仍是 `forming`；否則已送出的隊伍仍可透過邀請連結加入，S19 預覽也會顯示連結有效（medium）。
-  evidence: 2026-11-02 A 在 PR #23 的審查。3.1 只有 `forming` 狀態，目前不會出錯；epic-3-context 規定「送出報名後名單鎖定、邀請連結失效」。
 
 ## Deferred from: spec-2-4-status-badge-and-organizer-banner.md (2026-11-03)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-status-badge-and-organizer-banner.md`
+  summary: Story 2.4 第二階段第 3 項：S1 空狀態「目前沒有公開的賽事。」對主辦方另顯示「建立賽事」，連到 2.2 第二階段的 S26（`/organizer/tournaments/new`）（low）。等 PR #31 合併後再做。
+  evidence: 2026-11-03 使用者決定 2.4 第二階段先只做狀態徽章與申請主辦方 banner；S26 在 PR #31，尚未合併。上方 source_spec 為 `spec-2-4-public-tournament-pages.md` 的「Story 2.4 第二階段」那筆列了三項，其中狀態徽章、申請主辦方 banner 兩項已由 `spec-2-4-status-badge-and-organizer-banner.md` 完成，只剩本項；那筆依使用者指示保留不刪。
   summary: （低）`PageBanner` 的 `action` 只支援 `onClick`，S1「申請成為主辦方」按鈕以程式導向，不能中鍵開新分頁或複製連結；需要 A 為 `PageBanner` 新增連結型的 action。
   evidence: 2026-11-03 Story 2.4 第二階段審查（Blind Hunter）。`PageBanner.tsx` 是 A 的元件，本 Story 只 import 不修改。
 ## Deferred from: spec-3-2-player-registration-info-2.md (2026-11-03)
@@ -185,12 +184,46 @@
 
 ## Deferred from: Story 7.1 第二階段 competition 步驟（2026-11-03）
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-demo-seed-data.md`
-  summary: competition 步驟（`demo_data/competition.py`）已會替 `context.tournament_to_draw` 指定的賽事抽籤，但目前沒有上游步驟寫入這個欄位，實際啟動只會記錄「No demo tournament to draw」並略過。
-  evidence: 要等 B 的 tournaments 步驟建立「已截止報名、開賽在未來、主辦方為 `context.accounts["organizer"]`」的校園賽事並寫入 `context.tournament_to_draw`，以及 C 的 registration 步驟建立 32 隊正取、registration 提供抽籤用的 `list_accepted_teams` 等四個函式（contracts/competition.md〈二〉）。開賽時間要離啟動夠遠：時間已過時抽籤會被拒絕並略過。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-organizer-tournament-ui.md`
   summary: （低）主辦方賽事清單的查詢在兩處各定義一次：`features/tournaments/organizer-queries.ts` 的 `myTournamentsQueryOptions` 與 C 的 `features/registration/CreateTeamEntry.tsx` 的 `organizerTournamentsQueryOptions`，都用查詢鍵 `["tournaments","organizer","list"]`；之後只改其中一邊（例如 `queryFn` 或回傳型別），兩邊的快取會互相污染。
   evidence: 2026-11-03 A（@max930000）在 PR #31 的審查。處理時請 C 把 `CreateTeamEntry.tsx` 改成 import `myTournamentsQueryOptions`，刪掉自己的定義（registration 模組只新增 import，不改 tournaments 的檔案）。
+
+## Deferred from: spec-5-2-appeal-countdown-and-banner-link.md (2026-11-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-appeal-countdown-and-banner-link.md`
+  summary: B 的 `OrganizerApplyBanner.tsx`：S1「申請成為主辦方」改用 `PageBanner` 新增的連結型 action（`action: { label, to: "/organizer/apply" }`），就能中鍵開新分頁、複製連結（low）。
+  evidence: 2026-11-04 A 已為 `PageBanner` 新增 `to`；使用者決定不改 B 的既有函式，交給 B。改完後 S1 的測試要從按鈕改成連結。
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-appeal-countdown-and-banner-link.md`
+  summary: 請 D 的公開單場 API 帶申訴期的開始時間（例如 `appeal_started_at`，或賽事的申訴時限），S4 把它傳給 `Countdown` 的 `startsAt`，進度條才會從滿開始（low）。
+  evidence: 2026-11-04 使用者決定先用 Countdown 預設的截止前 24 小時當起點；FR-7 的申訴期最少 30 分鐘、預設 30 分鐘，所以目前進度條一開始只有約 2%。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-s36-game-settings-and-school-list-ui.md`
   summary: （低）`GameForm` 與 `SchoolDialog` 把 `form.formState.isSubmitting` 納入送出鈕停用，防止連點重複送出，但沒有測試：拿掉 `isSubmitting` 後現有測試仍會通過。
   evidence: 2026-11-03 A（@max930000）在 PR #30 的審查。下次動到這兩個表單時補測試：讓 `createGame`／`createSchool` 回傳一個未完成的 Promise，連按兩次送出，斷言只呼叫一次，且送出中按鈕停用。
+
+## Deferred from: spec-7-2-e2e-tournament-drill-2.md (2026-11-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-2.md`
+  summary: 完整賽事演練目前每款遊戲只組一隊（使用者 2026-11-04 決定）；抽籤以後的步驟需要 `teamCount` 隊（特戰英豪、英雄聯盟 32 隊，星砂競技場 8 隊）各自滿編、填完參賽資料並送出報名，要等 3.3～3.6 合併後再補。
+  evidence: 每位選手都經畫面註冊並等驗證信，一隊 3～7 人就要 1～2.5 分鐘；32 隊×7 人照同樣做法太慢，補的時候要另外決定建立大量隊伍的方式（例如改用 7.1 示範資料的隊伍，或只讓少數隊伍走畫面）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-2.md`
+  summary: e2e 一次只跑 1 個測試（`playwright.config.ts` 的 `workers: 1`，`tournament.spec.ts` 另有 `describe.configure({ mode: "default" })`），完整跑一次約 22 分鐘；演練同時跑會互相拖慢，一般 API 超過 1 秒（NFR-2），甚至整個卡住。
+  evidence: 2026-11-04 實測：本機沒設 worker 上限時，16 核預設開 8 個 worker，6 個演練同時開瀏覽器、註冊帳號，`POST /accounts` 6～7 秒、`GET /accounts/me` 約 2.4 秒，之後停住超過 20 分鐘；2 個 worker 時 e2e 容器約吃 5 核；1 個 worker 時 10 passed、62 skipped（22.4 分鐘）。7.3 彙整回應時間時要知道這些數字是在什麼並行度下量的；之後要縮短時間，`WORKER_POLL_SECONDS` 最小只能設 15 秒（`core/config.py`），省不多，要另找方法（例如共用已驗證的選手帳號）。
+## Deferred from: spec-2-7-referee-invitation.md (2026-11-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-7-referee-invitation.md`
+  summary: 2.7 第二階段：S31（`/organizer/tournaments/$tournamentId/referees`，邀請連結＋已接受的裁判名單、空狀態「還沒有裁判接受邀請。複製邀請連結傳給裁判。」）與 S23（`/referee-invite/$inviteToken`，預覽＋接受、過期文案「此裁判邀請已過期，請向主辦方索取新連結。」）畫面，並重新產生 `frontend/src/client`。
+  evidence: 第一階段 spec 的 Never 明定不做前端；S31 要沿用 3.1 的 Invite link field，等它合併後再做。後端 API 已在第一階段完成。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-7-referee-invitation.md`
+  summary: （中）裁判邀請的預覽（`PublicRefereeInvitation`）與主辦方查看目前邀請（`RefereeInvitationRead`），在賽事已結束或已取消時仍回 `expired: false`，要等按下接受才得到 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
+  evidence: 2026-11-04 Story 2.7 第一階段審查（Edge Case Hunter）。凍結區塊的預覽欄位只有賽事名稱、到期時間、是否過期，加欄位屬於改需求；第二階段做 S23、S31 時一起決定：加一個 `closed` 欄位或把 `expired` 改為「無法接受」，並讓畫面顯示原因。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-7-referee-invitation.md`
+  summary: （低）裁判邀請的 token 放在網址路徑（`GET /referee-invites/{token}`、`POST /referee-invites/{token}/accept`），uvicorn 與反向代理的 access log 會記下完整路徑，token 會留在 log 裡；與 3.1 的隊伍邀請連結做法相同。
+  evidence: 2026-11-04 D（@OG-Matcha）在 PR #40 的審查，期中可以接受。之後要收緊時，accept 改用 body 帶 token，或在 log 遮蔽這段路徑；隊伍邀請一併處理。
+## Deferred from: spec-7-1-tournaments-demo-step.md (2026-11-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
+  summary: （低）示範賽事的時間在第一次建立時固定（開賽＝當時＋7 天）；保留資料庫、超過 7 天後再次啟動時，tournaments 步驟依「主辦方＋名稱」沿用這場已過開賽時間的賽事，competition 步驟的抽籤會因 `TOURNAMENT_START_PASSED` 一直略過。
+  evidence: 2026-11-04 Story 7.1 tournaments 步驟第一輪審查（Blind Hunter、Edge Case Hunter）。凍結區塊規定已存在就沿用、不覆寫；Demo 前用 `docker compose down -v` 清掉資料庫即可。要自動處理時，需由人決定：過期就另建一場（會有兩場同名賽事）或改寫既有賽事的時間（違反「不覆寫」）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
+  summary: 示範資料的 tournaments 步驟已建立「FLOW 校園盃 特戰英豪」並寫入 `context.tournament_to_draw`（開放報名、開賽在啟動後 7 天），competition 步驟會嘗試抽籤；但目前沒有 registration 步驟建立 32 隊正取，registration 也還沒提供抽籤用的 `finalize_for_draw`、`list_accepted_teams` 等函式，實際啟動會記錄 `REGISTRATION_UNAVAILABLE` 並略過抽籤。
+  evidence: 2026-11-04 Story 7.1 tournaments 步驟（B）完成後，以 compose 實際啟動確認的 log。剩下的是 C 的 registration 步驟（32 隊正取，放在 `STEPS` 的 tournaments 之後、competition 之前）與 contracts/competition.md〈二〉的四個函式；賽事維持 `open`，所以 `draw` 會先呼叫 `finalize_for_draw`（spec-7-1-tournaments-demo-step.md Decisions）。

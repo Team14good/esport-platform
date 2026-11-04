@@ -5,6 +5,7 @@ tournaments 的 `TournamentRead` 等任何帶 `organizer_id` 的物件都可以�
 """
 
 import uuid
+from collections.abc import Collection, Sequence
 from typing import Protocol
 
 from app.core.errors import BusinessError
@@ -15,11 +16,66 @@ class OwnedTournament(Protocol):
     def organizer_id(self) -> uuid.UUID: ...
 
 
+class TeamMemberLike(Protocol):
+    @property
+    def account_id(self) -> uuid.UUID: ...
+
+    @property
+    def role(self) -> str: ...
+
+
+class TeamWithMembers(Protocol):
+    @property
+    def members(self) -> Sequence[TeamMemberLike]: ...
+
+
+CAPTAIN_ROLE = "captain"
+CAPTAIN_REQUIRED_MESSAGE = "只有隊長可以使用這個功能。"
+
+
+def ensure_captain(
+    team: TeamWithMembers,
+    account_id: uuid.UUID,
+    *,
+    message: str = CAPTAIN_REQUIRED_MESSAGE,
+) -> None:
+    """帳號是隊伍的隊長；否則拋 403 `TEAM_CAPTAIN_REQUIRED`（`message` 可依操作改寫）。
+
+    registration 的 `TeamRead` 等任何帶 `members`（每位有 `account_id` 與 `role`）的
+    物件都可以傳入；角色以字串比對（`MemberRole` 是 StrEnum）。
+    """
+    if not any(
+        member.account_id == account_id and member.role == CAPTAIN_ROLE
+        for member in team.members
+    ):
+        raise BusinessError("TEAM_CAPTAIN_REQUIRED", message, status_code=403)
+
+
 def ensure_tournament_owner(tournament: OwnedTournament, account_id: uuid.UUID) -> None:
     """帳號是賽事的主辦方；否則拋 403 `TOURNAMENT_OWNER_REQUIRED`。"""
     if tournament.organizer_id != account_id:
         raise BusinessError(
             "TOURNAMENT_OWNER_REQUIRED",
             "只有這場賽事的主辦方可以使用這個功能。",
+            status_code=403,
+        )
+
+
+def is_tournament_referee(
+    referee_tournament_ids: Collection[uuid.UUID], tournament_id: uuid.UUID
+) -> bool:
+    """帳號是這場賽事的裁判：`referee_tournament_ids` 是呼叫端已載入、該帳號
+    擔任裁判的賽事 id。裁判身分只在該賽事有效（A 賽事的裁判在 B 賽事為否）。"""
+    return tournament_id in referee_tournament_ids
+
+
+def ensure_tournament_referee(
+    referee_tournament_ids: Collection[uuid.UUID], tournament_id: uuid.UUID
+) -> None:
+    """帳號是這場賽事的裁判；否則拋 403 `TOURNAMENT_REFEREE_REQUIRED`。"""
+    if not is_tournament_referee(referee_tournament_ids, tournament_id):
+        raise BusinessError(
+            "TOURNAMENT_REFEREE_REQUIRED",
+            "只有這場賽事的裁判可以使用這個功能。",
             status_code=403,
         )
