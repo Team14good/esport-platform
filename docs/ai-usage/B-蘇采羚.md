@@ -282,3 +282,50 @@
 - 問題與修正：A 在審查中指出，S36 審查時補的測試只涵蓋「第一次載入就失敗」，沒有涵蓋 PR 說明中標為風險最高的「已載入後背景重抓失敗」，把判斷順序改回去，現有測試仍全部通過。AI 先前把兩種情境當成同一件事，主代理核對時也沒有發現。這次 AI 寫的新測試，第一版用「表單元素存在」當作等待條件，但表單本來就在畫面上，等於沒有等到重抓的錯誤，自行檢查後改成等請求結束、畫面重新渲染。另外 Biome 抓到一處換行格式不合規則
 - 成熟度：L3（AI 依人的審查意見修正，並以故意改壞程式碼的方式確認測試有效）
 - 證據：PR #30 的 A 審查意見；commit 未記錄
+
+### 2026-11-04｜需求／設計｜Story 2.7 第一階段 spec：邀請裁判的後端
+
+- Story／範圍：2.7 第一階段（分支 `story/2-7`，PR 未建立）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：接續 11/2 的 spec 草稿，AI 查 planning 文件後提出兩個開放問題；實作後又提出兩個新問題
+- AI 產出：`spec-2-7-referee-invitation.md` 的 Decisions 4 條、I/O 矩陣新增 2 列（主辦方接受 409、已結束／已取消 409）
+- 人做了什麼：決定主辦方不能接受自己賽事的裁判邀請（沒有裁判時由主辦方代登）；已結束、已取消拒絕；第一階段就重新產生前端 client；已是裁判的人用過期連結維持 409
+- 驗證：spec 經人核准後鎖定；決定都寫進 Decisions
+- 問題與修正：AI 查遍 PRD、epics、架構、UX，確認文件沒有規定「主辦方能否當裁判」，才交給人決定。人的第一次回答提到「改由選手自己登錄比分」，與 FR-26 衝突，AI 沒有照做，而是先確認意思。AI 把人沒有回答的「範圍維持兩階段」自行寫進 Decisions，寫完後自己發現並刪除。草稿凍結區塊寫「第一階段不重新產生 client」，AI 實作後讀 CI 設定才發現這樣 CI 一定失敗（2.1、2.2 都有產生），由人改為要產生。草稿的遷移 `down_revision` 也已經過時（main 之後多了 4 支遷移）
+- 成熟度：L3（AI 依既有規格產出 spec，規則由人決定）
+- 證據：spec 的 Decisions
+
+### 2026-11-04｜程式／程式生成｜Story 2.7 第一階段：裁判邀請資料表、5 支 API、is_referee／list_referees
+
+- Story／範圍：2.7 第一階段（分支 `story/2-7`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理）
+- 怎麼用：核准 spec 後，由不帶對話脈絡的實作子代理只依 spec 實作；主代理讀 diff 逐項核對
+- AI 產出：`referee_invitation`、`tournament_referee` 兩張表與 1 支遷移；5 支 API；tournaments 6 個公開函式；`core.authz` 2 個裁判判斷函式；identity 只新增 `get_display_names`；重新產生 `frontend/src/client`（新增 382 行）；測試 2 個檔案
+- 人做了什麼：核准 spec；實作中回答 2 個新問題
+- 驗證：子代理回報 1489 個測試通過；主代理讀 diff 確認檢查順序與兩個決定都有實作，I/O 矩陣每列都有測試
+- 問題與修正：子代理自己抓到 3 個錯誤：以 `rowcount` 判斷是否新增裁判，結果判斷錯誤、少寫操作紀錄，冪等測試抓到後改用 RETURNING；推進凍結時鐘 7 天後 access token 過期，改成重新登入；ruff format 順手改到別人的 2 個測試檔，已還原。實作期間 `story/2-7` 被快轉到新的 main，主代理產生審查 diff 時發現混入 PR #37、#38 的檔案，改成和 HEAD 比對
+- 成熟度：L4（spec → 子代理實作 → 主代理依 diff 核對 → 自動測試）
+- 證據：spec 的 Implementation Notes；commit 未記錄
+
+### 2026-11-04｜測試／程式審查｜Story 2.7 第一階段三個審查者審查與修正
+
+- Story／範圍：2.7 第一階段（分支 `story/2-7`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：三個審查者各自只看 diff，主代理逐筆查證後分類
+- AI 產出：21 筆發現；10 筆修正、1 筆延後、1 筆誤報、7 筆不處理，另 2 筆與其他筆重複（理由記在 spec 的 Review Triage Log）；測試增為 `test_referees.py` 35 個測試函式、`test_authz.py` 4 個
+- 人做了什麼：未記錄（分類由 AI 完成，待組員在 PR 審查時確認）
+- 驗證：修正後後端 1495 個測試全過、覆蓋率 97%；lint（mypy、ty、ruff）通過；Alembic 只有一個 head；前端 typecheck、build、Biome 通過
+- 問題與修正：兩個審查者指出可能死結：接受邀請先以 FOR SHARE 鎖邀請，新增裁判時的外鍵檢查要對賽事列取 FOR KEY SHARE；重新產生邀請先以 FOR UPDATE 鎖賽事，再更新邀請，兩邊交叉等待。主代理查到 `lock_tournament` 確實是 FOR UPDATE，兩個外鍵都指向 `tournament`，判定成立。實作子代理在 spec 寫的「接受不鎖賽事就不會死結」是錯的，改成兩邊都先鎖賽事。原本的併發測試用 `sleep(0.5)` 判斷「另一邊在等鎖」並不可靠，改成查 `pg_stat_activity`。子代理自己承認，新增的反方向測試沒有直接重現舊程式的死結（要在 service 中間插入停點）。token 長度上限改變了 OpenAPI，client 又重新產生一次
+- 成熟度：L4（多個審查者＋主代理查證＋測試驗證）
+- 證據：spec 的 Review Triage Log、`deferred-work.md`
+### 2026-11-04｜程式／程式生成｜Story 7.1 示範資料的 tournaments 步驟
+
+- Story／範圍：7.1 第二階段的 tournaments 步驟（B 負責；分支 `story/7-1-tournaments`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理、Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：D 請 B 補上建立示範賽事並寫入 `context.tournament_to_draw` 的步驟；AI 查 planning 文件後列出 4 個開放問題（每題附建議值），人決定後由子代理實作，主代理接手驗證，三個審查者審查
+- AI 產出：`demo_data/tournaments.py`（兩款遊戲＋段位表＋「FLOW 校園盃 特戰英豪」）；`STEPS` 新增一行；測試 1 個檔案；`deferred-work.md` 拆出只剩 C 的 registration 那一筆，並新增 1 筆延後項目
+- 人做了什麼：決定示範賽事維持開放報名（不照 D 原本說的「已截止報名」，避免狀態和未來的截止時間矛盾）、不放直播連結（與 7.1 AC 不同，理由是一般賽事通常沒有）、遊戲與段位數值與賽事時間採 AI 的建議值；核准 spec
+- 驗證：以 compose 實際啟動，log 顯示建立兩款遊戲與賽事，competition 步驟從「No demo tournament to draw」變成 `REGISTRATION_UNAVAILABLE`（等 C）；後端 1477 個測試全過、覆蓋率 97%，lint 通過
+- 問題與修正：AI 發現 D 要的「已截止報名」和 2.2 的「報名截止必須晚於現在」互相矛盾，查到 D 的 `draw` 也接受開放報名，交給人選擇。人第一次只回答了一題，AI 沒有把其他建議值當成決定，而是再確認一次。實作子代理在驗證階段停滯 10 分鐘被中止（本機 `python` 是 Microsoft Store 空殼），主代理接手。接手後發現 A 的 `test_init_twice_keeps_demo_account_count` 失敗：它把所有含 `already exists, skipped` 的 log 都算成帳號數；沒有改 A 的測試，而是把本步驟對既有遊戲與賽事的 log 改成較準確的 `reused`。自己的兩個測試單獨跑會過、全部跑會失敗，原因是測試資料庫有併發測試提交的資料，改成只看示範資料自己的遊戲與操作紀錄。審查 14 筆：6 筆修正（包括測試與註解宣稱 savepoint 會撤銷資料，但實際上沒有東西可撤銷）、1 筆延後（保留資料庫超過 7 天會沿用過期賽事）、2 筆誤報、5 筆不處理
+- 成熟度：L4（spec → 子代理實作 → 主代理驗證 → 多個審查者 → 測試）
+- 證據：`spec-7-1-tournaments-demo-step.md` 的 Decisions、Implementation Notes、Review Triage Log；commit 未記錄

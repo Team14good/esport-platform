@@ -1,17 +1,22 @@
-"""選手參賽資料的業務規則（Story 3.2）：段位、遊戲 ID、截圖檔名與平均段位積分。
+"""選手參賽資料的業務規則（Story 3.2）：段位、遊戲 ID、截圖檔名與平均段位積分；
+送出報名的條件（Story 3.3）。
 
 純函式，不碰資料庫。段位對照表來自賽事快照（tournaments 的
 `TournamentRead.rank_tiers`）。
 """
 
 import unicodedata
-from collections.abc import Iterable
+import uuid
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.errors import FieldError
 from app.modules.registration.models import (
     GAME_ACCOUNT_ID_MAX_LENGTH,
     RANK_SCREENSHOT_NAME_MAX_LENGTH,
+    MissingProfileField,
+    SubmitBlocker,
 )
 from app.modules.tournaments.models import RankTierRead
 
@@ -77,10 +82,72 @@ def clean_file_name(file_name: str | None, *, extension: str) -> str:
     return name or f"{DEFAULT_SCREENSHOT_STEM}{extension}"
 
 
-def average_rank_score(scores: Iterable[int]) -> float | None:
-    """平均段位積分，以四捨五入（ROUND_HALF_UP）取到小數第二位；沒有分數時回傳 None。"""
+def average_rank_score_decimal(scores: Iterable[int]) -> Decimal | None:
+    """平均段位積分（`Decimal`），以四捨五入（ROUND_HALF_UP）取到小數第二位；
+    沒有分數時回傳 None。送出報名時凍結到 Registration 的快照用這個值。"""
     values = list(scores)
     if not values:
         return None
     average = Decimal(sum(values)) / Decimal(len(values))
-    return float(average.quantize(_CENT, rounding=ROUND_HALF_UP))
+    return average.quantize(_CENT, rounding=ROUND_HALF_UP)
+
+
+def average_rank_score(scores: Iterable[int]) -> float | None:
+    """平均段位積分，以四捨五入（ROUND_HALF_UP）取到小數第二位；沒有分數時回傳 None。"""
+    average = average_rank_score_decimal(scores)
+    return None if average is None else float(average)
+
+
+# ---------------------------------------------------------------- 送出報名的條件
+
+
+@dataclass(frozen=True)
+class RosterEntry:
+    """送出檢查需要的一位隊員資料。"""
+
+    display_name: str
+    missing_fields: Sequence[MissingProfileField]
+    school_id: uuid.UUID | None
+
+
+def _names(entries: Iterable[RosterEntry]) -> str:
+    return "、".join(entry.display_name for entry in entries)
+
+
+def submit_blockers(
+    *, starters: int, members: Sequence[RosterEntry]
+) -> list[SubmitBlocker]:
+    """不能送出報名的原因，依固定順序全部列出（不只第一項）；`members` 依加入順序。
+
+    人數達先發人數 → 每位參賽資料完整 → 每位都設定了學校 → 已設學校的隊員學校相同。
+    """
+    blockers: list[SubmitBlocker] = []
+    shortage = starters - len(members)
+    if shortage > 0:
+        blockers.append(
+            SubmitBlocker(
+                code="STARTERS_NOT_MET",
+                message=f"還差 {shortage} 人才達先發人數（{starters} 人）",
+            )
+        )
+    incomplete = [entry for entry in members if entry.missing_fields]
+    if incomplete:
+        blockers.append(
+            SubmitBlocker(
+                code="PROFILE_INCOMPLETE",
+                message=f"尚未填完參賽資料：{_names(incomplete)}",
+            )
+        )
+    no_school = [entry for entry in members if entry.school_id is None]
+    if no_school:
+        blockers.append(
+            SubmitBlocker(
+                code="SCHOOL_MISSING", message=f"尚未設定學校：{_names(no_school)}"
+            )
+        )
+    schools = {entry.school_id for entry in members if entry.school_id is not None}
+    if len(schools) > 1:
+        blockers.append(
+            SubmitBlocker(code="SCHOOL_MISMATCH", message="隊員的學校不一致")
+        )
+    return blockers

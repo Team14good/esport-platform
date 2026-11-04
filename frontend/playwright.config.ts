@@ -17,7 +17,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // 演練測試每個要開 5～9 個瀏覽器並註冊多個帳號；不設上限時 16 核會開 8 個 worker 同時跑，
+  // 後端與瀏覽器搶滿 CPU 而卡住（2 個 worker 也吃到約 5 核），所以本機與 CI 一樣只用 1 個
+  workers: 1,
   // HTML 報告不自動開啟：在容器裡開啟會一直等待
   reporter: process.env.CI
     ? "blob"

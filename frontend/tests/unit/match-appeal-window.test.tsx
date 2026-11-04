@@ -59,7 +59,7 @@ describe("申訴期區塊", () => {
     expect(screen.getByText("10/18（日）14:22 截止")).toBeInTheDocument()
   })
 
-  it("有倒數插槽：插槽在標題與截止時間之間", () => {
+  it("有倒數插槽：插槽緊接在標題後，不再另外顯示截止時間（由 Countdown 顯示）", () => {
     render(
       <MatchAppealWindow
         detail={{ status: "appeal_window", appeal_deadline: DEADLINE }}
@@ -71,7 +71,8 @@ describe("申訴期區塊", () => {
     const slot = screen.getByText("剩 1:22:00").parentElement
     expect(slot).toHaveAttribute("data-slot", "appeal-countdown")
     expect(title.nextElementSibling).toBe(slot)
-    expect(slot?.nextElementSibling).toHaveTextContent("10/18（日）14:22 截止")
+    expect(slot?.nextElementSibling).toBeNull()
+    expect(screen.queryByText("10/18（日）14:22 截止")).toBeNull()
   })
 
   it.each<MatchStatus>(["scheduled", "live", "confirmed", "voided"])(
