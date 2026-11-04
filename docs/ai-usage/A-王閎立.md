@@ -540,3 +540,17 @@
   - 合併時 `deferred-work.md` 的 `merge=union` 把兩邊刪掉的項目都救回來，還留下沒有 `source_spec` 的孤立 summary；AI 第一次逐項刪除時被格式錯亂擋下，改成以 main 為底重新套用。第二次又因為 main 有兩筆完全相同的項目而中斷，修正後才完成
 - 成熟度：L3（人審查找出問題，AI 修正並以突變檢查驗證測試有效）
 - 證據：`_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md` 的 Review Triage Log；PR #47
+
+### 2026-11-04｜測試／e2e｜觀眾 e2e 改用 page.route 攔截 API
+
+- Story／範圍：5.8 第二階段（PR #47），D 審查的第 4 點
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：我決定改用 `page.route`，不等 7.1；AI 先讀 e2e 容器的掛載方式、S3 會呼叫哪些 API，再寫假 API
+- AI 產出：`tests/e2e/support/match-api.ts`（攔假賽事的賽事、對戰樹、單場三支 GET，沿用單元測試的假對戰樹產生器，不另寫一份）；`spectator.spec.ts` 兩個測試恢復，第二個原本只有註解，補成 S3 點場次卡 → S4 → 返回 S3，含 375 px 時對戰樹可左右捲動
+- 人做了什麼：決定做法（推翻先前「改 fixme」的決定）
+- 驗證：`docker compose --profile e2e run --rm --build e2e` 跑 spectator，4 passed（desktop、mobile-375 各 2）；biome、typecheck（含 tests）通過
+- 問題與修正：
+  - AI 一開始以為 e2e 容器裡沒有 `src`，查 `Dockerfile.e2e` 後確認 build 時有複製 `frontend/`，才決定直接 import 假資料產生器；代價是改了假資料要加 `--build`
+  - 假 API 只驗證前端流程與版面，測不到真後端與 NFR-2 回應時間，所以把舊測試標籤裡的 `@NFR-2` 拿掉，走真 API 的版本記入 deferred-work
+- 成熟度：L3（人決定做法，AI 實作並實際執行 e2e 驗證）
+- 證據：`frontend/tests/e2e/spectator.spec.ts`、`frontend/tests/e2e/support/match-api.ts`；PR #47
