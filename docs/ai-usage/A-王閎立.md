@@ -388,3 +388,17 @@
   - AI 第一次改完 biome 回報 2 個格式錯誤，用 `biome check --write` 修正
 - 成熟度：L3（AI 依人提出的審查意見修改，範圍與做法由人決定）
 - 證據：spec-7-2 的 Spec Change Log（2026-11-03）
+
+### 2026-11-04｜程式、測試／程式生成｜Story 5.2：S4 申訴期倒數接上 Countdown、PageBanner 連結型 action
+
+- Story／範圍：5.2（S4 申訴期倒數）、2.4 審查延後項目（`PageBanner`）、sprint 狀態整理（分支 `story/5-2-countdown`）
+- 怎麼用：先請 AI 盤點 main 新合併的 PR 與 `deferred-work.md`，找出 A 可以做的項目；選三項後以 bmad-build（oneshot）實作，spec 為 `_bmad-output/implementation-artifacts/spec-5-2-appeal-countdown-and-banner-link.md`
+- AI 產出：S4 路由傳入 `Countdown`（appeal 變體、歸零重抓）；申訴期區塊有倒數時不重複顯示截止時間；`PageBanner` 新增 `to`（TanStack `Link`）；新增測試 2 個、改 1 個；sprint-status 4.6 改 done；deferred-work 刪 1 項、新增 2 項
+- 人做了什麼：選定要做的三項；決定截止時間只留 Countdown 那一行、進度條先用預設 24 小時、S1 按鈕交給 B 改；決定跳過審查以省 token
+- 驗證：前端容器內 typecheck、biome（216 個檔案）、build 通過；本次改到的 4 個測試檔 36 個全過；全部 700 個測試一起跑時有 4～8 個別人與自己舊檔案的 1 秒逾時，單獨重跑全過
+- 問題與修正：
+  - AI 讀 `Countdown` 原始碼時發現它下方本來就會顯示「{絕對時間} 截止」，直接放進插槽會跟申訴期區塊原本那一行重複；這跟 5.2 spec 凍結區寫的「插槽在標題與截止時間之間」衝突，交由使用者決定
+  - AI 查 FR-7 發現申訴期預設只有 30 分鐘，Countdown 預設以 24 小時當進度條起點，進度條一開始只有約 2%；使用者決定先這樣，記進 deferred-work 請 D 的 API 帶開始時間
+  - 全部測試一起跑時 `organizer-tournaments` 失敗，AI 在 main 上與修改後各跑數次確認是偶發逾時，不是這次造成的
+- 成熟度：L3（AI 實作，人決定範圍與三個介面問題）
+- 證據：spec 的 Implementation Notes；尚未 commit

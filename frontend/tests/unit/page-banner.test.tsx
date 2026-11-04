@@ -7,6 +7,7 @@ import {
   PageBannerSlot,
   pickPageBanner,
 } from "@/components/common/PageBanner"
+import { renderWithRouterContext } from "./render-router"
 
 describe("Page banner", () => {
   it("destructive：顯示訊息，沒有按鈕也不能關閉", () => {
@@ -45,6 +46,18 @@ describe("Page banner", () => {
 
     await user.click(screen.getByRole("button", { name: "關閉提示" }))
     expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it("action 傳 to：以連結呈現（可中鍵開新分頁），不是按鈕", () => {
+    renderWithRouterContext(
+      <PageBanner action={{ label: "申請成為主辦方", to: "/organizer/apply" }}>
+        想辦賽事？
+      </PageBanner>,
+    )
+
+    const link = screen.getByRole("link", { name: "申請成為主辦方" })
+    expect(link).toHaveAttribute("href", "/organizer/apply")
+    expect(screen.queryByRole("button", { name: "申請成為主辦方" })).toBeNull()
   })
 
   it("default 沒有傳 onDismiss 時沒有關閉鈕", () => {

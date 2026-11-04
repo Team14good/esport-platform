@@ -13,13 +13,13 @@ const APPEAL_WINDOW_STATUSES: ReadonlySet<MatchStatus> = new Set([
 
 type MatchAppealWindowProps = {
   detail: Pick<PublicMatchDetail, "status" | "appeal_deadline">
-  /** 倒數插槽：B 的 Countdown（`appeal` 變體）做好後由呼叫端放入；沒有傳入時不顯示、不留空白 */
+  /** 倒數插槽：S4 路由放入 Countdown（`appeal` 變體）；有傳入時由 Countdown 顯示截止時間 */
   countdown?: ReactNode
   className?: string
 }
 
 /**
- * S4「申訴期」區塊：標題、倒數插槽、「{絕對時間} 截止」。
+ * S4「申訴期」區塊：標題，加上倒數插槽或「{絕對時間} 截止」（有倒數時只顯示倒數）。
  * 只在申訴期／申訴中且有截止時間時顯示。不讀裝置時鐘判斷是否到期，到期後的呈現屬於 Countdown。
  */
 export function MatchAppealWindow({
@@ -42,13 +42,17 @@ export function MatchAppealWindow({
       <h2 id={titleId} className="text-label text-status-appeal">
         申訴期
       </h2>
-      {hasCountdown && <div data-slot="appeal-countdown">{countdown}</div>}
-      <p
-        data-slot="appeal-deadline"
-        className="text-caption text-muted-foreground"
-      >
-        {formatMatchDateTime(deadline)} 截止
-      </p>
+      {hasCountdown ? (
+        // Countdown 下方自己就有「{絕對時間} 截止」，這裡不再重複
+        <div data-slot="appeal-countdown">{countdown}</div>
+      ) : (
+        <p
+          data-slot="appeal-deadline"
+          className="text-caption text-muted-foreground"
+        >
+          {formatMatchDateTime(deadline)} 截止
+        </p>
+      )}
     </Card>
   )
 }
