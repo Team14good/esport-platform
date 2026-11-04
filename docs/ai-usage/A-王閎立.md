@@ -389,6 +389,20 @@
 - 成熟度：L3（AI 依人提出的審查意見修改，範圍與做法由人決定）
 - 證據：spec-7-2 的 Spec Change Log（2026-11-03）
 
+### 2026-11-04｜測試｜Story 7.2 第二階段：三款遊戲的演練接上新增遊戲、建立賽事與組隊
+
+- Story／範圍：7.2 第二階段（`story/7-2-phase2`）
+- 怎麼用：用 bmad-build 寫 spec（使用者決定每款遊戲一隊滿編），交給子代理實作 `support/organizer.ts`、`support/drill.ts` 與 `tournament.spec.ts` 的三個真測試；e2e 卡住後由主對話停掉、縮小範圍找原因
+- AI 產出：spec `spec-7-2-e2e-tournament-drill-2.md`；`approveApplication` 移到 `support/organizer.ts` 並新增 `createOrganizer`；`support/drill.ts`（新增遊戲、建立賽事、觀眾瀏覽、建隊、加入、參賽資料、平均段位積分）；`accounts.ts` 新增 `registerVerifiedAccounts`；`tournament.spec.ts` 每款遊戲一個真測試；`playwright.config.ts` 改成 `workers: 1`；`deferred-work.md` 新增 2 項
+- 人做了什麼：決定每款一隊滿編；看到 Docker 容器太多、CPU 飆高時要求停掉並查原因、不要開那麼多容器；決定完整 e2e 只跑一次
+- 驗證：單跑星砂競技場×桌機 2.1 分鐘通過；完整 e2e（1 個 worker）10 passed、62 skipped，22.4 分鐘；前端容器內 typecheck、biome（220 個檔案）無錯誤
+- 問題與修正：
+  - 第一次完整 e2e 卡住超過 20 分鐘沒有進度；子代理先前把它歸因於密碼雜湊拖慢 API，加了 `describe.configure({ mode: "default" })`，但那只讓同一個檔案內依序，桌機與手機、其他檔案仍並行
+  - 使用者發現容器開太多、CPU 到 492%，要求停掉；AI 單跑一個測試確認流程本身沒問題，查出根因是 `fullyParallel` 加上本機沒設 worker 上限（16 核開 8 個 worker）
+  - 改成 2 個 worker 仍吃約 5 核，使用者再次指出，才改成 1 個 worker，並用 `docker update --cpus 1.5` 限制執行中的 e2e 容器
+  - AI 一開始用 Edit 改設定檔失敗（沒先讀檔），卻同時啟動了 e2e，等於用舊設定在跑，發現後停掉重跑
+- 成熟度：L3（AI 實作與除錯，人決定範圍並在負載過高時介入）
+- 證據：spec-7-2-e2e-tournament-drill-2 的 Implementation Notes；尚未 commit
 ### 2026-11-04｜程式、測試／程式生成｜Story 5.2：S4 申訴期倒數接上 Countdown、PageBanner 連結型 action
 
 - Story／範圍：5.2（S4 申訴期倒數）、2.4 審查延後項目（`PageBanner`）、sprint 狀態整理（分支 `story/5-2-countdown`）
