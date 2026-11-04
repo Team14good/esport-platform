@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import type { ReactNode } from "react"
 
 import {
@@ -10,7 +10,7 @@ import {
 import { useIsSignedIn } from "@/features/identity/auth"
 import { parseApiError } from "@/lib/api-error"
 import { notifyError } from "@/lib/feedback"
-import { matchQueryKey } from "./match-source"
+import { matchQueryKey, matchVersion, samePlaceholder } from "./match-source"
 import {
   type GameInput,
   ScoreEntryPanel,
@@ -73,16 +73,16 @@ export function useMatchScoreEntry({
   const signedIn = useIsSignedIn()
   const path = { tournament_id: detail.tournament.id, match_id: detail.id }
   const query = useQuery({
-    // 帶 updated_at：場次有變動（報到、登錄、送出）就重抓
+    // 帶場次版本（updated_at＋兩隊報到時間）：場次有變動（報到、登錄、送出、指派裁判）就重抓
     queryKey: [
       ...matchQueryKey(detail.tournament.id, detail.id),
       "score-entry",
-      detail.updated_at,
+      ...matchVersion(detail),
     ],
     queryFn: async () =>
       (await CompetitionService.readScoreEntry({ path })).data,
     enabled: signedIn,
-    placeholderData: keepPreviousData,
+    placeholderData: samePlaceholder(detail.id),
     retry: false,
   })
   const state = signedIn ? query.data : undefined

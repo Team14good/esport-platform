@@ -111,9 +111,22 @@ context:
 
 - **PR #47 審查後補（2026-11-04）**：審查 4.4（#46）時比對 `deferred-work.md`，發現漏刪 5.3 留下的「S4 接上 `ScoreEntryPanel`（A 的工作）」，本 Story 已完成（錯誤碼對照與 `SCORE_ERROR_REASONS` 七項一致、`check_in_incomplete` 時面板停用、已送出顯示唯讀列），補刪除。
 
+- **合併 main（4.4，#46）**：`sprint-status.yaml` 的 `last_updated` 衝突，採用 main 的值。`deferred-work.md` 設 `merge=union`，合併時救回兩邊刪掉的項目，格式也亂了；改以 main 的版本為底，重新套用本 Story 的刪除與新增。4.4 新增的「S4 要隨 `is_scorer` 顯示或隱藏」由本 Story 完成（指派會更新 `updated_at`），一併刪除。
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+2026-11-04 D（@OG-Matcha）審查 PR #47（核准，不擋合併；D 已查證每一點）：
+
+| # | 發現 | 判定 | 處理 |
+|---|------|------|------|
+| 1 | 記分者面板在兩隊報到後停在「等待雙方報到」：查詢 key 只看 `updated_at`，後端報到不更新 `updated_at`；測試 harness 在 refresh 時會改 `updated_at`，所以沒抓到 | medium | D 會在後端讓報到更新 `updated_at`。前端先保險：新增 `matchVersion()`，報到與比分登錄的 key 改成 `updated_at`＋兩隊報到時間。補測試「對手報到後 updated_at 沒變仍重抓」，把 key 改回只看 `updated_at` 時該測試失敗 |
+| 2 | `keepPreviousData` 會把上一場的資料帶到下一場 | medium | 新增 `samePlaceholder(matchId)`，只在同一場保留。S4 路由以場次當 key 重新掛載，原本靠這層避開；元件本身沒有防護，同一個實例換場時確實會帶過去（補的測試在改回 `keepPreviousData` 時失敗） |
+| 3 | 裝置時鐘比伺服器快時，「報到開放」倒數歸零只重抓一次，伺服器仍回 `too_early` 就不再重試 | low | 新增 `tooEarlyRetryInterval()`：本機已過 `opens_at` 且仍是 `too_early` 時每 5 秒重抓；補純函式測試 |
+| 4 | S4 完全沒有 e2e，可用 `page.route` 攔 API 回假資料 | low | 延後：與使用者「改 fixme、等 7.1」的決定不同，需要使用者決定；記入 `deferred-work.md` |
+
+修正後：單元測試 58 個檔案、761 個通過（新增 4 個）；typecheck、biome（239 個檔案）、build 通過。
 
 ## Verification
 

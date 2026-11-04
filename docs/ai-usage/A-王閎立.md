@@ -521,3 +521,22 @@
   - 審查只有單一 AI，沒有多個獨立審查者交叉確認
 - 成熟度：L3（AI 依 spec 審查並實際執行測試，人決定方式與是否採用）
 - 證據：審查意見在對話中；尚未貼到 PR
+
+### 2026-11-04｜程式／程式審查修正｜依 D 的審查修 PR #47，並解合併衝突
+
+- Story／範圍：5.8 第二階段（PR #47），合併 main 上的 4.4（#46）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：把 D 的審查意見貼給 AI，請它修正並解衝突
+- AI 產出：`matchVersion()`（key 加上兩隊報到時間）、`samePlaceholder()`（只在同一場保留舊資料）、`tooEarlyRetryInterval()`（時鐘偏快時重試）；新增 4 個測試；重建 `deferred-work.md`
+- 人做了什麼：D 審查並查證問題；我決定請 AI 修正
+- 驗證：
+  - 突變檢查：把 key 改回只看 `updated_at`、把 placeholder 改回 `keepPreviousData`，都剛好讓對應的新測試失敗
+  - 單元測試 761 passed；typecheck、biome、build 通過
+- 問題與修正：
+  - D 抓到兩個中度問題，都是 #47 實作時 AI 的錯：
+    - 一是假設報到會更新 `updated_at`，而且測試 harness 在 refresh 時就會改 `updated_at`，所以測不出來
+    - 二是假設路由重新掛載就足以避免帶到上一場的資料，元件本身沒有防護
+  - AI 一開始判斷第 2 點「路由會重新掛載，應該不會發生」，仍照建議修；突變檢查證明元件層的問題確實存在
+  - 合併時 `deferred-work.md` 的 `merge=union` 把兩邊刪掉的項目都救回來，還留下沒有 `source_spec` 的孤立 summary；AI 第一次逐項刪除時被格式錯亂擋下，改成以 main 為底重新套用。第二次又因為 main 有兩筆完全相同的項目而中斷，修正後才完成
+- 成熟度：L3（人審查找出問題，AI 修正並以突變檢查驗證測試有效）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md` 的 Review Triage Log；PR #47

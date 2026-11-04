@@ -309,3 +309,59 @@ describe("S4 比分登錄面板的資料轉接", () => {
     expect(screen.queryByRole("button", { name: "送出系列結果" })).toBeNull()
   })
 })
+
+describe("比分登錄查詢的重抓與換場", () => {
+  function renderWithRerender(detail: PublicMatchDetail) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const refresh = () => queryClient.invalidateQueries()
+    const view = (d: PublicMatchDetail) => (
+      <QueryClientProvider client={queryClient}>
+        <Harness detail={d} refresh={refresh} />
+      </QueryClientProvider>
+    )
+    const { rerender } = render(view(detail))
+    return (d: PublicMatchDetail) => rerender(view(d))
+  }
+
+  it("對手報到後 updated_at 沒變：仍因報到時間改變而重抓，面板解鎖", async () => {
+    signIn()
+    const read = vi
+      .spyOn(CompetitionService, "readScoreEntry")
+      .mockResolvedValueOnce({
+        data: scorerState({ reason: "check_in_incomplete" }),
+      } as unknown as ReadScoreEntryResult)
+      .mockResolvedValue({
+        data: scorerState(),
+      } as unknown as ReadScoreEntryResult)
+    const before = matchDetail({
+      check_in_a_at: "2026-11-04T09:40:00.000Z",
+      check_in_b_at: null,
+    })
+    const rerender = renderWithRerender(before)
+    expect(await screen.findByText("等待雙方報到")).toBeInTheDocument()
+
+    rerender({ ...before, check_in_b_at: "2026-11-04T09:45:00.000Z" })
+
+    expect(await screen.findByText("可開始")).toBeInTheDocument()
+    expect(screen.queryByText("等待雙方報到")).not.toBeInTheDocument()
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it("換到另一場：回應前不沿用上一場的面板", async () => {
+    signIn()
+    vi.spyOn(CompetitionService, "readScoreEntry")
+      .mockResolvedValueOnce({
+        data: scorerState(),
+      } as unknown as ReadScoreEntryResult)
+      .mockReturnValue(new Promise(() => {}) as never)
+    const first = matchDetail({ status: "live" })
+    const rerender = renderWithRerender(first)
+    expect(await screen.findByText("比分登錄")).toBeInTheDocument()
+
+    rerender({ ...first, id: "match-other" })
+
+    expect(screen.getByTestId("slot")).toHaveTextContent("沒有面板")
+  })
+})

@@ -26,6 +26,33 @@ export function matchQueryKey(tournamentId: string, matchId: string) {
 }
 
 /**
+ * 面板查詢的 `placeholderData`：只在同一場內保留上一份資料（key 更新時不閃空白），
+ * 換到另一場時不沿用，避免回應前顯示上一場的報到按鈕或各局。
+ */
+export function samePlaceholder(matchId: string) {
+  return <T>(
+    previous: T | undefined,
+    query: { queryKey: readonly unknown[] } | undefined,
+  ): T | undefined => (query?.queryKey[3] === matchId ? previous : undefined)
+}
+
+/**
+ * 面板查詢 key 的變動部分：場次 `updated_at` 加上兩隊報到時間。
+ * 後端報到時不一定更新 `updated_at`，加上報到時間，報到後一定會重抓。
+ */
+export function matchVersion(detail: {
+  updated_at: string
+  check_in_a_at?: string | null
+  check_in_b_at?: string | null
+}) {
+  return [
+    detail.updated_at,
+    detail.check_in_a_at ?? null,
+    detail.check_in_b_at ?? null,
+  ] as const
+}
+
+/**
  * 取得一場的公開資料。後端回 404 `MATCH_NOT_FOUND` 時拋 `MatchNotFoundError`；
  * 網址的 id 不是 UUID（422）時這場一定不存在，也當成找不到，不算連線失敗。
  */

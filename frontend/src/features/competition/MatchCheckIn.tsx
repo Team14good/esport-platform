@@ -1,11 +1,27 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { CompetitionService, type PublicMatchDetail } from "@/client"
 import { Countdown, type CountdownVariant } from "@/components/common/Countdown"
 import { useIsSignedIn } from "@/features/identity/auth"
 import { CheckInPanel } from "./CheckInPanel"
-import { matchQueryKey } from "./match-source"
+import { matchQueryKey, matchVersion, samePlaceholder } from "./match-source"
+
+/** 本機已過開放時間、伺服器仍回 too_early 時的重抓間隔 */
+export const TOO_EARLY_RETRY_MS = 5000
+
+/**
+ * 報到狀態查詢的重抓間隔：本機時間已過 `opens_at`、伺服器仍回 `too_early`
+ * （裝置時鐘比伺服器快）時每 5 秒重抓，直到伺服器放行；其他情況不定時重抓。
+ */
+export function tooEarlyRetryInterval(
+  data: { reason?: string | null; opens_at: string } | undefined,
+  now: number,
+): number | false {
+  return data?.reason === "too_early" && now >= Date.parse(data.opens_at)
+    ? TOO_EARLY_RETRY_MS
+    : false
+}
 
 /** 報到開放時間＝預定開始前 30 分鐘（contracts/competition.md `CheckInStatus.opens_at`）；未登入時沒有狀態查詢，用這個推算 */
 export const CHECK_IN_LEAD_MS = 30 * 60 * 1000
@@ -85,11 +101,11 @@ export function MatchCheckIn({ detail, refresh }: MatchCheckInProps) {
   const tournamentId = detail.tournament.id
   const matchId = detail.id
   const status = useQuery({
-    // 帶 updated_at：場次有變動（報到、改期、對手確定）就重抓
+    // 帶場次版本（updated_at＋兩隊報到時間）：場次有變動（報到、改期、對手確定）就重抓
     queryKey: [
       ...matchQueryKey(tournamentId, matchId),
       "check-in",
-      detail.updated_at,
+      ...matchVersion(detail),
     ],
     queryFn: async () =>
       (
@@ -98,8 +114,12 @@ export function MatchCheckIn({ detail, refresh }: MatchCheckInProps) {
         })
       ).data,
     enabled: signedIn,
-    placeholderData: keepPreviousData,
+    placeholderData: samePlaceholder(matchId),
     retry: false,
+    // 裝置時鐘比伺服器快時，「報到開放」倒數歸零那次重抓仍可能拿到 too_early；
+    // 本機時間已過開放時間卻還是 too_early 時，每 5 秒重抓直到伺服器放行
+    refetchInterval: (query) =>
+      tooEarlyRetryInterval(query.state.data, Date.now()),
   })
   const checkIn = signedIn ? status.data : undefined
   // 倒數歸零時重新 render，讓階段換到下一段；階段依每次 render 當下的時間決定，

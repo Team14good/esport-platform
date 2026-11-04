@@ -14,6 +14,8 @@ import {
   checkInCountdownPhase,
   MatchCheckIn,
   showsCheckIn,
+  TOO_EARLY_RETRY_MS,
+  tooEarlyRetryInterval,
 } from "@/features/competition/MatchCheckIn"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { ACCESS_TOKEN_STORAGE_KEY } from "@/features/identity/auth"
@@ -146,6 +148,30 @@ describe("報到倒數的階段", () => {
         now: at(scheduledAt),
       }),
     ).toBeNull()
+  })
+})
+
+describe("伺服器仍回 too_early 時的重抓", () => {
+  const opensAt = "2026-11-04T10:00:00.000Z"
+  const opens = Date.parse(opensAt)
+
+  it("本機已過開放時間、伺服器仍回 too_early：每 5 秒重抓", () => {
+    expect(
+      tooEarlyRetryInterval({ reason: "too_early", opens_at: opensAt }, opens),
+    ).toBe(TOO_EARLY_RETRY_MS)
+  })
+
+  it("還沒到開放時間、或伺服器已放行：不定時重抓", () => {
+    expect(
+      tooEarlyRetryInterval(
+        { reason: "too_early", opens_at: opensAt },
+        opens - 1,
+      ),
+    ).toBe(false)
+    expect(
+      tooEarlyRetryInterval({ reason: null, opens_at: opensAt }, opens + 1),
+    ).toBe(false)
+    expect(tooEarlyRetryInterval(undefined, opens + 1)).toBe(false)
   })
 })
 

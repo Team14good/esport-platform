@@ -208,3 +208,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`
   summary: （中）S4 報到倒數過了預定開始時間後應改為「棄權期限」（`appeal`）倒數，但公開單場（`PublicMatchDetail`）與報到狀態（`CheckInStatus`）都沒有 `forfeit_deadline`，前端拿不到期限，目前過了預定時間就不顯示倒數。
   evidence: 2026-11-04 實作 5.8 第二階段時發現，spec 的 Always 寫「過預定時間『棄權期限』→ `forfeit_deadline`」，但 `frontend/src/client/types.gen.ts` 只有主辦方的 `MatchRead` 有這個欄位；spec 禁止改後端。需要 D 在 `PublicMatchDetail`（或 `CheckInStatus`）加上 `forfeit_deadline`，重新產生 client 後，把 `features/competition/MatchCheckIn.tsx` 傳給 `checkInCountdownPhase` 的 `forfeitDeadline: null` 換成該欄位（階段判斷與測試已寫好）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`
+  summary: （低）S4 目前完全沒有 e2e：觀眾測試已改 `test.fixme` 等 7.1；也可以先用 Playwright 的 `page.route` 攔 `/api/v1/tournaments/*/matches/*` 回假資料讓測試繼續跑，不必等 7.1。
+  evidence: 2026-11-04 D（@OG-Matcha）在 PR #47 審查的第 4 點。使用者先前決定改 `test.fixme` 等 7.1，要改做法需使用者決定；`page.route` 測不到真的後端，7.1 有資料後仍要補走真 API 的版本。
