@@ -1,3 +1,4 @@
+import { Link, type LinkProps } from "@tanstack/react-router"
 import { CircleAlertIcon, InfoIcon, XIcon } from "lucide-react"
 import type { ReactNode } from "react"
 
@@ -8,11 +9,20 @@ import { cn } from "@/lib/utils"
 // Page banner（DESIGN.md〈Components〉、EXPERIENCE.md〈Component Patterns〉）：
 // 頁面內容最上方滿版的一則 Alert，用於整頁層級的狀況。同一頁最多一則，destructive 優先。
 
-type BannerAction = {
-  /** 按鈕文字（動詞＋名詞） */
-  label: string
-  onClick: () => void
-}
+type BannerAction =
+  | {
+      /** 按鈕文字（動詞＋名詞） */
+      label: string
+      onClick: () => void
+      to?: never
+    }
+  | {
+      /** 按鈕文字（動詞＋名詞） */
+      label: string
+      /** 連到站內頁面：以連結呈現，可中鍵開新分頁、複製連結 */
+      to: LinkProps["to"]
+      onClick?: never
+    }
 
 export type PageBannerProps =
   | {
@@ -56,7 +66,11 @@ export function PageBanner(props: PageBannerProps) {
         )}
       >
         <span className="min-w-0 flex-1 basis-48">{props.children}</span>
-        {action ? (
+        {action?.to !== undefined ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link to={action.to}>{action.label}</Link>
+          </Button>
+        ) : action ? (
           <Button variant="outline" size="sm" onClick={action.onClick}>
             {action.label}
           </Button>
