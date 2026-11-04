@@ -250,6 +250,17 @@
 - 成熟度：L4（人審查加上 AI 查證與突變驗證）
 - 證據：PR #5～#8 的留言與 commit
 
+### 2026-10-31｜程式／後端實作｜Story 5.8 後端：公開單場 API
+
+- Story／範圍：5.8（A 的 S4 場次頁需要的後端），分支 `story/5-8-api`（疊在 #20 上）
+- 工具：Claude Code（Opus 5.5）、BMAD `bmad-build`、實作子代理、3 個平行審查子代理
+- 怎麼用：依 A 在 deferred-work 的請求與 A 前端的 `PublicMatchDetail` 型別寫 spec，人核准後子代理實作
+- AI 產出：`GET /tournaments/{id}/matches/{id}`、`PublicMatchDetail` 等 schema、從公開對戰樹抽出共用的 `PublicMatch` 組法、12 個 API 測試、重新產生前端 client、約定文件
+- 人做了什麼：核准 spec
+- 驗證：容器內全套 919 個測試通過，lint 通過；突變檢查（同輪列表納入自己、拿掉場次所屬賽事檢查、同輪不過濾輪次）分別有 4、1、4 個測試失敗
+- 問題與修正：審查指出測試只用 8 隊與 2 隊，都沒有輪空；而單場 API 只拿同輪場次去組隊名與來源，最容易在有輪空的對戰表出錯。補上 3、5、6 隊的對照測試（單場與整棵對戰樹逐欄相同）。其餘 10 點審查意見逐條判定駁回或延後，理由記在 spec
+- 成熟度：L4（spec → 子代理實作 → 多代理審查 → 修正）
+- 證據：`spec-5-8-public-match-api.md` 的 Review Triage Log（11 項）
 ### 2026-11-03｜程式／測試｜依 A 對 #20（5.5、5.6）的 Request changes 修正自動確認
 
 - Story／範圍：5.5 第二階段的 `auto_confirm_expired`、5.5 spec
@@ -285,3 +296,37 @@
 - 問題與修正：原本約定 #20 先合、#24 再改接，結果 #24 先合，改由 #20 這邊改接，結果相同
 - 成熟度：L2（AI 整合，CI 驗證）
 - 證據：#20 的 commit 與 CI 紀錄
+
+### 2026-11-03｜實作｜Story 7.1 第二階段：示範資料的 competition 步驟
+
+- Story／範圍：7.1（A 的 Story）裡 D 負責的 competition 示範資料，依 7.1 腳本骨架的擴充方式新增步驟檔
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 7.1 spec、`demo_data` 擴充說明與 4.1 的 `draw`，新增 `demo_data/competition.py`：替 `context.tournament_to_draw` 指定的賽事抽籤（固定亂數種子），沒有指定、已抽過、或抽籤被業務規則拒絕時記錄並略過；抽籤放在 savepoint 裡，失敗不會讓整段示範資料回滾
+- AI 產出：`demo_data/competition.py`、`DemoContext.tournament_to_draw` 欄位、`STEPS` 加入 competition、7 個測試、deferred-work 一項
+- 人做了什麼：使用者決定先做這項
+- 驗證：後端全套 1456 passed、lint 通過；突變測試 3 項（拿掉「已抽過」檢查、拿掉固定種子、改成不攔截業務錯誤）都會讓測試失敗，已還原
+- 問題與修正：第一次在容器裡跑測試時，指令經過管線過濾輸出而卡住 10 分鐘，改成把輸出寫進檔案、加上 timeout 後正常。本機用 `ruff check tests` 會把 `app.*` 當第三方套件，提出錯誤的 import 排序建議；CI 只 lint `app/`，所以不採用
+- 成熟度：L2（AI 實作，測試與突變驗證）
+- 證據：本 PR 的 CI 紀錄
+
+### 2026-11-04｜修正｜依 A 對 #36 的審查讓抽籤不受報名回傳順序影響
+
+- Story／範圍：#36（7.1 competition 步驟）與 4.1 的 `draw`
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：A 指出固定種子只保證「同樣的輸入順序得到同樣結果」，C 的 `list_accepted_teams` 若依 UUID 或無 ORDER BY 回傳，示範對戰表每次會不同，而測試用固定順序的替身測不出來。AI 採用 A 的第二個做法：`draw` 洗牌前依隊名（相同再比 id）排序，並補「registration 回傳順序相反時同種子得到同一張表」的測試
+- AI 產出：`service.draw` 多呼叫一次 `get_team_names` 並排序；`rng` 說明改為測試與示範資料都會用；兩個測試的呼叫順序與 13 隊完整賽事的季軍預期值隨之更新
+- 人做了什麼：A 審查時提出問題
+- 驗證：後端全套 1457 passed、lint 通過；拿掉排序時新測試失敗，已還原
+- 問題與修正：13 隊完整賽事測試的季軍從隊伍4 變隊伍2，因為替身隊名「隊伍10」排在「隊伍2」前面，洗牌輸入順序改變；這是固定種子的預期值，不是規則改變
+- 成熟度：L3（人審查找出問題，AI 修正並驗證）
+- 證據：#36 的審查與 CI 紀錄
+### 2026-11-04｜文件｜依 A 對 #21 的建議補充 id 格式錯誤的回應
+
+- Story／範圍：#21（5.8 公開單場 API）的約定 `contracts/competition.md`
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：A 核准時建議約定補一句：id 不是 UUID 時 FastAPI 回 422 而不是 404。AI 在單場 API 那一列補上，寫法比照 tournaments.md 的公開 API
+- AI 產出：約定一句說明
+- 人做了什麼：A 審查時提出
+- 驗證：只改文件；A 的另一項建議（取同一輪場次會先抓整張對戰表）A 說留著就好，未修改
+- 成熟度：L1（AI 依審查意見改文件）
+- 證據：#21 的審查紀錄

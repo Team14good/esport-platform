@@ -184,7 +184,7 @@ def _eight_to_semis(
         (2, (1, 2, None), 0, 1),
         (3, (1, 2, None), 1, 2),
         (8, (1, 3, 2), 4, 3),
-        (13, (1, 3, 4), 8, 4),
+        (13, (1, 3, 2), 8, 4),
     ],
 )
 def test_full_tournament_from_draw_to_finished(
