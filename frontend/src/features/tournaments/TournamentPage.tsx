@@ -8,10 +8,9 @@ import { ErrorPage } from "@/components/layout/ErrorPage"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
-import { cn } from "@/lib/utils"
 import { isTournamentNotFound, publicTournamentQueryOptions } from "./queries"
-import { TOURNAMENT_STATUS_LABEL } from "./status"
 import { TournamentOverview } from "./TournamentOverview"
+import { TournamentStatusBadge } from "./TournamentStatusBadge"
 import { TournamentTabs } from "./TournamentTabs"
 
 export const CANCELLED_BANNER_TEXT = "此賽事已取消"
@@ -24,20 +23,11 @@ export function TournamentHeader({
 }) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-      <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 flex-col gap-2">
         <h1 className="break-words text-heading-lg sm:text-display">
           {tournament.name}
         </h1>
-        <p
-          className={cn(
-            "text-label",
-            tournament.status === "cancelled"
-              ? "text-destructive"
-              : "text-muted-foreground",
-          )}
-        >
-          {TOURNAMENT_STATUS_LABEL[tournament.status]}
-        </p>
+        <TournamentStatusBadge status={tournament.status} />
       </div>
       {tournament.livestream_url ? (
         <Button asChild variant="outline">
