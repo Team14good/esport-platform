@@ -447,6 +447,16 @@ def get_public_match(
     check_in_at = {
         c.team_id: c.at for c in repository.list_check_ins(session, match.id)
     }
+    # 送出結果與判棄權都把截止設為「當下＋申訴時限」，賽事建立後時限不能修改，
+    # 所以開始時間由截止往回推即可，不必另存欄位
+    appeal_deadline = (
+        match.appeal_deadline if match.status in _APPEAL_STATUSES else None
+    )
+    appeal_started_at = (
+        appeal_deadline - timedelta(minutes=tournament.appeal_minutes)
+        if appeal_deadline is not None
+        else None
+    )
     return PublicMatchDetail(
         **this.model_dump(),
         tournament=PublicTournamentRef(id=tournament.id, name=tournament.name),
@@ -460,9 +470,8 @@ def get_public_match(
         else bracket_rules.round_name(match.round_no, bracket.rounds),
         games=[_public_game(game) for game in repository.list_games(session, match.id)],
         same_round=same_round,
-        appeal_deadline=match.appeal_deadline
-        if match.status in _APPEAL_STATUSES
-        else None,
+        appeal_deadline=appeal_deadline,
+        appeal_started_at=appeal_started_at,
         updated_at=max(m.updated_at for m in round_matches),
         check_in_a_at=check_in_at.get(match.team_a_id) if match.team_a_id else None,
         check_in_b_at=check_in_at.get(match.team_b_id) if match.team_b_id else None,

@@ -51,6 +51,7 @@ DETAIL_KEYS = {
     "games",
     "same_round",
     "appeal_deadline",
+    "appeal_started_at",
     "updated_at",
     # 5.1：兩隊的報到時間
     "check_in_a_at",
@@ -220,22 +221,25 @@ def test_appeal_deadline_only_in_appeal_states(
     assert row is not None
     row.appeal_deadline = deadline
     # 已確認、已取消時欄位可能仍留著舊值，公開 API 一律不顯示
-    expected: dict[MatchStatus, str | None] = {
-        S.SCHEDULED: None,
-        S.LIVE: None,
-        S.APPEAL_WINDOW: "2026-10-26T12:30:00Z",
-        S.APPEALED: "2026-10-26T12:30:00Z",
-        S.CONFIRMED: None,
-        S.VOIDED: None,
+    # 開始時間＝截止－賽事的申訴時限（tournament_in 預設 30 分鐘）
+    window = ("2026-10-26T12:30:00Z", "2026-10-26T12:00:00Z")
+    expected: dict[MatchStatus, tuple[str, str] | tuple[None, None]] = {
+        S.SCHEDULED: (None, None),
+        S.LIVE: (None, None),
+        S.APPEAL_WINDOW: window,
+        S.APPEALED: window,
+        S.CONFIRMED: (None, None),
+        S.VOIDED: (None, None),
     }
-    for status, want in expected.items():
+    for status, (want_deadline, want_start) in expected.items():
         row.status = status
         session.add(row)
         session.commit()
 
         data = _get(client, tournament_id, ids["M1"])
 
-        assert data["appeal_deadline"] == want, status
+        assert data["appeal_deadline"] == want_deadline, status
+        assert data["appeal_started_at"] == want_start, status
 
 
 def test_updated_at_follows_same_round_changes(
