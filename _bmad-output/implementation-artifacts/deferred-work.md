@@ -234,3 +234,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
   summary: 示範資料的 tournaments 步驟已建立「FLOW 校園盃 特戰英豪」並寫入 `context.tournament_to_draw`（開放報名、開賽在啟動後 7 天），competition 步驟會嘗試抽籤；但目前沒有 registration 步驟建立 32 隊正取，registration 也還沒提供抽籤用的 `finalize_for_draw`、`list_accepted_teams` 等函式，實際啟動會記錄 `REGISTRATION_UNAVAILABLE` 並略過抽籤。
   evidence: 2026-11-04 Story 7.1 tournaments 步驟（B）完成後，以 compose 實際啟動確認的 log。剩下的是 C 的 registration 步驟（32 隊正取，放在 `STEPS` 的 tournaments 之後、competition 之前）與 contracts/competition.md〈二〉的四個函式；賽事維持 `open`，所以 `draw` 會先呼叫 `finalize_for_draw`（spec-7-1-tournaments-demo-step.md Decisions）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
+  summary: （中）Story 3.4～3.6 第二階段：先搶期送出與截止補位時，在同一個 `lock_tournament()` 鎖與交易內先呼叫 `backfill_vacancies` 讓有順位的候補遞補（以 `mark_status` 改為正取、寫操作紀錄、發事件），再以更新後的報名呼叫 `decide_first_come` 判定新送出的報名。
+  evidence: 2026-11-04 OG-Matcha 在 PR #28 的審查建議 1。期中抽籤前取消資格不立即遞補（epics.md 規則 6），先搶期會出現空位；不先遞補時新送出的隊伍會插到「候補第 1 位」前面（`test_backfill_without_backfill_new_submission_would_jump_queue`）。截止補位階段 `backfill_vacancies(phase=AFTER_DEADLINE)` 與 `fill_from_waitlist(remaining=空位)` 相同，擇一呼叫即可。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
+  summary: （中）先搶期釋出的是優先期代表隊（期中由 6.5 抽籤前取消資格觸發）時，`backfill_vacancies` 依先搶期順位把名額給別校，沒有依 FR-17「由同校平均段位積分次高的隊伍遞補」。
+  evidence: 2026-11-04 PR #28 審查修正的 Code Review（Blind Hunter）。3.4 第一階段的 deferred 項目寫「代表隊退出只在撤回、退回時觸發，期中不會發生」，但期中 6.5 可在先搶期取消優先期代表隊的資格，之後分配時就會走到這條路；同校候補的 `representative_backfill` 也會因代表隊不再是正取而變成 False。修正需在本模組新增同校遞補規則（需確認 `priority_schools` 中哪一隊是代表隊），並讓 `backfill_vacancies` 先處理。

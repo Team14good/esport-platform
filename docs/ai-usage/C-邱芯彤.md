@@ -214,3 +214,14 @@
 - 問題與修正：第一次就全部通過。人工看截圖時發現優先期倒數下方的日期沿用倒數元件的預設字尾「截止」，語意不精確，未修改，留給使用者決定
 - 成熟度：L3（AI 自動化實測與截圖，人決定要做這項檢查）
 - 證據：PR 檢查清單；commit 未記錄（尚未 commit）
+### 2026-11-04｜程式／程式審查｜Story 3.4 第一階段：依 PR #28 審查加入名額遞補 backfill_vacancies
+
+- Story／範圍：3.4 第一階段審查修正（分支 story/3-4，PR #28）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理、三個審查子代理）
+- 怎麼用：AI 先讀 PR #28 的審查，發現建議 1（先搶期空位讓新送出的隊伍插到候補前面）與期中規則 6「抽籤前取消資格不立即遞補」衝突，列出兩種配合方式給人決定；再以 bmad-build 寫 spec、子代理實作、三個審查子代理審 diff，主流程逐項查證後把修正交回同一個實作子代理
+- AI 產出：`allocation.py` 新增 `backfill_vacancies` 並改寫 `decide_first_come` 的呼叫端契約；新增 12 個測試函式（參數化後共 24 個案例），I/O 矩陣 6 列都有對應測試；epics.md 規則 6 與 Story 6.5、CONTRIBUTING 6.3、epic-3／epic-6 context 同步改成「之後分配時先由有順位的候補遞補」；deferred-work 新增 2 項
+- 人做了什麼：建議 1 選 (b) 先遞補；在「延後遞補（B 的 6.5 不改）」與「立即遞補（要和 B 協調）」中選延後；決定規劃文件的修改放進 #28；核准 spec
+- 驗證：後端 1704 個測試全部通過，`allocation.py` 分支覆蓋率 100%（106 statements、22 branches），mypy、ty、ruff 通過
+- 問題與修正：三個審查者共提出 15 項，修正 8 項、延後 1 項、駁回 6 項（其中 3 項查證為誤報，例如「優先期內有 pending 會高估空位」：優先期內不會有候補，結果必為空）。AI 實作的錯誤：超額測試只有 1 個有順位候補，拿掉 `max(…, 0)` 測試仍會通過（Verification Gap 抓到，補測資後實際拿掉確認會失敗）；改寫 docstring 時把舊契約涵蓋的撤回、退回、提高名額漏掉；epics.md 新句子與原有括號重複；沒寫明只能在抽籤前呼叫。審查也發現新流程讓「代表隊被取消資格時應由同校遞補」在期中變得可能發生，延後處理。另外，主流程一開始以為審查建議 2、3 還沒做，查 git 才發現使用者已在 `4b30a23` 補上但尚未推送；實作子代理做突變驗證時，因容器掛載可寫入，曾暫時改到本機的 `allocation.py`，它自己改回，主流程再確認
+- 成熟度：L4（固定流程，子代理實作、多個獨立審查者加自動測試，人只在規則選擇與 spec 核准時決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md（Decisions、Review Triage Log）；deferred-work.md；commit 未記錄（尚未 commit）
