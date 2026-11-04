@@ -96,8 +96,16 @@ describe("S36 學校清單", () => {
     expect(
       rows.map((row) => within(row).getAllByRole("cell")[0].textContent),
     ).toEqual(["國立成功大學", "國立清華大學", "國立臺灣大學"])
+    // 「修正名稱」的無障礙名稱帶上學校名稱，每一列分得出來
     expect(
-      within(rows[0]).getByRole("button", { name: "修正名稱" }),
+      within(rows[0]).getByRole("button", {
+        name: "修正「國立成功大學」的名稱",
+      }),
+    ).toBeInTheDocument()
+    expect(
+      within(rows[2]).getByRole("button", {
+        name: "修正「國立臺灣大學」的名稱",
+      }),
     ).toBeInTheDocument()
     // jsdom 不排版：卡片清單只在 < md（375 px）顯示
     expect(tableArea()).toHaveClass("hidden", "md:block")
@@ -255,7 +263,9 @@ describe("S36 學校清單", () => {
     renderApp("/admin/schools")
 
     const table = await screen.findByRole("table", { name: "學校" })
-    await user.click(within(table).getByRole("button", { name: "修正名稱" }))
+    await user.click(
+      within(table).getByRole("button", { name: "修正「國立臺灣大學」的名稱" }),
+    )
     const dialog = await screen.findByRole("dialog", { name: "修正學校名稱" })
     const input = within(dialog).getByLabelText("學校名稱")
     expect(input).toHaveValue("國立臺灣大學")
@@ -291,7 +301,7 @@ describe("S36 學校清單", () => {
 
     const table = await screen.findByRole("table", { name: "學校" })
     await user.click(
-      within(table).getAllByRole("button", { name: "修正名稱" })[0],
+      within(table).getByRole("button", { name: "修正「國立成功大學」的名稱" }),
     )
     const dialog = await screen.findByRole("dialog", { name: "修正學校名稱" })
     const input = within(dialog).getByLabelText("學校名稱")

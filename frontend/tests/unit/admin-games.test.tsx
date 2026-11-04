@@ -1,4 +1,5 @@
-import { screen, waitFor, within } from "@testing-library/react"
+import { focusManager } from "@tanstack/react-query"
+import { act, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
 import { describe, expect, it, vi } from "vitest"
@@ -153,10 +154,13 @@ describe("S36 遊戲設定：列表", () => {
     expect(
       within(first).getByRole("link", { name: "特戰英豪" }),
     ).toHaveAttribute("href", "/admin/games/game-1")
-    expect(within(first).getByRole("link", { name: "編輯" })).toHaveAttribute(
-      "href",
-      "/admin/games/game-1",
-    )
+    // 「編輯」的無障礙名稱帶上遊戲名稱，每一列分得出來
+    expect(
+      within(first).getByRole("link", { name: "編輯「特戰英豪」" }),
+    ).toHaveAttribute("href", "/admin/games/game-1")
+    expect(
+      within(second).getByRole("link", { name: "編輯「戰棋對決」" }),
+    ).toHaveAttribute("href", "/admin/games/game-2")
     expect(screen.getByRole("link", { name: "新增遊戲" })).toHaveAttribute(
       "href",
       "/admin/games/new",
@@ -180,7 +184,7 @@ describe("S36 遊戲設定：列表", () => {
         .map((term) => term.textContent),
     ).toEqual(["名稱", "先發／替補", "預設 BO", "每局時間", "比分型態", "操作"])
     expect(
-      within(cards[0]).getByRole("link", { name: "編輯" }),
+      within(cards[0]).getByRole("link", { name: "編輯「特戰英豪」" }),
     ).toBeInTheDocument()
   })
 
@@ -456,6 +460,39 @@ describe("S36 遊戲設定：編輯", () => {
       screen.getByRole("link", { name: BACK_TO_GAMES_TEXT }),
     ).toHaveAttribute("href", "/admin/games")
     expect(screen.queryByLabelText("遊戲名稱")).toBeNull()
+  })
+
+  it("已載入後背景重抓失敗：表單與改到一半的值保留，不顯示「重新載入」", async () => {
+    const user = userEvent.setup()
+    const read = vi
+      .spyOn(TournamentsService, "readGame")
+      .mockResolvedValueOnce({ data: VALORANT } as ReadResult)
+      .mockRejectedValue(httpError(500, {}))
+    signInAs({ account: ADMIN })
+    renderApp("/admin/games/game-1")
+
+    const name = await screen.findByLabelText("遊戲名稱")
+    await user.clear(name)
+    await user.type(name, "特戰英豪改")
+
+    // 模擬切到別的視窗再切回來，觸發 React Query 的背景重抓
+    try {
+      act(() => {
+        focusManager.setFocused(false)
+        focusManager.setFocused(true)
+      })
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+      // 等重抓的錯誤寫進查詢、畫面重新渲染後再斷言，避免在請求還沒結束時就通過
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      })
+    } finally {
+      focusManager.setFocused(undefined)
+    }
+
+    expect(screen.getByLabelText("遊戲名稱")).toHaveValue("特戰英豪改")
+    expect(screen.queryByRole("button", { name: "重新載入" })).toBeNull()
+    expect(screen.queryByText("伺服器發生錯誤（500）")).toBeNull()
   })
 })
 
