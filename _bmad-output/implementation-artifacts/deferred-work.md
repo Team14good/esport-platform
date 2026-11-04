@@ -66,15 +66,6 @@
     - S4 顯示哪一隊棄權（雙方棄權時兩隊都標示）與申訴期倒數。
     - 確認 D 的場次狀態轉換表允許「待開打 → 申訴期」；若不允許，請 D 在轉換表新增，不由 5.2 修改。
 
-## Deferred from: spec-5-2-forfeit-job.md (2026-10-30)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-forfeit-job.md`
-  summary: 逾時判棄權的 worker 工作（`competition/forfeit_job.py` 的 `make_forfeit_job`）已依約定介面寫好並以假的 `ForfeitPorts` 測過，但還沒接上真的 D、B 函式，也沒有加進 `app/worker/jobs.py` 的 `JOBS`，所以 worker 目前實際上不會判棄權。
-  evidence: D 的 4.1、5.1（Match 資料表、`get_match`、`lock_match`、`transition_match`、`list_forfeit_due`、`list_check_ins`）與 B 的 `lock_tournament` 尚未合併。合併後：
-    - 在 competition 新增轉接層檔案，實作 `ForfeitPorts`：`list_forfeit_due` → `service.list_forfeit_due(now=)`；`get_tournament_id` → `service.get_match(match_id=).tournament_id`；`lock_tournament` → tournaments `service.lock_tournament(tournament_id=)`，轉成 `TournamentForfeitInfo(cancelled=狀態是否為已取消, appeal_minutes=)`；`lock_match` → `service.lock_match(match_id=)`，直接回傳 Match 資料列；`list_checked_in_team_ids` → `service.list_check_ins(match_id=)` 的 `team_id`；`transition_to_appeal_window` → `service.transition_match(match=, to=MatchStatus.APPEAL_WINDOW)`。
-    - 把 `make_forfeit_job(轉接層)` 加進 `JOBS`，並補一個用真資料表跑 `run_once` 的整合測試。
-    - 確認 D 的轉換表允許「待開打 → 申訴期」；若不允許，請 D 新增，不由 5.2 修改。
-    - 請 D 評估 `list_forfeit_due` 是否排除「兩隊都已報到」的場次：目前的約定只排除非待開打，兩隊都報到但還沒登錄第一局的場次，每輪都會被重新鎖住再略過；這段期間它們的賽事列與場次列的鎖會留到該交易結束。
 ## Deferred from: Story 5.8 第一階段（2026-10-30）
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-match-page-results.md`
@@ -160,6 +151,10 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
   evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-reschedule-backend.md`
+  summary: S30 場次管理頁面與修改時間的 `Dialog`（時間選擇器只開放 `RescheduleInfo` 的 earliest～latest）還沒做，等 B 的主辦方版面合併後再做；後端 `GET /tournaments/{id}/manage/matches` 與 `PATCH /tournaments/{id}/matches/{match_id}/schedule` 已完成。列表的範圍是 GET 當下算的（最早隨時間前進、相鄰場次改時間也會變），對話框遇到任何 409 `RESCHEDULE_*` 都要重抓列表（錯誤訊息帶有當下的允許範圍）。
+  evidence: 2026-11-01 使用者決定先做後端。前端 client 重新產生後即有 `ManagedMatch`、`RescheduleInfo`、`RescheduleIn`。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: Story 2.4 第二階段：S1、S2 的狀態改用 1.7 的 `StatusBadge`（開放報名、進行中 live＋進行中脈動、賽程已公布 brand、已取消 destructive、其餘 muted-foreground）；S1 頂部「想辦賽事？申請成為主辦方」Page banner（已登入、非主辦方、沒有待審核申請；可關閉，存 `localStorage`，連到 `/organizer/apply`）；S1 空狀態對主辦方另顯示「建立賽事」（連到 2.2 第二階段的 S26）。
   evidence: 2026-11-02 使用者決定 2.4 拆兩階段：`StatusBadge`、申請 API 在 A 的 1.7（PR #10），主辦方身分在 1.8（PR #11），兩者都未合併。
