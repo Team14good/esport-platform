@@ -11,6 +11,7 @@ from app.modules.competition.models import (
     BracketRead,
     CheckInRead,
     CheckInStatus,
+    DrawStatus,
     GameScoreIn,
     ManagedMatch,
     MatchRead,
@@ -34,6 +35,16 @@ def draw(
     bracket = service.draw(session, tournament_id=tournament_id, actor_id=organizer.id)
     session.commit()
     return bracket
+
+
+@router.get("/organizer/tournaments/{tournament_id}/draw-status")
+def read_draw_status(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> DrawStatus:
+    """S27 抽籤按鈕：現在能不能抽籤；與抽籤同一套檢查與分配規則預估，不寫入（不 commit）。"""
+    return service.get_draw_status(
+        session, tournament_id=tournament_id, actor_id=organizer.id
+    )
 
 
 @router.get("/tournaments/{tournament_id}/bracket")

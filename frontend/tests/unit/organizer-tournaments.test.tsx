@@ -1,9 +1,10 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  CompetitionService,
   type GameRead,
   type Identity,
   type TournamentRead,
@@ -26,6 +27,13 @@ vi.mock("@tanstack/react-router-devtools", () => ({
 vi.mock("@tanstack/react-query-devtools", () => ({
   ReactQueryDevtools: () => null,
 }))
+
+// S27 總覽會查抽籤狀態（按鈕的測試在 draw-button.test.tsx）；這裡回傳不顯示按鈕的狀態
+beforeEach(() => {
+  vi.spyOn(CompetitionService, "readDrawStatus").mockResolvedValue({
+    data: { can_draw: false, reason: "not_drawable", expected_teams: null },
+  } as Awaited<ReturnType<typeof CompetitionService.readDrawStatus>>)
+})
 
 type ListMineResult = Awaited<
   ReturnType<typeof TournamentsService.listMyTournaments>

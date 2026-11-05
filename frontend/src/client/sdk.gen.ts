@@ -28,6 +28,9 @@ import type {
   competitionReadCheckInStatusData,
   competitionReadCheckInStatusErrors,
   competitionReadCheckInStatusResponses,
+  competitionReadDrawStatusData,
+  competitionReadDrawStatusErrors,
+  competitionReadDrawStatusResponses,
   competitionReadPublicBracketData,
   competitionReadPublicBracketErrors,
   competitionReadPublicBracketResponses,
@@ -1099,6 +1102,26 @@ export class CompetitionService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/tournaments/{tournament_id}/draw",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Draw Status
+   *
+   * S27 抽籤按鈕：現在能不能抽籤；與抽籤同一套檢查與分配規則預估，不寫入（不 commit）。
+   */
+  public static readDrawStatus<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadDrawStatusData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadDrawStatusResponses,
+      competitionReadDrawStatusErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/draw-status",
       ...options,
     })
   }
