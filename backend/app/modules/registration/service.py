@@ -1,13 +1,15 @@
 """registration 的業務規則、資源層級權限、狀態轉換、操作紀錄與事件；不得 commit 或 rollback。
 
 賽事只透過 tournaments 的公開函式 `get_tournament`、`lock_tournament`、
-`ensure_accepting_registrations` 取得與檢查（contracts/tournaments.md）。
+`ensure_accepting_registrations`、`transition_tournament`、`find_due_registration_end_id`
+取得、檢查與改變狀態（contracts/tournaments.md）。
 """
 
 import secrets
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import PurePath
 from typing import BinaryIO
 
@@ -67,8 +69,8 @@ def _ensure_accepting_registrations(tournament: TournamentRead) -> None:
 def _in_registration_period(tournament: TournamentRead) -> bool:
     """賽事開放報名且現在早於報名截止時間。
 
-    tournaments 的 `ensure_accepting_registrations` 只看狀態，open → closed 要到 3.6 才有；
-    所以 registration 自己再比對截止時間。
+    open → closed 由報名截止工作（3.6 `close_registration`）在 worker 下一輪才轉，
+    截止時間到了之後、轉狀態之前仍是 `open`；所以 registration 自己再比對截止時間。
     """
     return (
         tournament.status == TournamentStatus.OPEN
@@ -76,10 +78,19 @@ def _in_registration_period(tournament: TournamentRead) -> bool:
     )
 
 
-def _ensure_registration_period(tournament: TournamentRead) -> None:
-    """在報名期間（賽事開放且早於截止時間）；否則拋 409 `REGISTRATION_CLOSED`。"""
+def _ensure_registration_period(
+    tournament: TournamentRead, *, now: datetime | None = None
+) -> None:
+    """在報名期間（賽事開放且早於截止時間）；否則拋 409 `REGISTRATION_CLOSED`。
+
+    賽事已轉為「報名截止」（`closed`）時與截止時間已到同樣回「這場賽事的報名已截止。」，
+    其他非開放狀態由 tournaments 回「這場賽事目前不開放報名。」。`now` 讓呼叫端用同一個
+    時間做檢查與寫入（送出報名的 `submitted_at`）；省略時取 `clock.now()`。
+    """
+    if tournament.status == TournamentStatus.CLOSED:
+        raise _registration_deadline_passed()
     _ensure_accepting_registrations(tournament)
-    if clock.now() >= tournament.registration_end:
+    if (now if now is not None else clock.now()) >= tournament.registration_end:
         raise _registration_deadline_passed()
 
 
@@ -726,11 +737,14 @@ def submit_registration(
     先查隊伍、鎖住賽事，再依序檢查隊員、隊長、報名期間、報名仍是組隊中與送出條件。
     送出條件與 S17 的 `submit_blockers` 是同一個函式，不符合時全部原因以「；」串接。
     3.3 一律轉為 `pending`，名額分配在 3.4～3.6；送出不發事件（FR-37 只通知報名結果）。
+    鎖住賽事後只取一次當下時間，截止檢查與 `submitted_at` 共用，所以已送出的報名一定
+    早於報名截止時間（中間的查詢跨過截止時也一樣）。
     """
     team = repository.get_team(session, team_id)
     if team is None:
         raise _team_not_found()
     tournament = _lock_tournament(session, team.tournament_id)
+    now = clock.now()
     members = repository.list_members(session, team.id)
     viewer = next((m for m in members if m.account_id == account_id), None)
     if viewer is None:
@@ -738,7 +752,7 @@ def submit_registration(
     authz.ensure_captain(
         _team_read(team, members), account_id, message="只有隊長可以送出報名"
     )
-    _ensure_registration_period(tournament)
+    _ensure_registration_period(tournament, now=now)
     registration = _registration_of(session, team)
     if registration.status != RegistrationStatus.FORMING:
         raise _registration_already_submitted()
@@ -757,7 +771,7 @@ def submit_registration(
     if school_id is None or avg_rank_score is None:
         # 送出條件已保證；不用 assert（python -O 會略過而把 null 寫進快照）
         raise RuntimeError("送出條件通過後仍缺學校或段位積分")
-    submitted_at = clock.now()
+    submitted_at = now
     registration.school_id = school_id
     registration.avg_rank_score = avg_rank_score
     registration.submitted_at = submitted_at
@@ -1007,6 +1021,51 @@ def _fill_at_deadline_locked(
         _allocate(
             session, current[registration_id], RegistrationStatus.ACCEPTED, actor_id
         )
+
+
+# ---------------------------------------------------------------- 報名截止（Story 3.6）
+
+
+def close_registration(session: Session, *, tournament_id: uuid.UUID) -> bool:
+    """報名截止（FR-16）：鎖住賽事，在同一個鎖與交易內完成分配再轉「報名截止」。
+
+    鎖內重新檢查賽事仍為開放報名且報名截止時間已到；不成立時不做任何事（回傳 False），
+    所以重複呼叫結果不變。校園賽依序：沒有結算紀錄時先做優先期結算（沒有報名也寫一筆
+    空的結算紀錄）、補做先搶期、截止補位，最後轉為 `closed`；自訂模式只轉狀態。
+    操作者全部為系統（`None`），分配與補位發 `RegistrationAllocated`。
+    """
+    tournament = _lock_tournament(session, tournament_id)
+    if (
+        tournament.status != TournamentStatus.OPEN
+        or tournament.registration_end > clock.now()
+    ):
+        return False
+    if tournament.mode == TournamentMode.CAMPUS:
+        if repository.get_settlement(session, tournament.id) is None:
+            _settle_locked(session, tournament, actor_id=None)
+        _first_come_locked(session, tournament, actor_id=None)
+        _fill_at_deadline_locked(session, tournament, actor_id=None)
+    tournaments_service.transition_tournament(
+        session,
+        tournament_id=tournament.id,
+        to=TournamentStatus.CLOSED,
+        actor_id=None,
+    )
+    session.flush()
+    return True
+
+
+def close_due_registration(session: Session) -> bool:
+    """worker 用：關閉一場報名截止已到、仍為開放報名的賽事；回傳是否找到候選。
+
+    候選由 tournaments `find_due_registration_end_id` 找（最早到期的優先），再交給
+    `close_registration` 在鎖內重新檢查；沒有候選時回傳 False，worker 才會換下一個工作。
+    """
+    tournament_id = tournaments_service.find_due_registration_end_id(session)
+    if tournament_id is None:
+        return False
+    close_registration(session, tournament_id=tournament_id)
+    return True
 
 
 # ---------------------------------------------------------------- 公開函式（給其他模組）

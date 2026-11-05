@@ -32,6 +32,7 @@ from app.modules.registration.models import (
     RegistrationStatus,
     Team,
 )
+from app.modules.tournaments.models import Tournament, TournamentStatus
 from tests.conftest import FrozenClock
 from tests.helpers import make_game, make_tournament
 from tests.registration.test_team_concurrency import _demote_game_creator
@@ -47,15 +48,30 @@ def _draw(db: Session, tournament_id: uuid.UUID, actor_id: uuid.UUID) -> object:
     return service.finalize_for_draw(db, tournament_id=tournament_id, actor_id=actor_id)
 
 
+def _close(db: Session, tournament_id: uuid.UUID, _actor_id: uuid.UUID) -> object:
+    return service.close_registration(db, tournament_id=tournament_id)
+
+
 @pytest.mark.parametrize(
     ("first", "second"),
-    [(_worker, _worker), (_worker, _draw)],
-    ids=["worker-worker", "worker-finalize_for_draw"],
+    [(_worker, _worker), (_worker, _draw), (_close, _close), (_close, _draw)],
+    ids=[
+        "worker-worker",
+        "worker-finalize_for_draw",
+        "close-close",
+        "close-finalize_for_draw",
+    ],
 )
 def test_parallel_settlement_happens_once(
     frozen_clock: FrozenClock, first: Settle, second: Settle
 ) -> None:
-    """名額 2、3 校各 1 隊優先期內送出：結算 2 正取、1 候補，補位沒有空位。"""
+    """名額 2、3 校各 1 隊優先期內送出：結算 2 正取、1 候補，補位沒有空位。
+
+    報名截止（`close_registration`）的參數組把時鐘設在報名截止時間：另外確認賽事只轉
+    一次「報名截止」、最後為 `closed`（抽籤先拿到鎖時只分配不轉狀態，截止工作再轉；
+    截止工作先拿到鎖時賽事已不是開放報名，`finalize_for_draw` 不做任何事）。
+    """
+    at_deadline = _close in (first, second)
     with Session(engine) as setup:
         game = make_game(setup)
         _demote_game_creator(setup, game.id)
@@ -91,7 +107,9 @@ def test_parallel_settlement_happens_once(
             team_ids.append(team.id)
         setup.commit()
         tournament_id, organizer_id = tournament.id, tournament.organizer_id
-    frozen_clock.set(tournament.priority_end)
+    frozen_clock.set(
+        tournament.registration_end if at_deadline else tournament.priority_end
+    )
 
     start = threading.Barrier(2)
     outcomes: list[str] = []
@@ -150,6 +168,16 @@ def test_parallel_settlement_happens_once(
             ]
             # 每筆報名只改一次狀態
             assert sorted(changed) == sorted(r.id for r in registrations)
+            if at_deadline:
+                closed = [
+                    log for log in logs if log.action == "tournament.status_changed"
+                ]
+                assert len(closed) == 1
+                assert closed[0].after == {"status": "closed"}
+                status = check.exec(
+                    select(Tournament.status).where(Tournament.id == tournament_id)
+                ).one()
+                assert status == TournamentStatus.CLOSED
             events = _allocated_events(check, tournament_id)
             assert sorted(e.payload["registration_id"] for e in events) == sorted(
                 str(r.id) for r in registrations
