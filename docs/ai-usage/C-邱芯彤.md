@@ -273,3 +273,39 @@
 - 問題與修正：自動檢查第一次就全過，但 AI 看 375 px 截圖時發現 S12 的長徽章「候補・目前不在遞補順序中」設了不換行、不縮小，占約 170 px，說明欄只剩約 100 px、卡片被拉長到約 350 px；審查與單元測試都沒抓到。AI 列出三種方案請人決定，修正後縮到約 220 px。另外，既有資料裡有一筆沒有送出快照的 `pending` 報名，審查時判定「不會發生」的缺快照情況實際存在於開發資料庫；實測確認結算會略過它、寫入空紀錄，worker 沒有錯誤。AI 補新測試斷言時一次沒有照 biome 格式，biome 擋下後修正
 - 成熟度：L3（AI 準備資料、自動化實測並看截圖找出問題，人決定版面方案）
 - 證據：_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md（Decisions、Implementation Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-04｜需求／設計｜Story 3.6 第二階段之一 spec：給抽籤用的 registration 函式
+
+- Story／範圍：3.6 第二階段之一（分支 story/3-6，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（一個調查子代理、一個 spec 審查子代理）
+- 怎麼用：bmad-build 的單一目標檢查把 3.6 第二階段拆成「給 D 抽籤用的四個函式」與「截止 worker」，先做前者；調查子代理查 competition 的抽籤流程、D 的測試替身與示範資料，主流程查 registration 與 `allocation.py`，參考之前 stash 裡的舊草稿寫出 spec；人選擇先審查 spec，由審查子代理對照程式碼審查
+- AI 產出：spec-3-6-draw-functions.md（I/O 矩陣 15 列、5 項 Tasks、6 則 Decisions，約 4,500 tokens）；deferred-work 新增「Story 3.6 第二階段之二：截止 worker」1 項
+- 人做了什麼：選擇拆分並先做抽籤函式；決定優先期內抽籤照合約立即結算、晚送出的 `pending` 補做先搶期；保留完整 spec；選擇先審查 spec，並在審查後決定提前抽籤的候補依截止後規則顯示、抽籤觸發的分配操作者記主辦方、完成時刪除 3 項 deferred；核准 spec 並停在 ready-for-dev
+- 驗證：spec 審查子代理提出 13 項（必改 5、建議 7、小地方 1），主流程查證後 3 項請人決定、10 項直接修正；新增的矩陣列由主流程依 `allocation.py` 規則手算核對
+- 問題與修正：審查抓到 AI 寫的 spec 自相矛盾：AC 寫「抽籤後候補依截止後規則顯示」，但 `_current_phase` 只看報名截止時間，報名截止前抽籤會顯示先搶期規則，主流程查程式確認後交人決定；Tasks 引用已刪除的「Open Question 1」；漏寫補做先搶期時每筆都要重建候選名單（否則會超收或同校兩隊正取）、剩餘名額可能為負數、`mark_drawn` 遇到不存在 id／重複 id／空清單的處理。調查子代理找到 spec 原本沒注意的風險：示範資料的 `load()` 會對沒有報名的示範賽事真的抽籤，`finalize_for_draw` 不能拋出 `BusinessError` 以外的錯誤。舊草稿早於 3.4 第二階段，裡面「優先期學校不另存」與事件名稱已過時，沒有照搬
+- 成熟度：L4（固定流程，子代理調查與審查，主流程查證，人在拆分、規則與核准的 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-6-draw-functions.md（Decisions）；deferred-work.md；commit 未記錄（尚未 commit）
+
+### 2026-11-04｜程式／程式生成｜Story 3.6：給抽籤用的 registration 函式
+
+- Story／範圍：3.6（分支 story/3-6，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（一個實作子代理）
+- 怎麼用：主流程把 spec 交給沒有對話脈絡的實作子代理，spec 是唯一依據；子代理完成後，主流程讀完整 diff，逐項核對 Tasks、驗收條件與 I/O 矩陣 15 列，再自己重建容器跑相關測試
+- AI 產出：registration `service.py` 新增 4 個公開函式（`finalize_for_draw`、`list_accepted_teams`、`mark_drawn`、`get_team_names`）與 4 個私有函式（共用的鎖內結算、分配、補做先搶期、截止補位），`_current_phase` 改為賽事不是開放報名就用截止後規則；`repository.py` 新增 3 個查詢；新增 2 個測試檔（`test_draw_functions.py` 29 個測試、`test_settlement_concurrency.py` 2 個）；更新 competition 合約與 deferred-work（刪除 3 項）
+- 人做了什麼：在 spec 階段做的決策（拆分、提前抽籤立即結算、操作者記主辦方等）；本階段沒有額外決策
+- 驗證：主流程重建容器後跑新測試、worker 與 `tests/competition/` 共 935 個全過；子代理把鎖換成不加鎖的讀取，確認兩組併發測試都會失敗（第二個 session 撞結算表主鍵）
+- 問題與修正：子代理在容器裡對整個 `tests/` 跑 ruff format 與 `ruff check --fix`，動到 4 個其他組員的測試檔，子代理自己發現後用 `git checkout` 還原並回報。主流程在 Git Bash 用 `python` 改 spec frontmatter 時，叫到的是 Windows Store 的別名（exit 49），改用 `uv run --no-project python`
+- 成熟度：L4（固定流程，子代理實作，主流程依 diff 與 I/O 矩陣驗證並自己重跑測試）
+- 證據：_bmad-output/implementation-artifacts/spec-3-6-draw-functions.md（Implementation Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-04｜測試／程式審查｜Story 3.6 審查與完整驗證
+
+- Story／範圍：3.6（分支 story/3-6，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap 三個審查子代理）
+- 怎麼用：三個審查子代理平行讀 diff，主流程到程式碼逐項查證（送出報名是否同一把鎖、抽籤 router 何時 commit、`Registration.team_id` 是否唯一、有沒有 registration 合約），寫進 spec 的 Review Triage Log；修正交回原本的實作子代理
+- AI 產出：Blind Hunter 15 項、Edge Case Hunter 3 項、Verification Gap 0 項（附追蹤過的分支清單），合併為 18 列：patch 1、defer 0、駁回 16（查證不成立 10、影響輕微 6）、無缺口 1
+- 人做了什麼：本階段沒有額外決策
+- 驗證：修正後重建容器，後端 1944 個測試全過，mypy、ty、ruff check、ruff format 通過
+- 問題與修正：Blind Hunter 抓到 AI 寫的 `get_team_names` 測試用條件過濾建出預期值，查不到隊伍時預期值會跟著變小，測試仍會通過；改成直接斷言兩隊與各自的隊名。審查者提出的「送出報名與抽籤競態」「提前抽籤不足 2 隊時結算紀錄被寫入」，主流程查證後不成立：送出報名同樣先鎖賽事並在鎖內檢查開放狀態，router 只在成功時 commit。主流程為了產生 diff 又用了 `git add -N`（3.4 時已因此讓 `git stash` 失敗），這次在讀完 diff 後立刻取消標記，第二次改用 `git diff --no-index` 附上新檔，不動 index。完整測試加 lint 超過前景 600 秒上限，改在背景執行
+- 成熟度：L4（多個獨立審查者加自動測試，主流程查證每一項）
+- 證據：_bmad-output/implementation-artifacts/spec-3-6-draw-functions.md（Review Triage Log）；commit 未記錄（尚未 commit）
