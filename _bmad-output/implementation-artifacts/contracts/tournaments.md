@@ -58,11 +58,13 @@ class RefereeInvitationRead(BaseModel):   # 2.7：主辦方看到的邀請（S31
     created_at: datetime
     expires_at: datetime             # 產生後 7 天；重新產生時舊的設為當下
     expired: bool                    # expires_at <= 現在
+    accepting: bool                  # 賽事不是 finished／cancelled（2.7 第二階段）
 
 class PublicRefereeInvitation(BaseModel):  # 2.7：不需登入的邀請預覽（S23，AD-19）
     tournament_name: str
     expires_at: datetime
     expired: bool
+    accepting: bool                  # 賽事不是 finished／cancelled（2.7 第二階段）
 
 class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API 用（AD-19）
     id: UUID
@@ -83,7 +85,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 - 不登入就能呼叫的公開 API 用另外的 `Public*` schema（2.4 定義的 `PublicTournament`），不含 `organizer_id`、Email 與學校（AD-19）。
 - 裁判 API（2.7）：
   - `POST /organizer/tournaments/{tournament_id}/referee-invitation`（主辦方）：產生新邀請，201 回 `RefereeInvitationRead`；同賽事尚未過期的舊邀請 `expires_at` 設為現在（不刪除）。
-  - `GET /organizer/tournaments/{tournament_id}/referee-invitation`（主辦方）：最新一筆邀請（含 `expired`），從未產生回 `null`。
+  - `GET /organizer/tournaments/{tournament_id}/referee-invitation`（主辦方）：最新一筆邀請（含 `expired`、`accepting`），從未產生回 `null`。
   - `GET /organizer/tournaments/{tournament_id}/referees`（主辦方）：`list[RefereeRead]`，依接受時間排序。
   - 以上三支：不存在 404 `TOURNAMENT_NOT_FOUND`、別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；產生邀請時賽事已結束或已取消 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
   - `GET /referee-invites/{token}`（不需登入）：`PublicRefereeInvitation`；不存在 404 `REFEREE_INVITATION_NOT_FOUND`，過期仍回 200（`expired: true`）。

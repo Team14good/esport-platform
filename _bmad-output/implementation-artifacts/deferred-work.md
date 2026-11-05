@@ -170,12 +170,6 @@
 ## Deferred from: spec-2-7-referee-invitation.md (2026-11-04)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-7-referee-invitation.md`
-  summary: 2.7 第二階段：S31（`/organizer/tournaments/$tournamentId/referees`，邀請連結＋已接受的裁判名單、空狀態「還沒有裁判接受邀請。複製邀請連結傳給裁判。」）與 S23（`/referee-invite/$inviteToken`，預覽＋接受、過期文案「此裁判邀請已過期，請向主辦方索取新連結。」）畫面，並重新產生 `frontend/src/client`。
-  evidence: 第一階段 spec 的 Never 明定不做前端；S31 要沿用 3.1 的 Invite link field，等它合併後再做。後端 API 已在第一階段完成。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-7-referee-invitation.md`
-  summary: （中）裁判邀請的預覽（`PublicRefereeInvitation`）與主辦方查看目前邀請（`RefereeInvitationRead`），在賽事已結束或已取消時仍回 `expired: false`，要等按下接受才得到 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`。
-  evidence: 2026-11-04 Story 2.7 第一階段審查（Edge Case Hunter）。凍結區塊的預覽欄位只有賽事名稱、到期時間、是否過期，加欄位屬於改需求；第二階段做 S23、S31 時一起決定：加一個 `closed` 欄位或把 `expired` 改為「無法接受」，並讓畫面顯示原因。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-7-referee-invitation.md`
   summary: （低）裁判邀請的 token 放在網址路徑（`GET /referee-invites/{token}`、`POST /referee-invites/{token}/accept`），uvicorn 與反向代理的 access log 會記下完整路徑，token 會留在 log 裡；與 3.1 的隊伍邀請連結做法相同。
   evidence: 2026-11-04 D（@OG-Matcha）在 PR #40 的審查，期中可以接受。之後要收緊時，accept 改用 body 帶 token，或在 log 遮蔽這段路徑；隊伍邀請一併處理。
 ## Deferred from: spec-7-1-tournaments-demo-step.md (2026-11-04)
@@ -228,6 +222,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
   summary: 補 API 層測試：同校已有 2 隊 `drawn` 時，同校候補在 S17／S12 回 `waitlist_reason == "SCHOOL_LIMIT_REACHED"`、`waitlist_phase == "after_deadline"`（驗證 `_ORDER_STATUSES` 把 `drawn` 當正取）。
   evidence: 2026-11-04 Story 3.4 第二階段審查（Verification Gap）。`allocation.py` 的純函式測試有測 `drawn`，但沒有測試讓 `drawn` 報名經過 `service._waitlist_fields` 的狀態篩選；從 `_ORDER_STATUSES` 拿掉 `DRAWN`，現有測試仍全過。目前沒有正式程式會把報名設成 `drawn`（`mark_drawn` 尚未提供），在 3.6 提供 `mark_drawn` 時補。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-7-s31-s23-referee-ui.md`
+  summary: （中）裁判名單的查詢在兩處各定義一次：tournaments 的 `referee-queries.ts` `refereesQueryOptions`（S31）與 D 的 `features/competition/organizer-matches-queries.ts` `tournamentRefereesQueryOptions`（S30），都用 `["tournaments","organizer","referees",tournamentId]`；`queryFn`、`retry` 各寫一份，誰先掛載就用誰的設定，之後只改一邊會互相污染快取。
+  evidence: 2026-11-05 Story 2.7 第二階段審查（Blind Hunter）。前端依賴方向是 competition → tournaments，不能反過來匯入 D 的定義；處理時請 D 把 `organizer-matches-queries.ts` 改成匯入 `refereesQueryOptions`，刪掉自己的定義（competition 只新增 import，不改 tournaments 的檔案）。
 - source_spec: none
   summary: Story 3.6 第二階段之二：報名截止 worker 工作——截止後 1 分鐘內鎖住賽事、轉為「報名截止」，呼叫「給抽籤用的函式」那份 spec 建立的截止補位（先 `settle_priority_window`、處理優先期後送出的 `pending`、再 `fill_from_waitlist`），操作者為 system，重複執行結果不變；自訂模式只轉狀態不補位。
   evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.6 第二階段拆成兩份：先做給 D 抽籤用的四個函式（`finalize_for_draw`、`list_accepted_teams`、`mark_drawn`、`get_team_names`，目前抽籤回 503，期限 11/12），截止 worker 沿用同一段補位邏輯，排在之後。S2「抽籤準備中」B 已在 `TournamentOverview.tsx` 做好，不在範圍內。
