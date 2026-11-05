@@ -6,6 +6,7 @@ CONTRIBUTING 6.5：各模組負責人寫下別人會呼叫的 `service.py` 公�
 | --- | --- | --- |
 | competition | D 黃鉅燊 | [competition.md](competition.md) |
 | tournaments | B 蘇采羚 | [tournaments.md](tournaments.md) |
+| disputes | B 蘇采羚 | [disputes.md](disputes.md)（提議） |
 | registration | C 邱芯彤 | 待補；competition 需要的部分先列在 competition.md〈二〉 |
 | identity、notifications | A 王閎立 | 待補；identity 已新增 `register_referee_lookup(lookup: Callable[[Session, UUID], bool] \| None)`（4.4 S13）：identity 是最底層、不能呼叫 tournaments，由組裝層 `app/api/main.py` 註冊 `tournaments.has_referee_role`；有註冊且回真時 `list_identities` 在「我的隊伍」之後、「主辦方後台」之前加入 `IdentityKey.REFEREE`（「裁判」，`/me/referee`） |
 
