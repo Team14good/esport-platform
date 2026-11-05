@@ -114,6 +114,8 @@ context:
 
 - **合併 main（4.4，#46）**：`sprint-status.yaml` 的 `last_updated` 衝突，採用 main 的值。`deferred-work.md` 設 `merge=union`，合併時救回兩邊刪掉的項目，格式也亂了；改以 main 的版本為底，重新套用本 Story 的刪除與新增。4.4 新增的「S4 要隨 `is_scorer` 顯示或隱藏」由本 Story 完成（指派會更新 `updated_at`），一併刪除。
 
+- 2026-11-04 後續（使用者「現在做」）：D 的 #49 讓公開單場帶出 `forfeit_deadline`、報到成功更新 `updated_at`。S4 報到倒數過了預定時間改讀 `detail.forfeit_deadline`（原本寫死 `null`），刪除 deferred-work 對應項目；`matchVersion` 仍保留兩隊報到時間，只更新註解。分支 `story/5-8-forfeit-deadline` 已合併 D 的 `story/5-8-followups`，要等 #49 合併後再合併。
+
 ## Spec Change Log
 
 ## Review Triage Log
