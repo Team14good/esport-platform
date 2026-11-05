@@ -6,6 +6,7 @@
 
 import secrets
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import PurePath
 from typing import BinaryIO
@@ -373,8 +374,15 @@ def _candidate(registration: Registration) -> allocation.Candidate:
 
 
 def _current_phase(tournament: TournamentRead) -> allocation.AllocationPhase:
-    """依當下時間判斷候補順位的階段：報名截止前為先搶期，之後（含抽籤後）為截止後。"""
-    if clock.now() < tournament.registration_end:
+    """候補順位的階段：開放報名且早於報名截止為先搶期，其餘為截止後。
+
+    賽事不是開放報名（提前抽籤後、報名截止、取消等）時，即使還沒到報名截止時間也是
+    截止後（Story 3.6 Decisions）。
+    """
+    if (
+        tournament.status == TournamentStatus.OPEN
+        and clock.now() < tournament.registration_end
+    ):
         return allocation.AllocationPhase.FIRST_COME
     return allocation.AllocationPhase.AFTER_DEADLINE
 
@@ -811,22 +819,34 @@ def _priority_window_due(tournament: TournamentRead) -> bool:
     )
 
 
-def settle_priority_window(session: Session, *, tournament_id: uuid.UUID) -> bool:
-    """優先期結算（FR-14）：鎖住賽事，在同一個鎖與交易內完成；回傳這次是否結算。
+def _allocate(
+    session: Session,
+    registration: Registration,
+    status: RegistrationStatus,
+    actor_id: uuid.UUID | None,
+) -> None:
+    """把報名分配為正取或候補：`mark_status` 並發 `RegistrationAllocated`。"""
+    mark_status(session, registration=registration, to=status, actor_id=actor_id)
+    events.publish(
+        session,
+        RegistrationAllocated(
+            registration_id=registration.id,
+            team_id=registration.team_id,
+            tournament_id=registration.tournament_id,
+            status=status,
+        ),
+    )
 
-    鎖內重新檢查：已有結算紀錄、賽事不是開放中的校園賽、或優先期還沒結束時不做任何事
-    （回傳 False），所以重複呼叫結果不變。只有 `pending` 且在優先期內（`submitted_at <=
-    priority_end`）送出的報名參加結算；優先期後送出的 `pending` 維持原狀（3.5 處理）。
-    結果依 `allocation.allocate_priority_window`，逐筆以 `mark_status` 改狀態（操作者為
-    系統）並發 `RegistrationAllocated`，再寫結算紀錄（保存優先期有報名的學校，可為空）
-    與一筆 `registration.priority_window_settled` 摘要。3.6 截止補位前也會呼叫本函式。
+
+def _settle_locked(
+    session: Session, tournament: TournamentRead, *, actor_id: uuid.UUID | None
+) -> None:
+    """已鎖定、尚未結算的賽事做優先期結算；不檢查賽事狀態與時間（由呼叫端決定）。
+
+    只有 `pending` 且在優先期內（`submitted_at <= priority_end`）送出的報名參加結算。
+    結果依 `allocation.allocate_priority_window`，逐筆改狀態並發事件，再寫結算紀錄
+    （`settled_at` 為當下時間，提前抽籤時可能早於 `priority_end`）與一筆摘要。
     """
-    tournament = _lock_tournament(session, tournament_id)
-    if repository.get_settlement(session, tournament.id) is not None:
-        return False
-    if not _priority_window_due(tournament):
-        return False
-
     registrations = {
         r.id: r
         for r in repository.list_registrations(session, tournament.id)
@@ -843,17 +863,7 @@ def settle_priority_window(session: Session, *, tournament_id: uuid.UUID) -> boo
         *((i, RegistrationStatus.WAITLISTED) for i in result.waitlisted),
     ]
     for registration_id, status in outcomes:
-        registration = registrations[registration_id]
-        mark_status(session, registration=registration, to=status, actor_id=None)
-        events.publish(
-            session,
-            RegistrationAllocated(
-                registration_id=registration.id,
-                team_id=registration.team_id,
-                tournament_id=registration.tournament_id,
-                status=status,
-            ),
-        )
+        _allocate(session, registrations[registration_id], status, actor_id)
 
     priority_school_ids = sorted({c.school_id for c in candidates})
     repository.add_settlement(
@@ -866,7 +876,7 @@ def settle_priority_window(session: Session, *, tournament_id: uuid.UUID) -> boo
     )
     audit.record(
         session,
-        actor_id=None,
+        actor_id=actor_id,
         tournament_id=tournament.id,
         action="registration.priority_window_settled",
         entity_type="tournament",
@@ -880,6 +890,25 @@ def settle_priority_window(session: Session, *, tournament_id: uuid.UUID) -> boo
         },
     )
     session.flush()
+
+
+def settle_priority_window(session: Session, *, tournament_id: uuid.UUID) -> bool:
+    """優先期結算（FR-14）：鎖住賽事，在同一個鎖與交易內完成；回傳這次是否結算。
+
+    鎖內重新檢查：已有結算紀錄、賽事不是開放中的校園賽、或優先期還沒結束時不做任何事
+    （回傳 False），所以重複呼叫結果不變。只有 `pending` 且在優先期內（`submitted_at <=
+    priority_end`）送出的報名參加結算；優先期後送出的 `pending` 維持原狀（3.5 處理）。
+    結果依 `allocation.allocate_priority_window`，逐筆以 `mark_status` 改狀態（操作者為
+    系統）並發 `RegistrationAllocated`，再寫結算紀錄（保存優先期有報名的學校，可為空）
+    與一筆 `registration.priority_window_settled` 摘要。抽籤（`finalize_for_draw`）不呼叫
+    本函式：提前抽籤時優先期可能還沒結束，改直接用鎖內的 `_settle_locked`。
+    """
+    tournament = _lock_tournament(session, tournament_id)
+    if repository.get_settlement(session, tournament.id) is not None:
+        return False
+    if not _priority_window_due(tournament):
+        return False
+    _settle_locked(session, tournament, actor_id=None)
     return True
 
 
@@ -895,6 +924,89 @@ def allocate_due_priority_window(session: Session) -> bool:
             if settle_priority_window(session, tournament_id=tournament_id):
                 return True
     return False
+
+
+# ---------------------------------------------------------------- 抽籤前的分配（Story 3.6）
+
+# 先搶期判定時參考的狀態：待分配的報名不計入正取，但要能出現在 candidates 裡
+_FIRST_COME_STATUSES = _ORDER_STATUSES | {RegistrationStatus.PENDING}
+
+
+def _priority_schools(
+    session: Session, tournament_id: uuid.UUID
+) -> frozenset[uuid.UUID]:
+    settlement = repository.get_settlement(session, tournament_id)
+    return frozenset(settlement.priority_school_ids) if settlement else frozenset()
+
+
+def _registrations_in(
+    session: Session, tournament_id: uuid.UUID, statuses: frozenset[RegistrationStatus]
+) -> dict[uuid.UUID, Registration]:
+    return {
+        r.id: r
+        for r in repository.list_registrations(session, tournament_id)
+        if r.status in statuses
+    }
+
+
+def _first_come_locked(
+    session: Session, tournament: TournamentRead, *, actor_id: uuid.UUID | None
+) -> None:
+    """已鎖定的賽事補做先搶期（FR-15）：仍為 `pending` 的報名依送出時間（同時再依 id）逐筆判定。
+
+    每一筆都以最新狀態重建 candidates：先讓當下有順位的候補依 `backfill_vacancies`
+    遞補為正取，再以 `decide_first_come` 判定這一筆；前一筆剛正取的隊伍因此會算進
+    學校資格與名額。`priority_schools` 取自結算紀錄（沒有紀錄時為空集合）。
+    """
+    priority_schools = _priority_schools(session, tournament.id)
+    pending = sorted(
+        _registrations_in(
+            session, tournament.id, frozenset({RegistrationStatus.PENDING})
+        ).values(),
+        key=lambda r: (_candidate(r).submitted_at, r.id),
+    )
+    for registration in pending:
+        current = _registrations_in(session, tournament.id, _FIRST_COME_STATUSES)
+        backfilled = allocation.backfill_vacancies(
+            [_candidate(r) for r in current.values()],
+            phase=allocation.AllocationPhase.FIRST_COME,
+            priority_schools=priority_schools,
+            capacity=tournament.capacity,
+        )
+        for registration_id in backfilled:
+            _allocate(
+                session, current[registration_id], RegistrationStatus.ACCEPTED, actor_id
+            )
+        status = allocation.decide_first_come(
+            _candidate(registration),
+            candidates=[_candidate(r) for r in current.values()],
+            priority_schools=priority_schools,
+            capacity=tournament.capacity,
+        )
+        _allocate(session, registration, status, actor_id)
+
+
+def _fill_at_deadline_locked(
+    session: Session, tournament: TournamentRead, *, actor_id: uuid.UUID | None
+) -> None:
+    """已鎖定的賽事做截止補位（FR-16）：剩餘名額由候補依報名截止後的順位補上。
+
+    剩餘名額＝max(名額 − 目前正取（`accepted`＋`drawn`）, 0)；`fill_from_waitlist` 的
+    前 N 名改為正取，補位後仍有空位就保留。重複呼叫時已沒有可補的候補，結果不變。
+    """
+    current = _registrations_in(session, tournament.id, _ORDER_STATUSES)
+    accepted = sum(
+        1
+        for r in current.values()
+        if r.status in (RegistrationStatus.ACCEPTED, RegistrationStatus.DRAWN)
+    )
+    remaining = max(tournament.capacity - accepted, 0)
+    for registration_id in allocation.fill_from_waitlist(
+        [_candidate(r) for r in current.values()], remaining=remaining
+    ):
+        _allocate(
+            session, current[registration_id], RegistrationStatus.ACCEPTED, actor_id
+        )
 
 
 # ---------------------------------------------------------------- 公開函式（給其他模組）
@@ -923,3 +1035,94 @@ def is_member(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) ->
 def is_captain(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) -> bool:
     member = repository.get_team_member(session, team_id, account_id)
     return member is not None and member.role == MemberRole.CAPTAIN
+
+
+# ---------------------------------------------------------------- 抽籤用（competition 4.1，Story 3.6）
+
+
+def _registration_not_accepted() -> BusinessError:
+    return BusinessError(
+        "REGISTRATION_NOT_ACCEPTED",
+        "有隊伍不是這個賽事的正取，無法標為已參賽。",
+        status_code=409,
+    )
+
+
+def finalize_for_draw(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    """開放報名中抽籤前完成分配（提前抽籤＝提前結束報名）；重複呼叫結果不變。
+
+    先鎖住賽事；賽事不是開放報名或不是校園賽時不做任何事。否則在同一個交易依序：
+
+    1. 優先期結算：沒有結算紀錄時立即以當下已送出的優先期內報名結算（不檢查優先期
+       是否已結束）。
+    2. 補做先搶期：優先期後送出、仍為 `pending` 的報名依送出順序判定。
+    3. 截止補位：剩餘名額由候補依報名截止後的順位補上。
+
+    所有狀態變更與結算摘要的操作者都是 `actor_id`（抽籤的主辦方）。
+    """
+    tournament = _lock_tournament(session, tournament_id)
+    if (
+        tournament.status != TournamentStatus.OPEN
+        or tournament.mode != TournamentMode.CAMPUS
+    ):
+        return
+    if repository.get_settlement(session, tournament.id) is None:
+        _settle_locked(session, tournament, actor_id=actor_id)
+    _first_come_locked(session, tournament, actor_id=actor_id)
+    _fill_at_deadline_locked(session, tournament, actor_id=actor_id)
+
+
+def list_accepted_teams(
+    session: Session, *, tournament_id: uuid.UUID
+) -> list[TeamRead]:
+    """報名為正取（`accepted`）的隊伍，依隊伍 id 排序；隊伍與成員一次查出。"""
+    return [
+        _team_read(team, members)
+        for team, members in repository.list_teams_with_members_by_status(
+            session, tournament_id, RegistrationStatus.ACCEPTED
+        )
+    ]
+
+
+def mark_drawn(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    team_ids: Sequence[uuid.UUID],
+    actor_id: uuid.UUID,
+) -> None:
+    """抽籤的隊伍由正取（`accepted`）改為已參賽（`drawn`）；不發事件。
+
+    先鎖住賽事；`team_ids` 去重，空清單不做任何事。有任何 id 不存在、不屬於該賽事、
+    或報名不是正取時整批拒絕（409 `REGISTRATION_NOT_ACCEPTED`），不做部分更新。
+    已是 `drawn` 再呼叫也會被拒絕。
+    """
+    _lock_tournament(session, tournament_id)
+    unique_ids = set(team_ids)
+    if not unique_ids:
+        return
+    registrations = repository.list_registrations_by_team_ids(session, unique_ids)
+    if len(registrations) != len(unique_ids) or any(
+        r.tournament_id != tournament_id or r.status != RegistrationStatus.ACCEPTED
+        for r in registrations
+    ):
+        raise _registration_not_accepted()
+    for registration in registrations:
+        mark_status(
+            session,
+            registration=registration,
+            to=RegistrationStatus.DRAWN,
+            actor_id=actor_id,
+        )
+
+
+def get_team_names(
+    session: Session, *, team_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """依隊伍 id 一次查隊名；不看賽事與報名狀態，不存在的 id 不出現。"""
+    return {
+        team.id: team.name
+        for team in repository.list_teams_by_ids(session, set(team_ids))
+    }
