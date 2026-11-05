@@ -24,6 +24,8 @@ from app.modules.competition.models import (
     CheckInRead,
     CheckInStatus,
     CheckInStatusReason,
+    DrawStatus,
+    DrawStatusReason,
     GameScoreIn,
     ManagedMatch,
     Match,
@@ -205,6 +207,98 @@ def _bracket_to_read(
 
 # ---------------------------------------------------------------- 抽籤
 
+# 抽籤至少要有的正取隊數
+_MIN_DRAW_TEAMS = 2
+
+# 不能抽籤的原因 → 抽籤 API 的錯誤碼與訊息（狀態 API 的小寫代碼與錯誤碼一一對應）
+_DRAW_ERRORS: dict[DrawStatusReason, tuple[str, str]] = {
+    "already_drawn": ("BRACKET_ALREADY_DRAWN", "這場賽事已經抽過籤了。"),
+    "not_drawable": ("TOURNAMENT_NOT_DRAWABLE", "賽事目前的狀態不能抽籤。"),
+    "start_passed": ("TOURNAMENT_START_PASSED", "開賽時間已過，無法抽籤"),
+    "not_enough_teams": ("NOT_ENOUGH_TEAMS", "正取不足 2 隊，無法抽籤"),
+}
+
+
+def _draw_error(reason: DrawStatusReason) -> BusinessError:
+    code, message = _DRAW_ERRORS[reason]
+    return BusinessError(code, message, status_code=409)
+
+
+def _draw_blocked(
+    session: Session, tournament: TournamentRead
+) -> DrawStatusReason | None:
+    """抽籤在分配正取之前的檢查（依序）；呼叫端已鎖住賽事並確認是主辦方。"""
+    if repository.get_bracket_by_tournament(session, tournament.id) is not None:
+        return "already_drawn"
+    if tournament.status not in _DRAWABLE:
+        return "not_drawable"
+    if tournament.start_at <= clock.now():
+        return "start_passed"
+    return None
+
+
+class _PreviewRollback(Exception):
+    """預估抽籤時拋出，讓 savepoint 回滾分配結果；帶出預估的正取隊數。"""
+
+    def __init__(self, expected_teams: int) -> None:
+        super().__init__(expected_teams)
+        self.expected_teams = expected_teams
+
+
+def _expected_teams(
+    session: Session, *, tournament: TournamentRead, actor_id: uuid.UUID
+) -> int:
+    """抽籤當下會有幾隊正取。
+
+    開放報名中與 `draw` 一樣先呼叫 `finalize_for_draw`，但在 savepoint 裡執行，
+    數完隊伍就拋例外讓 savepoint 回滾：報名狀態、結算紀錄、操作紀錄與 outbox
+    事件都不會留下（AD-5：service 不呼叫 rollback，由 savepoint 自己回滾）。
+    """
+    if tournament.status != TournamentStatus.OPEN:
+        return len(
+            registration_port.list_accepted_teams(session, tournament_id=tournament.id)
+        )
+    try:
+        with session.begin_nested():
+            registration_port.finalize_for_draw(
+                session, tournament_id=tournament.id, actor_id=actor_id
+            )
+            raise _PreviewRollback(
+                len(
+                    registration_port.list_accepted_teams(
+                        session, tournament_id=tournament.id
+                    )
+                )
+            )
+    except _PreviewRollback as preview:
+        return preview.expected_teams
+
+
+def get_draw_status(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> DrawStatus:
+    """S27 抽籤按鈕：與 `draw` 相同的檢查順序與分配規則預估能不能抽籤，不寫入任何資料。
+
+    先不鎖讀賽事擋掉非主辦方（不讓無權限者排隊等鎖），再鎖住賽事（AD-6）
+    取得最新值，與同時進行的抽籤、優先期結算串行。
+    """
+    authz.ensure_tournament_owner(
+        tournaments_service.get_tournament(session, tournament_id=tournament_id),
+        actor_id,
+    )
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=tournament_id
+    )
+    blocked = _draw_blocked(session, tournament)
+    if blocked is not None:
+        return DrawStatus(can_draw=False, reason=blocked, expected_teams=None)
+    expected = _expected_teams(session, tournament=tournament, actor_id=actor_id)
+    if expected < _MIN_DRAW_TEAMS:
+        return DrawStatus(
+            can_draw=False, reason="not_enough_teams", expected_teams=expected
+        )
+    return DrawStatus(can_draw=True, reason=None, expected_teams=expected)
+
 
 def draw(
     session: Session,
@@ -222,20 +316,9 @@ def draw(
         session, tournament_id=tournament_id
     )
     authz.ensure_tournament_owner(tournament, actor_id)
-    if repository.get_bracket_by_tournament(session, tournament_id) is not None:
-        raise BusinessError(
-            "BRACKET_ALREADY_DRAWN", "這場賽事已經抽過籤了。", status_code=409
-        )
-    if tournament.status not in _DRAWABLE:
-        raise BusinessError(
-            "TOURNAMENT_NOT_DRAWABLE",
-            "賽事目前的狀態不能抽籤。",
-            status_code=409,
-        )
-    if tournament.start_at <= clock.now():
-        raise BusinessError(
-            "TOURNAMENT_START_PASSED", "開賽時間已過，無法抽籤", status_code=409
-        )
+    blocked = _draw_blocked(session, tournament)
+    if blocked is not None:
+        raise _draw_error(blocked)
     if tournament.status == TournamentStatus.OPEN:
         registration_port.finalize_for_draw(
             session, tournament_id=tournament_id, actor_id=actor_id
@@ -243,10 +326,8 @@ def draw(
     team_ids = registration_port.list_accepted_teams(
         session, tournament_id=tournament_id
     )
-    if len(team_ids) < 2:
-        raise BusinessError(
-            "NOT_ENOUGH_TEAMS", "正取不足 2 隊，無法抽籤", status_code=409
-        )
+    if len(team_ids) < _MIN_DRAW_TEAMS:
+        raise _draw_error("not_enough_teams")
 
     # 洗牌前先依隊名（相同再比 id）排序：結果只取決於亂數，不受 registration
     # 回傳順序影響，示範資料用固定種子時每次都得到同一張對戰表

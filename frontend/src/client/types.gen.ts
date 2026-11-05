@@ -246,6 +246,31 @@ export type CheckInStatus = {
 }
 
 /**
+ * DrawStatus
+ *
+ * S27 抽籤按鈕：現在能不能抽籤（與抽籤 API 同一套檢查與分配規則，不寫入）。
+ */
+export type DrawStatus = {
+  /**
+   * Can Draw
+   */
+  can_draw: boolean
+  /**
+   * Reason
+   */
+  reason:
+    | "already_drawn"
+    | "not_drawable"
+    | "start_passed"
+    | "not_enough_teams"
+    | null
+  /**
+   * Expected Teams
+   */
+  expected_teams: number | null
+}
+
+/**
  * EmailVerificationCreate
  */
 export type EmailVerificationCreate = {
@@ -3032,6 +3057,38 @@ export type competitionDrawResponses = {
 
 export type competitionDrawResponse =
   competitionDrawResponses[keyof competitionDrawResponses]
+
+export type competitionReadDrawStatusData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/draw-status"
+}
+
+export type competitionReadDrawStatusErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadDrawStatusError =
+  competitionReadDrawStatusErrors[keyof competitionReadDrawStatusErrors]
+
+export type competitionReadDrawStatusResponses = {
+  /**
+   * Successful Response
+   */
+  200: DrawStatus
+}
+
+export type competitionReadDrawStatusResponse =
+  competitionReadDrawStatusResponses[keyof competitionReadDrawStatusResponses]
 
 export type competitionReadPublicBracketData = {
   body?: never
