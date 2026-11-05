@@ -185,6 +185,18 @@ def find_due_upcoming_id(session: Session, now: datetime) -> uuid.UUID | None:
     return session.exec(statement).first()
 
 
+def find_due_registration_end_id(session: Session, now: datetime) -> uuid.UUID | None:
+    """一筆開放報名中、報名截止已到的賽事 id（最早到期的優先）；不加鎖。"""
+    statement = (
+        select(Tournament.id)
+        .where(Tournament.status == TournamentStatus.OPEN)
+        .where(col(Tournament.registration_end) <= now)
+        .order_by(col(Tournament.registration_end), col(Tournament.id))
+        .limit(1)
+    )
+    return session.exec(statement).first()
+
+
 def set_tournament_status(
     session: Session, tournament: Tournament, status: TournamentStatus, at: datetime
 ) -> Tournament:

@@ -50,6 +50,11 @@ def allocate_priority_windows(session: Session) -> bool:
     return registration_service.allocate_due_priority_window(session)
 
 
+def close_registrations(session: Session) -> bool:
+    """把一場報名截止已到的開放報名賽事轉為報名截止，校園賽先做截止補位（Story 3.6，操作者為系統）。"""
+    return registration_service.close_due_registration(session)
+
+
 # 判一場逾時未報到的棄權（Story 5.2；函式名稱為 `judge_forfeits`）
 judge_forfeits = make_forfeit_job(SERVICE_FORFEIT_PORTS)
 
@@ -62,6 +67,7 @@ def confirm_expired_appeals(session: Session) -> bool:
 JOBS: list[Job] = [
     open_registrations,
     allocate_priority_windows,
+    close_registrations,
     start_due_tournaments,
     judge_forfeits,
     confirm_expired_appeals,

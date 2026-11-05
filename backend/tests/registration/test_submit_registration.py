@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlmodel import Session, col
 
-from app.core import authz
+from app.core import authz, clock
 from app.core.db import engine
 from app.core.errors import BusinessError
 from app.modules.identity import service as identity_service
@@ -664,6 +664,42 @@ def test_submit_at_deadline_is_closed(
         ("STARTERS_NOT_MET", "還差 1 人才達先發人數（5 人）"),
     ]
     assert detail["profile_editable"] is False
+
+
+def test_submit_crossing_the_deadline_uses_one_time_for_check_and_snapshot(
+    client: TestClient,
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """截止前一刻送出、中間的查詢跨過截止：檢查與 `submitted_at` 用同一個時間。
+
+    直接呼叫 service（不經 API，避免登入驗證等其他程式先取時間）；`clock.now()`
+    第一次回傳截止前 1 微秒、之後一律截止後 1 微秒。改回兩次取時間時，
+    `submitted_at` 會晚於報名截止時間而失敗。
+    """
+    team, accounts = _team(client, session, names=FIVE)
+    tournament = service._get_tournament(session, uuid.UUID(team["tournament_id"]))
+    before = tournament.registration_end - timedelta(microseconds=1)
+    after = tournament.registration_end + timedelta(microseconds=1)
+    calls: list[datetime] = []
+
+    def _crossing_now() -> datetime:
+        calls.append(before if not calls else after)
+        return calls[-1]
+
+    monkeypatch.setattr(clock, "now", _crossing_now)
+
+    service.submit_registration(
+        session, team_id=uuid.UUID(team["id"]), account_id=accounts[0].id
+    )
+
+    registration = _registration(session, team["id"])
+    assert registration.status == RegistrationStatus.PENDING
+    assert registration.submitted_at == before
+    assert registration.submitted_at < tournament.registration_end
+    [submitted] = _audit(session, "registration.submitted", tournament.id)
+    assert submitted.after is not None
+    assert datetime.fromisoformat(submitted.after["submitted_at"]) == before
 
 
 def test_profile_editable_until_the_deadline(
