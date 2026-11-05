@@ -210,9 +210,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-7-s31-s23-referee-ui.md`
   summary: （中）裁判名單的查詢在兩處各定義一次：tournaments 的 `referee-queries.ts` `refereesQueryOptions`（S31）與 D 的 `features/competition/organizer-matches-queries.ts` `tournamentRefereesQueryOptions`（S30），都用 `["tournaments","organizer","referees",tournamentId]`；`queryFn`、`retry` 各寫一份，誰先掛載就用誰的設定，之後只改一邊會互相污染快取。
   evidence: 2026-11-05 Story 2.7 第二階段審查（Blind Hunter）。前端依賴方向是 competition → tournaments，不能反過來匯入 D 的定義；處理時請 D 把 `organizer-matches-queries.ts` 改成匯入 `refereesQueryOptions`，刪掉自己的定義（competition 只新增 import，不改 tournaments 的檔案）。
-- source_spec: none
-  summary: Story 3.6 第二階段之二：報名截止 worker 工作——截止後 1 分鐘內鎖住賽事、轉為「報名截止」，呼叫「給抽籤用的函式」那份 spec 建立的截止補位（先 `settle_priority_window`、處理優先期後送出的 `pending`、再 `fill_from_waitlist`），操作者為 system，重複執行結果不變；自訂模式只轉狀態不補位。
-  evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.6 第二階段拆成兩份：先做給 D 抽籤用的四個函式（`finalize_for_draw`、`list_accepted_teams`、`mark_drawn`、`get_team_names`，目前抽籤回 503，期限 11/12），截止 worker 沿用同一段補位邏輯，排在之後。S2「抽籤準備中」B 已在 `TournamentOverview.tsx` 做好，不在範圍內。
 - source_spec: _bmad-output/implementation-artifacts/spec-4-1-s27-draw-button.md
   summary: S27 抽籤預估改成不寫入的純函式試算（目前在 savepoint 內真的分配再回滾，開放報名中每次預估都持有賽事列鎖）。
   evidence: 2026-11-05 S27 審查。`get_draw_status` 在開放報名中呼叫 `finalize_for_draw` 後以例外回滾，每次預覽都重做分配、消耗 `audit_log.seq` 序列值並持有賽事列鎖到交易結束；前端只能以 `staleTime` 與關閉聚焦重抓降低頻率。改成 registration 提供不寫入的試算函式後可移除 savepoint。
