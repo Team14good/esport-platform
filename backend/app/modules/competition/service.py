@@ -1684,6 +1684,18 @@ def _range_text(window: schedule_rules.RescheduleWindow) -> str:
     return f"{start}～{_taipei_text(window.latest)}"
 
 
+def _reschedule_error(
+    reason: schedule_rules.RescheduleReason,
+    window: schedule_rules.RescheduleWindow,
+) -> BusinessError:
+    """新時間不在範圍內的 409；改期（4.3）與重賽（6.2）共用，錯誤碼與訊息不分岔。"""
+    if reason == "no_valid_time":
+        message = f"這場目前沒有可選的時間（最早 {_taipei_text(window.earliest)}）。"
+    else:
+        message = f"新時間不在允許範圍內，可選 {_range_text(window)}。"
+    return BusinessError(_RESCHEDULE_CODES[reason], message, status_code=409)
+
+
 def reschedule_match(
     session: Session,
     *,
@@ -1713,13 +1725,7 @@ def reschedule_match(
     window, check = _reschedule_window(session, tournament, match, matches, now=now)
     reason = check(scheduled_at)
     if reason is not None:
-        if reason == "no_valid_time":
-            message = (
-                f"這場目前沒有可選的時間（最早 {_taipei_text(window.earliest)}）。"
-            )
-        else:
-            message = f"新時間不在允許範圍內，可選 {_range_text(window)}。"
-        raise BusinessError(_RESCHEDULE_CODES[reason], message, status_code=409)
+        raise _reschedule_error(reason, window)
 
     before = {
         "scheduled_at": match.scheduled_at,
@@ -1749,6 +1755,89 @@ def reschedule_match(
         MatchRescheduled(match_id=match.id, scheduled_at=match.scheduled_at),
     )
     return _match_to_read(match)
+
+
+# ---------------------------------------------------------------- 6.x 前置（B 呼叫）
+
+
+def check_replay_time(
+    session: Session,
+    *,
+    tournament: TournamentRead,
+    match: Match,
+    scheduled_at: datetime,
+) -> None:
+    """重新比賽的新時間以 4.3 改期同一個範圍檢查（6.2 `replay_match` 呼叫）。
+
+    不符合拋與 `reschedule_match` 相同的 409（`RESCHEDULE_BEFORE_NOW`、
+    `RESCHEDULE_BEFORE_FEEDER`、`RESCHEDULE_AFTER_NEXT_MATCH`、`RESCHEDULE_NO_VALID_TIME`，
+    訊息附台北時間範圍）。不檢查賽事狀態、場次狀態、報到與主辦方（呼叫端負責），
+    不寫入任何資料。呼叫端先 `lock_tournament`、`lock_match`（AD-6）；相鄰場次以資料庫
+    最新值讀取。`scheduled_at` 必須帶時區（router 的欄位驗證負責），沒帶時區拋
+    `ValueError`（`schedule._utc`）；`tournament` 不是 `match` 所屬的賽事也拋
+    `ValueError`。兩者都是呼叫端的程式錯誤，不是業務錯誤。
+    """
+    if tournament.id != match.tournament_id:
+        raise ValueError("tournament 不是 match 所屬的賽事")
+    matches = repository.list_matches(session, match.bracket_id, fresh=True)
+    window, check = _reschedule_window(
+        session, tournament, match, matches, now=clock.now()
+    )
+    reason = check(scheduled_at)
+    if reason is not None:
+        raise _reschedule_error(reason, window)
+
+
+def get_replay_window(session: Session, *, match_id: uuid.UUID) -> RescheduleInfo:
+    """S32 重賽時間選擇器的範圍，與 `check_replay_time` 同一個規則；不寫入。
+
+    判斷順序（與 `replay_match` 的拒絕條件一致）：場次不存在拋 404 `MATCH_NOT_FOUND`；
+    賽事不是賽程已公布或進行中 → `tournament_not_reschedulable`、範圍為 None；
+    場次不是申訴中或結果不是棄權 → `match_not_reschedulable`、範圍為 None；
+    其餘有可選範圍時 `can_reschedule=True`，範圍為空時 `reason="no_valid_time"`，
+    仍附 `earliest`、`latest`（主辦方要先到 S30 把下一場改晚）。
+    本場與相鄰場次都以資料庫最新值讀取（與 `check_replay_time` 一致）。
+    """
+    match = repository.get_match(session, match_id)
+    if match is None:
+        raise _match_not_found()
+    matches = repository.list_matches(session, match.bracket_id, fresh=True)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=match.tournament_id
+    )
+    blocked: RescheduleBlockReason | None = None
+    if tournament.status not in _RESCHEDULABLE_TOURNAMENT:
+        blocked = "tournament_not_reschedulable"
+    elif (
+        MatchStatus(match.status) != MatchStatus.APPEALED
+        or match.outcome != MatchOutcome.FORFEIT
+    ):
+        blocked = "match_not_reschedulable"
+    if blocked is not None:
+        return RescheduleInfo(
+            can_reschedule=False, reason=blocked, earliest=None, latest=None
+        )
+    window, _check = _reschedule_window(
+        session, tournament, match, matches, now=clock.now()
+    )
+    return RescheduleInfo(
+        can_reschedule=not window.is_empty,
+        reason="no_valid_time" if window.is_empty else None,
+        earliest=window.earliest,
+        latest=window.latest,
+    )
+
+
+def unassign_referee_if_member(session: Session, *, match: Match) -> None:
+    """該場裁判是任一隊的隊員時收回（6.5 `disqualify` 頂替後呼叫）。
+
+    檢查兩隊（`advance` 填位後只檢查新填入的一隊）；收回時與 `advance` 相同，寫
+    `match.referee_unassigned`（操作者為系統）、發 `RefereeUnassigned`。裁判不是隊員、
+    沒有裁判、隊伍待定的一方不動。只對待開打、進行中的場次呼叫（已結束的場次裁判
+    不再有意義）。呼叫端先 `lock_tournament`、`lock_match`（AD-6）並已寫入頂替後的隊伍。
+    """
+    for team_id in (match.team_a_id, match.team_b_id):
+        _unassign_if_member(session, match=match, team_id=team_id)
 
 
 def list_my_referee_matches(
