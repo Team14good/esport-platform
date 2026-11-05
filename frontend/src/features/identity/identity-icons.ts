@@ -1,5 +1,6 @@
 import {
   CompassIcon,
+  FlagIcon,
   type LucideIcon,
   ShieldCheckIcon,
   TrophyIcon,
@@ -15,6 +16,7 @@ const IDENTITY_ICONS: Record<IdentityKey, LucideIcon> = {
   organizer: TrophyIcon,
   platform_admin: ShieldCheckIcon,
   my_teams: UsersIcon,
+  referee: FlagIcon,
 }
 
 /** 身分的圖示（身分切換器與 S11 共用）；不認得的身分用通用的人像圖示。 */

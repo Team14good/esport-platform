@@ -505,6 +505,24 @@ class ManagedMatch(BaseModel):
     can_assign_referee: bool
 
 
+# ---------------------------------------------------------------- 我執法的場次（4.4 S13）
+
+
+class RefereeMatch(PublicMatch):
+    """S13 的一列：`PublicMatch` 加上輪次名稱與兩隊是否都已報到。"""
+
+    round_name: str
+    # 兩隊都已確定且都已報到；前端在待開打時標示「可開始」
+    both_checked_in: bool
+
+
+class RefereeTournamentMatches(BaseModel):
+    """S13 依賽事分組。"""
+
+    tournament: PublicTournamentRef
+    matches: list[RefereeMatch]
+
+
 # ---------------------------------------------------------------- 指派裁判（4.4）
 
 

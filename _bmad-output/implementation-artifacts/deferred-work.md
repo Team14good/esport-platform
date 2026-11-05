@@ -199,9 +199,6 @@
   summary: Story 3.5 第二階段：先搶期送出時，在 3.3 `submit_registration` 的 `lock_tournament()` 鎖內先呼叫 `backfill_vacancies(FIRST_COME)` 遞補，再以 `decide_first_come` 判定正取或候補，回應直接帶結果與候補順位；補 200 筆平行送出的併發整合測試。
   evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.4～3.6 第二階段拆開。3.5 只改送出流程與併發測試，可獨立合併，排在 3.6 之後；沿用 3.4 第二階段建立的「優先期有報名的學校」與 S17／S12 狀態顯示。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
-  summary: S13「我執法的場次」還沒做：裁判需要列出自己被指派的場次，目前沒有查詢 API。
-  evidence: 2026-11-04 使用者決定之後再做；需要新增依 `referee_account_id` 查場次的 competition 函式與 API。
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
   summary: S4 要隨 `is_scorer` 顯示或隱藏比分登錄面板：指派、改派、收回後（含晉級衝突自動收回），`ScoreEntryState.is_scorer` 會改變，S4 需重抓 `GET .../score-entry`（A 的 S4 工作）。
   evidence: 2026-11-04 承接已刪除的 5.3 項目；後端端對端測試已在 `test_assign_referee.py`（指派／收回後 `is_scorer` 切換、晉級衝突收回），前端尚未接上。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-s30-matches-page.md`
@@ -216,6 +213,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-real-match-data.md`
   summary: 觀眾 e2e（`frontend/tests/e2e/spectator.spec.ts`）的 S3、S4 目前以 `page.route` 回傳假對戰樹（`support/match-api.ts`），沒有走真的後端；7.1 示範資料有已抽籤的賽事後，要補一份從真賽事 S2「對戰表」分頁進入、走真 API 的版本。
   evidence: 2026-11-04 使用者依 D 在 PR #47 審查的建議，決定先改用 `page.route`，不等 7.1。假資料只驗證前端流程與版面（含 375 px），測不到公開 API 的實際回應與 NFR-2 回應時間。
+
+## Deferred from: spec-4-4-s13-referee-matches.md (2026-11-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-s13-referee-matches.md`
+  summary: `Match.referee_account_id` 沒有索引，`GET /me/referee/matches` 會掃整張場次表；資料變多時要加索引，並另開一支 Alembic 遷移。
+  evidence: 2026-11-04 S13 實作與審查第 1 輪；期中規模可接受，且 `tests/test_migrations.py` 要求遷移與模型一致，所以這個 Story 沒動 schema。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
+  summary: Story 3.6 第二階段：確認抽籤後的報名狀態名稱與 `allocation.py` 一致——`allocation.py` 把 `drawn`（已參賽）也算進每校正取數（FR-17「含抽籤後」），3.4 第二階段的 S17／S12 候補順位也把 `drawn` 當正取。
+  evidence: 2026-11-04 Story 3.4 第二階段刪除第一階段的「Story 3.4～3.6 第二階段」項目時，該項目裡的這項檢查沒寫進 3.6 的新項目，依 spec 補上。3.6 接上 D 的 4.1（抽籤時把報名標為已參賽）時，確認 4.1 呼叫的 registration 函式寫入的狀態就是 `drawn`。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
+  summary: Story 3.6 第二階段：截止補位與 4.1 的 `finalize_for_draw`（開放報名中提前抽籤）都要先在鎖內呼叫 `settle_priority_window`，並處理優先期後送出、仍為 `pending` 的報名，不能讓它們被 `fill_from_waitlist` 漏掉或在抽籤後留在 `pending`。
+  evidence: 2026-11-04 Story 3.4 第二階段審查（Blind Hunter、Edge Case Hunter）。刪除第一階段的「Story 3.4～3.6 第二階段」項目時，「不能有 `pending` 報名被 `fill_from_waitlist` 漏掉」沒寫進 3.6 的新項目；而開發順序是 3.4 → 3.6 → 3.5，3.6 做的時候優先期後送出的報名仍會維持 `pending`（本 Story 刻意不處理）。另外 `competition/service.py` 的抽籤可以把賽事由 `open` 直接轉成 `published`，`registration_port.finalize_for_draw` 是 D 呼叫的入口；若優先期剛結束、worker 還沒結算就抽籤，優先期內的 `pending` 會留下。目前 registration 還沒提供 `finalize_for_draw`，抽籤回 503，所以現在不會發生。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-priority-window-allocation.md`
+  summary: 補 API 層測試：同校已有 2 隊 `drawn` 時，同校候補在 S17／S12 回 `waitlist_reason == "SCHOOL_LIMIT_REACHED"`、`waitlist_phase == "after_deadline"`（驗證 `_ORDER_STATUSES` 把 `drawn` 當正取）。
+  evidence: 2026-11-04 Story 3.4 第二階段審查（Verification Gap）。`allocation.py` 的純函式測試有測 `drawn`，但沒有測試讓 `drawn` 報名經過 `service._waitlist_fields` 的狀態篩選；從 `_ORDER_STATUSES` 拿掉 `DRAWN`，現有測試仍全過。目前沒有正式程式會把報名設成 `drawn`（`mark_drawn` 尚未提供），在 3.6 提供 `mark_drawn` 時補。
 - source_spec: none
   summary: Story 3.6 第二階段之二：報名截止 worker 工作——截止後 1 分鐘內鎖住賽事、轉為「報名截止」，呼叫「給抽籤用的函式」那份 spec 建立的截止補位（先 `settle_priority_window`、處理優先期後送出的 `pending`、再 `fill_from_waitlist`），操作者為 system，重複執行結果不變；自訂模式只轉狀態不補位。
   evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.6 第二階段拆成兩份：先做給 D 抽籤用的四個函式（`finalize_for_draw`、`list_accepted_teams`、`mark_drawn`、`get_team_names`，目前抽籤回 503，期限 11/12），截止 worker 沿用同一段補位邏輯，排在之後。S2「抽籤準備中」B 已在 `TournamentOverview.tsx` 做好，不在範圍內。

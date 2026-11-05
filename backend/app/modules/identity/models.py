@@ -394,6 +394,8 @@ class IdentityKey(StrEnum):
     PLATFORM_ADMIN = "platform_admin"
     # Story 3.1：所有登入帳號都有「我的隊伍」
     MY_TEAMS = "my_teams"
+    # Story 4.4：接受過任一賽事裁判邀請的帳號
+    REFEREE = "referee"
 
 
 class Identity(BaseModel):

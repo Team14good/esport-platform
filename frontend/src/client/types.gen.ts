@@ -378,7 +378,12 @@ export type Identity = {
  *
  * 身分切換器的身分；之後的 Story 會加入我的隊伍、裁判。
  */
-export type IdentityKey = "browse" | "organizer" | "platform_admin" | "my_teams"
+export type IdentityKey =
+  | "browse"
+  | "organizer"
+  | "platform_admin"
+  | "my_teams"
+  | "referee"
 
 /**
  * ManagedMatch
@@ -1160,6 +1165,78 @@ export type RefereeInvitationRead = {
 }
 
 /**
+ * RefereeMatch
+ *
+ * S13 的一列：`PublicMatch` 加上輪次名稱與兩隊是否都已報到。
+ */
+export type RefereeMatch = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Code
+   */
+  code: string
+  /**
+   * Round No
+   */
+  round_no: number
+  /**
+   * Slot No
+   */
+  slot_no: number
+  /**
+   * Is Third Place
+   */
+  is_third_place: boolean
+  team_a: PublicTeamRef | null
+  team_b: PublicTeamRef | null
+  /**
+   * Source A
+   */
+  source_a: string | null
+  /**
+   * Source B
+   */
+  source_b: string | null
+  /**
+   * Bye A
+   */
+  bye_a: boolean
+  /**
+   * Bye B
+   */
+  bye_b: boolean
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+  status: MatchStatus
+  outcome: MatchOutcome | null
+  /**
+   * Winner Id
+   */
+  winner_id: string | null
+  /**
+   * Wins A
+   */
+  wins_a: number
+  /**
+   * Wins B
+   */
+  wins_b: number
+  /**
+   * Round Name
+   */
+  round_name: string
+  /**
+   * Both Checked In
+   */
+  both_checked_in: boolean
+}
+
+/**
  * RefereeRead
  *
  * 已接受邀請的裁判。
@@ -1177,6 +1254,19 @@ export type RefereeRead = {
    * Accepted At
    */
   accepted_at: string
+}
+
+/**
+ * RefereeTournamentMatches
+ *
+ * S13 依賽事分組。
+ */
+export type RefereeTournamentMatches = {
+  tournament: PublicTournamentRef
+  /**
+   * Matches
+   */
+  matches: Array<RefereeMatch>
 }
 
 /**
@@ -3234,6 +3324,25 @@ export type competitionSubmitResultResponses = {
 
 export type competitionSubmitResultResponse =
   competitionSubmitResultResponses[keyof competitionSubmitResultResponses]
+
+export type competitionListMyRefereeMatchesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/me/referee/matches"
+}
+
+export type competitionListMyRefereeMatchesResponses = {
+  /**
+   * Response Competition-List My Referee Matches
+   *
+   * Successful Response
+   */
+  200: Array<RefereeTournamentMatches>
+}
+
+export type competitionListMyRefereeMatchesResponse =
+  competitionListMyRefereeMatchesResponses[keyof competitionListMyRefereeMatchesResponses]
 
 export type competitionListManagedMatchesData = {
   body?: never

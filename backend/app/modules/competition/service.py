@@ -43,6 +43,8 @@ from app.modules.competition.models import (
     PublicTeamRef,
     PublicTournamentRef,
     RefereeAssigned,
+    RefereeMatch,
+    RefereeTournamentMatches,
     RefereeUnassigned,
     ReplayCleared,
     RescheduleBlockReason,
@@ -1747,6 +1749,63 @@ def reschedule_match(
         MatchRescheduled(match_id=match.id, scheduled_at=match.scheduled_at),
     )
     return _match_to_read(match)
+
+
+def list_my_referee_matches(
+    session: Session, *, account_id: uuid.UUID
+) -> list[RefereeTournamentMatches]:
+    """S13：指派給我、未取消的場次，依賽事分組。
+
+    組內依預定時間、代號；各組依組內最早的預定時間（同時間依賽事名稱）。沒有指派回空清單。
+    已取消賽事的場次不列出（取消賽事不會把場次改成 voided，所以要在這裡過濾）；已結束的賽事仍列出。
+    """
+    matches = repository.list_referee_matches(session, account_id)
+    if not matches:
+        return []
+    checked_in = repository.list_check_in_pairs(session, [m.id for m in matches])
+    tournaments: dict[uuid.UUID, TournamentRead] = {}
+    groups: dict[uuid.UUID, list[RefereeMatch]] = {}
+    for bracket_id in dict.fromkeys(m.bracket_id for m in matches):
+        bracket = repository.get_bracket(session, bracket_id)
+        if bracket is None:
+            # 場次的外鍵保證對戰表存在；萬一不在，略過這些場次，不讓整頁失敗
+            logger.error("場次的對戰表不存在：bracket_id=%s", bracket_id)
+            continue
+        if bracket.tournament_id not in tournaments:
+            tournaments[bracket.tournament_id] = tournaments_service.get_tournament(
+                session, tournament_id=bracket.tournament_id
+            )
+        if tournaments[bracket.tournament_id].status == TournamentStatus.CANCELLED:
+            continue
+        mine = [m for m in matches if m.bracket_id == bracket_id]
+        public_matches, _team_ref = _public_matches(session, bracket, mine)
+        by_id = {p.id: p for p in public_matches}
+        rows = groups.setdefault(bracket.tournament_id, [])
+        for match in mine:
+            public = by_id[match.id]
+            teams = _match_teams(match)
+            rows.append(
+                RefereeMatch(
+                    **public.model_dump(),
+                    round_name="季軍賽"
+                    if match.is_third_place
+                    else bracket_rules.round_name(match.round_no, bracket.rounds),
+                    both_checked_in=len(teams) == 2
+                    and all((match.id, team_id) in checked_in for team_id in teams),
+                )
+            )
+    result = []
+    for tournament_id, rows in groups.items():
+        rows.sort(key=lambda m: (m.scheduled_at, m.code))
+        tournament = tournaments[tournament_id]
+        result.append(
+            RefereeTournamentMatches(
+                tournament=PublicTournamentRef(id=tournament.id, name=tournament.name),
+                matches=rows,
+            )
+        )
+    result.sort(key=lambda g: (g.matches[0].scheduled_at, g.tournament.name))
+    return result
 
 
 def list_managed_matches(

@@ -23,6 +23,8 @@ import type {
   competitionListManagedMatchesData,
   competitionListManagedMatchesErrors,
   competitionListManagedMatchesResponses,
+  competitionListMyRefereeMatchesData,
+  competitionListMyRefereeMatchesResponses,
   competitionReadCheckInStatusData,
   competitionReadCheckInStatusErrors,
   competitionReadCheckInStatusResponses,
@@ -1259,6 +1261,26 @@ export class CompetitionService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/submit",
+      ...options,
+    })
+  }
+
+  /**
+   * List My Referee Matches
+   *
+   * S13：指派給登入者、未取消的場次，依賽事分組；沒有指派回空清單（不要求有裁判身分）。
+   */
+  public static listMyRefereeMatches<ThrowOnError extends boolean = true>(
+    options?: Options<competitionListMyRefereeMatchesData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      competitionListMyRefereeMatchesResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/me/referee/matches",
       ...options,
     })
   }

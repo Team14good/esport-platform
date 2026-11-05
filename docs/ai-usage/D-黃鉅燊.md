@@ -566,6 +566,29 @@
 - 成熟度：L3（AI 實作、審查與修正，人核准設計）
 - 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
 
+### 2026-11-04｜審查／合併｜審 C 的 #50（3.4 第二階段：優先期結束自動分配）
+
+- Story／範圍：C 的 3.4 第二階段（+2083 行、28 個檔案）
+- 工具：Claude Code（Opus 5.5）；審查子代理逐行讀程式並做心智突變檢查
+- 怎麼用：子代理在獨立 worktree 讀完整支 PR，查鎖、冪等、交易範圍、遷移鏈、worker 順序與前端字串；AI 再回到程式碼親自查證影響 D 的那一點
+- AI 產出：核准審查（2 中、4 低）；合併 #50
+- 人做了什麼：使用者授權由 D 審查並合併所有人的 PR
+- 驗證：AI 親自讀 `settle_priority_window` 與 `contracts/competition.md:253`，確認「優先期內抽籤時結算函式直接回傳 False」與約定的 `finalize_for_draw` 衝突；合併前 CI 綠燈
+- 問題與修正：子代理說它把鎖換成不加鎖的讀取後「所有測試仍會通過」，這是推演不是實跑，所以審查只寫成「建議補併發測試」，不寫成已證實的缺陷
+- 成熟度：L2（AI 審查，人決定授權）
+- 證據：#50 的審查與合併紀錄
+
+### 2026-11-04｜實作／測試｜S13 我執法的場次與「裁判」身分（4.4 最後一塊）
+
+- Story／範圍：4.4（D）的 S13
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；實作與三個審查員（Blind Hunter、Edge Case Hunter、Verification Gap）都是子代理
+- 怎麼用：AI 查到身分清單由 identity（最底層）產生，依架構不能往上查 tournaments 的裁判名單，提出三種做法讓使用者選；使用者選「identity 開註冊點、由組裝層接上」。另外三個細節（列出含已結束的場次、依賽事分組、不分頁）寫進草稿請使用者核准
+- AI 產出：`GET /me/referee/matches`、`/me/referee` 頁面、`IdentityKey.REFEREE` 與 `register_referee_lookup`、`has_referee_role`；後端 24 個、前端 6 個測試；contracts、deferred-work、sprint-status；重新產生 client 與 routeTree
+- 人做了什麼：使用者決定先做 S13、選身分的接法、核准 spec
+- 驗證：後端全套 1891 passed、lint 通過；合併 main 後相關 320 個測試通過、重新產生的 client 與 commit 相同；前端 biome 通過、新的 6 個單元測試通過
+- 問題與修正：三個審查員合計約 40 項，去重後修 10 項、駁回 8 項（理由在 spec 的 Review Triage Log）。實際修正的錯誤：取消賽事不會把場次改成取消，已取消賽事的場次會繼續列出甚至標「可開始」；依位置配對場次，順序一變就會配錯或 500；身分查詢一出錯整個身分切換器就壞；「未註冊」的測試在結尾自己裝回註冊，刪掉組裝層的註冊時測試可能照樣通過（修正後實際刪掉註冊確認會紅）。實作子代理寫平手依賽事名排序的測試時用「甲盃」「乙盃」，以為甲在前，但字碼「乙」較小而失敗，改用英文名稱
+- 成熟度：L3（AI 實作、審查與修正，人決定設計與範圍）
+- 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
 ### 2026-11-04｜實作／測試｜公開單場加報到截止、報到更新 updated_at、季軍賽裁判衝突測試
 
 - Story／範圍：5.8 公開單場 API（D）後續；#47、#46 審查時承諾的後端
