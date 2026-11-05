@@ -341,3 +341,15 @@
 - 問題與修正：AI 前一次回報「所有留言都看過」時，實際只查了開著的 PR、截斷長度，也沒查行內留言與已合併 PR，漏掉 PR #42、#38 的審查內容；被使用者追問後才補查並修正
 - 成熟度：L2（AI 產出文件修改，範圍由人決定）
 - 證據：PR #42 的 D 審查；commit 未記錄
+
+### 2026-11-05｜設計／介面約定｜Epic 6 disputes 模組介面約定（提議）
+
+- Story／範圍：Epic 6 前置（6.1、6.2、6.4、6.5），CONTRIBUTING 6.5；分支 `docs/disputes-contract`
+- 工具：Claude Code（Opus 5.5），未經 BMAD
+- 怎麼用：AI 讀 epic-6-context、架構 D-5、competition 與 tournaments 約定，並直接查 disputes 骨架、competition 的場次狀態轉換表、registration 的報名狀態轉換表與 `core.storage`，寫出約定提議
+- AI 產出：`contracts/disputes.md`（Appeal、Report 欄位；disputes 公開函式 11 個、API 11 支、錯誤碼、事件 4 個；B 在 competition 新增的 5 個函式與用到 D 的函式；registration 需要的 6 個函式，其中 2 個新增；6 個待確認事項）；`contracts/README.md` 加一列
+- 人做了什麼：同意開 docs PR，待確認事項請 C、D、A 在 PR 回覆
+- 驗證：未記錄（約定文件，待 C、D 審查）
+- 問題與修正：AI 起初在約定裡寫「請 D 在 `MatchRead` 補上 `outcome`」，查 competition models 後發現欄位已存在，刪掉這一列；也查證 registration 的轉換表已允許四種報名狀態轉為 `disqualified`、competition 已允許申訴相關的場次轉換，把原本寫成「請確認」的兩項改為已確認
+- 成熟度：L3（AI 依既有規格與程式產出介面，人與組員決定）
+- 證據：`contracts/disputes.md`
