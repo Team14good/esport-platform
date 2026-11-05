@@ -4,6 +4,7 @@ import {
   EyeIcon,
   LayoutDashboardIcon,
   TrophyIcon,
+  UserCheckIcon,
 } from "lucide-react"
 
 import type { BackofficeNavItem } from "@/components/layout/BackofficeLayout"
@@ -37,6 +38,11 @@ export function tournamentNav(tournamentId: string): BackofficeNavItem[] {
       to: `/organizer/tournaments/${id}/matches` as LinkOptions["to"],
       label: "場次管理",
       icon: CalendarClockIcon,
+    },
+    {
+      to: `/organizer/tournaments/${id}/referees` as LinkOptions["to"],
+      label: "裁判",
+      icon: UserCheckIcon,
     },
   ]
 }

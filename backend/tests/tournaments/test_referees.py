@@ -115,10 +115,12 @@ def test_organizer_creates_invitation_valid_for_7_days(
         "created_at",
         "expires_at",
         "expired",
+        "accepting",
     }
     assert body["tournament_id"] == str(tournament.id)
     assert len(body["token"]) >= 43
     assert body["expired"] is False
+    assert body["accepting"] is True
     stored = session.exec(
         select(RefereeInvitation).where(RefereeInvitation.token == body["token"])
     ).one()
@@ -342,6 +344,7 @@ def test_preview_is_public_and_only_has_public_fields(
         "tournament_name": tournament.name,
         "expires_at": body["expires_at"],
         "expired": False,
+        "accepting": True,
     }
 
 
@@ -357,6 +360,41 @@ def test_preview_expired_and_invalidated_invitations(
 
     assert client.get(_preview_url(first["token"])).json()["expired"] is True
     assert client.get(_preview_url(second["token"])).json()["expired"] is False
+
+
+@pytest.mark.parametrize(
+    ("path", "accepting"),
+    [
+        ([], True),
+        ([TournamentStatus.PUBLISHED, TournamentStatus.ONGOING], True),
+        (FINISH_PATH, False),
+        ([TournamentStatus.CANCELLED], False),
+    ],
+    ids=["open", "ongoing", "finished", "cancelled"],
+)
+def test_accepting_follows_tournament_status(
+    client: TestClient,
+    session: Session,
+    organizer: Account,
+    tournament: TournamentRead,
+    path: list[TournamentStatus],
+    accepting: bool,
+) -> None:
+    """預覽與目前邀請的 `accepting`：已結束／已取消為 false，`expired` 的意思不變。"""
+    body = _invite(client, organizer, tournament.id)
+    _move_to(session, tournament.id, path)
+
+    preview = client.get(_preview_url(body["token"]))
+    current = client.get(
+        _invitation_url(tournament.id), headers=bearer(token_for(client, organizer))
+    )
+
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["accepting"] is accepting
+    assert preview.json()["expired"] is False
+    assert current.status_code == 200, current.text
+    assert current.json()["accepting"] is accepting
+    assert current.json()["expired"] is False
 
 
 def test_preview_unknown_token_is_404(client: TestClient) -> None:

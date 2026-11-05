@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-05-2026 13:15
+last_updated: 11-05-2026 14:03
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -56,7 +56,7 @@ development_status:
   2-4-公開賽事列表與賽事頁: done  # 負責：B；第一階段（API、S1、S2 總覽、Countdown、Page banner，PR #29）、第二階段狀態徽章與申請主辦方 banner（PR #32）已合併；第二階段第 3 項 S1 空狀態對主辦方的「建立賽事」（PR #38，spec-2-4-s1-empty-create-tournament.md）已合併
   2-5-抽籤前修改賽事: backlog  # 擱置（期中後）
   2-6-取消賽事: backlog  # 擱置（期中後）
-  2-7-邀請裁判: in-progress  # 負責：B；第一階段（後端，PR #40）完成，第二階段（S31、S23 畫面）待做
+  2-7-邀請裁判: done  # 負責：B；第一階段（後端，PR #40）、第二階段（S31、S23 畫面，PR #54）完成
   2-8-主辦方查閱操作紀錄: backlog  # 擱置（期中後）
   epic-2-retrospective: optional
 
