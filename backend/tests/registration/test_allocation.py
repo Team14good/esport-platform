@@ -305,6 +305,26 @@ def test_fill_from_waitlist_returns_all_when_fewer_than_n() -> None:
     assert fill_from_waitlist([], remaining=3) == ()
 
 
+def test_fill_from_waitlist_epics_example_skips_schools_at_limit() -> None:
+    # epics 範例（Story 3.6）：名額 5；Z 校 2 隊、W 校 1 隊正取；候補依積分 E（Z）、
+    # F（W）、G（W）、H（V，優先期超過名額的代表隊）。補 2 位：E 會使 Z 校超過 2 隊
+    # 而略過，F 補上後 W 校已滿 2 隊，G 略過，H 補上
+    z, w, v = 1, 2, 3
+    cs = [
+        cand(1, z, 90, status=S.ACCEPTED),
+        cand(2, z, 85, status=S.ACCEPTED),
+        cand(3, w, 80, status=S.ACCEPTED),
+        cand(11, z, 70, status=S.WAITLISTED),  # E
+        cand(12, w, 60, status=S.WAITLISTED),  # F
+        cand(13, w, 50, status=S.WAITLISTED),  # G
+        cand(14, v, 40, status=S.WAITLISTED),  # H
+    ]
+    assert fill_from_waitlist(cs, remaining=2) == (uid(12), uid(14))
+    order = waitlist_order(cs, phase=AFTER, priority_schools=())
+    assert order[uid(11)].position is None
+    assert order[uid(13)].position is None
+
+
 def test_fill_matches_after_deadline_order() -> None:
     cs = _after_deadline_scenario()
     order = waitlist_order(cs, phase=AFTER, priority_schools=())
