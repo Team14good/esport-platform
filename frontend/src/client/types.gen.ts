@@ -998,6 +998,10 @@ export type PublicRefereeInvitation = {
    * Expired
    */
   expired: boolean
+  /**
+   * Accepting
+   */
+  accepting: boolean
 }
 
 /**
@@ -1157,6 +1161,10 @@ export type RefereeInvitationRead = {
    * Expired
    */
   expired: boolean
+  /**
+   * Accepting
+   */
+  accepting: boolean
 }
 
 /**

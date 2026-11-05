@@ -24,6 +24,7 @@ import { Route as JoinInviteTokenRouteImport } from './routes/join.$inviteToken'
 import { Route as MeTeamsRouteImport } from './routes/me_.teams'
 import { Route as OrganizerIndexRouteImport } from './routes/organizer/index'
 import { Route as OrganizerApplyRouteImport } from './routes/organizer/apply'
+import { Route as RefereeInviteInviteTokenRouteImport } from './routes/referee-invite.$inviteToken'
 import { Route as TeamsTeamIdRouteImport } from './routes/teams.$teamId'
 import { Route as AdminGamesIndexRouteImport } from './routes/admin/games/index'
 import { Route as AdminGamesGameIdRouteImport } from './routes/admin/games/$gameId'
@@ -34,6 +35,7 @@ import { Route as TournamentsTournamentIdIndexRouteImport } from './routes/tourn
 import { Route as TournamentsTournamentIdBracketRouteImport } from './routes/tournaments/$tournamentId/bracket'
 import { Route as OrganizerTournamentsTournamentIdIndexRouteImport } from './routes/organizer/tournaments/$tournamentId/index'
 import { Route as OrganizerTournamentsTournamentIdMatchesRouteImport } from './routes/organizer/tournaments/$tournamentId/matches'
+import { Route as OrganizerTournamentsTournamentIdRefereesRouteImport } from './routes/organizer/tournaments/$tournamentId/referees'
 import { Route as TournamentsTournamentIdMatchesMatchIdRouteImport } from './routes/tournaments/$tournamentId/matches/$matchId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -111,6 +113,12 @@ const OrganizerApplyRoute = OrganizerApplyRouteImport.update({
   path: '/organizer/apply',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RefereeInviteInviteTokenRoute =
+  RefereeInviteInviteTokenRouteImport.update({
+    id: '/referee-invite/$inviteToken',
+    path: '/referee-invite/$inviteToken',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const TeamsTeamIdRoute = TeamsTeamIdRouteImport.update({
   id: '/teams/$teamId',
   path: '/teams/$teamId',
@@ -166,6 +174,12 @@ const OrganizerTournamentsTournamentIdMatchesRoute =
     path: '/matches',
     getParentRoute: () => OrganizerTournamentsTournamentIdRouteRoute,
   } as any)
+const OrganizerTournamentsTournamentIdRefereesRoute =
+  OrganizerTournamentsTournamentIdRefereesRouteImport.update({
+    id: '/referees',
+    path: '/referees',
+    getParentRoute: () => OrganizerTournamentsTournamentIdRouteRoute,
+  } as any)
 const TournamentsTournamentIdMatchesMatchIdRoute =
   TournamentsTournamentIdMatchesMatchIdRouteImport.update({
     id: '/tournaments/$tournamentId/matches/$matchId',
@@ -188,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/join/$inviteToken': typeof JoinInviteTokenRoute
   '/me/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
+  '/referee-invite/$inviteToken': typeof RefereeInviteInviteTokenRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/organizer/': typeof OrganizerIndexRoute
   '/organizer/tournaments/$tournamentId': typeof OrganizerTournamentsTournamentIdRouteRouteWithChildren
@@ -198,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/admin/games/': typeof AdminGamesIndexRoute
   '/tournaments/$tournamentId/': typeof TournamentsTournamentIdIndexRoute
   '/organizer/tournaments/$tournamentId/matches': typeof OrganizerTournamentsTournamentIdMatchesRoute
+  '/organizer/tournaments/$tournamentId/referees': typeof OrganizerTournamentsTournamentIdRefereesRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
   '/organizer/tournaments/$tournamentId/': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
@@ -216,6 +232,7 @@ export interface FileRoutesByTo {
   '/join/$inviteToken': typeof JoinInviteTokenRoute
   '/me/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
+  '/referee-invite/$inviteToken': typeof RefereeInviteInviteTokenRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/organizer': typeof OrganizerIndexRoute
   '/admin/games/$gameId': typeof AdminGamesGameIdRoute
@@ -225,6 +242,7 @@ export interface FileRoutesByTo {
   '/admin/games': typeof AdminGamesIndexRoute
   '/tournaments/$tournamentId': typeof TournamentsTournamentIdIndexRoute
   '/organizer/tournaments/$tournamentId/matches': typeof OrganizerTournamentsTournamentIdMatchesRoute
+  '/organizer/tournaments/$tournamentId/referees': typeof OrganizerTournamentsTournamentIdRefereesRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
   '/organizer/tournaments/$tournamentId': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
@@ -244,6 +262,7 @@ export interface FileRoutesById {
   '/join/$inviteToken': typeof JoinInviteTokenRoute
   '/me_/teams': typeof MeTeamsRoute
   '/organizer/apply': typeof OrganizerApplyRoute
+  '/referee-invite/$inviteToken': typeof RefereeInviteInviteTokenRoute
   '/teams/$teamId': typeof TeamsTeamIdRoute
   '/organizer/': typeof OrganizerIndexRoute
   '/organizer/tournaments/$tournamentId': typeof OrganizerTournamentsTournamentIdRouteRouteWithChildren
@@ -254,6 +273,7 @@ export interface FileRoutesById {
   '/admin/games/': typeof AdminGamesIndexRoute
   '/tournaments/$tournamentId/': typeof TournamentsTournamentIdIndexRoute
   '/organizer/tournaments/$tournamentId/matches': typeof OrganizerTournamentsTournamentIdMatchesRoute
+  '/organizer/tournaments/$tournamentId/referees': typeof OrganizerTournamentsTournamentIdRefereesRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
   '/organizer/tournaments/$tournamentId/': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
@@ -274,6 +294,7 @@ export interface FileRouteTypes {
     | '/join/$inviteToken'
     | '/me/teams'
     | '/organizer/apply'
+    | '/referee-invite/$inviteToken'
     | '/teams/$teamId'
     | '/organizer/'
     | '/organizer/tournaments/$tournamentId'
@@ -284,6 +305,7 @@ export interface FileRouteTypes {
     | '/admin/games/'
     | '/tournaments/$tournamentId/'
     | '/organizer/tournaments/$tournamentId/matches'
+    | '/organizer/tournaments/$tournamentId/referees'
     | '/tournaments/$tournamentId/matches/$matchId'
     | '/organizer/tournaments/$tournamentId/'
   fileRoutesByTo: FileRoutesByTo
@@ -302,6 +324,7 @@ export interface FileRouteTypes {
     | '/join/$inviteToken'
     | '/me/teams'
     | '/organizer/apply'
+    | '/referee-invite/$inviteToken'
     | '/teams/$teamId'
     | '/organizer'
     | '/admin/games/$gameId'
@@ -311,6 +334,7 @@ export interface FileRouteTypes {
     | '/admin/games'
     | '/tournaments/$tournamentId'
     | '/organizer/tournaments/$tournamentId/matches'
+    | '/organizer/tournaments/$tournamentId/referees'
     | '/tournaments/$tournamentId/matches/$matchId'
     | '/organizer/tournaments/$tournamentId'
   id:
@@ -329,6 +353,7 @@ export interface FileRouteTypes {
     | '/join/$inviteToken'
     | '/me_/teams'
     | '/organizer/apply'
+    | '/referee-invite/$inviteToken'
     | '/teams/$teamId'
     | '/organizer/'
     | '/organizer/tournaments/$tournamentId'
@@ -339,6 +364,7 @@ export interface FileRouteTypes {
     | '/admin/games/'
     | '/tournaments/$tournamentId/'
     | '/organizer/tournaments/$tournamentId/matches'
+    | '/organizer/tournaments/$tournamentId/referees'
     | '/tournaments/$tournamentId/matches/$matchId'
     | '/organizer/tournaments/$tournamentId/'
   fileRoutesById: FileRoutesById
@@ -356,6 +382,7 @@ export interface RootRouteChildren {
   JoinInviteTokenRoute: typeof JoinInviteTokenRoute
   MeTeamsRoute: typeof MeTeamsRoute
   OrganizerApplyRoute: typeof OrganizerApplyRoute
+  RefereeInviteInviteTokenRoute: typeof RefereeInviteInviteTokenRoute
   TeamsTeamIdRoute: typeof TeamsTeamIdRoute
   OrganizerIndexRoute: typeof OrganizerIndexRoute
   OrganizerTournamentsTournamentIdRouteRoute: typeof OrganizerTournamentsTournamentIdRouteRouteWithChildren
@@ -472,6 +499,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizerApplyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/referee-invite/$inviteToken': {
+      id: '/referee-invite/$inviteToken'
+      path: '/referee-invite/$inviteToken'
+      fullPath: '/referee-invite/$inviteToken'
+      preLoaderRoute: typeof RefereeInviteInviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/teams/$teamId': {
       id: '/teams/$teamId'
       path: '/teams/$teamId'
@@ -542,6 +576,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizerTournamentsTournamentIdMatchesRouteImport
       parentRoute: typeof OrganizerTournamentsTournamentIdRouteRoute
     }
+    '/organizer/tournaments/$tournamentId/referees': {
+      id: '/organizer/tournaments/$tournamentId/referees'
+      path: '/referees'
+      fullPath: '/organizer/tournaments/$tournamentId/referees'
+      preLoaderRoute: typeof OrganizerTournamentsTournamentIdRefereesRouteImport
+      parentRoute: typeof OrganizerTournamentsTournamentIdRouteRoute
+    }
     '/tournaments/$tournamentId/matches/$matchId': {
       id: '/tournaments/$tournamentId/matches/$matchId'
       path: '/tournaments/$tournamentId/matches/$matchId'
@@ -574,6 +615,7 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 
 interface OrganizerTournamentsTournamentIdRouteRouteChildren {
   OrganizerTournamentsTournamentIdMatchesRoute: typeof OrganizerTournamentsTournamentIdMatchesRoute
+  OrganizerTournamentsTournamentIdRefereesRoute: typeof OrganizerTournamentsTournamentIdRefereesRoute
   OrganizerTournamentsTournamentIdIndexRoute: typeof OrganizerTournamentsTournamentIdIndexRoute
 }
 
@@ -581,6 +623,8 @@ const OrganizerTournamentsTournamentIdRouteRouteChildren: OrganizerTournamentsTo
   {
     OrganizerTournamentsTournamentIdMatchesRoute:
       OrganizerTournamentsTournamentIdMatchesRoute,
+    OrganizerTournamentsTournamentIdRefereesRoute:
+      OrganizerTournamentsTournamentIdRefereesRoute,
     OrganizerTournamentsTournamentIdIndexRoute:
       OrganizerTournamentsTournamentIdIndexRoute,
   }
@@ -603,6 +647,7 @@ const rootRouteChildren: RootRouteChildren = {
   JoinInviteTokenRoute: JoinInviteTokenRoute,
   MeTeamsRoute: MeTeamsRoute,
   OrganizerApplyRoute: OrganizerApplyRoute,
+  RefereeInviteInviteTokenRoute: RefereeInviteInviteTokenRoute,
   TeamsTeamIdRoute: TeamsTeamIdRoute,
   OrganizerIndexRoute: OrganizerIndexRoute,
   OrganizerTournamentsTournamentIdRouteRoute:
