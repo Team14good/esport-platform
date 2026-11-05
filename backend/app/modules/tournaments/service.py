@@ -745,6 +745,11 @@ def is_referee(
     return authz.is_tournament_referee(referee_tournament_ids, tournament_id)
 
 
+def has_referee_role(session: Session, *, account_id: uuid.UUID) -> bool:
+    """帳號是不是任一賽事的裁判（接受過邀請即是，不看賽事狀態）；身分切換器用。"""
+    return repository.has_any_referee_row(session, account_id)
+
+
 def list_referees(session: Session, *, tournament_id: uuid.UUID) -> list[RefereeRead]:
     """某賽事的裁判（含顯示名稱），依接受邀請的時間排序。"""
     referees = repository.list_referees(session, tournament_id)

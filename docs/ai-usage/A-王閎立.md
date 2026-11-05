@@ -554,3 +554,39 @@
   - 假 API 只驗證前端流程與版面，測不到真後端與 NFR-2 回應時間，所以把舊測試標籤裡的 `@NFR-2` 拿掉，走真 API 的版本記入 deferred-work
 - 成熟度：L3（人決定做法，AI 實作並實際執行 e2e 驗證）
 - 證據：`frontend/tests/e2e/spectator.spec.ts`、`frontend/tests/e2e/support/match-api.ts`；PR #47
+
+### 2026-11-04｜審查｜審 D 的 #48（Story 4.3 S30 場次管理頁）
+
+- Story／範圍：4.3 S30 頁面、4.4 S30 指派選單（D），PR #48
+- 工具：Claude Code（Opus 5.5），沒有用子代理，直接審查
+- 怎麼用：AI 讀 spec（含 D 的 Review Triage Log）、前端 diff 與 `api-error`、`query-client` 的錯誤分類與重試規則，確認與剛合併的 #47 沒有衝突（`git merge-tree`）；在暫存 worktree 把 #48 合併 main 後，掛進重新 build 的前端容器跑檢查
+- AI 產出：核准，附 3 個低嚴重度意見（sprint 狀態太早標成 done、裁判清單重試期間整張表停在載入、409 後預填時間可能低於新的 min）與 2 個補充說明
+- 人做了什麼：指定審查 #48
+- 驗證：biome 通過、typecheck 0 錯誤、前端單元測試 61 個檔案 787 個全過；26 個新測試涵蓋 spec 的兩條驗收條件（min／max、mutation 後重抓）
+- 問題與修正：D 的紀錄寫「本機全套單元測試因映像缺套件大量失敗，以 CI 為準」；AI 先 `docker compose build frontend` 再跑，全部通過，確認失敗原因是映像過舊而不是程式問題
+- 成熟度：L2（AI 審查，人決定是否核准）
+- 證據：PR #48 的審查意見
+
+### 2026-11-04｜審查｜審 D 的 #49（公開單場加報到截止、報到更新 updated_at）
+
+- Story／範圍：5.8 後續（D），回應我在 #47 提的兩個後端缺口，以及我在 #46 建議的季軍賽裁判衝突測試
+- 工具：Claude Code（Opus 5.5），沒有用子代理，直接審查
+- 怎麼用：AI 讀 spec、contracts 與後端 diff，確認 `check_in` 在 `lock_match` 之後才 `touch_match`、只有成功才更新；再查前後端所有讀 `updated_at` 的地方（公開對戰樹的 `updated_at` 是各場最大值、S3 依它重抓賽事），評估報到會多觸發哪些重抓
+- AI 產出：核准，附 1 個低嚴重度意見（`forfeit_deadline` 只依狀態過濾，和約定寫的「兩隊都確定才有值」不完全一致）與 2 個補充說明
+- 人做了什麼：指定審查 #49
+- 驗證：在暫存 worktree 掛進後端容器跑全套，1872 passed，`scripts/lint.sh` 通過；`git merge-tree` 確認和 main 沒有衝突
+- 問題與修正：無（這次沒有發現 AI 判斷錯誤）
+- 成熟度：L2（AI 審查，人決定是否核准）
+- 證據：PR #49 的審查意見
+
+### 2026-11-04｜實作／測試｜S4 報到倒數改用公開單場的 forfeit_deadline
+
+- Story／範圍：5.8 後續（接 D 的 #49），deferred-work 的「S4 報到倒數過了預定時間應改為棄權期限」
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：我審完 #49 後決定直接做；AI 開新分支合併 D 的分支取得新的 client 型別，再改 `MatchCheckIn.tsx`
+- AI 產出：`MatchCheckIn` 把寫死的 `forfeitDeadline: null` 換成 `detail.forfeit_deadline ?? null`；更新 `match-source.ts` 過時的註解；新增 1 個單元測試（過了預定時間顯示「棄權期限」與截止時間，沒有期限就不顯示倒數）
+- 人做了什麼：決定現在做
+- 驗證：biome、typecheck 通過；前端單元測試 61 個檔案 799 個全過。突變檢查：把 `forfeit_deadline` 改回 `null`，新測試失敗
+- 問題與修正：AI 做突變檢查時，用 `sed -i` 改的是掛進容器的原始碼，等於直接改到本機檔案，跑完沒有還原。看 `git diff` 發現後手動改回，再重跑全套確認。之後突變檢查要用不掛載的容器，或先複製一份
+- 成熟度：L3（人決定範圍，AI 實作並驗證）
+- 證據：`frontend/src/features/competition/MatchCheckIn.tsx`、`frontend/tests/unit/match-check-in.test.tsx`

@@ -17,6 +17,7 @@ from app.modules.competition.models import (
     PublicBracket,
     PublicMatchDetail,
     RefereeAssignIn,
+    RefereeTournamentMatches,
     RescheduleIn,
     ScoreEntryState,
 )
@@ -155,6 +156,14 @@ def submit_result(
     )
     session.commit()
     return result
+
+
+@router.get("/me/referee/matches")
+def list_my_referee_matches(
+    session: SessionDep, account: CurrentAccount
+) -> list[RefereeTournamentMatches]:
+    """S13：指派給登入者、未取消的場次，依賽事分組；沒有指派回空清單（不要求有裁判身分）。"""
+    return service.list_my_referee_matches(session, account_id=account.id)
 
 
 @router.get("/tournaments/{tournament_id}/manage/matches")

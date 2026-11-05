@@ -108,6 +108,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `bo_for_round(session, *, tournament_id, round_no) -> int` | D（4.3、5.3、5.4） | 期中一律回傳 `TournamentRead.bo`（2.3 分輪 BO 擱置）；`round_no` 從 1 起算 | 2.2 |
 | `is_referee(session, *, tournament_id, account_id) -> bool` | D（4.4） | 已接受該賽事的裁判邀請；只在該賽事有效（經 `core.authz.is_tournament_referee` 判斷） | 2.7 |
 | `list_referees(session, *, tournament_id) -> list[RefereeRead]` | D（4.4 的 S30 選單） | 依接受邀請的時間排序 | 2.7 |
+| `has_referee_role(session, *, account_id) -> bool` | 組裝層（`app/api/main.py`）註冊給 identity 的 `register_referee_lookup`（4.4 S13） | 帳號是不是任一賽事的裁判（有 `TournamentReferee` 列即是，不看賽事狀態）；身分切換器的「裁判」用 | 4.4 |
 | `ensure_accepting_referees(tournament: TournamentRead) -> None` | tournaments 的裁判邀請（2.7）；其他模組需要時可呼叫 | 狀態為 `finished`、`cancelled` 時拋 `TOURNAMENT_NOT_ACCEPTING_REFEREES` 409；不碰資料庫 | 2.7 |
 
 三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
