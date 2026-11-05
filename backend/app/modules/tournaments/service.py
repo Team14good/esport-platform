@@ -561,8 +561,12 @@ def _is_expired(invitation: RefereeInvitation, now: datetime) -> bool:
     return invitation.expires_at <= now
 
 
+def _is_accepting_referees(tournament: TournamentRead) -> bool:
+    return tournament.status not in _REFEREE_CLOSED_STATUSES
+
+
 def _invitation_to_read(
-    invitation: RefereeInvitation, now: datetime
+    invitation: RefereeInvitation, tournament: TournamentRead, now: datetime
 ) -> RefereeInvitationRead:
     return RefereeInvitationRead(
         tournament_id=invitation.tournament_id,
@@ -570,6 +574,7 @@ def _invitation_to_read(
         created_at=invitation.created_at,
         expires_at=invitation.expires_at,
         expired=_is_expired(invitation, now),
+        accepting=_is_accepting_referees(tournament),
     )
 
 
@@ -582,7 +587,7 @@ def ensure_accepting_referees(
 
     產生與接受裁判邀請前檢查；不碰資料庫。`message` 讓接受邀請時換成給受邀者的說明。
     """
-    if tournament.status in _REFEREE_CLOSED_STATUSES:
+    if not _is_accepting_referees(tournament):
         raise BusinessError(
             "TOURNAMENT_NOT_ACCEPTING_REFEREES", message, status_code=409
         )
@@ -620,21 +625,26 @@ def invite_referee(
         before=None,
         after={"expires_at": invitation.expires_at},
     )
-    return _invitation_to_read(invitation, now)
+    return _invitation_to_read(invitation, tournament, now)
 
 
 def get_current_invitation(
     session: Session, *, tournament_id: uuid.UUID
 ) -> RefereeInvitationRead | None:
-    """同賽事最新的一筆邀請（含是否過期）；從未產生過回 None。權限由呼叫端檢查。"""
+    """同賽事最新的一筆邀請（含是否過期、賽事是否仍接受裁判）；從未產生過回 None。
+
+    權限由呼叫端檢查。
+    """
     invitation = repository.get_latest_invitation(session, tournament_id)
     if invitation is None:
         return None
-    return _invitation_to_read(invitation, clock.now())
+    tournament = get_tournament(session, tournament_id=tournament_id)
+    return _invitation_to_read(invitation, tournament, clock.now())
 
 
 def preview_invitation(session: Session, *, token: str) -> PublicRefereeInvitation:
-    """不需登入的邀請預覽：賽事名稱、到期時間、是否過期（AD-19，不含帳號資料）。
+    """不需登入的邀請預覽：賽事名稱、到期時間、是否過期、賽事是否仍接受裁判
+    （AD-19，不含帳號資料）。
 
     不存在拋 404 `REFEREE_INVITATION_NOT_FOUND`。
     """
@@ -646,6 +656,7 @@ def preview_invitation(session: Session, *, token: str) -> PublicRefereeInvitati
         tournament_name=tournament.name,
         expires_at=invitation.expires_at,
         expired=_is_expired(invitation, clock.now()),
+        accepting=_is_accepting_referees(tournament),
     )
 
 
@@ -732,6 +743,11 @@ def is_referee(
     referee = repository.get_referee(session, tournament_id, account_id)
     referee_tournament_ids = [referee.tournament_id] if referee is not None else []
     return authz.is_tournament_referee(referee_tournament_ids, tournament_id)
+
+
+def has_referee_role(session: Session, *, account_id: uuid.UUID) -> bool:
+    """帳號是不是任一賽事的裁判（接受過邀請即是，不看賽事狀態）；身分切換器用。"""
+    return repository.has_any_referee_row(session, account_id)
 
 
 def list_referees(session: Session, *, tournament_id: uuid.UUID) -> list[RefereeRead]:

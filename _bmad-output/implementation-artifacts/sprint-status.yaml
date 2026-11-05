@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-04-2026 21:30
+last_updated: 11-05-2026 14:03
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -56,7 +56,7 @@ development_status:
   2-4-公開賽事列表與賽事頁: done  # 負責：B；第一階段（API、S1、S2 總覽、Countdown、Page banner，PR #29）、第二階段狀態徽章與申請主辦方 banner（PR #32）已合併；第二階段第 3 項 S1 空狀態對主辦方的「建立賽事」（PR #38，spec-2-4-s1-empty-create-tournament.md）已合併
   2-5-抽籤前修改賽事: backlog  # 擱置（期中後）
   2-6-取消賽事: backlog  # 擱置（期中後）
-  2-7-邀請裁判: in-progress  # 負責：B；第一階段（後端，PR #40）完成，第二階段（S31、S23 畫面）待做
+  2-7-邀請裁判: done  # 負責：B；第一階段（後端，PR #40）、第二階段（S31、S23 畫面，PR #54）完成
   2-8-主辦方查閱操作紀錄: backlog  # 擱置（期中後）
   epic-2-retrospective: optional
 
@@ -66,7 +66,7 @@ development_status:
   3-3-送出報名與鎖定名單: done  # 負責：C
   3-4-優先期結束自動分配: done  # 負責：C；第一階段（allocation.py 純函式，含 3.5、3.6 規則）與第二階段（優先期結束自動分配，PR #50）完成；3.5、3.6 第二階段另列 deferred-work
   3-5-先搶期即時分配: backlog  # 負責：C；規則已在 3.4 的 allocation.py
-  3-6-報名截止與截止補位: backlog  # 負責：C；規則已在 3.4 的 allocation.py
+  3-6-報名截止與截止補位: done  # 負責：C；截止補位規則已在 3.4 第一階段完成（allocation.py）；本 Story 把規則接到抽籤流程，截止 worker 另列 deferred-work
   3-7-抽籤前撤回報名: backlog  # 擱置（期中後）
   3-8-主辦方檢視段位截圖與退回報名: backlog  # 擱置（期中後）
   3-9-公開正取名單與取消賽事通知: backlog  # 擱置（期中後）
@@ -78,7 +78,7 @@ development_status:
   4-1-主辦方提前抽籤並產生對戰表: in-progress  # 負責：D；第一階段（bracket.py）完成；第二階段後端（資料表、抽籤 service 與 API）完成，待 C 的 registration 函式（S27 畫面已在 #31 合併）
   4-2-報名截止時自動抽籤: backlog  # 擱置（期中後）
   4-3-排定與修改場次時間: done  # 負責：D；第一階段（schedule.py 純函式）、第二階段後端（#26）、S30 場次管理頁與修改時間完成
-  4-4-指派裁判到場次: in-progress  # 負責：D；後端（指派、改派、收回 API，晉級後衝突收回）已合併（#46），S30 指派選單完成待合併，S13 待做
+  4-4-指派裁判到場次: done  # 負責：D；後端（#46）、S30 指派選單（#48）、S13 我執法的場次與身分切換器「裁判」（#51）
   4-5-抽籤後退賽與候補遞補: backlog  # 擱置（期中後）
   4-6-視覺化對戰樹: done  # 負責：A；第一階段（PR #13）、第二階段（S3，PR #33）完成
   4-7-對戰樹隊伍搜尋與晉級路徑: backlog  # 擱置（期中後）

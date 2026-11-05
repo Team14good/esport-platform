@@ -468,6 +468,8 @@ class RefereeInvitationRead(BaseModel):
     expires_at: datetime
     # expires_at <= 現在（含被重新產生而作廢的邀請）
     expired: bool
+    # 賽事不是已結束或已取消（與 `ensure_accepting_referees` 同一個判斷）
+    accepting: bool
 
 
 class PublicRefereeInvitation(BaseModel):
@@ -476,6 +478,8 @@ class PublicRefereeInvitation(BaseModel):
     tournament_name: str
     expires_at: datetime
     expired: bool
+    # 賽事不是已結束或已取消（與 `ensure_accepting_referees` 同一個判斷）
+    accepting: bool
 
 
 class RefereeRead(BaseModel):

@@ -1,6 +1,7 @@
 """registration 擁有的資料表的查詢與加鎖；不做業務判斷、不碰其他模組的資料表。"""
 
 import uuid
+from collections.abc import Collection
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -185,3 +186,53 @@ def add_settlement(
     session.add(settlement)
     session.flush()
     return settlement
+
+
+def list_teams_by_ids(session: Session, team_ids: Collection[uuid.UUID]) -> list[Team]:
+    """依 id 一次查出多支隊伍（依 id 排列）；不存在的 id 不出現。"""
+    if not team_ids:
+        return []
+    statement = select(Team).where(col(Team.id).in_(team_ids)).order_by(col(Team.id))
+    return list(session.exec(statement))
+
+
+def list_registrations_by_team_ids(
+    session: Session, team_ids: Collection[uuid.UUID]
+) -> list[Registration]:
+    """依隊伍 id 一次查出多筆報名（依隊伍 id 排列）；不存在的隊伍不出現。"""
+    if not team_ids:
+        return []
+    statement = (
+        select(Registration)
+        .where(col(Registration.team_id).in_(team_ids))
+        .order_by(col(Registration.team_id))
+    )
+    return list(session.exec(statement))
+
+
+def list_teams_with_members_by_status(
+    session: Session, tournament_id: uuid.UUID, status: RegistrationStatus
+) -> list[tuple[Team, list[TeamMember]]]:
+    """某賽事報名為 `status` 的隊伍（依隊伍 id 排列）與其隊員（依加入時間、再依 id）。
+
+    隊伍一次查出、隊員一次查出，不逐隊查詢。
+    """
+    teams = list(
+        session.exec(
+            select(Team)
+            .join(Registration, col(Registration.team_id) == col(Team.id))
+            .where(Registration.tournament_id == tournament_id)
+            .where(Registration.status == status)
+            .order_by(col(Team.id))
+        )
+    )
+    if not teams:
+        return []
+    members: dict[uuid.UUID, list[TeamMember]] = {team.id: [] for team in teams}
+    for member in session.exec(
+        select(TeamMember)
+        .where(col(TeamMember.team_id).in_(members))
+        .order_by(col(TeamMember.created_at), col(TeamMember.id))
+    ):
+        members[member.team_id].append(member)
+    return [(team, members[team.id]) for team in teams]

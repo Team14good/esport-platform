@@ -353,3 +353,26 @@
 - 問題與修正：AI 起初在約定裡寫「請 D 在 `MatchRead` 補上 `outcome`」，查 competition models 後發現欄位已存在，刪掉這一列；也查證 registration 的轉換表已允許四種報名狀態轉為 `disqualified`、competition 已允許申訴相關的場次轉換，把原本寫成「請確認」的兩項改為已確認
 - 成熟度：L3（AI 依既有規格與程式產出介面，人與組員決定）
 - 證據：`contracts/disputes.md`
+### 2026-11-05｜需求／設計｜Story 2.7 第二階段 spec：S31 裁判管理與 S23 接受邀請
+
+- Story／範圍：2.7 第二階段（分支 `story/2-7-ui`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Explore 子代理調查前端）
+- 怎麼用：AI 依 epic-2-context、第一階段 spec 與延後項目寫 spec，列出 3 個開放問題（各附建議）
+- AI 產出：`spec-2-7-s31-s23-referee-ui.md`（I/O 矩陣 16 列、Decisions 3 條）
+- 人做了什麼：三題都選建議：接受後留在原頁並連到 S13、後端加 `accepting` 欄位（順便清掉第一階段延後項目）、產生新連結前先確認
+- 驗證：spec 經人核准後鎖定
+- 問題與修正：epic-2 context 之後有 C 的 commit 動到 planning 文件卻沒標 `Epic-Context: unaffected`；AI 查到它改的是候補遞補規則，epic-2 context 完全沒有這些內容，沿用現有 context 並寫進 Implementation Notes，沒有重新產生（避免與其他人的版本衝突）。調查時發現接受與預覽的回應都沒有 tournament_id，連不到 S2，交給人決定接受後的去處
+- 成熟度：L3（AI 依既有規格產出 spec，人做決定）
+- 證據：spec 的 Decisions、Implementation Notes
+
+### 2026-11-05｜程式／程式審查｜Story 2.7 第二階段：S31、S23 畫面與 `accepting` 欄位
+
+- Story／範圍：2.7 第二階段（分支 `story/2-7-ui`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理、Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：子代理只依 spec 實作並在瀏覽器實測；三個審查者審 diff；主代理逐筆查證、交回子代理修正，最後自己跑完整驗證
+- AI 產出：後端兩個 schema 新增 `accepting`＋4 種賽事狀態的測試；前端 S31、S23 兩頁、兩支路由、側欄「裁判」、`referee-queries.ts`；單元測試 1 個檔案（26 個測試）；重新產生 client
+- 人做了什麼：核准 spec
+- 驗證：前端 build、typecheck、Biome 通過，單元測試 62 個檔案、824 個全過；後端 1923 個全過、覆蓋率 97%，lint 通過，單一 head；重新產生的 client 與提交版本相同
+- 問題與修正：子代理在瀏覽器實測時抓到單元測試漏掉的 bug：產生的 client 把 `null` 回應換成 `{}`，從未產生過邀請時 S31 顯示空白連結與「賽事已結束」，單元測試因 mock 成 `null` 而沒發現；改為有 `token` 才算有邀請，mock 也改成 `{}`。審查 19 筆：11 筆修正（公開頁連帶載入主辦方頁的程式、接受失敗後卡片沒更新、背景重抓失敗蓋掉成功畫面、賽事未載入前按鈕可按等），1 筆延後（S31 與 D 的 S30 各定義一次同一個裁判名單查詢 key），5 筆不處理，2 筆誤報。主代理驗證時第一次跑 `generate-client.sh` 因工作區沒有 `.env` 而沒有執行，輸出卻顯示「client unchanged」，AI 看到錯誤訊息後判定那次比對無效，改用 `COMPOSE_ENV_FILES` 指向主資料夾的 `.env` 重跑
+- 成熟度：L4（spec → 子代理實作與實測 → 多個審查者 → 主代理驗證）
+- 證據：spec 的 Review Triage Log、Implementation Notes；commit 未記錄

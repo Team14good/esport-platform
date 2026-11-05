@@ -751,6 +751,7 @@ describe("S27 賽事總覽", () => {
       "查看賽事頁",
       "總覽",
       "場次管理",
+      "裁判",
     ])
     expect(links[0]).toHaveAttribute("href", "/tournaments/t-1")
     expect(links[1]).toHaveAttribute("href", "/organizer/tournaments/t-1")
@@ -758,6 +759,10 @@ describe("S27 賽事總覽", () => {
     expect(links[2]).toHaveAttribute(
       "href",
       "/organizer/tournaments/t-1/matches",
+    )
+    expect(links[3]).toHaveAttribute(
+      "href",
+      "/organizer/tournaments/t-1/referees",
     )
 
     expect(screen.getByText("開放報名")).toHaveAttribute("data-tone", "live")
