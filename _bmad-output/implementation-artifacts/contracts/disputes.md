@@ -103,15 +103,27 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | --- | --- | --- | --- |
 | `mark_appealed(session, *, match_id) -> MatchRead` | disputes `file_appeal` | `appeal_window` → `appealed`；已是 `appealed` 不動（第二隊申訴）；其他狀態 `MATCH_INVALID_TRANSITION` 409。不改 `appeal_deadline`（另一隊在原期限內仍可申訴）；worker `auto_confirm_expired` 只挑申訴期，申訴中的場次等主辦方處理 | `lock_match`、`transition_match` |
 | `uphold_result(session, *, match_id, actor_id) -> MatchRead` | disputes `resolve_appeals` | 只接受 `appealed`；沿用已寫入的 outcome、勝隊呼叫 `confirm_match`（內含晉級） | `confirm_match` |
-| `correct_result(session, *, match_id, games: list[GameScoreIn], actor_id) -> CorrectionResult` | disputes `resolve_appeals` | 只接受 `appealed`、`outcome=played`；以 `scoring.py` 驗證整組新的各局（與 5.3 相同規則）、整份替換 `match_game`、重算勝局數與勝隊，再 `confirm_match`；回傳 `{before_games, after_games, winner_id}` 給操作紀錄 | `scoring.series`、`confirm_match` |
-| `replay_match(session, *, match_id, scheduled_at, actor_id) -> ReplayCleared` | disputes `resolve_appeals` | 只接受 `appealed`、`outcome=forfeit`；`scheduled_at` 須在 `schedule.reschedule_window` 範圍內（4.3 同一規則）；`clear_for_replay` → `transition_match(→ scheduled)` → 寫入新時間 → `start_forfeit_clock` → 操作紀錄 `match.replay_scheduled` → 發 `MatchRescheduled`；同一交易 | `clear_for_replay`、`transition_match`、`start_forfeit_clock`、`schedule.reschedule_window` |
-| `disqualify(session, *, tournament_id, team_id, actor_id) -> DisqualifyResult` | disputes `resolve_report` | 依 epic-6-context〈取消資格（期中版）〉的 7 種情況頂替；抽籤前只改報名狀態（registration `mark_status(→ disqualified)`）；未結案的該場申訴由 disputes 一併結案（`DisqualifyResult` 回傳受影響的 `match_id`） | `list_team_matches`、`confirm_walkover`、`advance`、`confirm_match` |
+| `correct_result(session, *, match_id, games: list[GameScoreIn], actor_id) -> CorrectionResult` | disputes `resolve_appeals` | 只接受 `appealed`、`outcome=played`；以 `scoring.py` 驗證整組新的各局（與 5.3 相同規則），並套用 5.4 送出時的兩個檢查：未達門檻 `SERIES_NOT_DECIDED`、有多餘的局 `REDUNDANT_GAMES`（不能更正成沒打完的系列）；通過後整份替換 `match_game`（B 在 competition repository **新增**「刪除該場全部局」的函式）、重算勝局數與勝隊，再 `confirm_match`；回傳 `{before_games, after_games, winner_id}` 給操作紀錄 | `scoring.series`、`confirm_match` |
+| `replay_match(session, *, match_id, scheduled_at, actor_id) -> ReplayCleared` | disputes `resolve_appeals` | 只接受 `appealed`、`outcome=forfeit`；`scheduled_at` 以 D 的 ★ `check_replay_time` 檢查（與 4.3 改期同一個 `_reschedule_window`，錯誤碼與訊息也相同）；`clear_for_replay` → `transition_match(→ scheduled)` → 寫入新時間 → `start_forfeit_clock` → 操作紀錄 `match.replay_scheduled` → 發 `MatchRescheduled`；同一交易。裁判保留（`clear_for_replay` 不動裁判，與 4.4 一致） | `clear_for_replay`、`transition_match`、`start_forfeit_clock`、★ `check_replay_time` |
+| `disqualify(session, *, tournament_id, team_id, actor_id) -> DisqualifyResult` | disputes `resolve_report` | 依 epic-6-context〈取消資格（期中版）〉的 7 種情況頂替；抽籤前只改報名狀態（registration `mark_status(→ disqualified)`）。頂替改變場次的隊伍後：**重新檢查裁判衝突**（頂替進來的隊伍含該場裁判時收回指派，寫 `match.referee_unassigned`、操作者為系統、發 `RefereeUnassigned`，與 `advance` 相同）；兩隊湊齊的場次呼叫 `start_forfeit_clock`。未結案的該場申訴由 disputes 一併結案（`DisqualifyResult` 回傳受影響的 `match_id`） | `list_team_matches`、`confirm_walkover`、`advance`、`confirm_match`、`start_forfeit_clock`、★ `unassign_referee_if_member` |
+
+順序（D 確認）：`uphold_result`、`correct_result`、`replay_match` 都是 `lock_match` → 狀態（只接受 `appealed`）→ outcome 檢查 → 其他，與 `confirm_match` 一致。
 
 ## 四、6.x 需要的上游介面（請 C、D 確認）
 
 ### competition（D）
 
-都已在 competition.md〈一〉，不需要新增：`get_match`、`lock_match`、`transition_match`、`start_forfeit_clock`、`confirm_match`、`advance`、`confirm_walkover`、`clear_for_replay`、`list_team_matches`；`MatchRead` 已有 `outcome`（6.2 判斷「重新比賽只用於棄權」）。場次狀態轉換表已允許 `appeal_window → appealed`、`appealed → confirmed／scheduled`。
+已在 competition.md〈一〉：`get_match`、`lock_match`、`transition_match`、`start_forfeit_clock`、`confirm_match`、`advance`、`confirm_walkover`、`clear_for_replay`、`list_team_matches`；`MatchRead` 已有 `outcome`（6.2 判斷「重新比賽只用於棄權」）。場次狀態轉換表已允許 `appeal_window → appealed`、`appealed → confirmed／scheduled`。
+
+D 新增的 ★（只新增公開函式、不改既有函式；6.2 開工前合併，D 2026-11-05 在 #55 提議）：
+
+| 函式 | 用在 | 需要的內容 |
+| --- | --- | --- |
+| ★ `check_replay_time(session, *, tournament, match, scheduled_at) -> None` | 6.2 `replay_match` | 用 4.3 改期同一個 `_reschedule_window` 檢查；不符合拋 `RESCHEDULE_BEFORE_NOW`／`RESCHEDULE_BEFORE_FEEDER`／`RESCHEDULE_AFTER_NEXT_MATCH`／`RESCHEDULE_NO_VALID_TIME`（409，訊息附台北時間範圍）；不檢查場次狀態與報到（重賽時是 `appealed`、報到剛被清掉） |
+| ★ `get_replay_window(session, *, match_id) -> RescheduleInfo` | 6.2 S32 時間選擇器 | 同一個範圍（最早、最晚） |
+| ★ `unassign_referee_if_member(session, *, match) -> None` | 6.5 `disqualify` | 把 `advance` 用的 `_unassign_if_member` 包成公開函式：該場裁判是任一隊隊員時收回、寫 `match.referee_unassigned`（系統）、發 `RefereeUnassigned` |
+
+申訴拖久時，下一場的預定時間可能已早於重賽最早可選時間，`check_replay_time` 回 `RESCHEDULE_NO_VALID_TIME`；主辦方要先到 S30 把下一場改晚（下一場一方待定，不會有人報到，可以改），再回 S32 選重賽時間。S32 要把這個錯誤的訊息與「前往場次管理」一起顯示。
 
 ### registration（C）
 
@@ -129,6 +141,6 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 1. **Report 資料表由誰建**：提議 C 在 6.4 建立 `report` 表與遷移（照本約定的欄位，含處理欄位），B 的 6.5 只寫入處理欄位、不再改表。
 2. **附件**：每筆申訴、檢舉最多一張圖，沿用 `core.storage.save_image`（jpg／png、5 MB），和 C 的段位截圖相同。
 3. **申訴內容長度**：1～1000 字（UX 沒寫上限，先訂這個）。
-4. **重新比賽的新時間**：沿用 4.3 的 `reschedule_window`，不得早於現在、不得晚於勝隊的下一場（請 D 確認可以在 `appeals.py` 直接用 `schedule.py`）。
-5. **更正結果的各局**：前端送整組新的各局（不是逐局修改），規則與 5.3 相同。
+4. ~~重新比賽的新時間~~：D 確認（2026-11-05）不直接用 `schedule.py`，改用 D 新增的 `check_replay_time`、`get_replay_window`（〈四〉）。
+5. ~~更正結果的各局~~：前端送整組新的各局（不是逐局修改），規則與 5.3 相同，另加 5.4 送出時的兩個檢查（D 確認，2026-11-05）。
 6. **S4 申訴入口與徽章**：S4 屬於 A（5.8），6.1 由 B 提供 `appeal-state` API，S4 的按鈕、S21 對話框與「申訴中」徽章由誰接？提議 B 在 6.1 一併做（只新增元件，S4 只加掛載點，列在 PR 說明）。
