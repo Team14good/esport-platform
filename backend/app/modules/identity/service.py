@@ -568,11 +568,16 @@ def register_referee_lookup(
 
 
 def _is_referee(session: Session, account_id: uuid.UUID) -> bool:
-    """查詢失敗不能拖垮每個頁面都會呼叫的身分清單：記錄後視為不是裁判。"""
+    """查詢失敗不能拖垮每個頁面都會呼叫的身分清單：記錄後視為不是裁判。
+
+    查詢包在 savepoint 裡：SQL 失敗時只回滾到 savepoint，同一個交易後續的查詢仍可用
+    （PostgreSQL 在 SQL 失敗後會把整個交易標成中止）。savepoint 不是 commit（AD-5）。
+    """
     if _referee_lookup is None:
         return False
     try:
-        return _referee_lookup(session, account_id)
+        with session.begin_nested():
+            return _referee_lookup(session, account_id)
     except Exception:
         logger.exception("查詢裁判身分失敗：account_id=%s", account_id)
         return False

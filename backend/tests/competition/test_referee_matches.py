@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlmodel import Session
 
 import app.main  # noqa: F401  確保組裝層已載入
@@ -508,6 +509,25 @@ def test_failing_lookup_omits_referee_identity(
     assert response.status_code == 200
     assert [i["key"] for i in response.json()] == ["browse", "my_teams"]
     assert "查詢裁判身分失敗" in caplog.text
+
+
+@pytest.mark.usefixtures("restore_referee_lookup")
+def test_failing_sql_in_lookup_keeps_session_usable(
+    session: Session, world: World
+) -> None:
+    """lookup 的 SQL 失敗後，同一個 session 還能繼續查詢（A 在 #51 的建議）。"""
+    referee = world.referee()
+    account = AccountRead.model_validate(referee, from_attributes=True)
+
+    def broken_sql(s: Session, _account_id: uuid.UUID) -> bool:
+        s.execute(text("SELECT 1 / 0"))
+        return True
+
+    identity_service.register_referee_lookup(broken_sql)
+    keys = [i.key for i in identity_service.list_identities(session, account)]
+
+    assert IdentityKey.REFEREE not in keys
+    assert session.execute(text("SELECT 1")).scalar_one() == 1
 
 
 def test_composition_registers_referee_lookup(session: Session, world: World) -> None:
