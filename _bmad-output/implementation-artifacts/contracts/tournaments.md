@@ -110,6 +110,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `list_referees(session, *, tournament_id) -> list[RefereeRead]` | D（4.4 的 S30 選單） | 依接受邀請的時間排序 | 2.7 |
 | `has_referee_role(session, *, account_id) -> bool` | 組裝層（`app/api/main.py`）註冊給 identity 的 `register_referee_lookup`（4.4 S13） | 帳號是不是任一賽事的裁判（有 `TournamentReferee` 列即是，不看賽事狀態）；身分切換器的「裁判」用 | 4.4 |
 | `ensure_accepting_referees(tournament: TournamentRead) -> None` | tournaments 的裁判邀請（2.7）；其他模組需要時可呼叫 | 狀態為 `finished`、`cancelled` 時拋 `TOURNAMENT_NOT_ACCEPTING_REFEREES` 409；不碰資料庫 | 2.7 |
+| `find_due_registration_end_id(session) -> UUID \| None` | C（3.6 報名截止 worker 工作） | 一筆狀態為 `open`、`registration_end <= clock.now()` 的賽事 id，依報名截止時間、再依 id，最早到期的優先；不加鎖，呼叫端鎖住後要重新檢查。沒有任何報名的賽事也找得到（C 在 3.6 新增） | 3.6 |
 
 三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
 
@@ -120,7 +121,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | 從 → 到 | 誰呼叫 | 時機 |
 | --- | --- | --- |
 | `upcoming` → `open` | tournaments 的 worker 工作（2.2） | 報名開始時間到（1 分鐘內） |
-| `open` → `closed` | C（3.6 報名截止） | 報名截止時，截止補位之後 |
+| `open` → `closed` | C（3.6 報名截止） | 報名截止時，截止補位之後（C 已在 3.6 實作：worker 工作 `close_registrations` 呼叫 registration `close_registration`，轉為 `closed` 前在同一個鎖內先做優先期結算（尚未結算時）、補做先搶期、截止補位；操作者為系統） |
 | `open` → `published`、`closed` → `published` | D（4.1 抽籤） | 抽籤完成；開放報名中提前抽籤時直接從 `open` 轉 |
 | `published` → `ongoing` | D（5.x） | 最早一場開放報到時（開賽前 30 分鐘） |
 | `ongoing` → `finished` | D（5.5） | 決賽與季軍賽確定（季軍賽取消或不存在也算） |

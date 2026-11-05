@@ -309,3 +309,39 @@
 - 問題與修正：Blind Hunter 抓到 AI 寫的 `get_team_names` 測試用條件過濾建出預期值，查不到隊伍時預期值會跟著變小，測試仍會通過；改成直接斷言兩隊與各自的隊名。審查者提出的「送出報名與抽籤競態」「提前抽籤不足 2 隊時結算紀錄被寫入」，主流程查證後不成立：送出報名同樣先鎖賽事並在鎖內檢查開放狀態，router 只在成功時 commit。主流程為了產生 diff 又用了 `git add -N`（3.4 時已因此讓 `git stash` 失敗），這次在讀完 diff 後立刻取消標記，第二次改用 `git diff --no-index` 附上新檔，不動 index。完整測試加 lint 超過前景 600 秒上限，改在背景執行
 - 成熟度：L4（多個獨立審查者加自動測試，主流程查證每一項）
 - 證據：_bmad-output/implementation-artifacts/spec-3-6-draw-functions.md（Review Triage Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-05｜需求／設計｜Story 3.6 spec：報名截止自動補位
+
+- Story／範圍：3.6（分支 story/3-6-deadline，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（一個 spec 審查子代理）
+- 怎麼用：主流程調查 worker 排程、tournaments 的狀態轉換與找候選寫法、epics 的 3.6 驗收條件後寫出 spec；人選擇先審查，由子代理對照程式碼審查；之後 main 合併了 #53 等 5 個 PR，主流程重新查證 D 在 #53 的 4 項建議、合併後的 deferred-work，再更新 spec 並草擬給 D 的回覆
+- AI 產出：spec-3-6-deadline-fill.md（I/O 矩陣 16 列、13 項 Tasks、8 則 Decisions，約 5,900 tokens）；#53 上給 D 的回覆（4 項建議的處理）
+- 人做了什麼：保留完整 spec；決定截止後的錯誤訊息維持「這場賽事的報名已截止。」、`fill_at_deadline` 由 `finalize_for_draw` 取代、3-6 先改回 in-progress；要求加入提前抽籤失敗回滾測試並驗證確實寫入後才回滾；要求重新確認 6 項 deferred 都已完成或被涵蓋；修改回覆草稿兩處並要求查證送出時間的邊界；選擇以重設分支取代合併 commit；核准 spec 停在 ready-for-dev
+- 驗證：spec 審查子代理提出 12 項（必改 3、建議 7、小地方 2），主流程查證後 3 項請人決定、其餘直接修正；deferred-work 要刪的 6 項逐項對照程式碼與測試（`TournamentOverview.tsx`、`mark_drawn`、`_ORDER_STATUSES`、#53 的測試）
+- 問題與修正：AI 寫的第一版 spec 有三處錯誤，由審查子代理抓到：Problem 寫「截止後仍可送出報名」，但 registration 早已自己比對截止時間；以為插入新 worker 工作不影響既有測試，`test_email_pipeline.py` 其實比對完整清單；沒注意併發測試留下的 `open` 賽事會讓「找最早到期」的測試不穩定。AI 給 D 的回覆草稿第一版斷言「`submitted_at` 不會晚於截止」，人要求查證後發現截止檢查與寫入 `submitted_at` 是兩次 `clock.now()`，截止前一刻送出時可能晚幾毫秒，改成修正並補回歸測試，回覆也改為承認這個情況。另外發現 `deferred-work.md` 的 `merge=union` 讓 #53 刪掉的 3 項在 #51 合併後又回來
+- 成熟度：L4（固定流程，子代理審查，主流程查證，人在規則、範圍與回覆的 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md（Decisions）；https://github.com/Team14good/esport-platform/pull/53#issuecomment-6658603472；commit 未記錄（尚未 commit）
+
+### 2026-11-05｜程式／程式生成｜Story 3.6：報名截止自動補位
+
+- Story／範圍：3.6（分支 story/3-6-deadline，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（一個實作子代理）
+- 怎麼用：主流程確認分支基於最新 origin/main、spec 為 ready-for-dev 且 I/O 矩陣 16 列後，把 spec 交給沒有對話脈絡的實作子代理；完成後主流程讀完整 diff，逐項核對 Tasks 與 16 列矩陣，再自己重建容器跑完整測試
+- AI 產出：tournaments 新增公開函式 `find_due_registration_end_id` 與 repository 查詢；registration 新增 `close_registration`、`close_due_registration`，`_ensure_registration_period` 遇到 `closed` 回「這場賽事的報名已截止。」，`submit_registration` 只取一次 `now`；worker 新增 `close_registrations`；新增 2 個測試檔（31 個測試案例），在既有測試檔新增 3 個測試與 2 組併發參數，`test_email_pipeline.py` 插入 1 行；更新 tournaments 合約、sprint-status 備註，deferred-work 刪除 6 項
+- 人做了什麼：在 spec 階段做的決策（錯誤訊息、不公開 `fill_at_deadline`、回滾測試、送出時間只取一次等）；本階段沒有額外決策
+- 驗證：完整後端測試 2015 passed、覆蓋率 97%，lint 通過；子代理把 `submit_registration` 改回取兩次時間，確認新的回歸測試會失敗後還原
+- 問題與修正：子代理對 `tests/registration` 跑 ruff format，順手改到別人的 `test_confirm_advance.py`（自己發現並還原），也把自己檔案裡一段既有測試重新排版（由審查抓到，見下一筆）。子代理在審查前就把 spec 狀態改成 `done`，主流程依流程改回 `in-review`。子代理沒有依 Decisions 先把 sprint-status 的 3-6 改回 `in-progress`，只改備註
+- 成熟度：L4（固定流程，子代理實作，主流程依 diff 與 I/O 矩陣驗證並自己重跑測試）
+- 證據：_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md（Tasks、Implementation Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-05｜測試／程式審查｜Story 3.6 報名截止的審查與完整驗證
+
+- Story／範圍：3.6（分支 story/3-6-deadline，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap 三個審查子代理）
+- 怎麼用：三個審查子代理平行讀 diff，主流程到程式碼逐項查證（`finalize_for_draw` 是否已測過非開放狀態、自訂模式的既有處理、`lint.sh` 的檢查範圍、鎖內重新檢查能否空轉），寫進 spec 的 Review Triage Log；修正交回原本的實作子代理
+- AI 產出：Blind Hunter 13 項、Edge Case Hunter 4 項、Verification Gap 0 項缺口（另 1 項其他發現），去重後 14 列：patch 1、defer 1、駁回 12（查證不成立 3、與凍結的 I/O 矩陣一致 1、影響輕微 8）
+- 人做了什麼：本階段沒有額外決策
+- 驗證：修正後重建容器，後端 2015 passed、覆蓋率 97%，ruff check、ruff format 通過
+- 問題與修正：Blind Hunter 抓到 AI 在 `test_allocation.py` 混入既有測試的排版變更，還原後只剩新增的 20 行。三個審查者都提出「最早到期的賽事一直失敗會卡住之後的賽事」，與 `open_due_registration` 相同的既有模式，列入 deferred-work。實作子代理回報 `test_allocation.py` 原本就有 `test_story_3_6_example_deadline_fill` 涵蓋 epics E/F/G/H 範例，spec 的 Code Map 寫「沒有 E/F/G/H 範例」是錯的，新增的測試與它重複。主流程在 Git Bash 檢查換行時又叫到 Windows Store 的 `python` 別名（exit 49），改用 `tr -cd '\r' | wc -c`
+- 成熟度：L4（多個獨立審查者加自動測試，主流程查證每一項）
+- 證據：_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md（Review Triage Log）；deferred-work.md；commit 未記錄（尚未 commit）

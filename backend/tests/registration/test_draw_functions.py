@@ -788,6 +788,58 @@ def test_draw_via_api_no_longer_returns_503(
     assert set(_statuses(session, tournament).values()) == {D}
 
 
+def test_failed_early_draw_via_api_rolls_back_finalize(
+    client: TestClient,
+    session: Session,
+    frozen_clock: FrozenClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 優先期還沒結束、只有 1 隊：finalize_for_draw 在請求的交易內結算（寫入結算紀錄、
+    # 狀態、操作紀錄與事件），之後正取不足 2 隊抽籤失敗，router 不 commit，全部回滾
+    tournament = _tournament(session, frozen_clock)
+    registration = _submitted(
+        session, tournament, _school(session), submitted_at=_in_window(tournament)
+    )
+    organizer = session.get(Account, tournament.organizer_id)
+    assert organizer is not None
+    session.commit()
+    assert frozen_clock.now() < tournament.priority_end
+    logs_before = len(audit.list_for_tournament(session, tournament.id))
+
+    real_finalize = service.finalize_for_draw
+    seen: dict[str, Any] = {}
+
+    def _finalize_and_observe(db: Session, **kwargs: Any) -> None:
+        real_finalize(db, **kwargs)
+        # 在請求的同一個 session 內確認確實寫入過
+        seen["settled"] = repository.get_settlement(db, tournament.id) is not None
+        row = repository.get_registration_by_team(db, registration.team_id)
+        seen["status"] = None if row is None else row.status
+        seen["changed"] = len(_logs(db, tournament, "registration.status_changed"))
+        seen["events"] = len(_events(db, tournament))
+
+    monkeypatch.setattr(service, "finalize_for_draw", _finalize_and_observe)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/tournaments/{tournament.id}/draw",
+        headers=_auth(organizer),
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "NOT_ENOUGH_TEAMS"
+    assert seen == {"settled": True, "status": A, "changed": 1, "events": 1}
+    # 全部回滾
+    session.expire_all()
+    assert repository.get_settlement(session, tournament.id) is None
+    assert _statuses(session, tournament) == {registration.id: P}
+    assert len(audit.list_for_tournament(session, tournament.id)) == logs_before
+    assert _events(session, tournament) == []
+    assert (
+        tournaments_service.get_tournament(session, tournament_id=tournament.id).status
+        == TournamentStatus.OPEN
+    )
+
+
 # ---------------------------------------------------------------- 示範資料
 
 
