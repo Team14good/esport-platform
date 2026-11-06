@@ -99,7 +99,10 @@ def update_my_player_profile(
 def submit_registration(
     session: SessionDep, account: VerifiedAccount, team_id: uuid.UUID
 ) -> TeamDetail:
-    """S17 隊長送出報名：報名轉為「已送出・待分配」，名單鎖定並凍結學校、平均段位積分與送出時間。
+    """S17 隊長送出報名：名單鎖定並凍結學校、平均段位積分與送出時間。
+
+    優先期內或自訂模式送出時報名轉為「已送出・待分配」；校園賽在先搶期送出時
+    當下分配，回應直接帶正取或候補結果與候補順位。
 
     不符合送出條件時回 409 `REGISTRATION_REQUIREMENTS_UNMET`，`message` 列出全部原因。
     """

@@ -9,6 +9,8 @@ export const SUBMITTED_TEXT = "已送出報名"
 /**
  * S17 隊長送出報名。成功後以回應更新隊伍快取、讓 S12 我的隊伍重新取得並 Toast「已送出報名」；
  * 被拒時重新取得隊伍，讓停用原因與名單狀態跟上伺服器。錯誤訊息由 ConfirmDialog 顯示。
+ * 先搶期送出時伺服器當下分配（Story 3.5），回應已帶正取或候補結果與順位，S17 徽章與
+ * 候補說明直接照回應顯示，不做 optimistic update；Toast 文字不變。
  */
 export function useSubmitRegistration(teamId: string) {
   const queryClient = useQueryClient()

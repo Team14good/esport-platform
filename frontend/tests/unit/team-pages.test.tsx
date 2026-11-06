@@ -781,6 +781,81 @@ describe("送出報名（S17、S19）", () => {
     expect(within(profile).getByLabelText("遊戲 ID")).toBeDisabled()
   })
 
+  // Story 3.5：先搶期送出的回應已帶分配結果，S17 直接照回應顯示（不做 optimistic update）
+  const FIRST_COME_RULE =
+    "先搶期由優先期沒有報名、目前也沒有正取的學校，依送出先後遞補。"
+  const FIRST_COME: TeamDetail = {
+    ...SUBMITTED,
+    priority_end: inMs(-60 * 60 * 1000),
+    registration_end: inMs(3 * 24 * 60 * 60 * 1000),
+  }
+
+  async function submitWith(response: TeamDetail) {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    signInAs()
+    mockReadTeam(READY)
+    vi.spyOn(RegistrationService, "submitRegistration").mockResolvedValue({
+      data: response,
+    } as SubmitResult)
+    renderApp("/teams/team-1")
+
+    await user.click(await screen.findByRole("button", { name: "送出報名" }))
+    const dialog = await screen.findByRole("alertdialog")
+    await user.click(within(dialog).getByRole("button", { name: "送出報名" }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(success).toHaveBeenCalledWith("已送出報名", expect.anything())
+    expect(screen.queryByText("已送出・待分配")).toBeNull()
+    expect(screen.queryByText("優先期結束後分配名額")).toBeNull()
+  }
+
+  it("先搶期送出、回應為正取：直接顯示「正取」與報名截止倒數", async () => {
+    await submitWith({ ...FIRST_COME, registration_status: "accepted" })
+
+    expect(screen.getByText("正取")).toBeInTheDocument()
+    expect(
+      screen.getByText("報名截止").closest("[data-slot=countdown]"),
+    ).not.toBeNull()
+    expect(document.querySelector("[data-slot=waitlist-details]")).toBeNull()
+  })
+
+  it("先搶期送出、回應為候補有順位：直接顯示「候補第 N 位」與先搶期遞補規則", async () => {
+    await submitWith({
+      ...FIRST_COME,
+      registration_status: "waitlisted",
+      waitlist_position: 2,
+      waitlist_reason: null,
+      representative_backfill: false,
+      waitlist_phase: "first_come",
+    })
+
+    expect(screen.getByText("候補第 2 位")).toBeInTheDocument()
+    const details = screen
+      .getByText(FIRST_COME_RULE)
+      .closest<HTMLElement>("[data-slot=waitlist-details]") as HTMLElement
+    expect(details.children).toHaveLength(1)
+  })
+
+  it("先搶期送出、回應為候補沒有順位：直接顯示原因與先搶期遞補規則", async () => {
+    const reason = "先搶期每校只遞補最早送出的一隊，本校已有更早送出的候補。"
+    await submitWith({
+      ...FIRST_COME,
+      registration_status: "waitlisted",
+      waitlist_position: null,
+      waitlist_reason: "LATER_THAN_SCHOOLMATE",
+      representative_backfill: false,
+      waitlist_phase: "first_come",
+    })
+
+    expect(screen.getByText("候補・目前不在遞補順序中")).toBeInTheDocument()
+    const details = screen
+      .getByText(reason)
+      .closest<HTMLElement>("[data-slot=waitlist-details]") as HTMLElement
+    expect(
+      Array.from(details.children).map((line) => line.textContent),
+    ).toEqual([reason, FIRST_COME_RULE])
+  })
+
   it("伺服器拒絕時在對話框內顯示原因，並重新取得隊伍", async () => {
     const user = userEvent.setup()
     signInAs()
