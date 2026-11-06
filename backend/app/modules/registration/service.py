@@ -732,13 +732,18 @@ def update_player_profile(
 def submit_registration(
     session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
 ) -> TeamDetail:
-    """S17 隊長送出報名：報名從組隊中轉為待分配、名單鎖定，凍結學校、平均段位積分與送出時間。
+    """S17 隊長送出報名：報名送出、名單鎖定，凍結學校、平均段位積分與送出時間。
 
     先查隊伍、鎖住賽事，再依序檢查隊員、隊長、報名期間、報名仍是組隊中與送出條件。
     送出條件與 S17 的 `submit_blockers` 是同一個函式，不符合時全部原因以「；」串接。
-    3.3 一律轉為 `pending`，名額分配在 3.4～3.6；送出不發事件（FR-37 只通知報名結果）。
-    鎖住賽事後只取一次當下時間，截止檢查與 `submitted_at` 共用，所以已送出的報名一定
-    早於報名截止時間（中間的查詢跨過截止時也一樣）。
+    報名先轉為 `pending`（操作者為隊長），送出本身不發事件（FR-37 只通知報名結果）。
+    校園賽在先搶期（`now > priority_end`）送出時，在同一個鎖與交易內當下分配（FR-15，
+    Story 3.5）：優先期還沒結算就先結算（`settle_priority_window`），再以
+    `_first_come_locked` 依送出順序判定所有 `pending`（殘留的先判定，本筆最後），
+    操作者為系統，每筆發 `RegistrationAllocated`；回應帶正取或候補結果與順位。
+    優先期內（`now <= priority_end`）與自訂模式維持 `pending`，由 worker 或之後的分配處理。
+    鎖住賽事後只取一次當下時間，截止檢查、`submitted_at` 與先搶期判斷共用，所以已送出
+    的報名一定早於報名截止時間（中間的查詢跨過截止時也一樣）。
     """
     team = repository.get_team(session, team_id)
     if team is None:
@@ -796,6 +801,12 @@ def submit_registration(
         },
     )
     session.flush()
+    if tournament.mode == TournamentMode.CAMPUS and now > tournament.priority_end:
+        # 先搶期送出：_first_come_locked 不過濾優先期內的 pending，所以一定要先結算；
+        # 同一交易內重新鎖同一列不會阻塞，已結算時不做任何事
+        settle_priority_window(session, tournament_id=tournament.id)
+        _first_come_locked(session, tournament, actor_id=None)
+        session.flush()
     return _build_detail(session, team, tournament, viewer)
 
 
@@ -911,7 +922,8 @@ def settle_priority_window(session: Session, *, tournament_id: uuid.UUID) -> boo
 
     鎖內重新檢查：已有結算紀錄、賽事不是開放中的校園賽、或優先期還沒結束時不做任何事
     （回傳 False），所以重複呼叫結果不變。只有 `pending` 且在優先期內（`submitted_at <=
-    priority_end`）送出的報名參加結算；優先期後送出的 `pending` 維持原狀（3.5 處理）。
+    priority_end`）送出的報名參加結算；優先期後送出的 `pending` 維持原狀，由先搶期送出
+    （`submit_registration`）或報名截止、抽籤時的 `_first_come_locked` 判定。
     結果依 `allocation.allocate_priority_window`，逐筆以 `mark_status` 改狀態（操作者為
     系統）並發 `RegistrationAllocated`，再寫結算紀錄（保存優先期有報名的學校，可為空）
     與一筆 `registration.priority_window_settled` 摘要。抽籤（`finalize_for_draw`）不呼叫

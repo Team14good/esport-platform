@@ -345,3 +345,51 @@
 - 問題與修正：Blind Hunter 抓到 AI 在 `test_allocation.py` 混入既有測試的排版變更，還原後只剩新增的 20 行。三個審查者都提出「最早到期的賽事一直失敗會卡住之後的賽事」，與 `open_due_registration` 相同的既有模式，列入 deferred-work。實作子代理回報 `test_allocation.py` 原本就有 `test_story_3_6_example_deadline_fill` 涵蓋 epics E/F/G/H 範例，spec 的 Code Map 寫「沒有 E/F/G/H 範例」是錯的，新增的測試與它重複。主流程在 Git Bash 檢查換行時又叫到 Windows Store 的 `python` 別名（exit 49），改用 `tr -cd '\r' | wc -c`
 - 成熟度：L4（多個獨立審查者加自動測試，主流程查證每一項）
 - 證據：_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md（Review Triage Log）；deferred-work.md；commit 未記錄（尚未 commit）
+
+### 2026-11-06｜需求／設計｜Story 3.5 spec：先搶期即時分配
+
+- Story／範圍：3.5（分支 story/3-5，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（一個調查子代理、一個 spec 審查子代理）
+- 怎麼用：主流程確認沒有重複的 PR 後從 origin/main 開分支；調查子代理整理送出流程、`allocation.py`、3.6 的鎖內函式、前端送出回應與併發測試寫法，主流程讀 `_first_come_locked` 等程式確認後寫 spec；#58 合併後同步 main、更新行號；人選擇先審查，由子代理對照程式碼審查
+- AI 產出：spec-3-5-first-come-allocation.md（I/O 矩陣 13 列、10 項 Tasks、5 則 Decisions，約 15,000 字元）
+- 人做了什麼：決定 Toast 維持「已送出報名」、保留完整 spec；要求先審查 spec；核准後停在 ready-for-dev
+- 驗證：spec 審查子代理提出 15 項（必改 3、建議 8、小地方 4），主流程到程式碼查證，15 項都成立並修正；確認 #58 合併後刪除的 6 項 deferred 沒有被 `merge=union` 帶回
+- 問題與修正：AI 寫的第一版 spec 有兩處照著做會測不過，由審查子代理抓到：矩陣把「同校已有先搶期正取」的原因寫成 `LATER_THAN_SCHOOLMATE`，實際 `allocation.py` 回 `SCHOOL_NOT_ELIGIBLE`；200 筆測試寫「200 隊各屬不同學校」，但初始資料只有 139 所且學校清單測試檢查總數。另外漏了最常見的「優先期沒有任何報名時第一筆送出會寫空結算紀錄」、兩處行號錯誤、deferred 要刪整個項目而不是單行、router docstring 會過時。主流程第一次套用修改時比對字串沒對上，斷言在寫檔前擋下，修正後重跑
+- 成熟度：L4（固定流程，子代理調查與審查，主流程查證，人在規則與核准的 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-5-first-come-allocation.md（Decisions）；commit 未記錄（尚未 commit）
+
+### 2026-11-06｜程式／程式生成｜Story 3.5 先搶期即時分配
+
+- Story／範圍：3.5（分支 story/3-5，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（一個實作子代理）
+- 怎麼用：主流程記下基準 commit `453b847`，把 spec 交給沒有對話脈絡的實作子代理，spec 是唯一需求來源；完成後主流程自己讀 diff、對照 I/O 矩陣逐列核對
+- AI 產出：`submit_registration` 在校園賽、`now > priority_end` 時，同一個鎖與交易內先結算優先期再呼叫 `_first_come_locked`（service.py 約 10 行程式）；router docstring 更新並重新產生 client；新增 test_first_come_submission.py（11 支）、test_first_come_concurrency.py（200 筆與名額只剩 1 個，2 支），改 1 支既有測試，前端新增 3 支單元測試；deferred-work 刪 2 項
+- 人做了什麼：spec 的 Decisions（Toast 不變、保留 200 筆併發測試）在前一階段決定；本階段沒有新的決策
+- 驗證：主流程重新 build 後自己重跑新增與相關測試 61 passed（含 200 筆平行送出）
+- 問題與修正：子代理在審查前就把 sprint-status 的 3-5 標成 `done`，主流程比對 diff 時發現，改回 `in-progress`，審查後才標 `done`。主流程用 Git Bash 的 `python` 改 spec frontmatter 時又叫到 Windows Store 的空殼別名，指令沒有錯誤訊息但檔案沒變，`head` 檢查時發現，改用 `py`。子代理修審查意見時自行跑了 `scripts/prestart.sh`，主流程查看腳本內容，只是遷移與初始資料，無害
+- 成熟度：L4（依 spec 由子代理實作，主流程獨立讀 diff 與重跑測試）
+- 證據：_bmad-output/implementation-artifacts/spec-3-5-first-come-allocation.md（Implementation Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-06｜測試／程式審查｜Story 3.5 審查與驗證
+
+- Story／範圍：3.5（分支 story/3-5，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build 審查步驟（Blind Hunter、Edge Case Hunter、Verification Gap 三個子代理）
+- 怎麼用：三個沒有對話脈絡的審查子代理同時讀 diff；主流程逐條到程式碼查證後判定，修正項交回原實作子代理
+- AI 產出：審查意見 13 條（Blind Hunter 9、Edge Case Hunter 4、Verification Gap 0）
+- 人做了什麼：未參與判定；判定與證據寫在 spec 的 Review Triage Log 供審閱
+- 驗證：判定結果：修正 2 條、駁回 11 條（不成立 5、影響小 6），延後 0 條。修正後重新 build：後端 `scripts/test.sh` 通過、覆蓋率 97%（主流程只看到結尾，通過數未記錄；子代理修正前回報 2028 passed）；`lint.sh` 通過；前端 typecheck、biome 通過，單元測試 63 檔 834 passed
+- 問題與修正：Blind Hunter 抓到 AI 只更新 docstring 的下半段，`submit_registration` 第一行仍寫「轉為待分配」，router 說明也漏了自訂模式，已修並重新產生 client。Blind Hunter 與 Edge Case Hunter 都提出「結算函式回傳 False 時，優先期報名會被當先搶期判定」，主流程讀 `_ensure_registration_period` 與 `_priority_window_due` 確認送出時一定已開放且過了優先期，回 False 只會是已結算，判定不成立。Blind Hunter 說前端沒測 `SCHOOL_NOT_ELIGIBLE`，主流程 grep 到既有測試，判定不成立。主流程第一次跑前端單元測試時用 `tail` 截掉了通過數，重跑後只取摘要
+- 成熟度：L4（多個獨立審查者加自動測試，主流程查證每一條）
+- 證據：_bmad-output/implementation-artifacts/spec-3-5-first-come-allocation.md（Review Triage Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-06｜測試／瀏覽器實測｜Story 3.5：先搶期送出後 S17 直接顯示分配結果（桌機與 375 px）
+
+- Story／範圍：3.5（分支 story/3-5，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ Playwright（專案的 e2e 容器）
+- 怎麼用：人選擇先做瀏覽器實測再 commit。主流程照 3.4 的做法交給子代理：用 SQL 在開發資料庫建兩場名額 2、正在先搶期的校園賽（桌機、手機各一場，每隊只有隊長一人），寫一個掛進 e2e 容器、沿用專案 Playwright 設定的實測 spec（不放進 repo），由隊長在 S17 依序點「送出報名」
+- AI 產出：資料準備 SQL、實測 spec、24 張截圖；兩種寬度各 4 次送出，2 個 Playwright 測試第一次執行就通過（47.6 秒）：X 校隊 1「正取」、X 校隊 2「候補・目前不在遞補順序中」＋學校不符資格原因、Z 校隊填滿名額、Y 校隊「候補第 1 位」；每次都確認 Toast「已送出報名」、沒有整頁重新載入、DOM 從未出現「已送出・待分配」、375 px 沒有水平捲動
+- 人做了什麼：決定在 commit 前先做瀏覽器實測
+- 驗證：資料庫查核兩場數字相同：每隊 `registration.status_changed` 恰好 2 筆（待分配的操作者為隊長、結果為系統），`registration.priority_window_settled` 每場 1 筆且在第一筆送出的同一交易內、排在第一筆判定之前，`RegistrationAllocated` 每筆報名 1 則（合計 8 則）。主流程親自看了桌機正取、375 px 沒有順位與候補第 1 位三張截圖，徽章與說明正確、沒有截斷
+- 問題與修正：沒有發現產品程式的錯誤。子代理的確認框截圖截在開啟動畫中途，呈半透明，屬截圖時機問題。子代理另外注意到名單鎖定後自己那列仍顯示「填寫我的資料」按鈕，3.3 的實測已確認點開後是唯讀，不屬 3.5 範圍，未修改
+- 成熟度：L3（AI 準備資料、自動化實測並看截圖，人決定要做這項檢查）
+- 證據：_bmad-output/implementation-artifacts/spec-3-5-first-come-allocation.md；commit 未記錄（尚未 commit）

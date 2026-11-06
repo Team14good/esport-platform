@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-05-2026 14:03
+last_updated: 11-06-2026 10:00
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -65,7 +65,7 @@ development_status:
   3-2-選手填寫參賽資料: done  # 負責：C
   3-3-送出報名與鎖定名單: done  # 負責：C
   3-4-優先期結束自動分配: done  # 負責：C；第一階段（allocation.py 純函式，含 3.5、3.6 規則）與第二階段（優先期結束自動分配，PR #50）完成；3.5、3.6 第二階段另列 deferred-work
-  3-5-先搶期即時分配: backlog  # 負責：C；規則已在 3.4 的 allocation.py
+  3-5-先搶期即時分配: done  # 負責：C；規則已在 3.4 的 allocation.py；先搶期送出當下分配（spec-3-5-first-come-allocation）完成
   3-6-報名截止與截止補位: done  # 負責：C；截止補位規則已在 3.4 第一階段完成（allocation.py）；抽籤用函式（PR #53）與報名截止 worker 工作 close_registrations（spec-3-6-deadline-fill）完成
   3-7-抽籤前撤回報名: backlog  # 擱置（期中後）
   3-8-主辦方檢視段位截圖與退回報名: backlog  # 擱置（期中後）

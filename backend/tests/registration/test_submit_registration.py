@@ -675,7 +675,9 @@ def test_submit_crossing_the_deadline_uses_one_time_for_check_and_snapshot(
 
     直接呼叫 service（不經 API，避免登入驗證等其他程式先取時間）；`clock.now()`
     第一次回傳截止前 1 微秒、之後一律截止後 1 微秒。改回兩次取時間時，
-    `submitted_at` 會晚於報名截止時間而失敗。
+    `submitted_at` 會晚於報名截止時間而失敗。截止前 1 微秒已是先搶期（Story 3.5），
+    預設名額 16、新學校，所以當下分配為正取；第二次取時間後已過截止，回應的
+    `waitlist_phase` 不檢查。
     """
     team, accounts = _team(client, session, names=FIVE)
     tournament = service._get_tournament(session, uuid.UUID(team["tournament_id"]))
@@ -694,7 +696,7 @@ def test_submit_crossing_the_deadline_uses_one_time_for_check_and_snapshot(
     )
 
     registration = _registration(session, team["id"])
-    assert registration.status == RegistrationStatus.PENDING
+    assert registration.status == RegistrationStatus.ACCEPTED
     assert registration.submitted_at == before
     assert registration.submitted_at < tournament.registration_end
     [submitted] = _audit(session, "registration.submitted", tournament.id)
