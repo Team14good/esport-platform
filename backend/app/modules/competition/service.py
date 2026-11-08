@@ -1915,8 +1915,12 @@ def unassign_referee_if_member(session: Session, *, match: Match) -> None:
     檢查兩隊（`advance` 填位後只檢查新填入的一隊）；收回時與 `advance` 相同，寫
     `match.referee_unassigned`（操作者為系統）、發 `RefereeUnassigned`。裁判不是隊員、
     沒有裁判、隊伍待定的一方不動。只對待開打、進行中的場次呼叫（已結束的場次裁判
-    不再有意義）。呼叫端先 `lock_tournament`、`lock_match`（AD-6）並已寫入頂替後的隊伍。
+    不再有意義）；場次不是 `scheduled`、`live` 時拋 `ValueError`（呼叫端的程式錯誤，與
+    `check_replay_time` 一致），不寫入。呼叫端先 `lock_tournament`、`lock_match`（AD-6）
+    並已寫入頂替後的隊伍。
     """
+    if MatchStatus(match.status) not in (MatchStatus.SCHEDULED, MatchStatus.LIVE):
+        raise ValueError("只能對待開打或進行中的場次收回裁判")
     for team_id in (match.team_a_id, match.team_b_id):
         _unassign_if_member(session, match=match, team_id=team_id)
 
