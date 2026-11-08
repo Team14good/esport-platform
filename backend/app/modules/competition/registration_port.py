@@ -10,12 +10,16 @@
 
 import uuid
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Any, cast
 
 from sqlmodel import Session
 
 from app.core.errors import BusinessError
 from app.modules.registration import service as registration_service
+
+# registration 的報名狀態值（`RegistrationStatus.DISQUALIFIED`，StrEnum 可與字串比較）
+_DISQUALIFIED = "disqualified"
 
 
 class RegistrationUnavailableError(BusinessError):
@@ -90,3 +94,33 @@ def is_member(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) ->
     """帳號是不是該隊的隊員（指派裁判用）；registration 尚未提供時拋 503。"""
     lookup = _lookup("is_member", action="指派裁判")
     return bool(lookup(session, team_id=team_id, account_id=account_id))
+
+
+@dataclass(frozen=True)
+class RegistrationState:
+    """取消資格判斷需要的報名資料：所屬賽事、是否已取消資格。"""
+
+    tournament_id: uuid.UUID
+    disqualified: bool
+
+
+def get_registration_state(
+    session: Session, *, team_id: uuid.UUID
+) -> RegistrationState:
+    """隊伍的報名所屬賽事與是否已取消資格（6.5）；報名不存在由 registration 拋 404。"""
+    registration = _lookup("get_registration", action="取消資格")(
+        session, team_id=team_id
+    )
+    return RegistrationState(
+        tournament_id=registration.tournament_id,
+        disqualified=registration.status == _DISQUALIFIED,
+    )
+
+
+def disqualify_registration(
+    session: Session, *, team_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    """把隊伍的報名改為取消資格（6.5）；registration 尚未提供時拋 503。"""
+    _lookup("disqualify_registration", action="取消資格")(
+        session, team_id=team_id, actor_id=actor_id
+    )

@@ -375,6 +375,16 @@ class ReplayCleared(BaseModel):
     forfeit_deadline: datetime | None
 
 
+class DisqualifyResult(BaseModel):
+    """取消資格的結果（6.5，給 disputes `resolve_report` 結案與寫操作紀錄）。"""
+
+    # 直接被取消資格改動的場次（判對手獲勝、頂替、移出隊伍），依處理順序；
+    # 之後由晉級推進連帶改動的場次不列入。抽籤前或只改報名狀態時為空
+    affected_match_ids: list[uuid.UUID]
+    # 頂替原位置的隊伍；沒有頂替為 None
+    replacement_team_id: uuid.UUID | None
+
+
 class PublicTournamentRef(BaseModel):
     id: uuid.UUID
     name: str

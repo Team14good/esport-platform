@@ -107,6 +107,20 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | `replay_match(session, *, match_id, scheduled_at, actor_id) -> ReplayCleared` | disputes `resolve_appeals` | 只接受 `appealed`、`outcome=forfeit`；`scheduled_at` 以 D 的 ★ `check_replay_time` 檢查（與 4.3 改期同一個 `_reschedule_window`，錯誤碼與訊息也相同）；`clear_for_replay` → `transition_match(→ scheduled)` → 寫入新時間 → `start_forfeit_clock` → 操作紀錄 `match.replay_scheduled` → 發 `MatchRescheduled`；同一交易。裁判保留（`clear_for_replay` 不動裁判，與 4.4 一致） | `clear_for_replay`、`transition_match`、`start_forfeit_clock`、★ `check_replay_time` |
 | `disqualify(session, *, tournament_id, team_id, actor_id) -> DisqualifyResult` | disputes `resolve_report` | 依 epic-6-context〈取消資格（期中版）〉的 7 種情況頂替；抽籤前只改報名狀態（registration `mark_status(→ disqualified)`）。頂替改變場次的隊伍後：**重新檢查裁判衝突**（頂替進來的隊伍含該場裁判時收回指派，寫 `match.referee_unassigned`、操作者為系統、發 `RefereeUnassigned`，與 `advance` 相同）；兩隊湊齊的場次呼叫 `start_forfeit_clock`。未結案的該場申訴由 disputes 一併結案（`DisqualifyResult` 回傳受影響的 `match_id`） | `list_team_matches`、`confirm_walkover`、`advance`、`confirm_match`、`start_forfeit_clock`、★ `unassign_referee_if_member` |
 
+`disqualify`（6.5 第一階段，2026-11-08 實作；規則見 `competition/disqualification.py` 與 spec-6-5-disqualify.md）：
+
+```python
+class DisqualifyResult(BaseModel):          # competition/models.py
+    affected_match_ids: list[UUID]          # 直接被取消資格改動的場次（判對手獲勝、頂替、季軍賽移出隊伍），依處理順序；
+                                            # 之後由晉級推進連帶改動的場次不列入；抽籤前或只改報名狀態時為 []
+    replacement_team_id: UUID | None        # 頂替原位置的隊伍；沒有頂替為 null
+```
+
+- 先 `lock_tournament`，再依 id 遞增鎖住對戰表全部場次，判斷完成後才寫入（AD-6）。賽事已結束或已取消 409 `TOURNAMENT_FINISHED`／`TOURNAMENT_CANCELLED`；隊伍不屬於該賽事 404 `REGISTRATION_NOT_FOUND`；已取消資格 409 `TEAM_ALREADY_DISQUALIFIED`；拒絕時不改資料。
+- 報名經 registration 新增的 `disqualify_registration(session, *, team_id, actor_id) -> RegistrationRead`（內部用 `mark_status`）改為 `disqualified`。
+- 兩隊都在場的場次判對手獲勝時 outcome 為 `disqualified`（不用 walkover）；待開打的場次走 `scheduled → confirmed` 再 `advance`，已開打的走 `confirm_match`。操作紀錄：確認為 `match.confirmed`、換隊為 `match.teams_changed`（`before`／`after` 含 `team_a_id`、`team_b_id`，`after` 另含 `disqualified_team_id`），操作者為 `actor_id`；隨後晉級推進與季軍賽的 walkover 確認操作者為系統。
+- 對手還沒確定、需要把一方標記為不會有隊伍的情況尚未支援（拋 `NotImplementedError`，見 deferred-work.md）。
+
 順序（D 確認）：`uphold_result`、`correct_result`、`replay_match` 都是 `lock_match` → 狀態（只接受 `appealed`）→ outcome 檢查 → 其他，與 `confirm_match` 一致。
 
 ## 四、6.x 需要的上游介面（請 C、D 確認）

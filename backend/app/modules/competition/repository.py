@@ -223,6 +223,19 @@ def set_match_team(
     session.flush()
 
 
+def clear_match_team(
+    session: Session, match: Match, side: Literal["a", "b"], at: datetime
+) -> None:
+    """清空某一方的隊伍（6.5 取消資格：頂替的隊伍由季軍賽移到決賽）。"""
+    if side == "a":
+        match.team_a_id = None
+    else:
+        match.team_b_id = None
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
 def clear_match_result(session: Session, match: Match, at: datetime) -> None:
     """清除結果、勝隊與棄權期限（季軍賽取消時用）。"""
     match.outcome = None

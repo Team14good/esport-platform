@@ -1197,3 +1197,36 @@ def get_team_names(
         team.id: team.name
         for team in repository.list_teams_by_ids(session, set(team_ids))
     }
+
+
+# ---------------------------------------------------------------- 取消資格（competition 6.5）
+
+
+def disqualify_registration(
+    session: Session, *, team_id: uuid.UUID, actor_id: uuid.UUID
+) -> RegistrationRead:
+    """把隊伍的報名改為取消資格（`disqualified`），回傳更新後的報名。
+
+    先鎖住賽事（AD-6）。報名不存在拋 404 `REGISTRATION_NOT_FOUND`；已是取消資格拋
+    409 `TEAM_ALREADY_DISQUALIFIED`；其他不能轉為取消資格的狀態（組隊中、退回、撤回、
+    退賽）由 `mark_status` 拋 409 `REGISTRATION_INVALID_TRANSITION`。拒絕時不改任何資料。
+    不做遞補（期中版）：抽籤前空出的名額交給之後的分配（3.4 `backfill_vacancies`）。
+    操作紀錄 `registration.status_changed` 的操作者為 `actor_id`；不發事件。
+    """
+    registration = repository.get_registration_by_team(session, team_id)
+    if registration is None:
+        raise _registration_not_found()
+    _lock_tournament(session, registration.tournament_id)
+    # 鎖住賽事後以資料庫最新值判斷（等鎖期間可能已被改變）
+    session.refresh(registration)
+    if registration.status == RegistrationStatus.DISQUALIFIED:
+        raise BusinessError(
+            "TEAM_ALREADY_DISQUALIFIED", "這支隊伍已被取消資格。", status_code=409
+        )
+    mark_status(
+        session,
+        registration=registration,
+        to=RegistrationStatus.DISQUALIFIED,
+        actor_id=actor_id,
+    )
+    return RegistrationRead.model_validate(registration, from_attributes=True)

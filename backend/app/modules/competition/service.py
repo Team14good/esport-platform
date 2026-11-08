@@ -14,7 +14,13 @@ from app.core import audit, authz, clock, events
 from app.core.errors import BusinessError
 from app.modules.competition import bracket as bracket_rules
 from app.modules.competition import checkin as checkin_rules
-from app.modules.competition import progression, registration_port, repository, scoring
+from app.modules.competition import (
+    disqualification,
+    progression,
+    registration_port,
+    repository,
+    scoring,
+)
 from app.modules.competition import schedule as schedule_rules
 from app.modules.competition.models import (
     Bracket,
@@ -24,6 +30,7 @@ from app.modules.competition.models import (
     CheckInRead,
     CheckInStatus,
     CheckInStatusReason,
+    DisqualifyResult,
     DrawStatus,
     DrawStatusReason,
     GameScoreIn,
@@ -2173,3 +2180,32 @@ def unassign_referee(
         session, RefereeUnassigned(match_id=match.id, referee_account_id=previous)
     )
     return _match_to_read(match)
+
+
+# ---------------------------------------------------------------- 取消資格（6.5）
+
+
+def disqualify(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    team_id: uuid.UUID,
+    actor_id: uuid.UUID,
+) -> DisqualifyResult:
+    """取消隊伍資格，依 epic-6-context〈取消資格（期中版）〉判對手獲勝或頂替。
+
+    disputes `resolve_report` 屬實時呼叫；規則與尚未支援的情況見 `disqualification.py`。
+    先 `lock_tournament`，再依 id 遞增鎖住對戰表的全部場次（AD-6），判斷完成後才寫入。
+    報名一律改為取消資格（registration `disqualify_registration`，操作者為 `actor_id`）；
+    抽籤前只改報名狀態，不做遞補。判對手獲勝以 `disqualified` 確認並沿用 `advance`
+    晉級；頂替後對該場呼叫 `unassign_referee_if_member`，兩隊湊齊且待開打時
+    `start_forfeit_clock`。每個被改動的場次寫操作紀錄（操作者為 `actor_id`；
+    隨後晉級推進的變更操作者為系統）。
+
+    賽事已結束或已取消拋 409 `TOURNAMENT_FINISHED`／`TOURNAMENT_CANCELLED`；隊伍不屬於
+    該賽事拋 404 `REGISTRATION_NOT_FOUND`；已取消資格拋 409 `TEAM_ALREADY_DISQUALIFIED`；
+    任何拒絕都不改資料。不 commit（AD-5）。
+    """
+    return disqualification.disqualify(
+        session, tournament_id=tournament_id, team_id=team_id, actor_id=actor_id
+    )

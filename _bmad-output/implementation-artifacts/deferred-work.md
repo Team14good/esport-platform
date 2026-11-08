@@ -210,3 +210,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md`
   summary: （中）報名截止工作 `close_registrations` 每輪只取最早到期的一場；那場在 `close_registration` 一直拋錯（例如缺快照的 `RuntimeError`）時，worker 每輪都卡在它，之後到期的賽事永遠不會轉為「報名截止」。
   evidence: 2026-11-05 Story 3.6 截止 worker 審查第 1 輪（Blind Hunter、Edge Case Hunter、Verification Gap 都提出）。`find_due_registration_end_id` 依 `registration_end`、id 取第一筆，`run_once` 遇錯 rollback 後結束本輪該工作；`open_due_registration`、`allocate_due_priority_window` 是相同模式。處理時讓 worker 跳過本輪失敗過的候選（或逐筆在 savepoint 內嘗試），並補「第一場拋錯時第二場仍會關閉」的測試。
+
+## Deferred from: spec-6-5-disqualify.md（2026-11-08）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-disqualify.md`
+  summary: 6.5 第二階段：disputes `resolve_report`（屬實時呼叫 competition `disqualify`，申訴一併結案）、S33 檢舉處理頁、S27 待處理清單的檢舉、對戰樹的「取消資格」標記（`destructive`）。
+  evidence: 2026-11-08 使用者決定 Story 6.5 拆兩階段；第一階段只做 competition `disqualify` 與 registration `disqualify_registration`。檢舉資料表由 C 的 6.4 建立，6.4 合併後接上；`DisqualifyResult.affected_match_ids` 給 disputes 結案該場未結案的申訴。
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-disqualify.md`
+  summary: （高）取消資格時對手還沒確定（輪空入座、還沒比過，或只靠 walkover 晉級而等待另一場勝隊；決賽隊伍要由季軍賽的準決賽敗隊頂替、而季軍賽另一方未定）尚未支援，`disqualify` 拋 `NotImplementedError`、不改任何資料。
+  evidence: spec Design Notes 規定「先確認 progression 支援，不支援就停下回報」。`progression.advance` 的 `side_team` 只依 plan 的來源推導一方是否定案：輪空直接入座的一方沒有來源、永遠不會定案；由勝場進來的一方被清空後會被重新填回原隊伍（季軍賽一方會被填回已移到決賽的隊伍）。要支援需由 D 在 progression 新增「這一方確定不會有隊伍」的表示（例如 `MatchState` 加欄位、資料表加旗標並遷移），屬於修改既有函式，要 D 同意。

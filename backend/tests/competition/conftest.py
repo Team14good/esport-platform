@@ -10,6 +10,7 @@ from typing import Protocol
 import pytest
 from sqlmodel import Session, func, select
 
+from app.core.errors import BusinessError
 from app.core.events import OutboxEvent
 from app.modules.competition import registration_port, service
 from app.modules.competition.models import BracketRead, Match
@@ -42,6 +43,9 @@ class FakeRegistration:
     drawn: list[tuple[uuid.UUID, list[uuid.UUID], uuid.UUID]] = field(
         default_factory=list
     )
+    # 6.5：隊伍所屬的賽事（`list_accepted_teams` 時記下）與已取消資格的隊伍
+    tournament_id: uuid.UUID | None = None
+    disqualified: list[tuple[uuid.UUID, uuid.UUID]] = field(default_factory=list)
 
     def set_team_count(self, count: int) -> list[uuid.UUID]:
         self.teams = [uuid.uuid4() for _ in range(count)]
@@ -51,6 +55,7 @@ class FakeRegistration:
         self, _session: Session, *, tournament_id: uuid.UUID
     ) -> list[uuid.UUID]:
         self.calls.append("list_accepted_teams")
+        self.tournament_id = tournament_id
         return list(self.teams)
 
     def finalize_for_draw(
@@ -78,6 +83,25 @@ class FakeRegistration:
             return dict(self.names)
         return {team_id: f"隊伍{self.teams.index(team_id) + 1}" for team_id in team_ids}
 
+    def get_registration_state(
+        self, _session: Session, *, team_id: uuid.UUID
+    ) -> registration_port.RegistrationState:
+        self.calls.append("get_registration_state")
+        if team_id not in self.teams or self.tournament_id is None:
+            raise BusinessError(
+                "REGISTRATION_NOT_FOUND", "找不到這支隊伍的報名。", status_code=404
+            )
+        return registration_port.RegistrationState(
+            tournament_id=self.tournament_id,
+            disqualified=any(team == team_id for team, _ in self.disqualified),
+        )
+
+    def disqualify_registration(
+        self, _session: Session, *, team_id: uuid.UUID, actor_id: uuid.UUID
+    ) -> None:
+        self.calls.append("disqualify_registration")
+        self.disqualified.append((team_id, actor_id))
+
 
 @pytest.fixture
 def fake_registration(monkeypatch: pytest.MonkeyPatch) -> FakeRegistration:
@@ -87,6 +111,8 @@ def fake_registration(monkeypatch: pytest.MonkeyPatch) -> FakeRegistration:
         "finalize_for_draw",
         "mark_drawn",
         "get_team_names",
+        "get_registration_state",
+        "disqualify_registration",
     ):
         monkeypatch.setattr(registration_port, name, getattr(fake, name))
     return fake
