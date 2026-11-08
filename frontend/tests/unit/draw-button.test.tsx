@@ -1,8 +1,12 @@
-import { QueryClient } from "@tanstack/react-query"
-import { act, screen, waitFor, within } from "@testing-library/react"
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   CompetitionService,
@@ -10,8 +14,13 @@ import {
   type TournamentRead,
   TournamentsService,
 } from "@/client"
+import { DrawButton } from "@/features/competition/DrawButton"
 import { managedMatchesQueryOptions } from "@/features/competition/organizer-matches-queries"
 import { myTournamentsQueryOptions } from "@/features/tournaments/organizer-queries"
+import {
+  publicTournamentQueryOptions,
+  publicTournamentsQueryOptions,
+} from "@/features/tournaments/queries"
 import { FORBIDDEN_FALLBACK_MESSAGE } from "@/lib/api-error"
 import { ACCOUNT, renderApp, signInAs } from "./auth-fixtures"
 import { httpError } from "./helpers"
@@ -154,6 +163,17 @@ describe("S27 抽籤按鈕", () => {
         queryKey: managedMatchesQueryOptions("t-1").queryKey,
       }),
     )
+    // 公開賽事的詳情與列表（S2、S1）也標記為過期，切過去不會看到開放報名的舊狀態
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: publicTournamentQueryOptions("t-1").queryKey,
+      }),
+    )
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: publicTournamentsQueryOptions().queryKey,
+      }),
+    )
     await waitFor(() =>
       expect(read.mock.calls.length).toBeGreaterThan(readsBefore),
     )
@@ -262,15 +282,13 @@ describe("S27 抽籤按鈕", () => {
     mockTournament(OPEN)
     const status = vi
       .spyOn(CompetitionService, "readDrawStatus")
-      .mockRejectedValue(httpError(500, "Internal Server Error"))
+      .mockRejectedValue(
+        httpError(409, { detail: { code: "BOOM", message: "預估失敗" } }),
+      )
     open()
 
-    // 預設重試 3 次（約 7 秒）後才會進入錯誤狀態
-    expect(
-      await screen.findByText("無法取得抽籤狀態", undefined, {
-        timeout: 15000,
-      }),
-    ).toBeInTheDocument()
+    // 抽籤狀態查詢自己的 retry 會蓋掉 QueryClient 的設定；業務錯誤（4xx）不重試，第一次失敗就進入錯誤狀態
+    expect(await screen.findByText("無法取得抽籤狀態")).toBeInTheDocument()
     // 頁面其他內容仍在，也沒有抽籤按鈕
     expect(
       screen.getByRole("heading", { name: "臺大秋季盃" }),
@@ -287,7 +305,35 @@ describe("S27 抽籤按鈕", () => {
     expect(
       screen.getByRole("heading", { name: "臺大秋季盃" }),
     ).toBeInTheDocument()
-  }, 30000)
+  })
+
+  it("抽籤狀態伺服器錯誤（500）：重試 3 次後顯示「無法取得抽籤狀態」與重新載入", async () => {
+    // 500 會依 shouldRetry 重試（約 1、2、4 秒）；用假計時器跳過間隔，不真的等待
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      mockTournament(OPEN)
+      const status = vi
+        .spyOn(CompetitionService, "readDrawStatus")
+        .mockRejectedValue(httpError(500, "Internal Server Error"))
+      open()
+
+      await screen.findByRole("heading", { name: "臺大秋季盃" })
+      await waitFor(() => expect(status).toHaveBeenCalledTimes(1))
+      // 重試期間不顯示錯誤
+      expect(screen.queryByText("無法取得抽籤狀態")).toBeNull()
+      for (let i = 0; i < 10 && !screen.queryByText("無法取得抽籤狀態"); i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1000)
+        })
+      }
+      expect(screen.getByText("無法取得抽籤狀態")).toBeInTheDocument()
+      expect(status).toHaveBeenCalledTimes(4)
+      expect(screen.getByRole("button", { name: "重新載入" })).toBeEnabled()
+      expect(screen.queryByRole("button", { name: "抽籤" })).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 
   it("別人的賽事（403）：沿用後台的 403 頁，不查抽籤狀態", async () => {
     vi.spyOn(TournamentsService, "readMyTournament").mockRejectedValue(
@@ -305,5 +351,81 @@ describe("S27 抽籤按鈕", () => {
       await screen.findByRole("heading", { name: FORBIDDEN_FALLBACK_MESSAGE }),
     ).toBeInTheDocument()
     expect(status).not.toHaveBeenCalled()
+  })
+})
+
+describe("S27 抽籤狀態查詢", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    focusManager.setFocused(undefined)
+  })
+
+  function renderButton(tournament: TournamentRead) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <DrawButton tournament={tournament} />
+      </QueryClientProvider>,
+    )
+    return client
+  }
+
+  it.each([
+    "upcoming",
+    "published",
+    "ongoing",
+    "finished",
+    "cancelled",
+  ] as const)("賽事狀態 %s：不呼叫抽籤狀態 API、不顯示按鈕", async (state) => {
+    const status = mockStatus(CAN_DRAW)
+    renderButton({ ...OPEN, status: state })
+
+    await act(async () => {})
+    expect(status).not.toHaveBeenCalled()
+    expect(screen.queryByRole("region")).toBeNull()
+    expect(screen.queryByRole("button", { name: "抽籤" })).toBeNull()
+  })
+
+  it.each(["open", "closed"] as const)(
+    "賽事狀態 %s：查詢抽籤狀態",
+    async (state) => {
+      const status = mockStatus(CAN_DRAW)
+      renderButton({ ...OPEN, status: state })
+
+      expect(await drawButtonIn()).toBeEnabled()
+      expect(status).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  async function drawButtonIn() {
+    return within(
+      await screen.findByRole("region", { name: "抽籤" }),
+    ).getByRole("button", { name: "抽籤" })
+  }
+
+  it("30 秒內切回分頁不重抓；超過 30 秒切回分頁會重抓並更新按鈕", async () => {
+    const status = mockStatus(NOT_ENOUGH, CAN_DRAW)
+    // 只假造 Date：staleTime 以 Date.now() 判斷，計時器與 waitFor 仍用真的
+    vi.useFakeTimers({ toFake: ["Date"] })
+    renderButton(OPEN)
+
+    expect(await drawButtonIn()).toBeDisabled()
+    expect(status).toHaveBeenCalledTimes(1)
+
+    // 29 秒後切走再切回：資料還新鮮，不重抓
+    vi.setSystemTime(Date.now() + 29_000)
+    act(() => focusManager.setFocused(false))
+    act(() => focusManager.setFocused(true))
+    await act(async () => {})
+    expect(status).toHaveBeenCalledTimes(1)
+
+    // 超過 30 秒：切回分頁重抓，按鈕變成可按
+    vi.setSystemTime(Date.now() + 2_000)
+    act(() => focusManager.setFocused(false))
+    act(() => focusManager.setFocused(true))
+    await waitFor(() => expect(status).toHaveBeenCalledTimes(2))
+    await waitFor(async () => expect(await drawButtonIn()).toBeEnabled())
   })
 })

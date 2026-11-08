@@ -30,10 +30,17 @@ const HIDDEN_REASONS: ReadonlySet<DrawReason> = new Set([
  * 按下後以 AlertDialog 確認，後端抽籤時會再檢查一次。
  */
 export function DrawButton({ tournament }: { tournament: TournamentRead }) {
-  const status = useQuery(drawStatusQueryOptions(tournament.id))
+  // 只有開放報名與報名截止才可能抽籤；其他狀態不送出（後端每次預估都持有賽事列鎖）
+  const drawable =
+    tournament.status === "open" || tournament.status === "closed"
+  const status = useQuery({
+    ...drawStatusQueryOptions(tournament.id),
+    enabled: drawable,
+  })
   const draw = useDraw(tournament.id)
   const reasonId = useId()
 
+  if (!drawable) return null
   if (!status.data) {
     // 載入中不顯示；載入失敗要讓主辦方知道並能重試（後端抽籤仍會檢查，不會誤抽）
     if (!status.isError) return null
