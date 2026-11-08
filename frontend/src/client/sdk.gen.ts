@@ -28,6 +28,9 @@ import type {
   competitionReadCheckInStatusData,
   competitionReadCheckInStatusErrors,
   competitionReadCheckInStatusResponses,
+  competitionReadDrawStatusData,
+  competitionReadDrawStatusErrors,
+  competitionReadDrawStatusResponses,
   competitionReadPublicBracketData,
   competitionReadPublicBracketErrors,
   competitionReadPublicBracketResponses,
@@ -1042,7 +1045,10 @@ export class RegistrationService {
   /**
    * Submit Registration
    *
-   * S17 隊長送出報名：報名轉為「已送出・待分配」，名單鎖定並凍結學校、平均段位積分與送出時間。
+   * S17 隊長送出報名：名單鎖定並凍結學校、平均段位積分與送出時間。
+   *
+   * 優先期內或自訂模式送出時報名轉為「已送出・待分配」；校園賽在先搶期送出時
+   * 當下分配，回應直接帶正取或候補結果與候補順位。
    *
    * 不符合送出條件時回 409 `REGISTRATION_REQUIREMENTS_UNMET`，`message` 列出全部原因。
    */
@@ -1099,6 +1105,26 @@ export class CompetitionService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/tournaments/{tournament_id}/draw",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Draw Status
+   *
+   * S27 抽籤按鈕：現在能不能抽籤；與抽籤同一套檢查與分配規則預估，不寫入（不 commit）。
+   */
+  public static readDrawStatus<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadDrawStatusData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadDrawStatusResponses,
+      competitionReadDrawStatusErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/draw-status",
       ...options,
     })
   }
