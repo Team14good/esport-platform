@@ -590,3 +590,18 @@
 - 問題與修正：AI 做突變檢查時，用 `sed -i` 改的是掛進容器的原始碼，等於直接改到本機檔案，跑完沒有還原。看 `git diff` 發現後手動改回，再重跑全套確認。之後突變檢查要用不掛載的容器，或先複製一份
 - 成熟度：L3（人決定範圍，AI 實作並驗證）
 - 證據：`frontend/src/features/competition/MatchCheckIn.tsx`、`frontend/tests/unit/match-check-in.test.tsx`
+
+### 2026-11-09｜程式｜Story 5.6 第二階段：S2／S3 頒獎台與名次標記
+
+- Story／範圍：5.6（賽事結束後的 Podium 與決賽、季軍賽卡的名次標記）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（oneshot），沒有用子代理
+- 怎麼用：AI 對照 epics 5.6、DESIGN.md、EXPERIENCE.md 與既有的對戰樹元件，寫 spec、實作並補測試
+- AI 產出：`TournamentPodium.tsx`、`placementMark`、15 個單元測試與 1 個 Playwright 測試
+- 人做了什麼：決定自己負責這塊、指示有問題時選最推薦的做法並直接開 PR
+- 驗證：Vitest 916 通過、typecheck、biome、build 通過；Playwright 在 desktop 與 mobile-375 都通過，AI 看過截圖；沒有另外跑 code review（組內決定最後統一做）
+- 問題與修正：
+  - D 的進度訊息說 S4 面板還沒接，AI 查程式後確認 #47 已經完成，真正缺的是 S2／S3 名次
+  - S2 是 B 的 `TournamentPage`，為了不改對方的函式，AI 把 Podium 放在路由層、賽事標題之上，版面取捨寫在 PR 請 B 確認
+  - e2e 用 `page.route` 的假資料，本機沒有已結束的賽事，沒有走真的 API
+- 成熟度：L4（人只決定方向，AI 完成規格、實作與驗證）
+- 證據：`frontend/src/features/competition/TournamentPodium.tsx`、`frontend/tests/e2e/podium.spec.ts`
