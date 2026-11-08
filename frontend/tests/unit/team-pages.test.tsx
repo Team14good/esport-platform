@@ -137,6 +137,13 @@ function mockReadTeam(team: TeamDetail = TEAM) {
     .mockResolvedValue({ data: team } as ReadTeamResult)
 }
 
+/** 某行候補說明所在區塊的每一行文字；找不到區塊時直接讓斷言失敗。 */
+function waitlistLines(line: HTMLElement): (string | null)[] {
+  const details = line.closest("[data-slot=waitlist-details]")
+  expect(details).not.toBeNull()
+  return Array.from(details?.children ?? [], (child) => child.textContent)
+}
+
 function mockPreview(invite: TeamInvitePreview = INVITE) {
   return vi
     .spyOn(RegistrationService, "previewTeamInvite")
@@ -830,10 +837,9 @@ describe("送出報名（S17、S19）", () => {
     })
 
     expect(screen.getByText("候補第 2 位")).toBeInTheDocument()
-    const details = screen
-      .getByText(FIRST_COME_RULE)
-      .closest<HTMLElement>("[data-slot=waitlist-details]") as HTMLElement
-    expect(details.children).toHaveLength(1)
+    expect(waitlistLines(screen.getByText(FIRST_COME_RULE))).toEqual([
+      FIRST_COME_RULE,
+    ])
   })
 
   it("先搶期送出、回應為候補沒有順位：直接顯示原因與先搶期遞補規則", async () => {
@@ -848,12 +854,10 @@ describe("送出報名（S17、S19）", () => {
     })
 
     expect(screen.getByText("候補・目前不在遞補順序中")).toBeInTheDocument()
-    const details = screen
-      .getByText(reason)
-      .closest<HTMLElement>("[data-slot=waitlist-details]") as HTMLElement
-    expect(
-      Array.from(details.children).map((line) => line.textContent),
-    ).toEqual([reason, FIRST_COME_RULE])
+    expect(waitlistLines(screen.getByText(reason))).toEqual([
+      reason,
+      FIRST_COME_RULE,
+    ])
   })
 
   it("伺服器拒絕時在對話框內顯示原因，並重新取得隊伍", async () => {
@@ -1125,12 +1129,11 @@ describe("名額分配結果（S17、S12）", () => {
     expect(
       within(header).getByText("候補・目前不在遞補順序中"),
     ).toBeInTheDocument()
-    const details = within(header)
-      .getByText(UNRANKED_REASON)
-      .closest<HTMLElement>("[data-slot=waitlist-details]") as HTMLElement
-    expect(
-      Array.from(details.children).map((line) => line.textContent),
-    ).toEqual([UNRANKED_REASON, BACKFILL, FIRST_COME_RULE])
+    expect(waitlistLines(within(header).getByText(UNRANKED_REASON))).toEqual([
+      UNRANKED_REASON,
+      BACKFILL,
+      FIRST_COME_RULE,
+    ])
     // 候補不顯示倒數
     expect(screen.queryByText("報名截止")).toBeNull()
   })
@@ -1162,12 +1165,10 @@ describe("名額分配結果（S17、S12）", () => {
       })
       renderApp("/teams/team-1")
 
-      const details = (await screen.findByText(message)).closest<HTMLElement>(
-        "[data-slot=waitlist-details]",
-      ) as HTMLElement
-      expect(
-        Array.from(details.children).map((line) => line.textContent),
-      ).toEqual([message, rule])
+      expect(waitlistLines(await screen.findByText(message))).toEqual([
+        message,
+        rule,
+      ])
     },
   )
 
@@ -1184,10 +1185,9 @@ describe("名額分配結果（S17、S12）", () => {
     renderApp("/teams/team-1")
 
     expect(await screen.findByText("候補第 3 位")).toBeInTheDocument()
-    const details = screen
-      .getByText(AFTER_DEADLINE_RULE)
-      .closest<HTMLElement>("[data-slot=waitlist-details]") as HTMLElement
-    expect(details.children).toHaveLength(1)
+    expect(waitlistLines(screen.getByText(AFTER_DEADLINE_RULE))).toEqual([
+      AFTER_DEADLINE_RULE,
+    ])
     expect(screen.queryByText(UNRANKED_REASON)).toBeNull()
   })
 

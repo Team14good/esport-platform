@@ -279,6 +279,11 @@ def test_second_team_of_school_with_first_come_acceptance_is_waitlisted(
     assert body["representative_backfill"] is False
     assert body["waitlist_phase"] == "first_come"
     assert len(_events(session, tournament)) == 1
+    registration = _registration(session, team["id"])
+    assert _changes(session, tournament, registration.id) == [
+        ("pending", captain.id),
+        ("waitlisted", None),
+    ]
 
 
 def test_full_capacity_waitlist_positions_follow_epics_example(
@@ -344,6 +349,12 @@ def test_full_capacity_waitlist_positions_follow_epics_example(
         "waitlisted",
         "waitlisted",
     ]
+    for team, captain in ((team_c, captain_c), (team_d, captain_d)):
+        registration = _registration(session, team["id"])
+        assert _changes(session, tournament, registration.id) == [
+            ("pending", captain.id),
+            ("waitlisted", None),
+        ]
 
 
 def test_vacancy_is_backfilled_before_judging_the_submission(
@@ -456,6 +467,11 @@ def test_first_submission_without_any_priority_registration(
         "priority_school_ids": [],
     }
     assert len(_events(session, tournament)) == 1
+    registration = _registration(session, team["id"])
+    assert _changes(session, tournament, registration.id) == [
+        ("pending", captain.id),
+        ("accepted", None),
+    ]
 
 
 def test_leftover_first_come_pending_is_judged_first(
@@ -501,6 +517,37 @@ def test_submission_at_priority_end_stays_pending(
     assert body["registration_status"] == "pending"
     assert _events(session, tournament) == []
     assert repository.get_settlement(session, tournament.id) is None
+    registration = _registration(session, team["id"])
+    assert _changes(session, tournament, registration.id) == [("pending", captain.id)]
+
+
+def test_submission_just_after_priority_end_is_allocated(
+    client: TestClient, session: Session, frozen_clock: FrozenClock
+) -> None:
+    """`priority_end` 後 1 微秒就屬先搶期；條件若截掉秒以下會誤判為優先期。"""
+    tournament = _tournament(session, frozen_clock)
+    team, captain = _api_team(client, session, tournament, _school(session))
+    frozen_clock.advance(timedelta(microseconds=1))
+
+    body = _submit_ok(client, captain, team)
+
+    assert body["registration_status"] == "accepted"
+    registration = _registration(session, team["id"])
+    assert registration.submitted_at == tournament.priority_end + timedelta(
+        microseconds=1
+    )
+    assert _changes(session, tournament, registration.id) == [
+        ("pending", captain.id),
+        ("accepted", None),
+    ]
+    assert _events(session, tournament) == [
+        {
+            "registration_id": str(registration.id),
+            "team_id": team["id"],
+            "tournament_id": str(tournament.id),
+            "status": "accepted",
+        }
+    ]
 
 
 def test_custom_mode_submission_stays_pending(
@@ -521,6 +568,8 @@ def test_custom_mode_submission_stays_pending(
     assert body["registration_status"] == "pending"
     assert _events(session, tournament) == []
     assert repository.get_settlement(session, tournament.id) is None
+    registration = _registration(session, team["id"])
+    assert _changes(session, tournament, registration.id) == [("pending", captain.id)]
 
 
 def test_rejected_submission_does_not_settle_or_allocate(

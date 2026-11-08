@@ -94,7 +94,7 @@ context:
 - [x] `frontend/tests/unit/team-pages.test.tsx` -- 送出回應為 `accepted`、`waitlisted`（有順位、沒有順位）時 S17 直接顯示對應徽章與說明
 - [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- 刪除 Code Map 列的 2 項
 - [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 3-5 改為 `in-progress`，完成時 `done`
-- [ ] `docs/ai-usage/C-邱芯彤.md` -- 完成後依 `docs/ai-usage/README.md` 在檔尾新增紀錄（由主流程在使用者確認後寫）
+- [x] `docs/ai-usage/C-邱芯彤.md` -- 完成後依 `docs/ai-usage/README.md` 在檔尾新增紀錄（由主流程在使用者確認後寫）
 
 **Acceptance Criteria:**
 - Given 先搶期的校園賽，when 隊長送出報名，then 回應與 S17 直接顯示「正取」、「候補第 N 位」或「候補・目前不在遞補順序中」＋原因，且結果與 `allocation.py` 一致。
@@ -126,6 +126,18 @@ context:
 | 10 | Edge | `test_first_come_concurrency.py` Barrier | false | 駁回 | 只有 10 隊的測試用 `barrier=True`，小於 `WORKERS`（20）；描述的情況沒有呼叫端。 |
 | 11 | Blind | 併發測試留資料、`_events` 全表掃描 | low | 駁回 | 事件在 finally 依賽事刪除，不會累積；帳號與賽事留下是因為被只增不改的操作紀錄參照，與既有併發測試相同。 |
 | 12 | Blind | 鎖持有時間 | low | 駁回 | 先搶期送出時通常只有本筆 `pending`，`_first_come_locked` 只跑一輪；200 筆測試所在的 61 支測試共 31.45 秒跑完。 |
+
+PR #59 審查（2026-11-08，OG-Matcha 與 max930000 皆核准）：合併前 1 項、建議 6 項，全部處理。
+
+| # | 來源 | 位置 | 判定 | 去向 | 證據 |
+|---|------|------|------|------|------|
+| 13 | OG-Matcha | 與 main 衝突、CI 跑在 #56 合併前 | medium | patch | `git merge origin/main`；`sprint-status.yaml` 的 `last_updated` 取較新時間；`scripts/generate-client.sh` 重新產生 client，與自動合併結果相同。 |
+| 14 | OG-Matcha | `test_first_come_concurrency.py` `_check` | low | patch | 補公平性斷言：扣掉既有正取的名額與學校後，正取等於依 `(submitted_at, id)` 排序、學校不重複的前幾支隊伍。推翻第 1 輪 #6 的駁回：沒有優先期學校時答案只是排序取前 N，不必重算整套規則。 |
+| 15 | OG-Matcha | 優先期邊界 | low | patch | 新增 `test_submission_just_after_priority_end_is_allocated`：`priority_end` 後 1 微秒送出即正取並發 `RegistrationAllocated`。 |
+| 16 | OG-Matcha | spec Tasks、ai-usage 證據 | low | patch | 勾選 Tasks 的 ai-usage 列；ai-usage 只新增不修改，#59 與 commit 寫在本次修正的新紀錄裡。 |
+| 17 | max930000 | `test_first_come_submission.py` 操作者 | low | patch | 5 支測試補 `_changes` 斷言：`pending`（隊長）→ 結果（系統）；留在 `pending` 的只有 `("pending", 隊長)`。 |
+| 18 | max930000 | `sprint-status.yaml` 3-4 註解 | low | patch | 改為 3.5、3.6 第二階段已於各自 spec 完成。 |
+| 19 | max930000 | `team-pages.test.tsx` `as HTMLElement` | low | patch | 五處改用 `waitlistLines()`：先斷言區塊存在，再比對每行文字。 |
 
 ## Design Notes
 

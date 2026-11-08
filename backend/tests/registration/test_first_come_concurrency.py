@@ -168,6 +168,19 @@ def _check(
         assert len(accepted) <= capacity
         assert max(Counter(r.school_id for r in accepted).values()) == 1
 
+        # 公平性：沒有優先期學校時，正取就是依（送出時間, id）排序後、扣掉既有正取的
+        # 名額與學校，前幾支學校不重複的隊伍。把取時間移到鎖之前，或把先搶期的排序
+        # 改成只依 id，送出時間與正取對不上，這裡就會失敗。
+        submitted_ids = {r.id for r in submitted}
+        preset = [r for r in accepted if r.id not in submitted_ids]
+        seen = {r.school_id for r in preset}
+        expected: set[uuid.UUID] = set()
+        for r in sorted(submitted, key=lambda r: (r.submitted_at, r.id)):
+            if r.school_id not in seen and len(expected) < capacity - len(preset):
+                seen.add(r.school_id)
+                expected.add(r.id)
+        assert {r.id for r in accepted if r.id in submitted_ids} == expected
+
         logs = check.exec(
             select(AuditLog).where(AuditLog.tournament_id == tournament.id)
         ).all()
