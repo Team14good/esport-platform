@@ -383,6 +383,7 @@ def test_second_draw_is_rejected(
     error = _draw_error(session, tournament.id, tournament.organizer_id)
 
     assert (error.code, error.status_code) == ("BRACKET_ALREADY_DRAWN", 409)
+    assert error.message == "這場賽事已經抽過籤了。"
 
 
 def test_existing_bracket_wins_over_drawable_status(
@@ -409,6 +410,23 @@ def test_wrong_status_is_409(
 ) -> None:
     tournament = tournament_in(session, status)
     fake_registration.set_team_count(8)
+
+    error = _draw_error(session, tournament.id, tournament.organizer_id)
+
+    assert (error.code, error.status_code) == ("TOURNAMENT_NOT_DRAWABLE", 409)
+    assert error.message == "賽事目前的狀態不能抽籤。"
+    assert fake_registration.calls == []
+
+
+def test_wrong_status_wins_over_start_passed(
+    session: Session,
+    fake_registration: FakeRegistration,
+    frozen_clock: FrozenClockLike,
+) -> None:
+    # 狀態不對且開賽已過：先回狀態錯誤，不是開賽已過
+    tournament = tournament_in(session, S.PUBLISHED)
+    fake_registration.set_team_count(8)
+    frozen_clock.set(ROUND_1 + timedelta(minutes=1))
 
     error = _draw_error(session, tournament.id, tournament.organizer_id)
 
