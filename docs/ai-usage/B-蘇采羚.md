@@ -377,17 +377,6 @@
 - 成熟度：L4（spec → 子代理實作與實測 → 多個審查者 → 主代理驗證）
 - 證據：spec 的 Review Triage Log、Implementation Notes；commit 未記錄
 
-### 2026-11-09｜程式／程式生成｜Story 6.1 提出申訴
-
-- Story／範圍：6.1（分支 `story/6-1`，Draft PR #63，spec `_bmad-output/implementation-artifacts/spec-6-1-file-appeal.md`）
-- 工具：Claude Code（Opus 5.5）＋ bmad-build（調查子代理、實作子代理、Blind Hunter、Edge Case Hunter、Verification Gap）
-- 怎麼用：以 B 自己的 disputes 約定（#55）與 epic-6 context 寫 spec，列出 1 個需要人決定的問題；子代理依 spec 實作前後端；三個審查者審 diff；主代理逐筆核對、交回子代理修正，最後自己在容器跑後端與前端全套
-- AI 產出：`appeal` 資料表與遷移；`file_appeal`、`get_appeal_state`、`open_appeal_attachment` 與三支 API；competition 新增 `mark_appealed`（新檔 `appeals.py`，`service.py` 只新增公開函式）；前端 `features/disputes/` 的 `AppealPanel`、`AppealDialog`、queries，S4 只加掛載點；約定 `disputes.md`、`competition.md` 依分工更新；後端測試 3 個新檔（含兩條真實連線的併發測試），前端 1 個新檔並在 `match-route.test.tsx` 補路由層測試
-- 人做了什麼：與 D 協議 Epic 6 分工（competition 端的 4 個函式交給 D）；決定 S4 由 B 在 6.1 一併掛；核准 spec
-- 驗證：後端 lint（mypy 70 個檔案無問題、ruff 通過）、全套 2161 passed、覆蓋率 97%；前端 Biome 251 個檔案、型別檢查 0 錯誤、單元測試 65 個檔案 868 個全過；三個審查者共 26 點，8 點修正、1 點延後（取消賽事後仍可申訴，期中 2.6 擱置走不到）、17 點不處理（含 6 點誤判）；375px 手動檢查未做
-- 問題與修正：審查找出「看起來有驗、其實不會紅」的地方：router 在 commit 失敗時刪附件、S4 路由是否真的掛上申訴入口，都沒有任何測試，補上後拿掉對應程式會失敗。AI 實作的說明清理去掉所有控制與格式字元，會丟掉 tab、拆散 ZWJ 表情（申訴是證據，存下的文字會和隊長輸入不同），改成只去控制字元與雙向控制字元。第一隊送出後佔位資料讓舊的可按按鈕閃回，改成佔位期間停用，子代理拿掉修正確認新測試會失敗。審查員有誤判被主代理排除，例如「第二隊送出後不會重抓」（S4 的 refresh 會 invalidate 整場的查詢前綴）、「期限到了按鈕仍可按」（倒數歸零會觸發 refresh）。子代理第一次跑後端全套時，併發測試提交的操作紀錄（只增不改、刪不掉）讓別的測試計數多 1，改為只計該場次後通過。另外 frozen 區塊寫隊長判斷「經 `registration_port.is_captain`」，但那是 competition 內部檔案、架構測試不允許 disputes 匯入，實作改呼叫 `registration.service.is_captain`，已記在 Implementation Notes 待使用者確認
-- 成熟度：L4（spec → 子代理實作 → 多個審查者 → 主代理核對與完整驗證，人在分工與 spec 決策點介入）
-- 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；Draft PR #63；commit 未建立
 ### 2026-11-07｜程式／程式審查｜審查 D 的 #56：Story 4.1 S27 抽籤按鈕與抽籤狀態
 
 - Story／範圍：4.1 S27（D 的 PR #56，18 個檔案、+1459／-22 行；B 因 CODEOWNERS 的 `features/tournaments/` 被指定審查）
@@ -459,3 +448,15 @@
 - 問題與修正：D 列的兩種情況裡，「尚未開放 → 開放報名」在 #60 合併後已不會發生（尚未開放時不送出抽籤狀態查詢），變異檢查也證實這個測試不靠修正就會過，所以 PR 說明據實寫明只有後一種是這次修正擋下的。全套測試第一次有 1 個 S30 測試逾時，AI 查出是本機容器映像裡的 `vitest.config.ts` 是舊版（預設 5 秒、沒有 15 秒設定），掛上目前的設定檔後全過，不是程式錯誤
 - 成熟度：L3（AI 依審查意見與既有規格修正，人決定範圍）
 - 證據：spec-2-4-s27-countdowns.md 的 Implementation Notes；PR #62
+
+### 2026-11-09｜程式／程式生成｜Story 6.1 提出申訴
+
+- Story／範圍：6.1（分支 `story/6-1`，Draft PR #63，spec `_bmad-output/implementation-artifacts/spec-6-1-file-appeal.md`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（調查子代理、實作子代理、Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：以 B 自己的 disputes 約定（#55）與 epic-6 context 寫 spec，列出 1 個需要人決定的問題；子代理依 spec 實作前後端；三個審查者審 diff；主代理逐筆核對、交回子代理修正，最後自己在容器跑後端與前端全套
+- AI 產出：`appeal` 資料表與遷移；`file_appeal`、`get_appeal_state`、`open_appeal_attachment` 與三支 API；competition 新增 `mark_appealed`（新檔 `appeals.py`，`service.py` 只新增公開函式）；前端 `features/disputes/` 的 `AppealPanel`、`AppealDialog`、queries，S4 只加掛載點；約定 `disputes.md`、`competition.md` 依分工更新；後端測試 3 個新檔（含兩條真實連線的併發測試），前端 1 個新檔並在 `match-route.test.tsx` 補路由層測試
+- 人做了什麼：與 D 協議 Epic 6 分工（competition 端的 4 個函式交給 D）；決定 S4 由 B 在 6.1 一併掛；核准 spec
+- 驗證：後端 lint（mypy 70 個檔案無問題、ruff 通過）、全套 2161 passed、覆蓋率 97%；前端 Biome 251 個檔案、型別檢查 0 錯誤、單元測試 65 個檔案 868 個全過；三個審查者共 26 點，8 點修正、1 點延後（取消賽事後仍可申訴，期中 2.6 擱置走不到）、17 點不處理（含 6 點誤判）；375px 手動檢查未做
+- 問題與修正：審查找出「看起來有驗、其實不會紅」的地方：router 在 commit 失敗時刪附件、S4 路由是否真的掛上申訴入口，都沒有任何測試，補上後拿掉對應程式會失敗。AI 實作的說明清理去掉所有控制與格式字元，會丟掉 tab、拆散 ZWJ 表情（申訴是證據，存下的文字會和隊長輸入不同），改成只去控制字元與雙向控制字元。第一隊送出後佔位資料讓舊的可按按鈕閃回，改成佔位期間停用，子代理拿掉修正確認新測試會失敗。審查員有誤判被主代理排除，例如「第二隊送出後不會重抓」（S4 的 refresh 會 invalidate 整場的查詢前綴）、「期限到了按鈕仍可按」（倒數歸零會觸發 refresh）。子代理第一次跑後端全套時，併發測試提交的操作紀錄（只增不改、刪不掉）讓別的測試計數多 1，改為只計該場次後通過。另外 frozen 區塊寫隊長判斷「經 `registration_port.is_captain`」，但那是 competition 內部檔案、架構測試不允許 disputes 匯入，實作改呼叫 `registration.service.is_captain`，已記在 Implementation Notes 待使用者確認
+- 成熟度：L4（spec → 子代理實作 → 多個審查者 → 主代理核對與完整驗證，人在分工與 spec 決策點介入）
+- 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；Draft PR #63；commit 未建立
