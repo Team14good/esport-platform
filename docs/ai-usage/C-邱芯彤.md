@@ -393,3 +393,15 @@
 - 問題與修正：沒有發現產品程式的錯誤。子代理的確認框截圖截在開啟動畫中途，呈半透明，屬截圖時機問題。子代理另外注意到名單鎖定後自己那列仍顯示「填寫我的資料」按鈕，3.3 的實測已確認點開後是唯讀，不屬 3.5 範圍，未修改
 - 成熟度：L3（AI 準備資料、自動化實測並看截圖，人決定要做這項檢查）
 - 證據：_bmad-output/implementation-artifacts/spec-3-5-first-come-allocation.md；commit 未記錄（尚未 commit）
+
+### 2026-11-08｜測試／程式審查｜Story 3.5 處理 PR #59 審查建議並同步 main
+
+- Story／範圍：3.5（分支 story/3-5，PR #59）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：兩位組員（OG-Matcha、max930000）核准 PR #59 後，人請 AI 處理留言。AI 用 gh 讀出審查內容，依序同步 main、補測試、更新 spec
+- AI 產出：`git merge origin/main`（解 `sprint-status.yaml` 衝突、以 `scripts/generate-client.sh` 重新產生 client）；併發測試的公平性斷言；`priority_end` 後 1 微秒的邊界測試；5 支測試的操作紀錄操作者斷言；前端 `waitlistLines()` helper 取代五處 `as HTMLElement`；spec Review Triage Log #13–#19
+- 人做了什麼：交代處理審查建議；審查者提供公平性斷言的寫法
+- 驗證：後端 `scripts/test.sh` 2096 passed、覆蓋率 97%；`lint.sh` 通過；前端 typecheck、biome 通過，單元測試 64 檔 843 passed
+- 問題與修正：AI 用 `python` 解衝突時，這台電腦的 `python` 是 WindowsApps 佔位程式，沒有執行也沒有報錯，AI 沒檢查就 `git add`，merge commit 帶著衝突標記。之後同一個佔位程式讓前端替換也沒生效，typecheck 報「`waitlistLines` 宣告但未使用」，AI 才 grep 發現檔案沒變，回頭檢查到 merge commit 的衝突標記；改用 `py -3` 重做，並 amend 尚未推送的 merge commit。另外第 1 輪自審時駁回的公平性斷言（Triage #6，理由是要重算整套規則），審查者指出沒有優先期學校時只要排序取前 N，這次補上
+- 成熟度：L3（AI 執行修正與驗證，審查與判斷來自組員）
+- 證據：PR #59；commit 2535df5（merge）、676141c；_bmad-output/implementation-artifacts/spec-3-5-first-come-allocation.md（Review Triage Log #13–#19）
