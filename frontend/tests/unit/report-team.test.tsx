@@ -222,8 +222,8 @@ describe("S2「檢舉隊伍」入口", () => {
     const { reportable } = mockApis({
       teams: httpError(403, {
         detail: {
-          code: "TEAM_CAPTAIN_REQUIRED",
-          message: "只有隊長可以使用這個功能。",
+          code: "CAPTAIN_REQUIRED",
+          message: "只有隊長可以提出檢舉。",
         },
       }),
     })

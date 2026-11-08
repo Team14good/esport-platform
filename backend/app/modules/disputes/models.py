@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel
-from sqlalchemy import DateTime, Index, String
+from sqlalchemy import DateTime, Index, String, Text
 from sqlmodel import Field, SQLModel
 
 from app.core.events import Event
@@ -36,7 +36,6 @@ class ReportStatus(StrEnum):
 
 REPORT_DESCRIPTION_MAX_LENGTH = 1000
 REPORT_ATTACHMENT_KEY_MAX_LENGTH = 64
-REPORT_REASON_MAX_LENGTH = 200
 
 
 # ---------------------------------------------------------------- 資料表
@@ -67,7 +66,8 @@ class Report(SQLModel, table=True):
         default=None, max_length=REPORT_ATTACHMENT_KEY_MAX_LENGTH
     )
     status: ReportStatus = Field(sa_type=String(32))
-    reason: str | None = Field(default=None, max_length=REPORT_REASON_MAX_LENGTH)
+    # 處理理由要寫查證經過，與申訴的 reason 同樣用 Text；長度上限由 6.5 的 service 驗證
+    reason: str | None = Field(default=None, sa_type=Text)
     handled_by: uuid.UUID | None = Field(default=None, foreign_key="account.id")
     handled_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 

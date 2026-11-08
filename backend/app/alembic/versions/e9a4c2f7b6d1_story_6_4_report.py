@@ -38,9 +38,7 @@ def upgrade():
             "attachment_key", sqlmodel.sql.sqltypes.AutoString(length=64), nullable=True
         ),
         sa.Column("status", sa.String(length=32), nullable=False),
-        sa.Column(
-            "reason", sqlmodel.sql.sqltypes.AutoString(length=200), nullable=True
-        ),
+        sa.Column("reason", sa.Text(), nullable=True),
         sa.Column("handled_by", sa.Uuid(), nullable=True),
         sa.Column("handled_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["filed_by"], ["account.id"]),

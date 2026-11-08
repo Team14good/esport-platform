@@ -49,9 +49,9 @@ def _report_not_allowed(message: str) -> BusinessError:
 
 
 def _captain_required() -> BusinessError:
-    return BusinessError(
-        "TEAM_CAPTAIN_REQUIRED", authz.CAPTAIN_REQUIRED_MESSAGE, status_code=403
-    )
+    # 與 6.1 申訴、competition 報到相同的錯誤碼（2026-11-09 與 B 協議），
+    # 不用 `ensure_captain` 的 `TEAM_CAPTAIN_REQUIRED`
+    return BusinessError("CAPTAIN_REQUIRED", "只有隊長可以提出檢舉。", status_code=403)
 
 
 def _team_not_found() -> BusinessError:
@@ -84,9 +84,11 @@ def _reporter_team(
     team = registration_service.find_team_of_account(
         session, tournament_id=tournament.id, account_id=account_id
     )
-    if team is None:
+    if team is None or not any(
+        member.account_id == account_id and member.role == authz.CAPTAIN_ROLE
+        for member in team.members
+    ):
         raise _captain_required()
-    authz.ensure_captain(team, account_id)
     registration = registration_service.get_registration(session, team_id=team.id)
     if registration.status not in REPORTABLE_STATUSES:
         raise _report_not_allowed("本隊的報名尚未送出或已不在賽事中，不能提出檢舉。")

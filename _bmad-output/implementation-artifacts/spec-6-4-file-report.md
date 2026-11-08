@@ -24,16 +24,20 @@ context:
 - 重複檢舉：同一檢舉人隊伍對同一對象已有「處理中」（`open`）的檢舉時拒絕（409 `REPORT_ALREADY_FILED`，「已檢舉這支隊伍，主辦方處理中。」）；結案（駁回或屬實）後可以再檢舉。S20 的對象清單把這些隊伍標為「已檢舉・處理中」並停用。
 - 沒有可檢舉的隊伍（清單為空）時不顯示「檢舉隊伍」；清單有隊伍、但全部已檢舉處理中時仍顯示，S20 內全部停用。
 - spec 約 4,200 tokens，超過 1,600；後端、S20、S2 入口是同一個使用者目標，且 6.5（11/13）要接著用後端，保留完整 spec，不拆。
-- 主流程提出、使用者核准的：賽事 `cancelled` 視同已結束；「檢舉隊伍」放在 S2 總覽的倒數／建隊區塊下方、賽事資訊上方；非隊長一律 403 `TEAM_CAPTAIN_REQUIRED`；成功 Toast「已送出檢舉」。
+- 主流程提出、使用者核准的：賽事 `cancelled` 視同已結束；「檢舉隊伍」放在 S2 總覽的倒數／建隊區塊下方、賽事資訊上方；非隊長一律 403 `TEAM_CAPTAIN_REQUIRED`（2026-11-09 改為 `CAPTAIN_REQUIRED`，見本節最後一則）；成功 Toast「已送出檢舉」。
 - spec 審查（2026-11-08）後補定：S20 介面文字（見 Boundaries〈S20 介面〉）；說明不符的錯誤 `REPORT_DESCRIPTION_INVALID`「說明須為 1～1000 字。」；主辦方列表排序為處理中在前、各組依 `filed_at` 由舊到新、再依 id；附件下載檔名 `report-<檢舉 id>.<jpg|png>`；送出不經 AlertDialog（EXPERIENCE.md:111 不在 Dialog 上再開 Dialog）。與 contracts 不同的地方（錯誤碼、新增欄位、`find_team_of_account`、`file_report` 回傳）先整理成清單請 B 確認，取得共識後才回寫 `contracts/disputes.md`。
 - 2026-11-08 使用者核准 spec 審查的 20 項修正，以及 S20 的畫面文字、欄位配置、錯誤訊息與主辦方列表排序；保留完整 spec（約 6,600 tokens），不拆、不做第二輪審查；核准後停在 ready-for-dev，實作在新的 session 進行。
 - 對外約定（#55 `contracts/disputes.md`）的差異要先請 B 確認；未取得共識前，不自行改變既有的對外約定。
+- 2026-11-09，B 在 #63 回覆後由使用者決定：
+  - 非隊長（含沒有隊伍）改為 403 `CAPTAIN_REQUIRED`「只有隊長可以提出檢舉。」，與 6.1 申訴、competition 報到一致；disputes 自己比對成員角色，不用 `ensure_captain`。先前「程式中沒有 `CAPTAIN_REQUIRED`」的判斷有誤，competition 5.1 報到已在用。
+  - `report.reason` 改用 `Text`，與申訴的 `reason` 相同；長度上限由 6.5 的 service 驗證。
+  - 其他 7 處差異 B 沒有異議，回寫 `contracts/disputes.md`。
 
 ## Boundaries & Constraints
 
 **Always:**
 - 可檢舉的報名狀態＝`pending`、`accepted`、`waitlisted`、`drawn`（下稱「四種狀態」）。檢舉人必須是四種狀態隊伍的隊長；對象必須是同賽事、四種狀態、不是自己的隊伍；賽事狀態為 `finished` 或 `cancelled` 時拒絕。
-- 檢查順序與錯誤碼：賽事不存在 404 `TOURNAMENT_NOT_FOUND` → 賽事已結束或已取消 409 `REPORT_NOT_ALLOWED` → 登入者在該賽事沒有隊伍（`find_team_of_account` 回 None 時直接拋 `BusinessError("TEAM_CAPTAIN_REQUIRED", <與 `ensure_captain` 相同的訊息>, status_code=403)`）或不是隊長（`ensure_captain(team, account_id)`）403 `TEAM_CAPTAIN_REQUIRED` → 檢舉人報名不是四種狀態 409 `REPORT_NOT_ALLOWED` → 對象是自己 422 `REPORT_SELF`（`BusinessError(..., status_code=422)`，不是 `FieldError`）→ 對象不存在或不在此賽事 404 `TEAM_NOT_FOUND` → 對象不是四種狀態 409 `REPORT_NOT_ALLOWED` → 已有對同一對象處理中的檢舉 409 `REPORT_ALREADY_FILED` → 說明與附件驗證。`file_report` 先以 tournaments 的 `lock_tournament` 鎖住賽事再檢查，同時送出兩筆相同的檢舉只會成功一筆。`REPORT_NOT_ALLOWED` 的 message 寫出具體原因（例如「賽事已結束，不能提出檢舉。」）。
+- 檢查順序與錯誤碼：賽事不存在 404 `TOURNAMENT_NOT_FOUND` → 賽事已結束或已取消 409 `REPORT_NOT_ALLOWED` → 登入者在該賽事沒有隊伍（`find_team_of_account` 回 None）或不是隊長（比對 `team.members` 的角色）403 `CAPTAIN_REQUIRED`「只有隊長可以提出檢舉。」 → 檢舉人報名不是四種狀態 409 `REPORT_NOT_ALLOWED` → 對象是自己 422 `REPORT_SELF`（`BusinessError(..., status_code=422)`，不是 `FieldError`）→ 對象不存在或不在此賽事 404 `TEAM_NOT_FOUND` → 對象不是四種狀態 409 `REPORT_NOT_ALLOWED` → 已有對同一對象處理中的檢舉 409 `REPORT_ALREADY_FILED` → 說明與附件驗證。`file_report` 先以 tournaments 的 `lock_tournament` 鎖住賽事再檢查，同時送出兩筆相同的檢舉只會成功一筆。`REPORT_NOT_ALLOWED` 的 message 寫出具體原因（例如「賽事已結束，不能提出檢舉。」）。
 - 說明去除頭尾空白後 1～1000 字（以 code point 計），存入去頭尾空白後的值；不符時 `FieldError("REPORT_DESCRIPTION_INVALID", "說明須為 1～1000 字。", loc=("body", "description"))`。POST 為 multipart：`reported_team_id: Annotated[uuid.UUID, Form()]`、`description: Annotated[str, Form()] = ""`（預設空字串，空白才會走到 service 的 `FieldError`，不是 FastAPI 的英文 missing 錯誤）、`attachment: Annotated[UploadFile | None, File()] = None`（瀏覽器送出的空檔視為沒附）；附件最多一張，沿用 `core.storage.save_image`（JPG／PNG、5 MB，415／413）。
 - 建立檢舉、`audit.record`（`report.filed`，操作者為檢舉人，after 含 `reporter_team_id`、`reported_team_id`、`description`、`has_attachment`，**不含**檔案鍵值）與 `events.publish(ReportFiled(report_id, tournament_id, reported_team_id))` 在同一交易。附件在所有檢查通過後才存；`file_report` 回傳內部結果 `FiledReport{report: ReportRead, attachment_key: str | None}`（只給 router 用，與 contracts 回傳 `ReportRead` 不同），存檔後 service 內任何步驟失敗先刪新檔再往外拋，router commit 失敗也刪新檔（照 `registration/service.py:712-716`、`router.py:84-89`）。被檢舉的隊伍狀態不變。
 - 附件下載：檢舉不存在 404 `REPORT_NOT_FOUND` → 非該賽事主辦方 403 `TOURNAMENT_OWNER_REQUIRED`（`Organizer` dep ＋ `ensure_tournament_owner`）→ 沒有附件 404 `FILE_NOT_FOUND`。`open_report_attachment` 回 `(檔案, media type)`，media type 依鍵值副檔名（`.jpg`→`image/jpeg`、`.png`→`image/png`）；router 以 `StreamingResponse` 分塊讀、在 generator 的 `finally` 關檔，`Content-Disposition: attachment; filename="report-<id>.<ext>"`，並宣告 `response_class=StreamingResponse` 與 `responses={200: {"content": {"image/png": {}, "image/jpeg": {}}}}`，讓產生的 client 不把圖檔當 JSON。任何回應都不暴露 `attachment_key`，只給 `has_attachment`。
@@ -64,7 +68,7 @@ context:
 | 同時送出相同檢舉 | A 隊長平行送出兩筆對 B 的檢舉 | 只有一筆成功 | 另一筆 409 `REPORT_ALREADY_FILED` |
 | 對象在其他賽事或不存在 | 隨機 id 或他賽事隊伍 | 拒絕 | 404 `TEAM_NOT_FOUND` |
 | 檢舉人狀態不符 | A 為 `forming` 或 `withdrawn` | 拒絕；`reportable-teams` 同樣拒絕 | 409 `REPORT_NOT_ALLOWED` |
-| 非隊長 | A 的隊員、沒有隊伍的帳號、他賽事的隊長 | 拒絕 | 403 `TEAM_CAPTAIN_REQUIRED` |
+| 非隊長 | A 的隊員、沒有隊伍的帳號、他賽事的隊長 | 拒絕 | 403 `CAPTAIN_REQUIRED` |
 | 未登入／未驗證 | 無 token／未驗證 Email | 拒絕 | 401／403 `EMAIL_NOT_VERIFIED` |
 | 說明不符 | 空白、只有空白、1001 字 | 拒絕，不留附件 | 422 `REPORT_DESCRIPTION_INVALID`（loc `body.description`） |
 | 存檔後失敗 | 附件已存，之後寫入或 commit 失敗 | 不留檢舉也不留檔案 | 原錯誤 |
@@ -79,9 +83,9 @@ context:
 
 ## Code Map
 
-- `backend/app/modules/disputes/models.py` -- 已有 `ReportStatus`（OPEN／DISMISSED／SUBSTANTIATED）。新增 `Report` table（欄位照 contracts〈一〉，含 6.5 用的 `reason`、`handled_by`、`handled_at`，6.5 不再改表；型別：`description` varchar(1000)、`attachment_key` varchar(64)、`status` String(32)（照 `registration/models.py:130`）、`reason` varchar(200)（同 `REJECT_REASON_MAX_LENGTH`，PR 請 B 確認）、時間欄位 `DateTime(timezone=True)`；index：`tournament_id`、(`reporter_team_id`, `reported_team_id`)）、`ReportRead`（不含 `attachment_key`，改 `has_attachment`；含 `reporter_team_name`、`reported_team_name` 供 S33）、`ReportableTeam{id, name, has_open_report}`、`ReportFiled(Event)`（事件寫法照 `registration/models.py:159` `RegistrationAllocated`）。
+- `backend/app/modules/disputes/models.py` -- 已有 `ReportStatus`（OPEN／DISMISSED／SUBSTANTIATED）。新增 `Report` table（欄位照 contracts〈一〉，含 6.5 用的 `reason`、`handled_by`、`handled_at`，6.5 不再改表；型別：`description` varchar(1000)、`attachment_key` varchar(64)、`status` String(32)（照 `registration/models.py:130`）、`reason` `Text`（與申訴相同，2026-11-09 B 確認）、時間欄位 `DateTime(timezone=True)`；index：`tournament_id`、(`reporter_team_id`, `reported_team_id`)）、`ReportRead`（不含 `attachment_key`，改 `has_attachment`；含 `reporter_team_name`、`reported_team_name` 供 S33）、`ReportableTeam{id, name, has_open_report}`、`ReportFiled(Event)`（事件寫法照 `registration/models.py:159` `RegistrationAllocated`）。
 - `backend/app/modules/disputes/{repository,service,router}.py` -- 目前幾乎是空檔；router 已掛在 `api/main.py:26`。service 只呼叫 registration、tournaments 的 `service.py`；不 commit。
-- `backend/app/modules/registration/service.py` -- 已有 `get_team`（:1086，`TeamRead.members` 含 role）、`get_registration`（:1094）、`get_team_names`（:1192）。新增公開函式：`find_team_of_account(session, *, tournament_id, account_id) -> TeamRead | None`（不限角色，用 `repository.get_membership`（repository.py:60）；同一帳號在一個賽事只會有一隊，`uq_team_member_tournament_id_account_id`；取代 contracts 的 `find_captain_team`，隊長判斷交給 `ensure_captain`，符合 epic-6-context）、`list_teams_by_status(session, *, tournament_id, statuses) -> list[TeamSummary{id, name}]`（既有 repository 函式不合用：`list_teams_with_members_by_status`（:213）只收單一狀態且載入隊員、`list_registrations`（:150）沒有隊名；新增一個 join team 與 registration、`status IN (...)` 的 repository 查詢）。
+- `backend/app/modules/registration/service.py` -- 已有 `get_team`（:1086，`TeamRead.members` 含 role）、`get_registration`（:1094）、`get_team_names`（:1192）。新增公開函式：`find_team_of_account(session, *, tournament_id, account_id) -> TeamRead | None`（不限角色，用 `repository.get_membership`（repository.py:60）；同一帳號在一個賽事只會有一隊，`uq_team_member_tournament_id_account_id`；取代 contracts 的 `find_captain_team`，隊長判斷由 disputes 比對成員角色）、`list_teams_by_status(session, *, tournament_id, statuses) -> list[TeamSummary{id, name}]`（既有 repository 函式不合用：`list_teams_with_members_by_status`（:213）只收單一狀態且載入隊員、`list_registrations`（:150）沒有隊名；新增一個 join team 與 registration、`status IN (...)` 的 repository 查詢）。
 - `backend/app/modules/tournaments/service.py:394` `get_tournament`、`:402` `lock_tournament` -- 取狀態與 `organizer_id`；`file_report` 用 `lock_tournament` 防止重複檢舉的競態。
 - `backend/app/core/storage.py` -- `save_image`（鍵值帶 `.jpg`／`.png` 副檔名，下載的 media type 依副檔名）、`open_file`（呼叫端關閉）、`delete_file`。目前沒有任何下載 API，這是第一個：用 `StreamingResponse`，`Content-Disposition: attachment`。
 - `backend/app/modules/registration/router.py:59-95` -- multipart 寫法範本（`Form()`、`UploadFile | None = File()`、空檔視為沒附、commit 失敗刪新檔）。
@@ -107,9 +111,9 @@ context:
 - [x] `frontend/src/features/tournaments/TournamentOverview.tsx` -- 只新增 `<ReportTeamEntry>` 掛載點
 - [x] `frontend/tests/unit/report-team.test.tsx` -- S2 入口顯示條件（含隊員不呼叫 `reportable-teams`、403 不重試、清單為空不顯示）、S20 送出成功與錯誤、全部已檢舉時停用、說明字數（含 emoji 以 code point 計）與附件檢查、送出後 invalidate
 - [x] `backend/tests/traceability.yaml` -- 若 #61 已合併，新增的後端測試檔各加一列（layer `integration`、stories `["6.4"]`、frs `[FR-32]`，併發檔加 `NFR-1`）；若把 registration 新函式的測試加進既有測試檔，該列的 `stories` 補 `"6.4"`（#61 尚未合併，本 Story 不加）
-- [ ] `_bmad-output/implementation-artifacts/contracts/disputes.md` -- 先整理與約定不同處並請 B 確認（PR 說明或 #55 留言），取得共識後才回寫；差異：`TEAM_CAPTAIN_REQUIRED`、`REPORT_ALREADY_FILED`、`REPORT_DESCRIPTION_INVALID`、`ReportableTeam.has_open_report`、`ReportRead` 欄位、`file_report` 回傳 `FiledReport`、`find_team_of_account`、`reason` 長度、POST 表單欄位
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 6-4 改 `in-progress`，完成時 `done`；`epic-6` 改 `in-progress`
-- [ ] `docs/ai-usage/C-邱芯彤.md` -- 完成後由主流程在使用者確認後新增紀錄
+- [x] `_bmad-output/implementation-artifacts/contracts/disputes.md` -- 先整理與約定不同處並請 B 確認（PR 說明或 #55 留言），取得共識後才回寫；差異：`TEAM_CAPTAIN_REQUIRED`、`REPORT_ALREADY_FILED`、`REPORT_DESCRIPTION_INVALID`、`ReportableTeam.has_open_report`、`ReportRead` 欄位、`file_report` 回傳 `FiledReport`、`find_team_of_account`、`reason` 長度、POST 表單欄位（2026-11-09 B 回覆後回寫）
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 6-4 改 `in-progress`，完成時 `done`；`epic-6` 改 `in-progress`
+- [x] `docs/ai-usage/C-邱芯彤.md` -- 完成後由主流程在使用者確認後新增紀錄
 
 **Acceptance Criteria:**
 - Given 符合資格的隊長在 S2 總覽，when 按「檢舉隊伍」、選對象、填說明（可附截圖）並送出，then 建立檢舉、寫操作紀錄並發 `ReportFiled`，被檢舉隊伍的狀態不變，只有該賽事主辦方能下載附件。
@@ -128,6 +132,8 @@ context:
 7. 實作完成後逐項確認：測試結果、Git diff、審查結果與 AI 使用紀錄。
 
 ## Spec Change Log
+
+- 2026-11-09：B 在 #63 回覆約定差異。使用者決定非隊長錯誤碼改為 `CAPTAIN_REQUIRED`、`report.reason` 改為 `Text`（見 Decisions 最後一則），連帶更新 Boundaries 的檢查順序、I/O 矩陣〈非隊長〉、Code Map 與 Design Notes。遷移檔尚未合併進 main，直接修改 `e9a4c2f7b6d1`，不另加遷移。
 
 ## Review Triage Log
 
@@ -163,7 +169,7 @@ context:
 
 - 隊長身分：`MyTeamCard` 沒有角色欄位，不改 S12 的回應；改用 S17 已有快取的 `TeamDetail.my_role`，只有隊長才呼叫 `reportable-teams`。非 `open` 狀態時 `CreateTeamEntry` 不掛載，`ReportTeamEntry` 會讓登入者多取一次 `/accounts/me/teams`（與 S12 共用快取）。
 - 重複檢舉以 `lock_tournament` 序列化，不用部分唯一索引：遷移與模型比對較單純，且與 registration 的併發做法一致。
-- 錯誤碼沿用 `TEAM_CAPTAIN_REQUIRED`（`ensure_captain` 既有），不用 contracts 寫的 `CAPTAIN_REQUIRED`（程式中不存在）。
+- 非隊長的錯誤碼用 `CAPTAIN_REQUIRED`，與 6.1 申訴、competition 報到一致（2026-11-09 改；原本誤以為程式中沒有這個碼而用 `TEAM_CAPTAIN_REQUIRED`）。
 - 附件先存檔再寫資料庫；驗證失敗在存檔前擋下，commit 失敗由 router 刪檔（與 S18 相同）。
 
 ## Verification

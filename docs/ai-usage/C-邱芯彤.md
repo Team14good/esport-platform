@@ -464,3 +464,21 @@
 - 問題與修正：e2e 容器把 `tests/` 掛成唯讀，腳本放不進去，改成掛到 `/app/frontend/manual` 並另寫設定檔；手機版第一次截圖時 Sheet 還在滑入，看截圖才發現，等動畫結束後重拍。沒有發現產品程式的問題
 - 成熟度：L3（AI 依 spec 設計實測並執行，人決定要實測並確認結果）
 - 證據：spec-6-4-file-report.md 的 I/O 矩陣 S2／S20 各列；截圖在 frontend/test-results/manual-6-4/（不進 repo）
+
+### 2026-11-09｜專案管理與流程／介面協調｜Story 6.4 依 B 的回覆調整約定差異
+
+- Story／範圍：6.4（PR #64）；與 6.1（PR #63）的介面協調
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 B 在 #63 的回覆，到 main 與 `story/6-1` 查證 B 說的內容，整理成兩個待決問題給使用者選，再依決定修改程式、遷移、測試、spec 與 `contracts/disputes.md`
+- AI 產出：
+  - 改 4 個程式檔：disputes 的 service、models，遷移檔，以及前後端各一個測試檔。
+  - spec 更新 Decisions、Boundaries、I/O 矩陣、Code Map、Design Notes 與 Spec Change Log。
+  - 約定檔回寫 7 處差異與 2 個新決定。
+- 人做了什麼：決定非隊長錯誤碼改用 `CAPTAIN_REQUIRED`、`report.reason` 改用 `Text`
+- 驗證：後端 2171 個測試通過（覆蓋率 97%）；前端 899 個單元測試通過，typecheck 與 biome 通過；lint 第一次發現 1 個檔案格式不符，用 ruff format 修正後通過
+- 問題與修正：
+  - AI 在 spec 寫「程式中沒有 `CAPTAIN_REQUIRED`」，因此改用 `TEAM_CAPTAIN_REQUIRED`；B 在 #63 指出 competition 5.1 報到就在用。AI 用 `git grep` 查 main，確認 `competition/service.py:1021` 確實有這個碼，原本的判斷有誤。原因是當時只查了 `core/authz.py`，沒有搜尋整個 backend。
+  - AI 一開始把 `reason` 定為 200 字，沒考慮 6.5 要寫查證經過；B 指出後改用 `Text`，與申訴一致。
+  - AI 手動改程式後沒有先格式化，lint 抓到後才修正。
+- 成熟度：L3（AI 查證並執行修改，決定來自組員協調與使用者）
+- 證據：PR #64、#63 留言；_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Decisions 2026-11-09、Spec Change Log）；commit 未記錄（尚未 commit）

@@ -476,8 +476,8 @@ def test_non_captains_are_403(client: TestClient, session: Session) -> None:
         ):
             assert result.status_code == 403
             assert result.json()["detail"] == {
-                "code": "TEAM_CAPTAIN_REQUIRED",
-                "message": "只有隊長可以使用這個功能。",
+                "code": "CAPTAIN_REQUIRED",
+                "message": "只有隊長可以提出檢舉。",
             }
 
 
