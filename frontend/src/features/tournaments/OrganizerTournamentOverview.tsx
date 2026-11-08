@@ -1,13 +1,15 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ExternalLinkIcon } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 
 import type { TournamentMode, TournamentRead } from "@/client"
+import { Countdown } from "@/components/common/Countdown"
 import { BackofficeLayout } from "@/components/layout/BackofficeLayout"
 import { ErrorPage } from "@/components/layout/ErrorPage"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DrawButton } from "@/features/competition/DrawButton"
+import { drawStatusQueryOptions } from "@/features/competition/draw-queries"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { tournamentNav } from "./organizer-nav"
@@ -17,6 +19,10 @@ import {
 } from "./organizer-queries"
 import { isTournamentNotFound } from "./queries"
 import { formatInterval, formatRegistrationPeriod } from "./status"
+import {
+  REGISTRATION_OPENING_TEXT,
+  registrationEndVariant,
+} from "./TournamentOverview"
 import { TournamentStatusBadge } from "./TournamentStatusBadge"
 
 export const TOURNAMENT_MODE_LABEL: Record<TournamentMode, string> = {
@@ -83,7 +89,86 @@ function Field({ term, children }: { term: string; children: ReactNode }) {
   )
 }
 
-/** S27 總覽的內容：賽事名稱＋狀態徽章，以及建立時的各項設定。 */
+/** 優先期倒數歸零那一刻（隱藏前）顯示的文字；不寫「系統處理中」，因為之後不重抓 */
+export const PRIORITY_ENDED_TEXT = "優先期已結束"
+
+/**
+ * S27 依狀態的倒數（EXPERIENCE.md〈倒數與時間〉）：尚未開放顯示報名開始倒數；
+ * 開放報名顯示報名截止倒數，優先期內另有優先期結束倒數。其他狀態不顯示。
+ * 報名開始、報名截止歸零後重抓賽事直到狀態改變；優先期結束後賽事狀態不變，
+ * 所以歸零後直接隱藏，不重抓。
+ */
+function OrganizerStatusCountdowns({
+  tournament,
+}: {
+  tournament: TournamentRead
+}) {
+  const queryClient = useQueryClient()
+  // 已歸零而隱藏的優先期結束時間；priority_end 改變時重新判斷
+  const [priorityEndedFor, setPriorityEndedFor] = useState<string | null>(null)
+
+  // 倒數歸零後的輪詢重抓：本身每 5 秒一次，所以單次失敗不重試，也不換成錯誤頁。
+  // 狀態改變時抽籤狀態也要跟著重抓：它有 30 秒 staleTime，停在 S27 時不會自己更新
+  const refetchAfterCountdown = () => {
+    void queryClient
+      .fetchQuery({
+        ...myTournamentQueryOptions(tournament.id),
+        retry: false,
+      })
+      .then((latest) => {
+        if (latest && latest.status !== tournament.status) {
+          return queryClient.invalidateQueries({
+            queryKey: drawStatusQueryOptions(tournament.id).queryKey,
+          })
+        }
+      })
+      .catch(() => undefined)
+  }
+
+  if (tournament.status === "upcoming") {
+    return (
+      <Countdown
+        key={`upcoming-${tournament.registration_start}`}
+        label="報名開始"
+        deadline={tournament.registration_start}
+        variant="muted"
+        suffix="開放報名"
+        expiredText={REGISTRATION_OPENING_TEXT}
+        onExpire={refetchAfterCountdown}
+      />
+    )
+  }
+  if (tournament.status !== "open") return null
+
+  const priorityEnd = tournament.priority_end
+  const showPriority =
+    priorityEndedFor !== priorityEnd &&
+    new Date(priorityEnd).getTime() > Date.now()
+
+  return (
+    <div className="flex flex-col gap-4">
+      {showPriority ? (
+        <Countdown
+          key={`priority-${priorityEnd}`}
+          label="優先期結束"
+          deadline={priorityEnd}
+          variant="muted"
+          expiredText={PRIORITY_ENDED_TEXT}
+          onExpire={() => setPriorityEndedFor(priorityEnd)}
+        />
+      ) : null}
+      <Countdown
+        key={`open-${tournament.registration_end}`}
+        label="報名截止"
+        deadline={tournament.registration_end}
+        variant={registrationEndVariant}
+        onExpire={refetchAfterCountdown}
+      />
+    </div>
+  )
+}
+
+/** S27 總覽的內容：賽事名稱＋狀態徽章、依狀態的倒數，以及建立時的各項設定。 */
 export function OrganizerTournamentSummary({
   tournament,
 }: {
@@ -97,6 +182,7 @@ export function OrganizerTournamentSummary({
         </h1>
         <TournamentStatusBadge status={tournament.status} />
       </header>
+      <OrganizerStatusCountdowns tournament={tournament} />
       <dl className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-body">
         <Field term="模式">{TOURNAMENT_MODE_LABEL[tournament.mode]}</Field>
         <Field term="遊戲">{tournament.game_name}</Field>
