@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-05-2026 14:03
+last_updated: 11-08-2026 15:00
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -86,7 +86,7 @@ development_status:
 
   epic-5: in-progress
   5-1-場次頁與隊長報到: in-progress  # 負責：D；第一階段（checkin.py、CheckInPanel）完成；第二階段後端（報到 API、賽事開始 worker）完成並已合併（#22），S4 接上待 A
-  5-2-逾時判棄權: in-progress  # 負責：A
+  5-2-逾時判棄權: done  # 負責：A；第一階段規則與 worker 工作（#16）、接上 worker（#34）、S4 申訴期倒數與棄權標記（#39）完成
   5-3-裁判逐局登錄比分: in-progress  # 負責：D；第一階段（scoring.py 純函式，含 5.4 規則）完成；第二階段後端（逐局資料表、登錄／刪除／送出 API）完成並已合併（#25），S4 接面板待 A，記分者接指派已由 4.4 後端處理
   5-4-送出系列結果: in-progress  # 負責：D；系列結果與送出條件已在 5.3 的 scoring.py；第二階段與 5.3 合併做（spec-5-3-referee-score-backend.md），後端完成並已合併（#25）
   5-5-申訴期滿自動確認與一般晉級: in-progress  # 負責：D；第一階段（progression.py）完成；第二階段（確認、晉級、申訴期滿自動確認、賽事結束）後端完成
@@ -106,5 +106,5 @@ development_status:
   epic-7: in-progress
   7-1-一鍵載入示範資料: in-progress  # 負責：A
   7-2-端對端演練-兩款遊戲的完整賽事: in-progress  # 負責：A
-  7-3-測試覆蓋率與測試報告素材: backlog  # 負責：A
+  7-3-測試覆蓋率與測試報告素材: review  # 負責：A；總指令、併發測試、報告與追溯完成，待統一 code review
   epic-7-retrospective: optional

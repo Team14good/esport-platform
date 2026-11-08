@@ -124,6 +124,20 @@ docker compose --profile e2e run --rm e2e bunx playwright test --grep @story-1.7
 
 每個 PR 與 `main` 的 push 都由 GitHub Actions（`.github/workflows/ci.yml`）跑上面全部項目，另外檢查 Alembic 只有一個 head、`frontend/src/client` 與後端 API 一致；範本原本的 Actions 已移除，這份是本專案自己的。
 
+### 測試總指令與測試報告
+
+```bash
+# 依序跑單元（前端 Vitest、後端 pytest -m unit）、整合（後端 pytest -m integration）、端對端，最後產生報告
+bash scripts/test-all.sh
+# 略過端對端（報告註明「本次略過」）；--no-build 不重新 build 容器
+bash scripts/test-all.sh --skip-e2e
+```
+
+- 預設先 `docker compose up -d --build --wait`，測到的是目前的原始碼；任何一層失敗都會跑完其餘層，最後以非 0 結束。
+- 產出放在 `reports/`（已加進 `.gitignore`）：`test-report.md`（各層結果、後端覆蓋率、純函式分支覆蓋率、NFR-1 併發比對、NFR-2 回應時間、Story／FR 追溯）、`coverage/index.html`、`raw/`（JUnit、coverage.json、Playwright json、計時檔）。
+- 後端每個測試檔的層級（unit／integration）與 Story、FR 寫在 `backend/tests/traceability.yaml`；新增測試檔要加一列，否則 `tests/test_traceability.py` 會失敗並列出檔名。
+- `scripts/test.sh` 開啟分支覆蓋率，並要求 `allocation.py`、`bracket.py`、`schedule.py`、`progression.py` 逐檔達 90% 以上（CI 也會檢查）。
+
 測試不會寫入開發用資料庫：每個測試包在一個外層交易裡並在結束時回滾；`<POSTGRES_DB>_test` 在每次測試開始時刪除重建並跑完遷移。
 
 ## 重新產生前端 API client
