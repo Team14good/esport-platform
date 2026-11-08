@@ -1,21 +1,29 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   CompetitionService,
+  type DrawStatus,
   type GameRead,
   type Identity,
   type TournamentRead,
+  type TournamentStatus,
   TournamentsService,
 } from "@/client"
+import {
+  EXPIRE_TIMEOUT_TEXT,
+  EXPIRED_TEXT,
+} from "@/components/common/Countdown"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import {
   CAPACITY_WARNING_TEXT,
   TOURNAMENT_CREATED_TEXT,
 } from "@/features/tournaments/CreateTournamentForm"
+import { PRIORITY_ENDED_TEXT } from "@/features/tournaments/OrganizerTournamentOverview"
 import { NO_TOURNAMENTS_TEXT } from "@/features/tournaments/OrganizerTournamentsPage"
+import { REGISTRATION_OPENING_TEXT } from "@/features/tournaments/TournamentOverview"
 import { FORBIDDEN_FALLBACK_MESSAGE } from "@/lib/api-error"
 import { taipeiLocalToIso } from "@/lib/datetime"
 import { ACCOUNT, BROWSE, renderApp, signInAs } from "./auth-fixtures"
@@ -882,6 +890,403 @@ describe("S27 載入失敗", () => {
     ).toBeInTheDocument()
     // 按下後重新取得（總覽掛上時會再取一次，所以不比對確切次數）
     expect(read.mock.calls.length).toBeGreaterThan(4)
+  })
+})
+
+describe("S27 狀態倒數", () => {
+  // 台北時間 2026/11/05 12:00
+  const NOW = new Date("2026-11-05T04:00:00Z")
+  const HOUR = 60 * 60 * 1000
+  const at = (offsetMs: number) =>
+    new Date(NOW.getTime() + offsetMs).toISOString()
+
+  /**
+   * 回傳 `server.current` 的賽事資料；測試中途改 `current` 模擬伺服器狀態改變。
+   * 版面與總覽掛上時的取得次數不固定，所以重抓次數都以掛上後的次數為基準比較。
+   */
+  function mockServer(initial: TournamentRead) {
+    const server = { current: initial }
+    const read = vi
+      .spyOn(TournamentsService, "readMyTournament")
+      .mockImplementation(async () => ({ data: server.current }) as never)
+    return { server, read }
+  }
+
+  function useFakeClock(extra: ("setTimeout" | "clearTimeout")[] = []) {
+    vi.useFakeTimers({
+      toFake: ["Date", "setInterval", "clearInterval", ...extra],
+    })
+    vi.setSystemTime(NOW)
+  }
+
+  function countdowns(): HTMLElement[] {
+    return Array.from(document.querySelectorAll("[data-slot=countdown]"))
+  }
+
+  function countdownLabels(): string[] {
+    return countdowns().map(
+      (countdown) => countdown.querySelector("span")?.textContent ?? "",
+    )
+  }
+
+  async function openSummary() {
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer/tournaments/t-1")
+    await screen.findByRole("heading", { name: "臺大秋季盃" })
+  }
+
+  // 開放報名、優先期內：優先期 1 天後結束、報名 3 天後截止
+  const OPEN: TournamentRead = {
+    ...TOURNAMENT,
+    status: "open",
+    registration_start: at(-HOUR),
+    priority_end: at(24 * HOUR),
+    registration_end: at(72 * HOUR),
+    start_at: at(96 * HOUR),
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("尚未開放：「報名開始」倒數；歸零後「報名開放中 · 系統處理中」並重抓，開放報名後換成報名截止倒數", async () => {
+    useFakeClock()
+    const upcoming: TournamentRead = {
+      ...OPEN,
+      status: "upcoming",
+      registration_start: at(2000),
+    }
+    const { server, read } = mockServer(upcoming)
+    await openSummary()
+
+    expect(countdownLabels()).toEqual(["報名開始"])
+    expect(screen.getByRole("timer")).toHaveTextContent("00:02")
+    expect(countdowns()[0]).toHaveAttribute("data-variant", "muted")
+    expect(
+      screen.getByText(
+        `${formatMatchDateTime(upcoming.registration_start)} 開放報名`,
+      ),
+    ).toBeInTheDocument()
+    const calls = read.mock.calls.length
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(
+      await screen.findByText(REGISTRATION_OPENING_TEXT),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(EXPIRED_TEXT)).toBeNull()
+    // 歸零時立即重抓一次（仍是尚未開放）
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(calls + 1))
+    expect(screen.getByText(REGISTRATION_OPENING_TEXT)).toBeInTheDocument()
+
+    // 5 秒後再抓一次：已開放報名，換成開放報名的倒數
+    server.current = { ...upcoming, status: "open" }
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    await vi.waitFor(() =>
+      expect(countdownLabels()).toEqual(["優先期結束", "報名截止"]),
+    )
+    expect(read).toHaveBeenCalledTimes(calls + 2)
+    expect(screen.queryByText(REGISTRATION_OPENING_TEXT)).toBeNull()
+  })
+
+  it("開放報名、優先期內：「優先期結束」與「報名截止」兩個倒數，下方各有「{時間} 截止」", async () => {
+    useFakeClock()
+    mockServer(OPEN)
+    await openSummary()
+
+    expect(countdownLabels()).toEqual(["優先期結束", "報名截止"])
+    const [priority, registration] = countdowns()
+    expect(within(priority).getByRole("timer")).toHaveTextContent(
+      "剩 1 天 0 小時",
+    )
+    expect(priority).toHaveAttribute("data-variant", "muted")
+    expect(
+      within(priority).getByText(
+        `${formatMatchDateTime(OPEN.priority_end)} 截止`,
+      ),
+    ).toBeInTheDocument()
+    expect(within(registration).getByRole("timer")).toHaveTextContent(
+      "剩 3 天 0 小時",
+    )
+    expect(registration).toHaveAttribute("data-variant", "muted")
+    expect(
+      within(registration).getByText(
+        `${formatMatchDateTime(OPEN.registration_end)} 截止`,
+      ),
+    ).toBeInTheDocument()
+    // 倒數區在標題列與設定清單之間
+    const dl = screen.getByText("模式").closest("dl") as HTMLElement
+    expect(
+      priority.compareDocumentPosition(dl) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it("優先期倒數歸零：直接隱藏，只剩報名截止倒數；不顯示「系統處理中」也不重抓", async () => {
+    useFakeClock()
+    const { read } = mockServer({ ...OPEN, priority_end: at(1000) })
+    await openSummary()
+    expect(countdownLabels()).toEqual(["優先期結束", "報名截止"])
+    const calls = read.mock.calls.length
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    await vi.waitFor(() => expect(countdownLabels()).toEqual(["報名截止"]))
+    expect(screen.queryByText(EXPIRED_TEXT)).toBeNull()
+    expect(screen.queryByText(PRIORITY_ENDED_TEXT)).toBeNull()
+    expect(screen.queryByText(/系統處理中/)).toBeNull()
+
+    act(() => {
+      vi.advanceTimersByTime(15_000)
+    })
+    expect(read).toHaveBeenCalledTimes(calls)
+    expect(countdownLabels()).toEqual(["報名截止"])
+  })
+
+  it("尚未開放、優先期在未來：只有「報名開始」倒數", async () => {
+    useFakeClock()
+    mockServer({
+      ...OPEN,
+      status: "upcoming",
+      registration_start: at(HOUR),
+      priority_end: at(24 * HOUR),
+    })
+    await openSummary()
+
+    expect(countdownLabels()).toEqual(["報名開始"])
+    expect(screen.getAllByRole("timer")).toHaveLength(1)
+  })
+
+  it("開放報名、優先期已過：只有「報名截止」倒數", async () => {
+    useFakeClock()
+    mockServer({ ...OPEN, priority_end: at(-1000) })
+    await openSummary()
+
+    expect(countdownLabels()).toEqual(["報名截止"])
+    expect(screen.queryByText(PRIORITY_ENDED_TEXT)).toBeNull()
+  })
+
+  it("報名截止最後 24 小時：報名截止倒數為 appeal 變體", async () => {
+    useFakeClock()
+    mockServer({
+      ...OPEN,
+      priority_end: at(-1000),
+      registration_end: at(5 * HOUR),
+    })
+    await openSummary()
+
+    const [registration] = countdowns()
+    expect(registration).toHaveAttribute("data-variant", "appeal")
+    expect(within(registration).getByRole("timer")).toHaveTextContent(
+      "剩 5 小時 0 分",
+    )
+  })
+
+  it("報名截止歸零：「已截止 · 系統處理中」並每 5 秒重抓；狀態變為報名截止後倒數區消失、徽章為「報名截止」", async () => {
+    useFakeClock()
+    const ending: TournamentRead = {
+      ...OPEN,
+      priority_end: at(-1000),
+      registration_end: at(1000),
+    }
+    const { server, read } = mockServer(ending)
+    await openSummary()
+    expect(screen.getByRole("timer")).toHaveTextContent("00:01")
+    expect(screen.getByText("開放報名")).toHaveAttribute("data-tone", "live")
+    const calls = read.mock.calls.length
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(await screen.findByText(EXPIRED_TEXT)).toBeInTheDocument()
+    // 歸零時立即重抓一次（仍是開放報名）
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(calls + 1))
+    expect(screen.getByText(EXPIRED_TEXT)).toBeInTheDocument()
+
+    // 5 秒後再抓一次：已是報名截止
+    server.current = { ...ending, status: "closed" }
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    await vi.waitFor(() => expect(countdowns()).toHaveLength(0))
+    expect(read).toHaveBeenCalledTimes(calls + 2)
+    expect(screen.queryByText("開放報名")).toBeNull()
+    expect(screen.getByText("報名截止")).toHaveAttribute("data-tone", "muted")
+    expect(screen.queryByText(EXPIRED_TEXT)).toBeNull()
+  })
+
+  /** 抽籤狀態依 `current` 回傳；測試中途改 `current` 模擬預估結果改變。 */
+  function mockDrawStatus(initial: DrawStatus) {
+    const drawStatus = { current: initial }
+    const readDrawStatus = vi
+      .spyOn(CompetitionService, "readDrawStatus")
+      .mockImplementation(async () => ({ data: drawStatus.current }) as never)
+    return { drawStatus, readDrawStatus }
+  }
+
+  it("報名截止歸零、狀態變為報名截止：抽籤狀態跟著重抓，按鈕依新的預估停用", async () => {
+    useFakeClock()
+    const ending: TournamentRead = {
+      ...OPEN,
+      priority_end: at(-1000),
+      registration_end: at(1000),
+    }
+    const { server } = mockServer(ending)
+    const { drawStatus, readDrawStatus } = mockDrawStatus({
+      can_draw: true,
+      reason: null,
+      expected_teams: 4,
+    })
+    await openSummary()
+    expect(await screen.findByRole("button", { name: "抽籤" })).toBeEnabled()
+    const drawCalls = readDrawStatus.mock.calls.length
+
+    // 截止後 worker 補位，正取不足：抽籤狀態仍在 30 秒 staleTime 內
+    server.current = { ...ending, status: "closed" }
+    drawStatus.current = {
+      can_draw: false,
+      reason: "not_enough_teams",
+      expected_teams: 1,
+    }
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    await vi.waitFor(() => expect(countdowns()).toHaveLength(0))
+    await vi.waitFor(() =>
+      expect(readDrawStatus).toHaveBeenCalledTimes(drawCalls + 1),
+    )
+    expect(
+      await screen.findByText("正取不足 2 隊，無法抽籤"),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "抽籤" })).toBeDisabled()
+  })
+
+  it("報名開始歸零、狀態變為開放報名：抽籤按鈕出現，不必重新整理", async () => {
+    useFakeClock()
+    const upcoming: TournamentRead = {
+      ...OPEN,
+      status: "upcoming",
+      registration_start: at(1000),
+    }
+    const { server } = mockServer(upcoming)
+    const { drawStatus } = mockDrawStatus({
+      can_draw: false,
+      reason: "not_drawable",
+      expected_teams: null,
+    })
+    await openSummary()
+    expect(screen.queryByRole("button", { name: "抽籤" })).toBeNull()
+
+    server.current = { ...upcoming, status: "open" }
+    drawStatus.current = { can_draw: true, reason: null, expected_teams: 4 }
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    await vi.waitFor(() =>
+      expect(countdownLabels()).toEqual(["優先期結束", "報名截止"]),
+    )
+    expect(await screen.findByRole("button", { name: "抽籤" })).toBeEnabled()
+  })
+
+  it("報名截止歸零後重抓失敗：保留畫面、不重試、不換成錯誤頁，下一次輪詢狀態改變後倒數區消失", async () => {
+    // 連 setTimeout 也換成假的，才能確認失敗後沒有依全站規則延遲重試
+    useFakeClock(["setTimeout", "clearTimeout"])
+    const ending: TournamentRead = {
+      ...OPEN,
+      priority_end: at(-1000),
+      registration_end: at(1000),
+    }
+    const { server, read } = mockServer(ending)
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer/tournaments/t-1")
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await vi.waitFor(() =>
+      expect(screen.getByRole("timer")).toHaveTextContent("00:01"),
+    )
+    const calls = read.mock.calls.length
+
+    // 歸零當下的重抓失敗一次
+    read.mockRejectedValueOnce(httpError(500, "Internal Server Error"))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(read).toHaveBeenCalledTimes(calls + 1)
+    expect(
+      screen.getByRole("heading", { name: "臺大秋季盃" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(EXPIRED_TEXT)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "重新載入" })).toBeNull()
+
+    // 5 秒內只有下一次輪詢一次呼叫（仍是開放報名）
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+    expect(read).toHaveBeenCalledTimes(calls + 2)
+    expect(screen.getByText(EXPIRED_TEXT)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "重新載入" })).toBeNull()
+
+    // 再下一次輪詢：已是報名截止
+    server.current = { ...ending, status: "closed" }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+    expect(read).toHaveBeenCalledTimes(calls + 3)
+    await vi.waitFor(() => expect(countdowns()).toHaveLength(0))
+    expect(screen.getByText("報名截止")).toHaveAttribute("data-tone", "muted")
+  })
+
+  it("報名截止歸零 2 分鐘狀態仍未改變：顯示逾時提示並停止重抓", async () => {
+    useFakeClock(["setTimeout", "clearTimeout"])
+    const { read } = mockServer({
+      ...OPEN,
+      priority_end: at(-1000),
+      registration_end: at(1000),
+    })
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer/tournaments/t-1")
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await vi.waitFor(() =>
+      expect(screen.getByRole("timer")).toBeInTheDocument(),
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(screen.getByText(EXPIRED_TEXT)).toBeInTheDocument()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
+    })
+
+    expect(screen.getByText(EXPIRE_TIMEOUT_TEXT)).toBeInTheDocument()
+    expect(screen.queryByText(EXPIRED_TEXT)).toBeNull()
+    const calls = read.mock.calls.length
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60 * 1000)
+    })
+    expect(read).toHaveBeenCalledTimes(calls)
+  })
+
+  it.each<TournamentStatus>([
+    "closed",
+    "published",
+    "ongoing",
+    "finished",
+    "cancelled",
+  ])("%s：不顯示倒數", async (status) => {
+    useFakeClock()
+    mockServer({ ...OPEN, status })
+    await openSummary()
+
+    expect(countdowns()).toHaveLength(0)
+    expect(screen.queryByRole("timer")).toBeNull()
   })
 })
 
