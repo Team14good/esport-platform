@@ -134,6 +134,7 @@ context:
 ## Spec Change Log
 
 - 2026-11-09：B 在 #63 回覆約定差異。使用者決定非隊長錯誤碼改為 `CAPTAIN_REQUIRED`、`report.reason` 改為 `Text`（見 Decisions 最後一則），連帶更新 Boundaries 的檢查順序、I/O 矩陣〈非隊長〉、Code Map 與 Design Notes。遷移檔尚未合併進 main，直接修改 `e9a4c2f7b6d1`，不另加遷移。
+- 2026-11-09：B 在 #64 核准並提出 4 點不擋合併的建議，使用者決定合併前處理其中 3 點：`report` 加 `(reported_team_id, status)` 索引（6.5 結案同一隊的未結案檢舉）與 CHECK `reporter_team_id <> reported_team_id`（同樣直接改 `e9a4c2f7b6d1`）；補 S2 掛載點的頁面層測試，以及附件鍵值存在但檔案已不在時下載回 404 `FILE_NOT_FOUND` 的測試。約定檔裡殘留的 `ensure_captain` 寫法，由 B 合併 #63 時一併修改。
 
 ## Review Triage Log
 

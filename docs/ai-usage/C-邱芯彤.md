@@ -482,3 +482,18 @@
   - AI 手動改程式後沒有先格式化，lint 抓到後才修正。
 - 成熟度：L3（AI 查證並執行修改，決定來自組員協調與使用者）
 - 證據：PR #64、#63 留言；_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Decisions 2026-11-09、Spec Change Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-09｜測試／依審查建議補強｜Story 6.4 處理 B 在 #64 的審查建議
+
+- Story／範圍：6.4（PR #64）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 B 在 #64 的核准審查（B 用 bmad-code-review 跑了四個審查員），把 4 點不擋合併的建議整理給使用者選；使用者決定合併前處理其中 3 點，AI 實作並重跑驗證
+- AI 產出：
+  - `report` 表加 `(reported_team_id, status)` 索引，以及 CHECK `reporter_team_id <> reported_team_id`，直接改尚未進 main 的遷移。
+  - 新增 4 個測試：資料庫擋下檢舉自己的隊伍、檔案已不在時下載回 404，以及 S2 頁面層的 2 個案例。
+  - 更新 PR 說明差異表第 7 項與 spec 的 Spec Change Log。
+- 人做了什麼：B 審查並核准；使用者決定合併前處理哪幾點，約定檔殘留的寫法交給 B 合併 #63 時修改
+- 驗證：後端 2173 個測試通過（覆蓋率 97%），lint 通過；前端 901 個單元測試通過，typecheck 與 biome 通過
+- 問題與修正：新增的 S2 頁面層測試第一次失敗，找不到「檢舉隊伍」，5 秒後逾時。AI 單獨重跑讀錯誤訊息，發現是 jsdom 沒有 `window.matchMedia`：隊長的 S2 會掛載 S20，`useIsMobile` 呼叫它而讓整頁出錯。這不是產品問題（瀏覽器實測正常），照其他測試檔的做法 mock `matchMedia` 後通過。這也說明 B 指出的缺口是真的：之前的測試都直接渲染元件，沒有走過整頁的路徑。
+- 成熟度：L4（組員以多代理審查提出建議，AI 實作並以自動測試驗證，人在 checkpoint 決策）
+- 證據：PR #64（B 的審查）；_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Spec Change Log 2026-11-09）；commit 未記錄（尚未 commit）

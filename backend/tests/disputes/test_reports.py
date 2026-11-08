@@ -12,9 +12,10 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.core import events
+from app.core import clock, events
 from app.core.config import settings
 from app.core.events import OutboxEvent
 from app.core.storage import MAX_IMAGE_BYTES
@@ -880,6 +881,42 @@ def test_download_permissions_and_missing(client: TestClient, session: Session) 
     # 先查檢舉是否存在，再檢查是不是該賽事主辦方
     response = _download(client, other_organizer, uuid.uuid4())
     assert _error_code(response) == "REPORT_NOT_FOUND"
+
+
+def test_download_when_stored_file_is_gone_is_404(
+    client: TestClient, session: Session, upload_dir: Path
+) -> None:
+    """資料庫有附件鍵值、但檔案已不在儲存區時，回 404 `FILE_NOT_FOUND`。"""
+    w = _world(client, session)
+    report = _post_ok(client, w, attachment=("p.png", PNG, "image/png"))
+    [row] = _reports(session, w.tid)
+    assert row.attachment_key is not None
+    (upload_dir / row.attachment_key).unlink()
+
+    response = _download(client, w.organizer, report["id"])
+
+    assert response.status_code == 404
+    assert _error_code(response) == "FILE_NOT_FOUND"
+
+
+def test_database_rejects_self_report(client: TestClient, session: Session) -> None:
+    """繞過 service 直接寫入時，CHECK 約束擋下檢舉人隊伍等於對象隊伍。"""
+    w = _world(client, session)
+    team_id = uuid.UUID(w.a["id"])
+
+    with pytest.raises(IntegrityError), session.begin_nested():
+        session.add(
+            Report(
+                tournament_id=w.tid,
+                reporter_team_id=team_id,
+                filed_by=w.a_captain.id,
+                reported_team_id=team_id,
+                filed_at=clock.now(),
+                description=DESCRIPTION,
+                status=ReportStatus.OPEN,
+            )
+        )
+        session.flush()
 
 
 def test_list_reports_has_no_open_reports_from_other_tournaments(

@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel
-from sqlalchemy import DateTime, Index, String, Text
+from sqlalchemy import CheckConstraint, DateTime, Index, String, Text
 from sqlmodel import Field, SQLModel
 
 from app.core.events import Event
@@ -52,6 +52,13 @@ class Report(SQLModel, table=True):
             "ix_report_reporter_team_id_reported_team_id",
             "reporter_team_id",
             "reported_team_id",
+        ),
+        # 6.5 取消資格後要結案「對同一隊的其他未結案檢舉」
+        Index("ix_report_reported_team_id_status", "reported_team_id", "status"),
+        # service 已擋 REPORT_SELF；資料庫再擋一次，避免繞過 service 的寫入
+        CheckConstraint(
+            "reporter_team_id <> reported_team_id",
+            name="ck_report_reporter_not_reported",
         ),
     )
 
