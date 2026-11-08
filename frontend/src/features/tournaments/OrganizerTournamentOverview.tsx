@@ -9,6 +9,7 @@ import { ErrorPage } from "@/components/layout/ErrorPage"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DrawButton } from "@/features/competition/DrawButton"
+import { drawStatusQueryOptions } from "@/features/competition/draw-queries"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { tournamentNav } from "./organizer-nav"
@@ -106,12 +107,20 @@ function OrganizerStatusCountdowns({
   // 已歸零而隱藏的優先期結束時間；priority_end 改變時重新判斷
   const [priorityEndedFor, setPriorityEndedFor] = useState<string | null>(null)
 
-  // 倒數歸零後的輪詢重抓：本身每 5 秒一次，所以單次失敗不重試，也不換成錯誤頁
+  // 倒數歸零後的輪詢重抓：本身每 5 秒一次，所以單次失敗不重試，也不換成錯誤頁。
+  // 狀態改變時抽籤狀態也要跟著重抓：它有 30 秒 staleTime，停在 S27 時不會自己更新
   const refetchAfterCountdown = () => {
     void queryClient
       .fetchQuery({
         ...myTournamentQueryOptions(tournament.id),
         retry: false,
+      })
+      .then((latest) => {
+        if (latest && latest.status !== tournament.status) {
+          return queryClient.invalidateQueries({
+            queryKey: drawStatusQueryOptions(tournament.id).queryKey,
+          })
+        }
       })
       .catch(() => undefined)
   }

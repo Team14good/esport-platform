@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   CompetitionService,
+  type DrawStatus,
   type GameRead,
   type Identity,
   type TournamentRead,
@@ -1115,6 +1116,79 @@ describe("S27 狀態倒數", () => {
     expect(screen.queryByText("開放報名")).toBeNull()
     expect(screen.getByText("報名截止")).toHaveAttribute("data-tone", "muted")
     expect(screen.queryByText(EXPIRED_TEXT)).toBeNull()
+  })
+
+  /** 抽籤狀態依 `current` 回傳；測試中途改 `current` 模擬預估結果改變。 */
+  function mockDrawStatus(initial: DrawStatus) {
+    const drawStatus = { current: initial }
+    const readDrawStatus = vi
+      .spyOn(CompetitionService, "readDrawStatus")
+      .mockImplementation(async () => ({ data: drawStatus.current }) as never)
+    return { drawStatus, readDrawStatus }
+  }
+
+  it("報名截止歸零、狀態變為報名截止：抽籤狀態跟著重抓，按鈕依新的預估停用", async () => {
+    useFakeClock()
+    const ending: TournamentRead = {
+      ...OPEN,
+      priority_end: at(-1000),
+      registration_end: at(1000),
+    }
+    const { server } = mockServer(ending)
+    const { drawStatus, readDrawStatus } = mockDrawStatus({
+      can_draw: true,
+      reason: null,
+      expected_teams: 4,
+    })
+    await openSummary()
+    expect(await screen.findByRole("button", { name: "抽籤" })).toBeEnabled()
+    const drawCalls = readDrawStatus.mock.calls.length
+
+    // 截止後 worker 補位，正取不足：抽籤狀態仍在 30 秒 staleTime 內
+    server.current = { ...ending, status: "closed" }
+    drawStatus.current = {
+      can_draw: false,
+      reason: "not_enough_teams",
+      expected_teams: 1,
+    }
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    await vi.waitFor(() => expect(countdowns()).toHaveLength(0))
+    await vi.waitFor(() =>
+      expect(readDrawStatus).toHaveBeenCalledTimes(drawCalls + 1),
+    )
+    expect(
+      await screen.findByText("正取不足 2 隊，無法抽籤"),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "抽籤" })).toBeDisabled()
+  })
+
+  it("報名開始歸零、狀態變為開放報名：抽籤按鈕出現，不必重新整理", async () => {
+    useFakeClock()
+    const upcoming: TournamentRead = {
+      ...OPEN,
+      status: "upcoming",
+      registration_start: at(1000),
+    }
+    const { server } = mockServer(upcoming)
+    const { drawStatus } = mockDrawStatus({
+      can_draw: false,
+      reason: "not_drawable",
+      expected_teams: null,
+    })
+    await openSummary()
+    expect(screen.queryByRole("button", { name: "抽籤" })).toBeNull()
+
+    server.current = { ...upcoming, status: "open" }
+    drawStatus.current = { can_draw: true, reason: null, expected_teams: 4 }
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    await vi.waitFor(() =>
+      expect(countdownLabels()).toEqual(["優先期結束", "報名截止"]),
+    )
+    expect(await screen.findByRole("button", { name: "抽籤" })).toBeEnabled()
   })
 
   it("報名截止歸零後重抓失敗：保留畫面、不重試、不換成錯誤頁，下一次輪詢狀態改變後倒數區消失", async () => {

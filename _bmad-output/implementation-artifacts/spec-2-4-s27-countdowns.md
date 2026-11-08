@@ -75,6 +75,8 @@ context:
 - 倒數區是 `OrganizerTournamentSummary` 內新增的私有元件 `OrganizerStatusCountdowns`；重抓沿用 S2 的寫法（`queryClient.fetchQuery({...myTournamentQueryOptions(id), retry: false})`，失敗時保留畫面）。
 - `Countdown` 沒有「歸零後隱藏」的選項且不能改，所以優先期倒數用 `onExpire`（歸零當下立即呼叫）記下已結束的 `priority_end` 並隱藏；初次渲染時 `priority_end <= Date.now()` 就不顯示。歸零到隱藏之間若畫面來得及繪製，顯示的是 `PRIORITY_ENDED_TEXT`「優先期已結束」，不會出現「系統處理中」。
 - 測試：S27 掛上時 `readMyTournament` 的呼叫次數不固定（版面與總覽），所以重抓次數以掛上後的次數為基準，伺服器狀態用可變的 `server.current` 模擬。
+- PR #62 審查後續（D，2026-11-08，合併 #60 後）：倒數歸零重抓到的賽事狀態與原本不同時，`refetchAfterCountdown` 另外 `invalidateQueries` 抽籤狀態（`drawStatusQueryOptions` 的 key）。抽籤狀態有 30 秒 staleTime，停在 S27 時不會自己更新，開放報名轉為報名截止後 `can_draw`／`reason` 會停在舊的預估。補兩個測試：開放報名 → 報名截止後抽籤狀態重抓、按鈕依新預估停用；尚未開放 → 開放報名後抽籤按鈕出現。變異檢查：拿掉 invalidate 後前者失敗；後者不靠這次修正也會過，因為 #60 已讓尚未開放時不送出抽籤狀態查詢。
+- 本機容器的 `vitest.config.ts` 是舊版（沒有 `testTimeout: 15000`），全套測試時 S30 的第一個測試偶爾超過預設 5 秒；掛上目前的設定檔重跑就全過，CI 用的是目前的設定。
 
 ## Spec Change Log
 
