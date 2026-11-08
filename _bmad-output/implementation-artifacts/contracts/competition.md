@@ -236,7 +236,7 @@ class PublicBracket(BaseModel):
 | `record_game(session, *, tournament_id, match_id, account_id, game_no, data: GameScoreIn) -> ScoreEntryState`、`delete_game(..., game_no)`、`submit_result(...)`、`get_score_entry(...)` | router | 比分登錄、刪除最後一局、送出系列結果與 S4 讀取；規則一律交給 `scoring.py` | 5.3、5.4 |
 | `get_podium(session, *, tournament_id) -> PublicPodium \| None` | A（5.8、7.1） | 名次；尚未抽籤或賽事不是 `finished` 回 None | 5.5 |
 
-申訴相關的 `mark_appealed`、`uphold_result`、`correct_result`、`replay_match`：設計文件放在 MatchService，epic 6 由 disputes 呼叫。**`mark_appealed` 由 B 寫在 competition 新增的 `competition/appeals.py`，`service.py` 只新增這個公開函式，D 審查；`uphold_result`、`correct_result`、`replay_match`（6.2）與 `disqualify`（6.5）由 D 實作。**（2026-11-08 使用者與 D 協議）
+申訴相關的 `mark_appealed`、`uphold_result`、`correct_result`、`replay_match`：設計文件放在 MatchService，epic 6 由 disputes 呼叫。**這四個與 6.5 的 `disqualify` 都由 B 寫在 competition 新增的檔案（`competition/appeals.py`、`competition/disqualification.py`），`service.py` 只新增公開函式，不改 D 的既有函式，D 審查。**（2026-11-09 使用者決定，取代 2026-11-08 改由 D 實作的協議）
 
 ### 事件（`core.events.publish`，期中只發不通知）
 

@@ -54,6 +54,7 @@ context:
 
 - 2026-11-08（使用者與 D 協議）：Epic 6 改照模組分工。competition 端 6.2 的 `uphold_result`、`correct_result`、`replay_match` 與 6.5 的 `disqualify` 由 D 實作；B 負責 6.1 全部（含 competition 的 `mark_appealed`），以及 6.2、6.5 的 disputes 端（`resolve_appeals`、`resolve_report`、S32、S33）。約定〈一〉分工表隨本 Story 更新。
 - 2026-11-08（使用者）：S4 的「提出申訴」與「申訴處理中」由 B 在 6.1 一併做。新元件（`AppealPanel`、`AppealDialog`）放 `features/disputes/`；S4 屬於 A 的 5.8，只加掛載點（`MatchAppealWindow` 多一個插槽並在申訴中顯示「申訴處理中」，S4 路由傳入），不改其他既有行為；PR 說明列出動到的 A／D 檔案並請 A 審查（CONTRIBUTING 6.6）。
+- 2026-11-09（使用者）：取代上面 2026-11-08 的模組分工。Epic 6 的 6.1、6.2、6.5 全部由 B 實作，包含 competition 端的 `uphold_result`、`correct_result`、`replay_match` 與 `disqualify`（D 審查）；約定〈一〉〈三〉、`competition.md` 與 `sprint-status.yaml` 隨本 PR 改回。
 
 </frozen-after-approval>
 

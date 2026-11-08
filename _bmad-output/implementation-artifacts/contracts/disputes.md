@@ -9,12 +9,12 @@
 | Story | 負責 | 內容 |
 | --- | --- | --- |
 | 6.1 提出申訴 | B | `file_appeal`；competition 新增 `mark_appealed` |
-| 6.2 主辦方處理申訴 | B（disputes 端）、D（competition 端） | B：`resolve_appeals`、S32；D：competition 新增 `uphold_result`、`correct_result`、`replay_match` |
+| 6.2 主辦方處理申訴 | B | `resolve_appeals`、S32；competition 新增 `uphold_result`、`correct_result`、`replay_match`（D 審查） |
 | 6.4 提出檢舉 | C | `file_report`；只新增檢舉相關檔案 |
-| 6.5 查證檢舉與取消資格 | B（disputes 端）、D（competition 端） | B：`resolve_report`、S33；D：competition 新增 `disqualify` |
+| 6.5 查證檢舉與取消資格 | B | `resolve_report`、S33；competition 新增 `disqualify`（D 審查） |
 | 6.3 逾期提醒 | 期中擱置 | `Appeal.reminded_at` 先保留欄位，不寫 worker |
 
-2026-11-08（使用者與 D 協議）：Epic 6 改照模組分工，6.2、6.5 的 competition 函式由 D 新增；B 負責 6.1 全部（含 competition 的 `mark_appealed`），以及 6.2、6.5 的 disputes 端。
+2026-11-09（使用者）：Epic 6 的 6.1、6.2、6.5 全部由 B 實作，包含 competition 端的函式（D 審查）；取代 2026-11-08 與 D 協議的模組分工（當時改由 D 實作 6.2、6.5 的 competition 函式）。
 
 ## 一、資料表（disputes 擁有）
 
@@ -99,9 +99,9 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 
 ## 三、competition 新增的申訴、取消資格函式
 
-2026-11-08 起：`mark_appealed` 由 B 在 6.1 新增（D 審查）；`uphold_result`、`correct_result`、`replay_match`、`disqualify` 改由 D 新增（B 審查呼叫介面），內容仍以下表為準。
+2026-11-09 起：下表五個函式（`mark_appealed`、`uphold_result`、`correct_result`、`replay_match`、`disqualify`）都由 B 新增，D 審查；取代 2026-11-08 改由 D 實作後四個的協議。
 
-B 的 `mark_appealed` 依 CONTRIBUTING 6.6 寫在 competition **新增的檔案** `competition/appeals.py`，`service.py` 只新增這個公開函式，不改 D 的既有函式；這條規則只適用於 `mark_appealed`。其他四個函式是 D 在自己的模組裡實作，檔案配置由 D 決定。所有函式的呼叫端都先 `lock_tournament`，函式內 `lock_match` 並以鎖住後的狀態判斷（AD-6）。
+B 依 CONTRIBUTING 6.6 把這些函式寫在 competition **新增的檔案**（`competition/appeals.py`、`competition/disqualification.py`），`service.py` 只新增公開函式，不改 D 的既有函式；需要改 D 的既有函式時先在 PR 問 D。所有函式的呼叫端都先 `lock_tournament`，函式內 `lock_match` 並以鎖住後的狀態判斷（AD-6）。
 
 | 函式 | 呼叫者 | 說明 | 用到 D 的 |
 | --- | --- | --- | --- |
