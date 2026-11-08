@@ -460,3 +460,15 @@
 - 問題與修正：審查找出「看起來有驗、其實不會紅」的地方：router 在 commit 失敗時刪附件、S4 路由是否真的掛上申訴入口，都沒有任何測試，補上後拿掉對應程式會失敗。AI 實作的說明清理去掉所有控制與格式字元，會丟掉 tab、拆散 ZWJ 表情（申訴是證據，存下的文字會和隊長輸入不同），改成只去控制字元與雙向控制字元。第一隊送出後佔位資料讓舊的可按按鈕閃回，改成佔位期間停用，子代理拿掉修正確認新測試會失敗。審查員有誤判被主代理排除，例如「第二隊送出後不會重抓」（S4 的 refresh 會 invalidate 整場的查詢前綴）、「期限到了按鈕仍可按」（倒數歸零會觸發 refresh）。子代理第一次跑後端全套時，併發測試提交的操作紀錄（只增不改、刪不掉）讓別的測試計數多 1，改為只計該場次後通過。另外 frozen 區塊寫隊長判斷「經 `registration_port.is_captain`」，但那是 competition 內部檔案、架構測試不允許 disputes 匯入，實作改呼叫 `registration.service.is_captain`，已記在 Implementation Notes 待使用者確認
 - 成熟度：L4（spec → 子代理實作 → 多個審查者 → 主代理核對與完整驗證，人在分工與 spec 決策點介入）
 - 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；Draft PR #63；commit 未建立
+
+### 2026-11-09｜程式／程式審查｜審查 C 的 #64：Story 6.4 提出檢舉
+
+- Story／範圍：6.4（C 的 PR #64，28 個檔案、+3683／-80 行；B 是 tournaments 負責人，也是 6.5 `resolve_report` 的實作者）
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）
+- 怎麼用：以 `spec-6-4-file-report.md`、epic-6 context 與 disputes 約定跑四個審查者，另請 Acceptance Auditor 從 6.5 的角度看 `Report`、`ReportRead`；主代理核對後擬審查意見，並用 `git merge-tree` 實際試合 #63 與 #64 列出衝突檔案，人確認後送出 approve
+- AI 產出：四個審查者共約 23 點（Blind Hunter 13、Edge Case Hunter 2、Verification Gap 1、Acceptance Auditor 4 點加 6 點 6.5 備註）；核對後留 4 點低度建議（遷移進 main 前加 `reported_team_id` 索引、S2 掛載點的路由層測試、約定兩處仍寫 `ensure_captain`、存檔不見的 404 沒有測試）；6.5 的設計備註（多筆檢舉對同一隊、`ReportRead` 缺報名狀態、`resolve_report` 要先鎖賽事）留給 B 自己
+- 人做了什麼：確認審查意見後送出 approve
+- 驗證：Acceptance Auditor 逐條核對 spec 的 AC、Boundaries 與 I/O 矩陣；`git merge-tree` 確認 10 個衝突檔案與兩支遷移接在同一個 head
+- 問題與修正：Edge Case Hunter 提的「隊長中途換人後一直 403」，主代理判斷要等期中擱置的 3.11（隊員異動）才會發生而排除；Blind Hunter 對 C 的 spec 與 AI 紀錄寫法的意見（任務勾選、計數）屬 C 自己的文件，不列入審查意見
+- 成熟度：L4（多個審查者並行，主代理逐筆核對並實際試合，人在送出前確認）
+- 證據：PR #64 的審查意見（B，APPROVED，2026-11-09）
