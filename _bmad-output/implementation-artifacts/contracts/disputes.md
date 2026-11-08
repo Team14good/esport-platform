@@ -43,10 +43,12 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
     description: str                        # 1～1000 字
     attachment_key: str | None
     status: ReportStatus                    # open → dismissed／substantiated
-    reason: str | None                      # 處理理由，結案時必填
+    reason: str | None                      # 處理理由，結案時必填；Text（與申訴相同），長度上限由 6.5 驗證
     handled_by: UUID | None
     handled_at: datetime | None
 ```
+
+`ReportRead`（6.4）不含 `attachment_key`，改以 `has_attachment: bool` 表示有沒有附件；另含 `reporter_team_name`、`reported_team_name` 供 S33 顯示。
 
 `AppealStatus`、`AppealDecision`、`ReportStatus` 已在 `disputes/models.py`（2.x 前置），沿用不改。
 
@@ -61,9 +63,9 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | `list_tournament_appeals(session, *, tournament_id, actor_id) -> list[AppealRead]` | router（S32） | 主辦方；依場次分組、未結案在前 | 6.2 |
 | `resolve_appeals(session, *, tournament_id, match_id, actor_id, decision: AppealDecision, reason: str, games: list[GameScoreIn] \| None, replay_at: datetime \| None) -> list[AppealRead]` | router（S32） | 主辦方；同一場次未結案的申訴一次以相同決定與理由結案（寫 `handled_by`、`handled_at`）。`upheld` → `uphold_result`；`corrected` → `correct_result(games)`；`rematch` → `replay_match(replay_at)`（只用於 `outcome=forfeit` 的場次）。寫 `appeal.resolved`（更正時 before／after 含各局），發 `AppealResolved` | 6.2 |
 | `open_appeal_attachment(session, *, appeal_id, actor_id) -> tuple[BinaryIO, str]` | router | 只有該賽事主辦方 | 6.1 |
-| `list_reportable_teams(session, *, tournament_id, account_id) -> list[ReportableTeam]` | router（S20） | 檢舉人資格檢查後，回可被檢舉的隊伍（只有 id、隊名；排除自己） | 6.4（C） |
-| `file_report(session, *, tournament_id, account_id, reported_team_id, description, attachment, content_type) -> ReportRead` | router（S20） | 賽事未結束；檢舉人是報名狀態為 `pending`／`accepted`／`waitlisted`／`drawn` 的隊伍隊長；對象同樣四種狀態且不是自己；寫 `report.filed`，發 `ReportFiled` | 6.4（C） |
-| `list_tournament_reports(session, *, tournament_id, actor_id) -> list[ReportRead]` | router（S33） | 主辦方；未結案在前 | 6.4（C） |
+| `list_reportable_teams(session, *, tournament_id, account_id) -> list[ReportableTeam]` | router（S20） | 檢舉人資格檢查後（錯誤同 `file_report`），回可被檢舉的隊伍 `{id, name, has_open_report}`（排除自己；`has_open_report`＝本隊對它已有處理中的檢舉），依隊名排序 | 6.4（C） |
+| `file_report(session, *, tournament_id, account_id, reported_team_id, description, attachment, content_type) -> FiledReport` | router（S20） | 先 `lock_tournament`。賽事未結束；檢舉人是報名狀態為 `pending`／`accepted`／`waitlisted`／`drawn` 的隊伍隊長；對象同樣四種狀態且不是自己；同一隊對同一對象已有處理中的檢舉時拒絕（結案後可再檢舉）；說明去頭尾空白後 1～1000 字（code point）；全部通過才存附件；寫 `report.filed`，發 `ReportFiled`。回傳 `FiledReport {report: ReportRead, attachment_key}`：router 在交易提交失敗時刪掉剛存的附件 | 6.4（C） |
+| `list_tournament_reports(session, *, tournament_id, actor_id) -> list[ReportRead]` | router（S33） | 主辦方；處理中在前，各組依 `filed_at` 由舊到新、再依 id | 6.4（C） |
 | `resolve_report(session, *, tournament_id, report_id, actor_id, substantiated: bool, reason: str) -> ReportRead` | router（S33） | 主辦方；駁回只結案；屬實時賽事未結束才呼叫 competition `disqualify`，已結束只記錄屬實。寫 `report.resolved`，發 `ReportResolved` | 6.5 |
 | `open_report_attachment(session, *, report_id, actor_id) -> tuple[BinaryIO, str]` | router | 只有該賽事主辦方 | 6.4（C） |
 | `count_open_disputes(session, *, tournament_id) -> OpenDisputes` | router（S27 待處理清單） | `{appeals, reports, earliest_deadline}`；S27 前端直接呼叫 disputes 的 API（tournaments 不能呼叫 disputes） | 6.2 |
@@ -78,13 +80,13 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | `POST /api/v1/organizer/tournaments/{tid}/matches/{mid}/appeal-resolution` | `Organizer` | `{decision, reason, games?, replay_at?}` |
 | `GET /api/v1/organizer/appeals/{appeal_id}/attachment` | `Organizer` | 下載附件 |
 | `GET /api/v1/tournaments/{tid}/reportable-teams` | `VerifiedAccount` | S20 選單 |
-| `POST /api/v1/tournaments/{tid}/reports` | `VerifiedAccount` | multipart |
+| `POST /api/v1/tournaments/{tid}/reports` | `VerifiedAccount` | multipart：`reported_team_id`、`description`（預設空字串）、`attachment?`（空檔視為未附）；201 `ReportRead` |
 | `GET /api/v1/organizer/tournaments/{tid}/reports` | `Organizer` | S33 |
 | `POST /api/v1/organizer/reports/{report_id}/resolution` | `Organizer` | `{substantiated, reason}` |
 | `GET /api/v1/organizer/reports/{report_id}/attachment` | `Organizer` | 下載附件 |
 | `GET /api/v1/organizer/tournaments/{tid}/open-disputes` | `Organizer` | S27 待處理 |
 
-錯誤碼（提議）：`APPEAL_DEADLINE_PASSED` 409、`APPEAL_NOT_ALLOWED` 409（場次不是申訴期／申訴中）、`APPEAL_ALREADY_FILED` 409、`CAPTAIN_REQUIRED` 403（沿用）、`NO_OPEN_APPEALS` 409、`REPLAY_ONLY_FOR_FORFEIT` 409、`REPORT_NOT_ALLOWED` 409（檢舉人或對象的報名狀態不符、賽事已結束）、`REPORT_SELF` 422、`REPORT_ALREADY_RESOLVED` 409、`APPEAL_NOT_FOUND`／`REPORT_NOT_FOUND` 404；附件沿用 `core.storage` 的錯誤（格式、大小）。
+錯誤碼（提議）：`APPEAL_DEADLINE_PASSED` 409、`APPEAL_NOT_ALLOWED` 409（場次不是申訴期／申訴中）、`APPEAL_ALREADY_FILED` 409、`CAPTAIN_REQUIRED` 403（沿用）、`NO_OPEN_APPEALS` 409、`REPLAY_ONLY_FOR_FORFEIT` 409、`REPORT_NOT_ALLOWED` 409（檢舉人或對象的報名狀態不符、賽事已結束）、`REPORT_SELF` 422、`REPORT_ALREADY_FILED` 409（同一隊對同一對象已有處理中的檢舉）、`REPORT_DESCRIPTION_INVALID` 422（欄位錯誤，`loc` 為 `body.description`）、`REPORT_ALREADY_RESOLVED` 409、`APPEAL_NOT_FOUND`／`REPORT_NOT_FOUND` 404；附件沿用 `core.storage` 的錯誤（格式、大小）。
 
 ### 事件（`core.events.publish`，期中只發不通知）
 
@@ -133,8 +135,8 @@ D 新增的 ★（只新增公開函式、不改既有函式；6.2 開工前合�
 | `get_registration(session, *, team_id) -> RegistrationRead` | 6.4、6.5 | 報名狀態 |
 | `is_captain(session, *, team_id, account_id) -> bool` | 6.1 | 已有 |
 | `mark_status(session, *, registration, to, actor_id)` | 6.5 取消資格 | 已有；`pending`／`accepted`／`waitlisted`／`drawn` → `disqualified` 都已允許。抽籤前取消資格後的遞補由 3.4 的 `backfill_vacancies` 在下一次分配處理，6.5 不另外處理 |
-| ★ `list_teams_by_status(session, *, tournament_id, statuses) -> list[TeamSummary]` | 6.4 檢舉選單 | 只要 id、隊名；或由 C 在 6.4 自己實作 `list_reportable_teams` |
-| ★ `find_captain_team(session, *, tournament_id, account_id) -> TeamRead \| None` | 6.4 | 登入者在該賽事當隊長的隊伍（判斷檢舉人資格） |
+| ★ `list_teams_by_status(session, *, tournament_id, statuses) -> list[TeamSummary]` | 6.4 檢舉選單 | 只要 id、隊名（6.4 已新增） |
+| ★ `find_team_of_account(session, *, tournament_id, account_id) -> TeamRead \| None` | 6.4 | 登入者在該賽事的隊伍（不限角色），隊長由 disputes 比對成員角色，非隊長回 `CAPTAIN_REQUIRED`（6.4 已新增，取代原提議的 `find_captain_team`） |
 
 ## 五、待確認
 

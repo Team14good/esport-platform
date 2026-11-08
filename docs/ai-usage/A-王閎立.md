@@ -656,3 +656,18 @@
   - 「某層失敗」只用竄改的 junit 測了報告腳本，沒有實際注入失敗跑過一次總指令
 - 成熟度：L3（人決定範圍，AI 實作，主對話逐項查證）
 - 證據：`scripts/test-all.sh`、`backend/scripts/check_branch_coverage.py`、`backend/tests/traceability.yaml`
+
+### 2026-11-09｜測試｜依 D 的審查修正 #61 的併發測試與追溯標註
+
+- Story／範圍：7.3（PR #61）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 D 的審查意見，修正 `test_score_concurrency.py` 的錯誤分類與 `traceability.yaml` 的 FR，合併 main 並補上 #64 新增的 3 個測試檔
+- AI 產出：非預期錯誤改以 `unexpected:` 前綴區分，並斷言其餘結果都是 `RESULT_ALREADY_SUBMITTED`
+- 人做了什麼：指示依 D 的訊息完成修正
+- 驗證：對應檔與併發測試 5 passed；在容器內把重複送出改成拋 `RuntimeError`，新斷言確實失敗，還原後重跑通過；2,179 個後端測試都有分層
+- 問題與修正：
+  - AI 原本用 `not o.startswith("<")` 判斷業務錯誤，但 `repr(IntegrityError(...))` 不是 `<` 開頭，死結或鎖逾時會被算成業務錯誤，測試照樣通過。這是 D 審查時發現的，AI 自己的驗證沒抓到
+  - AI 替 D 的 `test_replay_hooks.py`、`test_match_transitions.py` 標錯 FR，由 D 確認後改正
+  - 第一次變異測試找錯拋錯的位置，改在 `_ENTRY_REJECTIONS` 查表處才真正驗到
+- 成熟度：L3（組員審查指出問題，AI 修正並驗證）
+- 證據：PR #61 的 OG-Matcha 審查意見、`backend/tests/competition/test_score_concurrency.py`

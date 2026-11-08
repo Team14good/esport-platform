@@ -149,6 +149,24 @@ export type AdminOrganizerApplication = {
 export type ApplicationStatus = "pending" | "approved" | "rejected"
 
 /**
+ * Body_disputes-file_report
+ */
+export type Body_disputes_file_report = {
+  /**
+   * Reported Team Id
+   */
+  reported_team_id: string
+  /**
+   * Description
+   */
+  description?: string
+  /**
+   * Attachment
+   */
+  attachment?: Blob | File | null
+}
+
+/**
  * Body_registration-update_my_player_profile
  */
 export type Body_registration_update_my_player_profile = {
@@ -1343,6 +1361,94 @@ export type RegistrationStatus =
   | "drawn"
   | "retired"
   | "disqualified"
+
+/**
+ * ReportRead
+ *
+ * 檢舉內容；不含附件鍵值，只以 `has_attachment` 表示有沒有附件。
+ */
+export type ReportRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Tournament Id
+   */
+  tournament_id: string
+  /**
+   * Reporter Team Id
+   */
+  reporter_team_id: string
+  /**
+   * Reporter Team Name
+   */
+  reporter_team_name: string
+  /**
+   * Reported Team Id
+   */
+  reported_team_id: string
+  /**
+   * Reported Team Name
+   */
+  reported_team_name: string
+  /**
+   * Filed By
+   */
+  filed_by: string
+  /**
+   * Filed At
+   */
+  filed_at: string
+  /**
+   * Description
+   */
+  description: string
+  /**
+   * Has Attachment
+   */
+  has_attachment: boolean
+  status: ReportStatus
+  /**
+   * Reason
+   */
+  reason: string | null
+  /**
+   * Handled By
+   */
+  handled_by: string | null
+  /**
+   * Handled At
+   */
+  handled_at: string | null
+}
+
+/**
+ * ReportStatus
+ *
+ * 檢舉狀態：處理中、駁回、屬實。
+ */
+export type ReportStatus = "open" | "dismissed" | "substantiated"
+
+/**
+ * ReportableTeam
+ *
+ * S20 檢舉對象選單的一項；`has_open_report`＝本隊對它已有處理中的檢舉。
+ */
+export type ReportableTeam = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+  /**
+   * Has Open Report
+   */
+  has_open_report: boolean
+}
 
 /**
  * RescheduleIn
@@ -3550,3 +3656,132 @@ export type competitionAssignRefereeResponses = {
 
 export type competitionAssignRefereeResponse =
   competitionAssignRefereeResponses[keyof competitionAssignRefereeResponses]
+
+export type disputesListReportableTeamsData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/reportable-teams"
+}
+
+export type disputesListReportableTeamsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesListReportableTeamsError =
+  disputesListReportableTeamsErrors[keyof disputesListReportableTeamsErrors]
+
+export type disputesListReportableTeamsResponses = {
+  /**
+   * Response Disputes-List Reportable Teams
+   *
+   * Successful Response
+   */
+  200: Array<ReportableTeam>
+}
+
+export type disputesListReportableTeamsResponse =
+  disputesListReportableTeamsResponses[keyof disputesListReportableTeamsResponses]
+
+export type disputesFileReportData = {
+  body: Body_disputes_file_report
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/reports"
+}
+
+export type disputesFileReportErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesFileReportError =
+  disputesFileReportErrors[keyof disputesFileReportErrors]
+
+export type disputesFileReportResponses = {
+  /**
+   * Successful Response
+   */
+  201: ReportRead
+}
+
+export type disputesFileReportResponse =
+  disputesFileReportResponses[keyof disputesFileReportResponses]
+
+export type disputesListTournamentReportsData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/reports"
+}
+
+export type disputesListTournamentReportsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesListTournamentReportsError =
+  disputesListTournamentReportsErrors[keyof disputesListTournamentReportsErrors]
+
+export type disputesListTournamentReportsResponses = {
+  /**
+   * Response Disputes-List Tournament Reports
+   *
+   * Successful Response
+   */
+  200: Array<ReportRead>
+}
+
+export type disputesListTournamentReportsResponse =
+  disputesListTournamentReportsResponses[keyof disputesListTournamentReportsResponses]
+
+export type disputesDownloadReportAttachmentData = {
+  body?: never
+  path: {
+    /**
+     * Report Id
+     */
+    report_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/reports/{report_id}/attachment"
+}
+
+export type disputesDownloadReportAttachmentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesDownloadReportAttachmentError =
+  disputesDownloadReportAttachmentErrors[keyof disputesDownloadReportAttachmentErrors]
+
+export type disputesDownloadReportAttachmentResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown
+}

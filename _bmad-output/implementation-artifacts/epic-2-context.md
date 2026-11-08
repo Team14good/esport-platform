@@ -43,7 +43,7 @@
 
 - **路由**：S1 `/`、S2 `/tournaments/$tournamentId`、S25 `/organizer`、S26 `/organizer/tournaments/new`、S27 `/organizer/tournaments/$tournamentId`、S31 `…/$tournamentId/referees`、S23 `/referee-invite/$inviteToken`、S36 `/admin/games`、`/admin/schools`。
 - **主辦方賽事後台**：沿用 1.8 的 Sidebar 版面；2.2 建立賽事側欄，最上方「查看賽事頁」連到 S2，下方「總覽」，之後的 Story 把自己的頁面加進側欄。主辦方身分以 S25 為首頁。
-- **2.4 建立的元件**：Countdown（說明文字＋等寬數字；24 小時以上「剩 2 天 5 小時」、1～24 小時「剩 5 小時 12 分」、未滿 1 小時 `mm:ss`；下方「{絕對時間} 截止」；變體 `muted`／`live`／`appeal`／`destructive`；歸零後顯示「已截止 · 系統處理中」並每 5 秒重抓，最多 2 分鐘）、Page banner（同頁最多一則）。S2 以 `Tabs` 呈現，2.4 先做「總覽」分頁。
+- **2.4 建立的元件**：Countdown（說明文字＋等寬數字；24 小時以上「剩 2 天 5 小時」、1～24 小時「剩 5 小時 12 分」、未滿 1 小時 `mm:ss`；下方「{絕對時間} 截止」，格式如 `10/18（六）19:00`（Asia/Taipei）；變體 `muted`／`live`／`appeal`／`destructive`；歸零後顯示「已截止 · 系統處理中」並每 5 秒重抓，最多 2 分鐘）、Page banner（同頁最多一則）。S2 以 `Tabs` 呈現，2.4 先做「總覽」分頁。
 - **Invite link field**：期中改由 Story 3.1 建立，2.7 沿用（唯讀輸入框＋「複製連結」、Toast「已複製」、到期時間與「連結已過期」＋「產生新連結」）。
 - **空狀態文案**：S1「目前沒有公開的賽事。」、S25「你還沒有建立賽事。」＋「建立賽事」、S31「還沒有裁判接受邀請。複製邀請連結傳給裁判。」；過期邀請的 S23 寫「此裁判邀請已過期，請向主辦方索取新連結。」。
 - 375 px 寬的手機上 S1、S2 沒有橫向捲軸。

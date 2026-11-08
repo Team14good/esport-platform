@@ -112,6 +112,7 @@ context:
   - 矩陣的「某層失敗」：以竄改的 junit 與結束碼餵報告腳本（報告列出失敗案例與結束碼），腳本流程沒有 `set -e`、`record` 累計結束碼（讀程式確認），沒有實際注入失敗跑過一次總指令。
   - 矩陣的「分支覆蓋率不足」：以竄改的 coverage json 測 `check_branch_coverage.py`（低於門檻與沒有資料都結束碼 1）。「測試檔沒標註」：暫時新增未登記的測試檔，`test_every_test_file_is_listed` 失敗。
 - **其他 PR 要注意**：本 Story 合併後，新增後端測試檔都要加進 `tests/traceability.yaml`，否則 CI 失敗。#56、#57、#59 若有新增測試檔，合併 main 後要補一列。
+- **PR #61 審查後修正（2026-11-09，D 核准時要求）**：`test_score_concurrency.py` 原本用 `not o.startswith("<")` 判斷業務錯誤，但 `repr(IntegrityError(...))` 等不是 `<` 開頭，非預期錯誤會被算成業務錯誤；改為 `unexpected:` 前綴，並斷言其餘結果都是 `RESULT_ALREADY_SUBMITTED`。`traceability.yaml` 依 D 的確認改正 `test_replay_hooks.py`、`test_match_transitions.py` 的 FR，`test_score_concurrency.py` 補 5.4／FR-27；另補 #64 新增的 3 個測試檔。
 
 ## Spec Change Log
 

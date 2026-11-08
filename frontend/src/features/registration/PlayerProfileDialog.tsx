@@ -1,16 +1,10 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
 import { FormErrorAlert } from "@/components/common/FormErrorAlert"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { ResponsiveDialog } from "@/components/common/ResponsiveDialog"
 import {
   Form,
   FormControl,
@@ -29,14 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import { useIsMobile } from "@/hooks/useMobile"
 import { type ApiError, applyFieldErrors, parseApiError } from "@/lib/api-error"
 import { ScreenshotUploader } from "./ScreenshotUploader"
 
@@ -106,7 +92,6 @@ export function PlayerProfileDialog({
   uploadProgress = null,
   onSubmit,
 }: PlayerProfileDialogProps) {
-  const isMobile = useIsMobile()
   const [formError, setFormError] = useState<ApiError | null>(null)
   const schema = useMemo(
     () => buildSchema(Boolean(uploadedScreenshotName)),
@@ -248,8 +233,7 @@ export function PlayerProfileDialog({
   )
 
   return (
-    <ResponsiveShell
-      isMobile={isMobile}
+    <ResponsiveDialog
       open={open}
       onOpenChange={(next) => {
         // 送出中不能關閉（Esc、點遮罩、關閉鈕），否則請求失敗時錯誤沒地方顯示
@@ -258,53 +242,9 @@ export function PlayerProfileDialog({
       }}
       title={title}
       description={description}
+      testIdPrefix="player-profile"
     >
       {body}
-    </ResponsiveShell>
-  )
-}
-
-function ResponsiveShell({
-  isMobile,
-  open,
-  onOpenChange,
-  title,
-  description,
-  children,
-}: {
-  isMobile: boolean
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: string
-  description: string
-  children: ReactNode
-}) {
-  if (isMobile) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[90dvh] overflow-y-auto"
-          data-testid="player-profile-sheet"
-        >
-          <SheetHeader>
-            <SheetTitle>{title}</SheetTitle>
-            <SheetDescription>{description}</SheetDescription>
-          </SheetHeader>
-          <div className="px-4 pb-4">{children}</div>
-        </SheetContent>
-      </Sheet>
-    )
-  }
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="player-profile-dialog">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        {children}
-      </DialogContent>
-    </Dialog>
+    </ResponsiveDialog>
   )
 }

@@ -60,7 +60,7 @@ competition/test_match_api.py:
 competition/test_match_transitions.py:
   layer: integration
   stories: ["4.1"]
-  frs: [FR-21]
+  frs: [FR-25, NFR-1]
 competition/test_progression.py:
   layer: unit
   stories: ["5.5", "5.6"]
@@ -80,7 +80,7 @@ competition/test_replay_clear.py:
 competition/test_replay_hooks.py:
   layer: integration
   stories: ["6.2", "6.5"]
-  frs: [FR-31, FR-33]
+  frs: [FR-31, FR-22, FR-4, FR-23]
 competition/test_reschedule.py:
   layer: integration
   stories: ["4.3"]
@@ -91,8 +91,8 @@ competition/test_schedule.py:
   frs: [FR-23]
 competition/test_score_concurrency.py:
   layer: integration
-  stories: ["5.3", "7.3"]
-  frs: [FR-26, NFR-1]
+  stories: ["5.3", "5.4", "7.3"]
+  frs: [FR-26, FR-27, NFR-1]
 competition/test_score_entry.py:
   layer: integration
   stories: ["5.3", "5.4"]
@@ -141,6 +141,14 @@ core/test_storage.py:
   layer: unit
   stories: ["3.2"]
   frs: [FR-12]
+disputes/test_report_concurrency.py:
+  layer: integration
+  stories: ["6.4"]
+  frs: [FR-32, NFR-1]
+disputes/test_reports.py:
+  layer: integration
+  stories: ["6.4"]
+  frs: [FR-32, FR-5, NFR-5]
 identity/test_demo_data.py:
   layer: integration
   stories: ["7.1"]
@@ -213,6 +221,10 @@ registration/test_player_profile_api.py:
   layer: integration
   stories: ["3.2"]
   frs: [FR-12]
+registration/test_report_functions.py:
+  layer: integration
+  stories: ["6.4"]
+  frs: [FR-32]
 registration/test_settlement_concurrency.py:
   layer: integration
   stories: ["3.4", "3.6"]

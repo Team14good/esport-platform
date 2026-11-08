@@ -4,6 +4,7 @@ import type { PublicTournament } from "@/client"
 import { Countdown, type CountdownVariant } from "@/components/common/Countdown"
 import { Button } from "@/components/ui/button"
 import { formatMatchDateTime } from "@/features/competition/match-time"
+import { ReportTeamEntry } from "@/features/disputes/ReportTeamEntry"
 import { useIsSignedIn } from "@/features/identity/auth"
 import { CreateTeamEntry } from "@/features/registration/CreateTeamEntry"
 import { formatInterval, formatRegistrationPeriod } from "./status"
@@ -107,6 +108,10 @@ export function TournamentOverview({
       <StatusPanel
         tournament={tournament}
         onCountdownExpire={onCountdownExpire}
+      />
+      <ReportTeamEntry
+        tournamentId={tournament.id}
+        tournamentStatus={tournament.status}
       />
       <dl className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-body">
         <Field term="狀態">

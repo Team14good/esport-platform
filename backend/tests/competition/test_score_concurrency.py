@@ -43,6 +43,7 @@ from tests.report_support import record_nfr1
 pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 THREADS = 8
+UNEXPECTED_PREFIX = "unexpected:"
 
 
 class World:
@@ -110,7 +111,10 @@ def world(fake_registration: FakeRegistration) -> Iterator[World]:
 
 
 def _run_parallel(actions: list[Callable[[Session], Any]]) -> list[str]:
-    """每個動作各用一條連線同時開始；成功 commit 回 "ok"，業務錯誤回錯誤代碼。"""
+    """每個動作各用一條連線同時開始。
+
+    成功 commit 回 "ok"，業務錯誤回錯誤代碼，其他例外回 `unexpected:` 開頭的字串。
+    """
     start = threading.Barrier(len(actions))
     outcomes: list[str] = []
     lock = threading.Lock()
@@ -124,8 +128,9 @@ def _run_parallel(actions: list[Callable[[Session], Any]]) -> list[str]:
                 result = "ok"
             except BusinessError as exc:
                 result = exc.code
-            except Exception as exc:  # 讓非預期錯誤（例如唯一鍵衝突）出現在斷言訊息裡
-                result = repr(exc)
+            except Exception as exc:
+                # 非預期錯誤（唯一鍵衝突、死結、barrier 逾時）另外標記，不算業務錯誤
+                result = f"{UNEXPECTED_PREFIX}{exc!r}"
         with lock:
             outcomes.append(result)
 
@@ -136,6 +141,10 @@ def _run_parallel(actions: list[Callable[[Session], Any]]) -> list[str]:
         thread.join(timeout=30)
     assert not any(thread.is_alive() for thread in threads)
     return outcomes
+
+
+def _business_errors(outcomes: list[str]) -> list[str]:
+    return [o for o in outcomes if o != "ok" and not o.startswith(UNEXPECTED_PREFIX)]
 
 
 def _audits(db: Session, world: World, action: str) -> list[AuditLog]:
@@ -162,7 +171,7 @@ def test_parallel_records_of_the_same_game_keep_one_row(world: World) -> None:
         match = check.get(Match, world.match_id)
         logs = _audits(check, world, "match.game_recorded")
     succeeded = outcomes.count("ok")
-    business_errors = [o for o in outcomes if o != "ok" and not o.startswith("<")]
+    business_errors = _business_errors(outcomes)
     record_nfr1(
         "同時登錄同一場次同一局",
         submitted=THREADS,
@@ -218,7 +227,7 @@ def test_parallel_submissions_of_the_same_match_happen_once(world: World) -> Non
             )
             if event.payload.get("match_id") == str(world.match_id)
         ]
-    business_errors = [o for o in outcomes if o != "ok" and not o.startswith("<")]
+    business_errors = _business_errors(outcomes)
     record_nfr1(
         "同時送出同一場次的系列結果",
         submitted=THREADS,
@@ -230,7 +239,7 @@ def test_parallel_submissions_of_the_same_match_happen_once(world: World) -> Non
     )
 
     assert outcomes.count("ok") == 1, outcomes
-    assert len(business_errors) == THREADS - 1, outcomes
+    assert set(outcomes) - {"ok"} == {"RESULT_ALREADY_SUBMITTED"}, outcomes
     assert match is not None
     assert match.status == MatchStatus.APPEAL_WINDOW
     assert (match.wins_a, match.wins_b) == (2, 0)
