@@ -210,3 +210,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md`
   summary: （中）報名截止工作 `close_registrations` 每輪只取最早到期的一場；那場在 `close_registration` 一直拋錯（例如缺快照的 `RuntimeError`）時，worker 每輪都卡在它，之後到期的賽事永遠不會轉為「報名截止」。
   evidence: 2026-11-05 Story 3.6 截止 worker 審查第 1 輪（Blind Hunter、Edge Case Hunter、Verification Gap 都提出）。`find_due_registration_end_id` 依 `registration_end`、id 取第一筆，`run_once` 遇錯 rollback 後結束本輪該工作；`open_due_registration`、`allocate_due_priority_window` 是相同模式。處理時讓 worker 跳過本輪失敗過的候選（或逐筆在 savepoint 內嘗試），並補「第一場拋錯時第二場仍會關閉」的測試。
+
+## Deferred from: code review of spec-6-1-file-appeal.md (2026-11-09)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-1-file-appeal.md`
+  summary: （中，未驗證）賽事已取消時，仍在申訴期的場次可以提出申訴並轉為申訴中；`get_appeal_state` 也會回可提出。`file_appeal` 只看場次狀態與期限，沒有檢查賽事狀態。
+  evidence: 2026-11-09 Story 6.1 審查（Edge Case Hunter）。期中 2.6 取消賽事擱置，賽事只會在決賽與季軍賽都確認後轉為已結束（此時所有場次都已確認），所以目前走不到；2.6 實作時若取消賽事不作廢場次，就要在 `file_appeal` 鎖住賽事後檢查 `finished`／`cancelled` 並回 `APPEAL_NOT_ALLOWED`，`get_appeal_state` 同步，補測試。

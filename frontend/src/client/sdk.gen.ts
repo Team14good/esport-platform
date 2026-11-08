@@ -52,6 +52,15 @@ import type {
   competitionUnassignRefereeData,
   competitionUnassignRefereeErrors,
   competitionUnassignRefereeResponses,
+  disputesDownloadAppealAttachmentData,
+  disputesDownloadAppealAttachmentErrors,
+  disputesDownloadAppealAttachmentResponses,
+  disputesFileAppealData,
+  disputesFileAppealErrors,
+  disputesFileAppealResponses,
+  disputesReadAppealStateData,
+  disputesReadAppealStateErrors,
+  disputesReadAppealStateResponses,
   identityApproveOrganizerApplicationData,
   identityApproveOrganizerApplicationErrors,
   identityApproveOrganizerApplicationResponses,
@@ -1396,6 +1405,75 @@ export class CompetitionService {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+}
+
+export class DisputesService {
+  /**
+   * Read Appeal State
+   *
+   * S4 申訴入口：登入者本隊現在能不能提出申訴；不透露另一隊有沒有申訴。
+   */
+  public static readAppealState<ThrowOnError extends boolean = true>(
+    options: Options<disputesReadAppealStateData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesReadAppealStateResponses,
+      disputesReadAppealStateErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/appeal-state",
+      ...options,
+    })
+  }
+
+  /**
+   * File Appeal
+   *
+   * S21 提出申訴（multipart）：說明 1～1000 字，附件最多一張（JPG／PNG，5 MB 內）。
+   *
+   * 只有該場兩隊的隊長能在申訴期限內提出，每隊每場一次；第一筆申訴讓場次轉為申訴中。
+   */
+  public static fileAppeal<ThrowOnError extends boolean = true>(
+    options: Options<disputesFileAppealData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      disputesFileAppealResponses,
+      disputesFileAppealErrors,
+      ThrowOnError
+    >({
+      ...formDataBodySerializer,
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/appeals",
+      ...options,
+      headers: {
+        "Content-Type": null,
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Download Appeal Attachment
+   *
+   * 下載申訴附件；只有該賽事主辦方（AD-15）。
+   */
+  public static downloadAppealAttachment<ThrowOnError extends boolean = true>(
+    options: Options<disputesDownloadAppealAttachmentData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesDownloadAppealAttachmentResponses,
+      disputesDownloadAppealAttachmentErrors,
+      ThrowOnError
+    >({
+      responseType: "blob",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/appeals/{appeal_id}/attachment",
+      ...options,
     })
   }
 }
