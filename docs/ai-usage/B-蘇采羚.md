@@ -376,3 +376,51 @@
 - 問題與修正：子代理在瀏覽器實測時抓到單元測試漏掉的 bug：產生的 client 把 `null` 回應換成 `{}`，從未產生過邀請時 S31 顯示空白連結與「賽事已結束」，單元測試因 mock 成 `null` 而沒發現；改為有 `token` 才算有邀請，mock 也改成 `{}`。審查 19 筆：11 筆修正（公開頁連帶載入主辦方頁的程式、接受失敗後卡片沒更新、背景重抓失敗蓋掉成功畫面、賽事未載入前按鈕可按等），1 筆延後（S31 與 D 的 S30 各定義一次同一個裁判名單查詢 key），5 筆不處理，2 筆誤報。主代理驗證時第一次跑 `generate-client.sh` 因工作區沒有 `.env` 而沒有執行，輸出卻顯示「client unchanged」，AI 看到錯誤訊息後判定那次比對無效，改用 `COMPOSE_ENV_FILES` 指向主資料夾的 `.env` 重跑
 - 成熟度：L4（spec → 子代理實作與實測 → 多個審查者 → 主代理驗證）
 - 證據：spec 的 Review Triage Log、Implementation Notes；commit 未記錄
+
+### 2026-11-07｜程式／程式審查｜審查 D 的 #56：Story 4.1 S27 抽籤按鈕與抽籤狀態
+
+- Story／範圍：4.1 S27（D 的 PR #56，18 個檔案、+1459／-22 行；B 因 CODEOWNERS 的 `features/tournaments/` 被指定審查）
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）
+- 怎麼用：以 PR 的 spec（`spec-4-1-s27-draw-button.md`）與 `contracts/competition.md`、`epic-4-context.md` 為依據跑四個審查者；主代理逐筆對照程式核對、篩選，擬好審查意見，人確認後送出 approve
+- AI 產出：四個審查者共 26 點（Blind Hunter 13、Acceptance Auditor 6、Edge Case Hunter 7、Verification Gap 0）；核對後留 3 點（中 1：停留在 S27 時抽籤狀態不會自動更新；低 2：合約的鎖順序與程式不一致、draw-status 那列少寫 503），排除 23 點；一份審查意見
+- 人做了什麼：決定審查整份 diff（不只 tournaments 部分）；確認審查意見後送出 approve
+- 驗證：每個留下的發現都回到程式與合約核對；Verification Gap 確認 diff 的每個改動都有會失敗的測試
+- 問題與修正：審查者有數點誤判，主代理核對後排除：Blind Hunter 說抽籤後公開頁面快取會停在「尚未抽籤」，但專案的 QueryClient 預設 staleTime 為 0，換頁就重抓；Blind Hunter 也說合約沒寫這個 GET 會鎖賽事，實際合約有寫「先 `lock_tournament`」；Edge Case Hunter 說 `can_draw=false`、`reason=null` 會讓按鈕無說明地停用，以及主辦方在兩次讀取間被換人，後端都不會產生這種情況。工作階段中途中斷，Edge Case Hunter 沒跑完，重建 diff 確認程式沒變後重跑。bmad-code-review 的步驟要把發現寫進 spec 並改 sprint-status，但 PR 是 D 的，主代理改為只擬審查意見，不動別人的分支
+- 成熟度：L4（多個審查者並行，主代理逐筆核對，人在送出前確認）
+- 證據：PR #56 的審查意見（B，APPROVED，2026-11-07）
+
+### 2026-11-07｜程式／程式審查｜審查 D 的 #57：6.2／6.5 前置的 competition 公開函式
+
+- Story／範圍：6.2、6.5 前置（D 的 PR #57，5 個檔案、+802／-8 行；B 是這三個函式的呼叫端、disputes 約定 #55 的作者）
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）
+- 怎麼用：以 `spec-6-x-competition-hooks.md`、`contracts/disputes.md`、`contracts/competition.md` 為依據跑四個審查者；主代理對照 B 自己的 disputes 約定與程式逐筆核對，擬審查意見，人確認後送出 approve
+- AI 產出：四個審查者共 16 點（Blind Hunter 12、Edge Case Hunter 4、Verification Gap 0、Acceptance Auditor 0 點違反、4 點備註）；核對後留 2 點低度約定文字建議（`get_replay_window` 的場次歸屬與主辦方由呼叫端檢查、`unassign_referee_if_member` 的狀態前提沒有在程式裡擋），另整理出 B 做 6.2 時要注意的呼叫順序（`check_replay_time` 要在 `clear_for_replay` 之前）
+- 人做了什麼：確認審查意見後送出 approve
+- 驗證：每個留下的發現都回到程式與約定核對；Verification Gap 確認改動都有會失敗的測試
+- 問題與修正：Blind Hunter 說 `list_matches(fresh=True)` 會用資料庫的值蓋掉呼叫端還沒 flush 的修改，主代理查 `repository.list_matches` 與 Session 設定後判定為誤判：查詢前 autoflush 會先寫入；Edge Case Hunter 提的「季軍賽作廢時仍限制準決賽重賽時間」是 4.3 `_reschedule_window` 既有的行為，不是這個 PR 造成的
+- 成熟度：L4（多個審查者並行，主代理逐筆核對，人在送出前確認）
+- 證據：PR #57 的審查意見（B，APPROVED，2026-11-07）
+
+### 2026-11-07｜需求／一致性檢查｜比對已實作的功能與原始規劃文件
+
+- Story／範圍：Epic 1～5、7 已完成或進行中的 Story（1.1～1.5、1.7、1.8、2.1、2.2、2.4、2.7、3.1～3.4、3.6、4.1、4.3、4.4、4.6、5.1～5.6、5.8、7.1、7.2）與 Epic 6 現況
+- 工具：Claude Code（Opus 5.5）＋三個唯讀子代理（依 Epic 分工）
+- 怎麼用：子代理以 `epics.md`（套用期中版調整）、PRD、`EXPERIENCE.md`、架構文件為準，逐條對照 main 的程式與測試，區分「符合／部分符合／不符／未實作／有意偏離（已記錄）」；主代理抽查關鍵發現
+- AI 產出：每個 Story 的 AC 對照表；7 個沒有追蹤的落差（S27 缺報名截止與優先期結束倒數、S12 缺下一場與優先期倒數、抽籤順延沒有提示主辦方、頒獎台與名次標記未做、比分登錄沒有併發測試、7.2 沒有操作紀錄斷言）、1 個過時的延後項目（5.2 第二階段）
+- 人做了什麼：提出要檢查「做的東西跟原本文件是否相符」
+- 驗證：主代理抽查 4 項：前端沒有 `podium` 元件、S12 沒有下一場資料、前端沒用到 `delayed_rounds`、S27 沒有 `Countdown`，都屬實；7 個落差尚未寫入 deferred-work
+- 問題與修正：找到 B 自己負責的 2.4 有一條 AC（S27 倒數）在 2.2 第二階段 spec 寫「不做」、2.4 spec 只做 S2，兩邊都沒接到，Story 卻已標 done；這是流程上的缺口，不是 AI 這次的錯誤
+- 成熟度：L3（AI 依既有規格逐條比對，人決定後續處理）
+- 證據：未記錄（結果只在對話中，尚未寫入 deferred-work）
+
+### 2026-11-07｜程式／程式生成｜Story 2.4 補遺：S27 報名開始、優先期結束、報名截止倒數
+
+- Story／範圍：2.4 補遺（分支 `story/2-4-s27-countdown`，spec `_bmad-output/implementation-artifacts/spec-2-4-s27-countdowns.md`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（epic context 重新產生子代理、實作子代理、Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：由文件比對找到的落差開 spec；主代理調查後寫 spec 並列出 2 個需要人決定的問題；子代理依 spec 實作；三個審查者審 diff；主代理逐筆核對、交回子代理補測試，最後自己在容器跑完整驗證
+- AI 產出：`OrganizerTournamentOverview.tsx` 新增私有元件 `OrganizerStatusCountdowns`（沿用 2.4 的 `Countdown`、`registrationEndVariant`、`REGISTRATION_OPENING_TEXT`，不改 S2）；`organizer-tournaments.test.tsx` 新增〈S27 狀態倒數〉14 個測試，涵蓋 I/O 矩陣 7 個情境；sprint-status 註解；重新產生 `epic-2-context.md`（只多一行時間格式）
+- 人做了什麼：決定尚未開放時 S27 也顯示「報名開始」倒數（照 EXPERIENCE.md）、優先期倒數歸零後直接隱藏（避免 2 分鐘後誤報逾時）；核准 spec
+- 驗證：容器內 Biome 檢查 244 個檔案通過、型別檢查 0 錯誤、單元測試 63 個檔案 845 個全過；三個審查者共 15 點，3 點補測試（重抓失敗不重試也不換錯誤頁、尚未開放不顯示優先期倒數、徽章斷言檢查實際色調），12 點不處理（4 點誤判，8 點低度），0 點延後；375px 手動檢查未做
+- 問題與修正：審查找出測試「看起來有驗、其實不會紅」的地方：倒數歸零後重抓的錯誤處理（`retry: false`、`.catch`）沒有任何失敗的測試，子代理補測試後以暫存副本拿掉 `retry: false` 確認新測試會失敗；徽章斷言只檢查屬性存在、不檢查值。Blind Hunter 建議把倒數規則搬到 `status.ts`，主代理判定會改到 S2，違反 spec 的 Never 而不採用。子代理第一次跑完整單元測試時有 1 個與本次無關的測試逾時，單獨重跑與全套重跑都通過；主代理最後重跑全套也通過。bmad-build 最後一步要 commit，依 CLAUDE.md「除非使用者要求，不要 commit」沒有執行
+- 成熟度：L4（spec → 子代理實作 → 多個審查者 → 主代理核對與完整驗證，人在 spec 決策點介入）
+- 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；commit 未建立

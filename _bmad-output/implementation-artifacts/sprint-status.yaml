@@ -53,7 +53,7 @@ development_status:
   2-1-平台管理員維護遊戲設定與學校清單: done  # 負責：B；第一階段（後端，PR #9）、第二階段（S36 畫面，PR #30）完成
   2-2-主辦方建立賽事: done  # 負責：B；第一階段（後端，PR #15）、第二階段（S25～S27 畫面，PR #31）完成
   2-3-分輪設定-bo-數: backlog  # 擱置（期中後）
-  2-4-公開賽事列表與賽事頁: done  # 負責：B；第一階段（API、S1、S2 總覽、Countdown、Page banner，PR #29）、第二階段狀態徽章與申請主辦方 banner（PR #32）已合併；第二階段第 3 項 S1 空狀態對主辦方的「建立賽事」（PR #38，spec-2-4-s1-empty-create-tournament.md）已合併
+  2-4-公開賽事列表與賽事頁: done  # 負責：B；第一階段（API、S1、S2 總覽、Countdown、Page banner，PR #29）、第二階段狀態徽章與申請主辦方 banner（PR #32）已合併；第二階段第 3 項 S1 空狀態對主辦方的「建立賽事」（PR #38，spec-2-4-s1-empty-create-tournament.md）已合併；補遺 S27 倒數（報名開始、優先期結束、報名截止，spec-2-4-s27-countdowns.md）
   2-5-抽籤前修改賽事: backlog  # 擱置（期中後）
   2-6-取消賽事: backlog  # 擱置（期中後）
   2-7-邀請裁判: done  # 負責：B；第一階段（後端，PR #40）、第二階段（S31、S23 畫面，PR #54）完成
