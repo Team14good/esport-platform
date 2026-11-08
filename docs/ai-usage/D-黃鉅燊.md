@@ -623,4 +623,14 @@
 - 驗證：修補前後端全套 2001 passed；修補後 competition 與架構測試 1003 passed、lint 通過（全套第二次跑在本機記憶體不足被系統停掉，以 CI 為準）；三個變異（先寫再拋、只看 `next_match_id`、拿掉讀最新值）都讓測試轉紅
 - 問題與修正：審查找出測試「看起來有驗、其實不會紅」的四處：錯誤路徑在 rollback 之後才比對「不寫入」、錯誤訊息兩邊用同一個 helper 互比、季軍賽與決賽排同一時間所以測不到取較早一場、替身對待定隊伍回 False 所以測不到待定檢查；都改寫後用變異確認會紅。另外審查員指出 spec 對 `get_replay_window` 漏了賽事狀態與棄權條件，AI 沒有自行改 frozen 區塊，問使用者後才改
 - 成熟度：L3（AI 實作、審查與修正，人決定規格）
+### 2026-11-05｜實作／測試｜S27 抽籤按鈕與抽籤狀態（4.1 最後一塊）
+
+- Story／範圍：4.1（D）的 S27 抽籤按鈕
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；實作與三個審查員（Blind Hunter、Edge Case Hunter、Verification Gap）都是子代理
+- 怎麼用：AI 指出 UX 要求「正取不足 2 隊停用」，但開放報名中的正取名單要到抽籤當下才分配，前端沒資料可判斷，提出做法讓使用者選；使用者選「後端預估＋按下再確認」。AI 設計成在 savepoint 裡跑抽籤同一套分配再回滾，保證預估與實抽同一條程式路徑
+- AI 產出：`GET /organizer/tournaments/{id}/draw-status`、`DrawStatus`；`draw` 的檢查抽成 `_draw_blocked` 與 `_DRAW_ERRORS` 共用；`DrawButton` 插入 B 的 S27 總覽；後端 29＋1 個、前端 9 個測試；contracts、deferred-work、sprint-status；重新產生 client
+- 人做了什麼：使用者決定 S27 停用的做法、核准 spec
+- 驗證：後端全套 2005 passed、lint 通過；前端 biome 通過、相關 45 個單元測試通過；實作者把 `raise` 改成 `return` 做變異，6 個「預估不留痕跡」測試都會紅；把成功提示改字，前端測試會紅
+- 問題與修正：三個審查員無高嚴重度，修 4 類、延後 1 項、駁回 2 項（理由在 spec 的 Review Triage Log）。實際修正的問題：開放報名中每次預估都鎖住賽事並重做分配，而前端預設切回分頁就重抓，會卡住學生報名，改成 30 秒內不重抓、先驗主辦方再取鎖；狀態查詢失敗時按鈕無聲消失，改成顯示錯誤與重新載入；前端測試拿正式碼的常數比對 spec 文字，改字也不會紅（循環斷言），改用字面字串並以變異確認；原因代碼的檢查順序、`draw` 兩則錯誤訊息沒有測試固定
+- 成熟度：L3（AI 實作、審查與修正，人決定設計與範圍）
 - 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
