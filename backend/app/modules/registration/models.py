@@ -329,6 +329,13 @@ class TeamRead(BaseModel):
     members: list[TeamMemberRole]
 
 
+class TeamSummary(BaseModel):
+    """給其他模組使用的隊伍摘要：只有 id 與隊名（Story 6.4 檢舉選單）。"""
+
+    id: uuid.UUID
+    name: str
+
+
 class RegistrationRead(BaseModel):
     """給其他模組使用的報名資料。
 

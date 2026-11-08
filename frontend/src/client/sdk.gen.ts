@@ -52,6 +52,18 @@ import type {
   competitionUnassignRefereeData,
   competitionUnassignRefereeErrors,
   competitionUnassignRefereeResponses,
+  disputesDownloadReportAttachmentData,
+  disputesDownloadReportAttachmentErrors,
+  disputesDownloadReportAttachmentResponses,
+  disputesFileReportData,
+  disputesFileReportErrors,
+  disputesFileReportResponses,
+  disputesListReportableTeamsData,
+  disputesListReportableTeamsErrors,
+  disputesListReportableTeamsResponses,
+  disputesListTournamentReportsData,
+  disputesListTournamentReportsErrors,
+  disputesListTournamentReportsResponses,
   identityApproveOrganizerApplicationData,
   identityApproveOrganizerApplicationErrors,
   identityApproveOrganizerApplicationResponses,
@@ -1396,6 +1408,96 @@ export class CompetitionService {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+}
+
+export class DisputesService {
+  /**
+   * List Reportable Teams
+   *
+   * S20 檢舉對象選單：同賽事已送出報名、不是自己的隊伍（依隊名排序）。
+   *
+   * 只有該賽事待分配、正取、候補、已參賽隊伍的隊長能取得；賽事已結束或已取消時
+   * 回 409 `REPORT_NOT_ALLOWED`。
+   */
+  public static listReportableTeams<ThrowOnError extends boolean = true>(
+    options: Options<disputesListReportableTeamsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesListReportableTeamsResponses,
+      disputesListReportableTeamsErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/reportable-teams",
+      ...options,
+    })
+  }
+
+  /**
+   * File Report
+   *
+   * S20 提出檢舉（multipart）：對象、說明（1～1000 字）、選擇性截圖（JPG／PNG，5 MB 內）。
+   */
+  public static fileReport<ThrowOnError extends boolean = true>(
+    options: Options<disputesFileReportData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      disputesFileReportResponses,
+      disputesFileReportErrors,
+      ThrowOnError
+    >({
+      ...formDataBodySerializer,
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/reports",
+      ...options,
+      headers: {
+        "Content-Type": null,
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * List Tournament Reports
+   *
+   * S33 檢舉列表：只有該賽事主辦方；處理中在前，各組依提出時間由舊到新。
+   */
+  public static listTournamentReports<ThrowOnError extends boolean = true>(
+    options: Options<disputesListTournamentReportsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesListTournamentReportsResponses,
+      disputesListTournamentReportsErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/reports",
+      ...options,
+    })
+  }
+
+  /**
+   * Download Report Attachment
+   *
+   * 下載檢舉附件：只有該賽事主辦方。
+   */
+  public static downloadReportAttachment<ThrowOnError extends boolean = true>(
+    options: Options<disputesDownloadReportAttachmentData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesDownloadReportAttachmentResponses,
+      disputesDownloadReportAttachmentErrors,
+      ThrowOnError
+    >({
+      responseType: "blob",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/reports/{report_id}/attachment",
+      ...options,
     })
   }
 }

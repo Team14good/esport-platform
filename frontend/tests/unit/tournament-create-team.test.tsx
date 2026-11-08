@@ -386,7 +386,9 @@ describe("S2 開放報名的「建立隊伍」入口", () => {
     renderApp(`/tournaments/${TOURNAMENT_ID}`)
 
     expect(await screen.findByText("抽籤準備中")).toBeInTheDocument()
+    // Story 6.4 的「檢舉隊伍」在任何未結束的狀態都會查我的隊伍（spec-6-4 Design Notes），
+    // 所以這裡改為等查詢完成後，確認仍沒有「建立隊伍」
+    await waitFor(() => expect(myTeams).toHaveBeenCalled())
     expect(screen.queryByRole("button", { name: "建立隊伍" })).toBeNull()
-    expect(myTeams).not.toHaveBeenCalled()
   })
 })
