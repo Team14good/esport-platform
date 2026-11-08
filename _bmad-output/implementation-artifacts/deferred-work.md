@@ -204,6 +204,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-7-s31-s23-referee-ui.md`
   summary: （中）裁判名單的查詢在兩處各定義一次：tournaments 的 `referee-queries.ts` `refereesQueryOptions`（S31）與 D 的 `features/competition/organizer-matches-queries.ts` `tournamentRefereesQueryOptions`（S30），都用 `["tournaments","organizer","referees",tournamentId]`；`queryFn`、`retry` 各寫一份，誰先掛載就用誰的設定，之後只改一邊會互相污染快取。
   evidence: 2026-11-05 Story 2.7 第二階段審查（Blind Hunter）。前端依賴方向是 competition → tournaments，不能反過來匯入 D 的定義；處理時請 D 把 `organizer-matches-queries.ts` 改成匯入 `refereesQueryOptions`，刪掉自己的定義（competition 只新增 import，不改 tournaments 的檔案）。
+- source_spec: _bmad-output/implementation-artifacts/spec-4-1-s27-draw-button.md
+  summary: S27 抽籤預估改成不寫入的純函式試算（目前在 savepoint 內真的分配再回滾，開放報名中每次預估都持有賽事列鎖）。
+  evidence: 2026-11-05 S27 審查。`get_draw_status` 在開放報名中呼叫 `finalize_for_draw` 後以例外回滾，每次預覽都重做分配、消耗 `audit_log.seq` 序列值並持有賽事列鎖到交易結束；前端只能以 `staleTime` 與關閉聚焦重抓降低頻率。改成 registration 提供不寫入的試算函式後可移除 savepoint。
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md`
   summary: （中）報名截止工作 `close_registrations` 每輪只取最早到期的一場；那場在 `close_registration` 一直拋錯（例如缺快照的 `RuntimeError`）時，worker 每輪都卡在它，之後到期的賽事永遠不會轉為「報名截止」。
   evidence: 2026-11-05 Story 3.6 截止 worker 審查第 1 輪（Blind Hunter、Edge Case Hunter、Verification Gap 都提出）。`find_due_registration_end_id` 依 `registration_end`、id 取第一筆，`run_once` 遇錯 rollback 後結束本輪該工作；`open_due_registration`、`allocate_due_priority_window` 是相同模式。處理時讓 worker 跳過本輪失敗過的候選（或逐筆在 savepoint 內嘗試），並補「第一場拋錯時第二場仍會關閉」的測試。

@@ -7,6 +7,7 @@ import { BackofficeLayout } from "@/components/layout/BackofficeLayout"
 import { ErrorPage } from "@/components/layout/ErrorPage"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { DrawButton } from "@/features/competition/DrawButton"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { tournamentNav } from "./organizer-nav"
@@ -142,5 +143,10 @@ export function OrganizerTournamentOverview({
 }) {
   const tournament = useQuery(myTournamentQueryOptions(tournamentId))
   if (!tournament.data) return null
-  return <OrganizerTournamentSummary tournament={tournament.data} />
+  return (
+    <>
+      <OrganizerTournamentSummary tournament={tournament.data} />
+      <DrawButton tournament={tournament.data} />
+    </>
+  )
 }
