@@ -424,3 +424,15 @@
 - 問題與修正：審查找出測試「看起來有驗、其實不會紅」的地方：倒數歸零後重抓的錯誤處理（`retry: false`、`.catch`）沒有任何失敗的測試，子代理補測試後以暫存副本拿掉 `retry: false` 確認新測試會失敗；徽章斷言只檢查屬性存在、不檢查值。Blind Hunter 建議把倒數規則搬到 `status.ts`，主代理判定會改到 S2，違反 spec 的 Never 而不採用。子代理第一次跑完整單元測試時有 1 個與本次無關的測試逾時，單獨重跑與全套重跑都通過；主代理最後重跑全套也通過。bmad-build 最後一步要 commit，依 CLAUDE.md「除非使用者要求，不要 commit」沒有執行
 - 成熟度：L4（spec → 子代理實作 → 多個審查者 → 主代理核對與完整驗證，人在 spec 決策點介入）
 - 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；commit 未建立
+
+### 2026-11-08｜程式／程式審查｜審查 D 的 #60：S27 抽籤狀態與 6.x 前置函式的審查後續
+
+- Story／範圍：4.1 S27、6.2／6.5 前置（D 的 PR #60，9 個檔案、+394／-22 行；處理 B 與 A 在 #56、#57 的建議）
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）
+- 怎麼用：以 `spec-4-1-followup-review.md`、前兩支 spec 與 competition、disputes 約定為依據跑四個審查者；主代理對照 B 先前的建議與自己的 #62、disputes 約定核對，擬審查意見，人確認後送出 approve
+- AI 產出：四個審查者共 17 點（Blind Hunter 11、Edge Case Hunter 1、Verification Gap 0、Acceptance Auditor 5）；核對後留 1 點低度建議（抽籤狀態的 queryKey 只有賽事 id，狀態變成報名截止後最多沿用 30 秒前的預估）與 1 點給 B 自己的提醒（`disputes.md` 第 124 行沒寫 `unassign_referee_if_member` 新的 `ValueError` 前提，6.5 要在 `confirm_walkover`／`confirm_match` 之前呼叫）
+- 人做了什麼：確認審查意見後送出 approve
+- 驗證：Verification Gap 確認每個改動拿掉後都有測試會失敗；留下的發現都回到程式與約定核對
+- 問題與修正：Edge Case Hunter 的 queryKey 發現是單看 #60 看不出的跨 PR 互動，主代理對照 B 自己的 #62（報名截止歸零後重抓賽事）確認會發生；Acceptance Auditor 指出 competition 約定改了前提、但呼叫端的 disputes 約定沒同步，主代理判斷這是 B 自己的檔案，記為 6.5 的待辦而不要求 D 修改（Never 條款不允許 D 改 disputes）
+- 成熟度：L4（多個審查者並行，主代理逐筆核對，人在送出前確認）
+- 證據：PR #60 的審查意見（B，APPROVED，2026-11-08）
