@@ -282,6 +282,25 @@ class BracketRead(BaseModel):
     matches: list[MatchRead]
 
 
+DrawStatusReason = Literal[
+    "already_drawn",
+    "not_drawable",
+    "start_passed",
+    "not_enough_teams",
+]
+
+
+class DrawStatus(BaseModel):
+    """S27 抽籤按鈕：現在能不能抽籤（與抽籤 API 同一套檢查與分配規則，不寫入）。"""
+
+    can_draw: bool
+    # None 代表可以抽籤；與抽籤 API 的錯誤碼一一對應：BRACKET_ALREADY_DRAWN、
+    # TOURNAMENT_NOT_DRAWABLE、TOURNAMENT_START_PASSED、NOT_ENOUGH_TEAMS
+    reason: DrawStatusReason | None
+    # 預估的正取隊數（開放報名中為分配後的數量）；在前面的檢查就被擋下時為 None
+    expected_teams: int | None
+
+
 class PublicTeamRef(BaseModel):
     id: uuid.UUID
     name: str

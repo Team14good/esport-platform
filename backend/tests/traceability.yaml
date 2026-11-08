@@ -41,6 +41,10 @@ competition/test_draw.py:
   layer: integration
   stories: ["4.1"]
   frs: [FR-19, FR-20]
+competition/test_draw_status.py:
+  layer: integration
+  stories: ["4.1"]
+  frs: [FR-19]
 competition/test_forfeit.py:
   layer: unit
   stories: ["5.2"]
@@ -73,6 +77,10 @@ competition/test_replay_clear.py:
   layer: integration
   stories: ["6.2"]
   frs: [FR-31]
+competition/test_replay_hooks.py:
+  layer: integration
+  stories: ["6.2", "6.5"]
+  frs: [FR-31, FR-33]
 competition/test_reschedule.py:
   layer: integration
   stories: ["4.3"]
@@ -185,6 +193,14 @@ registration/test_draw_functions.py:
   layer: integration
   stories: ["3.6"]
   frs: [FR-16, FR-19]
+registration/test_first_come_concurrency.py:
+  layer: integration
+  stories: ["3.5"]
+  frs: [FR-15, NFR-1]
+registration/test_first_come_submission.py:
+  layer: integration
+  stories: ["3.5"]
+  frs: [FR-15, FR-16, FR-17]
 registration/test_nfr1_registration_report.py:
   layer: integration
   stories: ["3.4", "7.3"]

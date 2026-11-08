@@ -600,3 +600,37 @@
 - 問題與修正：審查子代理指出 `forfeit_deadline` 在比賽中、申訴期仍回傳舊的過期值，前端可能顯示錯的倒數，改成只在待開打時給並補測試；也指出約定新寫的「6.2、6.5 要重新檢查」目前沒有實作，會被誤讀成現況，改標「目前只有 `advance` 實作」。AI 第一次套用修正時，取代字串在 `service.py` 出現 3 次而失敗，卻在同一個指令裡接著跑了全套測試（跑的是沒修正的版本），發現後停掉重跑
 - 成熟度：L2（AI 實作與驗證）
 - 證據：本 PR 的 CI 紀錄
+
+### 2026-11-05｜審查／合併｜B 的 #55（disputes 介面約定）
+
+- Story／範圍：6.x disputes 模組介面約定（B）中用到 competition 的部分
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 對照 competition 的程式審 B 的約定，指出重賽時間若直接用 `schedule.reschedule_window` 會漏掉相鄰場次與報到提前量、`disqualify` 頂替後要重新檢查裁判衝突、`correct_result` 要套 5.4 送出的兩個檢查，提議由 D 新增三個公開函式；B 依此更新後 AI 逐項核對再核准、合併
+- AI 產出：COMMENT 審查（4 點）、核准審查；合併 #55
+- 人做了什麼：使用者授權由 D 審查並合併所有人的 PR
+- 驗證：合併前 CI 綠燈；逐項比對 B 更新的 diff 與審查意見
+- 問題與修正：無
+- 成熟度：L2（AI 審查，人決定授權）
+- 證據：#55 的審查與合併紀錄
+
+### 2026-11-05｜實作／測試｜6.2／6.5 前置：重賽時間與裁判收回的公開函式
+
+- Story／範圍：competition（D）提供給 B 的 6.2 `replay_match`、6.5 `disqualify`
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；實作與兩個審查員（Blind Hunter、Edge Case Hunter 兼 Verification Gap）都是子代理
+- 怎麼用：依 #55 合併的約定寫 spec，子代理只新增包住既有私有函式的公開函式，改期的錯誤訊息抽成共用 helper
+- AI 產出：`check_replay_time`、`get_replay_window`、`unassign_referee_if_member`、`_reschedule_error`；37 個測試；contracts 補三列
+- 人做了什麼：使用者決定 `get_replay_window` 也擋已取消賽事與非棄權場次（審查後問人）
+- 驗證：修補前後端全套 2001 passed；修補後 competition 與架構測試 1003 passed、lint 通過（全套第二次跑在本機記憶體不足被系統停掉，以 CI 為準）；三個變異（先寫再拋、只看 `next_match_id`、拿掉讀最新值）都讓測試轉紅
+- 問題與修正：審查找出測試「看起來有驗、其實不會紅」的四處：錯誤路徑在 rollback 之後才比對「不寫入」、錯誤訊息兩邊用同一個 helper 互比、季軍賽與決賽排同一時間所以測不到取較早一場、替身對待定隊伍回 False 所以測不到待定檢查；都改寫後用變異確認會紅。另外審查員指出 spec 對 `get_replay_window` 漏了賽事狀態與棄權條件，AI 沒有自行改 frozen 區塊，問使用者後才改
+- 成熟度：L3（AI 實作、審查與修正，人決定規格）
+### 2026-11-05｜實作／測試｜S27 抽籤按鈕與抽籤狀態（4.1 最後一塊）
+
+- Story／範圍：4.1（D）的 S27 抽籤按鈕
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；實作與三個審查員（Blind Hunter、Edge Case Hunter、Verification Gap）都是子代理
+- 怎麼用：AI 指出 UX 要求「正取不足 2 隊停用」，但開放報名中的正取名單要到抽籤當下才分配，前端沒資料可判斷，提出做法讓使用者選；使用者選「後端預估＋按下再確認」。AI 設計成在 savepoint 裡跑抽籤同一套分配再回滾，保證預估與實抽同一條程式路徑
+- AI 產出：`GET /organizer/tournaments/{id}/draw-status`、`DrawStatus`；`draw` 的檢查抽成 `_draw_blocked` 與 `_DRAW_ERRORS` 共用；`DrawButton` 插入 B 的 S27 總覽；後端 29＋1 個、前端 9 個測試；contracts、deferred-work、sprint-status；重新產生 client
+- 人做了什麼：使用者決定 S27 停用的做法、核准 spec
+- 驗證：後端全套 2005 passed、lint 通過；前端 biome 通過、相關 45 個單元測試通過；實作者把 `raise` 改成 `return` 做變異，6 個「預估不留痕跡」測試都會紅；把成功提示改字，前端測試會紅
+- 問題與修正：三個審查員無高嚴重度，修 4 類、延後 1 項、駁回 2 項（理由在 spec 的 Review Triage Log）。實際修正的問題：開放報名中每次預估都鎖住賽事並重做分配，而前端預設切回分頁就重抓，會卡住學生報名，改成 30 秒內不重抓、先驗主辦方再取鎖；狀態查詢失敗時按鈕無聲消失，改成顯示錯誤與重新載入；前端測試拿正式碼的常數比對 spec 文字，改字也不會紅（循環斷言），改用字面字串並以變異確認；原因代碼的檢查順序、`draw` 兩則錯誤訊息沒有測試固定
+- 成熟度：L3（AI 實作、審查與修正，人決定設計與範圍）
+- 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄

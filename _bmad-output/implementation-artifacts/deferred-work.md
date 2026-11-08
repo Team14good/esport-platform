@@ -161,14 +161,8 @@
   summary: 示範資料的 tournaments 步驟已建立「FLOW 校園盃 特戰英豪」並寫入 `context.tournament_to_draw`（開放報名、開賽在啟動後 7 天），competition 步驟會嘗試抽籤；但目前沒有 registration 步驟建立 32 隊正取，registration 也還沒提供抽籤用的 `finalize_for_draw`、`list_accepted_teams` 等函式，實際啟動會記錄 `REGISTRATION_UNAVAILABLE` 並略過抽籤。
   evidence: 2026-11-04 Story 7.1 tournaments 步驟（B）完成後，以 compose 實際啟動確認的 log。剩下的是 C 的 registration 步驟（32 隊正取，放在 `STEPS` 的 tournaments 之後、competition 之前）與 contracts/competition.md〈二〉的四個函式；賽事維持 `open`，所以 `draw` 會先呼叫 `finalize_for_draw`（spec-7-1-tournaments-demo-step.md Decisions）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
-  summary: （中）Story 3.4～3.6 第二階段：先搶期送出與截止補位時，在同一個 `lock_tournament()` 鎖與交易內先呼叫 `backfill_vacancies` 讓有順位的候補遞補（以 `mark_status` 改為正取、寫操作紀錄、發事件），再以更新後的報名呼叫 `decide_first_come` 判定新送出的報名。
-  evidence: 2026-11-04 OG-Matcha 在 PR #28 的審查建議 1。期中抽籤前取消資格不立即遞補（epics.md 規則 6），先搶期會出現空位；不先遞補時新送出的隊伍會插到「候補第 1 位」前面（`test_backfill_without_backfill_new_submission_would_jump_queue`）。截止補位階段 `backfill_vacancies(phase=AFTER_DEADLINE)` 與 `fill_from_waitlist(remaining=空位)` 相同，擇一呼叫即可。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
   summary: （中）先搶期釋出的是優先期代表隊（期中由 6.5 抽籤前取消資格觸發）時，`backfill_vacancies` 依先搶期順位把名額給別校，沒有依 FR-17「由同校平均段位積分次高的隊伍遞補」。
   evidence: 2026-11-04 PR #28 審查修正的 Code Review（Blind Hunter）。3.4 第一階段的 deferred 項目寫「代表隊退出只在撤回、退回時觸發，期中不會發生」，但期中 6.5 可在先搶期取消優先期代表隊的資格，之後分配時就會走到這條路；同校候補的 `representative_backfill` 也會因代表隊不再是正取而變成 False。修正需在本模組新增同校遞補規則（需確認 `priority_schools` 中哪一隊是代表隊），並讓 `backfill_vacancies` 先處理。
-- source_spec: none
-  summary: Story 3.5 第二階段：先搶期送出時，在 3.3 `submit_registration` 的 `lock_tournament()` 鎖內先呼叫 `backfill_vacancies(FIRST_COME)` 遞補，再以 `decide_first_come` 判定正取或候補，回應直接帶結果與候補順位；補 200 筆平行送出的併發整合測試。
-  evidence: 2026-11-04 bmad-build 單一目標檢查，邱芯彤選擇把 3.4～3.6 第二階段拆開。3.5 只改送出流程與併發測試，可獨立合併，排在 3.6 之後；沿用 3.4 第二階段建立的「優先期有報名的學校」與 S17／S12 狀態顯示。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
   summary: S4 要隨 `is_scorer` 顯示或隱藏比分登錄面板：指派、改派、收回後（含晉級衝突自動收回），`ScoreEntryState.is_scorer` 會改變，S4 需重抓 `GET .../score-entry`（A 的 S4 工作）。
   evidence: 2026-11-04 承接已刪除的 5.3 項目；後端端對端測試已在 `test_assign_referee.py`（指派／收回後 `is_scorer` 切換、晉級衝突收回），前端尚未接上。
@@ -193,6 +187,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-7-s31-s23-referee-ui.md`
   summary: （中）裁判名單的查詢在兩處各定義一次：tournaments 的 `referee-queries.ts` `refereesQueryOptions`（S31）與 D 的 `features/competition/organizer-matches-queries.ts` `tournamentRefereesQueryOptions`（S30），都用 `["tournaments","organizer","referees",tournamentId]`；`queryFn`、`retry` 各寫一份，誰先掛載就用誰的設定，之後只改一邊會互相污染快取。
   evidence: 2026-11-05 Story 2.7 第二階段審查（Blind Hunter）。前端依賴方向是 competition → tournaments，不能反過來匯入 D 的定義；處理時請 D 把 `organizer-matches-queries.ts` 改成匯入 `refereesQueryOptions`，刪掉自己的定義（competition 只新增 import，不改 tournaments 的檔案）。
+- source_spec: _bmad-output/implementation-artifacts/spec-4-1-s27-draw-button.md
+  summary: S27 抽籤預估改成不寫入的純函式試算（目前在 savepoint 內真的分配再回滾，開放報名中每次預估都持有賽事列鎖）。
+  evidence: 2026-11-05 S27 審查。`get_draw_status` 在開放報名中呼叫 `finalize_for_draw` 後以例外回滾，每次預覽都重做分配、消耗 `audit_log.seq` 序列值並持有賽事列鎖到交易結束；前端只能以 `staleTime` 與關閉聚焦重抓降低頻率。改成 registration 提供不寫入的試算函式後可移除 savepoint。
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md`
   summary: （中）報名截止工作 `close_registrations` 每輪只取最早到期的一場；那場在 `close_registration` 一直拋錯（例如缺快照的 `RuntimeError`）時，worker 每輪都卡在它，之後到期的賽事永遠不會轉為「報名截止」。
   evidence: 2026-11-05 Story 3.6 截止 worker 審查第 1 輪（Blind Hunter、Edge Case Hunter、Verification Gap 都提出）。`find_due_registration_end_id` 依 `registration_end`、id 取第一筆，`run_once` 遇錯 rollback 後結束本輪該工作；`open_due_registration`、`allocate_due_priority_window` 是相同模式。處理時讓 worker 跳過本輪失敗過的候選（或逐筆在 savepoint 內嘗試），並補「第一場拋錯時第二場仍會關閉」的測試。

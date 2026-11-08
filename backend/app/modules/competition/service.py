@@ -24,6 +24,8 @@ from app.modules.competition.models import (
     CheckInRead,
     CheckInStatus,
     CheckInStatusReason,
+    DrawStatus,
+    DrawStatusReason,
     GameScoreIn,
     ManagedMatch,
     Match,
@@ -205,6 +207,98 @@ def _bracket_to_read(
 
 # ---------------------------------------------------------------- 抽籤
 
+# 抽籤至少要有的正取隊數
+_MIN_DRAW_TEAMS = 2
+
+# 不能抽籤的原因 → 抽籤 API 的錯誤碼與訊息（狀態 API 的小寫代碼與錯誤碼一一對應）
+_DRAW_ERRORS: dict[DrawStatusReason, tuple[str, str]] = {
+    "already_drawn": ("BRACKET_ALREADY_DRAWN", "這場賽事已經抽過籤了。"),
+    "not_drawable": ("TOURNAMENT_NOT_DRAWABLE", "賽事目前的狀態不能抽籤。"),
+    "start_passed": ("TOURNAMENT_START_PASSED", "開賽時間已過，無法抽籤"),
+    "not_enough_teams": ("NOT_ENOUGH_TEAMS", "正取不足 2 隊，無法抽籤"),
+}
+
+
+def _draw_error(reason: DrawStatusReason) -> BusinessError:
+    code, message = _DRAW_ERRORS[reason]
+    return BusinessError(code, message, status_code=409)
+
+
+def _draw_blocked(
+    session: Session, tournament: TournamentRead
+) -> DrawStatusReason | None:
+    """抽籤在分配正取之前的檢查（依序）；呼叫端已鎖住賽事並確認是主辦方。"""
+    if repository.get_bracket_by_tournament(session, tournament.id) is not None:
+        return "already_drawn"
+    if tournament.status not in _DRAWABLE:
+        return "not_drawable"
+    if tournament.start_at <= clock.now():
+        return "start_passed"
+    return None
+
+
+class _PreviewRollback(Exception):
+    """預估抽籤時拋出，讓 savepoint 回滾分配結果；帶出預估的正取隊數。"""
+
+    def __init__(self, expected_teams: int) -> None:
+        super().__init__(expected_teams)
+        self.expected_teams = expected_teams
+
+
+def _expected_teams(
+    session: Session, *, tournament: TournamentRead, actor_id: uuid.UUID
+) -> int:
+    """抽籤當下會有幾隊正取。
+
+    開放報名中與 `draw` 一樣先呼叫 `finalize_for_draw`，但在 savepoint 裡執行，
+    數完隊伍就拋例外讓 savepoint 回滾：報名狀態、結算紀錄、操作紀錄與 outbox
+    事件都不會留下（AD-5：service 不呼叫 rollback，由 savepoint 自己回滾）。
+    """
+    if tournament.status != TournamentStatus.OPEN:
+        return len(
+            registration_port.list_accepted_teams(session, tournament_id=tournament.id)
+        )
+    try:
+        with session.begin_nested():
+            registration_port.finalize_for_draw(
+                session, tournament_id=tournament.id, actor_id=actor_id
+            )
+            raise _PreviewRollback(
+                len(
+                    registration_port.list_accepted_teams(
+                        session, tournament_id=tournament.id
+                    )
+                )
+            )
+    except _PreviewRollback as preview:
+        return preview.expected_teams
+
+
+def get_draw_status(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> DrawStatus:
+    """S27 抽籤按鈕：與 `draw` 相同的檢查順序與分配規則預估能不能抽籤，不寫入任何資料。
+
+    先不鎖讀賽事擋掉非主辦方（不讓無權限者排隊等鎖），再鎖住賽事（AD-6）
+    取得最新值，與同時進行的抽籤、優先期結算串行。
+    """
+    authz.ensure_tournament_owner(
+        tournaments_service.get_tournament(session, tournament_id=tournament_id),
+        actor_id,
+    )
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=tournament_id
+    )
+    blocked = _draw_blocked(session, tournament)
+    if blocked is not None:
+        return DrawStatus(can_draw=False, reason=blocked, expected_teams=None)
+    expected = _expected_teams(session, tournament=tournament, actor_id=actor_id)
+    if expected < _MIN_DRAW_TEAMS:
+        return DrawStatus(
+            can_draw=False, reason="not_enough_teams", expected_teams=expected
+        )
+    return DrawStatus(can_draw=True, reason=None, expected_teams=expected)
+
 
 def draw(
     session: Session,
@@ -222,20 +316,9 @@ def draw(
         session, tournament_id=tournament_id
     )
     authz.ensure_tournament_owner(tournament, actor_id)
-    if repository.get_bracket_by_tournament(session, tournament_id) is not None:
-        raise BusinessError(
-            "BRACKET_ALREADY_DRAWN", "這場賽事已經抽過籤了。", status_code=409
-        )
-    if tournament.status not in _DRAWABLE:
-        raise BusinessError(
-            "TOURNAMENT_NOT_DRAWABLE",
-            "賽事目前的狀態不能抽籤。",
-            status_code=409,
-        )
-    if tournament.start_at <= clock.now():
-        raise BusinessError(
-            "TOURNAMENT_START_PASSED", "開賽時間已過，無法抽籤", status_code=409
-        )
+    blocked = _draw_blocked(session, tournament)
+    if blocked is not None:
+        raise _draw_error(blocked)
     if tournament.status == TournamentStatus.OPEN:
         registration_port.finalize_for_draw(
             session, tournament_id=tournament_id, actor_id=actor_id
@@ -243,10 +326,8 @@ def draw(
     team_ids = registration_port.list_accepted_teams(
         session, tournament_id=tournament_id
     )
-    if len(team_ids) < 2:
-        raise BusinessError(
-            "NOT_ENOUGH_TEAMS", "正取不足 2 隊，無法抽籤", status_code=409
-        )
+    if len(team_ids) < _MIN_DRAW_TEAMS:
+        raise _draw_error("not_enough_teams")
 
     # 洗牌前先依隊名（相同再比 id）排序：結果只取決於亂數，不受 registration
     # 回傳順序影響，示範資料用固定種子時每次都得到同一張對戰表
@@ -1684,6 +1765,18 @@ def _range_text(window: schedule_rules.RescheduleWindow) -> str:
     return f"{start}～{_taipei_text(window.latest)}"
 
 
+def _reschedule_error(
+    reason: schedule_rules.RescheduleReason,
+    window: schedule_rules.RescheduleWindow,
+) -> BusinessError:
+    """新時間不在範圍內的 409；改期（4.3）與重賽（6.2）共用，錯誤碼與訊息不分岔。"""
+    if reason == "no_valid_time":
+        message = f"這場目前沒有可選的時間（最早 {_taipei_text(window.earliest)}）。"
+    else:
+        message = f"新時間不在允許範圍內，可選 {_range_text(window)}。"
+    return BusinessError(_RESCHEDULE_CODES[reason], message, status_code=409)
+
+
 def reschedule_match(
     session: Session,
     *,
@@ -1713,13 +1806,7 @@ def reschedule_match(
     window, check = _reschedule_window(session, tournament, match, matches, now=now)
     reason = check(scheduled_at)
     if reason is not None:
-        if reason == "no_valid_time":
-            message = (
-                f"這場目前沒有可選的時間（最早 {_taipei_text(window.earliest)}）。"
-            )
-        else:
-            message = f"新時間不在允許範圍內，可選 {_range_text(window)}。"
-        raise BusinessError(_RESCHEDULE_CODES[reason], message, status_code=409)
+        raise _reschedule_error(reason, window)
 
     before = {
         "scheduled_at": match.scheduled_at,
@@ -1749,6 +1836,89 @@ def reschedule_match(
         MatchRescheduled(match_id=match.id, scheduled_at=match.scheduled_at),
     )
     return _match_to_read(match)
+
+
+# ---------------------------------------------------------------- 6.x 前置（B 呼叫）
+
+
+def check_replay_time(
+    session: Session,
+    *,
+    tournament: TournamentRead,
+    match: Match,
+    scheduled_at: datetime,
+) -> None:
+    """重新比賽的新時間以 4.3 改期同一個範圍檢查（6.2 `replay_match` 呼叫）。
+
+    不符合拋與 `reschedule_match` 相同的 409（`RESCHEDULE_BEFORE_NOW`、
+    `RESCHEDULE_BEFORE_FEEDER`、`RESCHEDULE_AFTER_NEXT_MATCH`、`RESCHEDULE_NO_VALID_TIME`，
+    訊息附台北時間範圍）。不檢查賽事狀態、場次狀態、報到與主辦方（呼叫端負責），
+    不寫入任何資料。呼叫端先 `lock_tournament`、`lock_match`（AD-6）；相鄰場次以資料庫
+    最新值讀取。`scheduled_at` 必須帶時區（router 的欄位驗證負責），沒帶時區拋
+    `ValueError`（`schedule._utc`）；`tournament` 不是 `match` 所屬的賽事也拋
+    `ValueError`。兩者都是呼叫端的程式錯誤，不是業務錯誤。
+    """
+    if tournament.id != match.tournament_id:
+        raise ValueError("tournament 不是 match 所屬的賽事")
+    matches = repository.list_matches(session, match.bracket_id, fresh=True)
+    window, check = _reschedule_window(
+        session, tournament, match, matches, now=clock.now()
+    )
+    reason = check(scheduled_at)
+    if reason is not None:
+        raise _reschedule_error(reason, window)
+
+
+def get_replay_window(session: Session, *, match_id: uuid.UUID) -> RescheduleInfo:
+    """S32 重賽時間選擇器的範圍，與 `check_replay_time` 同一個規則；不寫入。
+
+    判斷順序（與 `replay_match` 的拒絕條件一致）：場次不存在拋 404 `MATCH_NOT_FOUND`；
+    賽事不是賽程已公布或進行中 → `tournament_not_reschedulable`、範圍為 None；
+    場次不是申訴中或結果不是棄權 → `match_not_reschedulable`、範圍為 None；
+    其餘有可選範圍時 `can_reschedule=True`，範圍為空時 `reason="no_valid_time"`，
+    仍附 `earliest`、`latest`（主辦方要先到 S30 把下一場改晚）。
+    本場與相鄰場次都以資料庫最新值讀取（與 `check_replay_time` 一致）。
+    """
+    match = repository.get_match(session, match_id)
+    if match is None:
+        raise _match_not_found()
+    matches = repository.list_matches(session, match.bracket_id, fresh=True)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=match.tournament_id
+    )
+    blocked: RescheduleBlockReason | None = None
+    if tournament.status not in _RESCHEDULABLE_TOURNAMENT:
+        blocked = "tournament_not_reschedulable"
+    elif (
+        MatchStatus(match.status) != MatchStatus.APPEALED
+        or match.outcome != MatchOutcome.FORFEIT
+    ):
+        blocked = "match_not_reschedulable"
+    if blocked is not None:
+        return RescheduleInfo(
+            can_reschedule=False, reason=blocked, earliest=None, latest=None
+        )
+    window, _check = _reschedule_window(
+        session, tournament, match, matches, now=clock.now()
+    )
+    return RescheduleInfo(
+        can_reschedule=not window.is_empty,
+        reason="no_valid_time" if window.is_empty else None,
+        earliest=window.earliest,
+        latest=window.latest,
+    )
+
+
+def unassign_referee_if_member(session: Session, *, match: Match) -> None:
+    """該場裁判是任一隊的隊員時收回（6.5 `disqualify` 頂替後呼叫）。
+
+    檢查兩隊（`advance` 填位後只檢查新填入的一隊）；收回時與 `advance` 相同，寫
+    `match.referee_unassigned`（操作者為系統）、發 `RefereeUnassigned`。裁判不是隊員、
+    沒有裁判、隊伍待定的一方不動。只對待開打、進行中的場次呼叫（已結束的場次裁判
+    不再有意義）。呼叫端先 `lock_tournament`、`lock_match`（AD-6）並已寫入頂替後的隊伍。
+    """
+    for team_id in (match.team_a_id, match.team_b_id):
+        _unassign_if_member(session, match=match, team_id=team_id)
 
 
 def list_my_referee_matches(
