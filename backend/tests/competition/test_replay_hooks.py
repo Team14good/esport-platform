@@ -565,3 +565,36 @@ def test_pending_teams_do_nothing(session: Session, setup: HookSetup) -> None:
     assert setup.row("M5").referee_account_id == referee.id
     assert _writes(session, setup) == before
     assert setup.member_calls == []
+
+
+@pytest.mark.parametrize(
+    "status",
+    [s for s in MatchStatus if s not in (MatchStatus.SCHEDULED, MatchStatus.LIVE)],
+)
+def test_wrong_match_status_raises_value_error_without_writes(
+    session: Session, setup: HookSetup, status: MatchStatus
+) -> None:
+    referee = _referee_on(session, setup, "M1")
+    setup.members.add((setup.team("M1", "a"), referee.id))
+    setup.update("M1", status=status)
+    before = _writes(session, setup)
+
+    with pytest.raises(ValueError):
+        _unassign(session, setup, "M1")
+
+    # `_writes` 先 flush 再 expire：拋錯前若寫過欄位、紀錄或事件（即使還沒 commit）都會被看到
+    assert _writes(session, setup) == before
+    assert setup.row("M1").referee_account_id == referee.id
+    assert setup.member_calls == []
+
+
+def test_live_match_member_referee_is_unassigned(
+    session: Session, setup: HookSetup
+) -> None:
+    referee = _referee_on(session, setup, "M1")
+    setup.members.add((setup.team("M1", "b"), referee.id))
+    setup.update("M1", status=MatchStatus.LIVE)
+
+    _unassign(session, setup, "M1")
+
+    _assert_unassigned_once(session, setup, "M1", referee)

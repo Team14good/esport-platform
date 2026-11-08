@@ -36,6 +36,7 @@ from app.modules.tournaments.models import (
     TournamentRead,
     TournamentStatus,
 )
+from app.worker.jobs import allocate_priority_windows
 from tests.conftest import FrozenClock
 from tests.helpers import make_account
 from tests.registration.test_teams import _auth, _set_status
@@ -87,9 +88,16 @@ def _outbox_count(session: Session) -> int:
 def _snapshot(session: Session, tournament: TournamentRead) -> dict[str, Any]:
     """預估不得改變的一切：報名狀態、結算紀錄、操作紀錄數、outbox 事件數、賽事狀態。"""
     statuses = _statuses(session, tournament)  # 會 expire_all，之後的查詢都讀資料庫
+    settlement = registration_repository.get_settlement(session, tournament.id)
     return {
         "statuses": statuses,
-        "settlement": registration_repository.get_settlement(session, tournament.id),
+        # 比欄位的值：ORM 物件在同一個 session 是同一個實例，前後比對必定相等
+        "settlement": None
+        if settlement is None
+        else {
+            "settled_at": settlement.settled_at,
+            "priority_school_ids": list(settlement.priority_school_ids),
+        },
         "audit": len(audit.list_for_tournament(session, tournament.id)),
         "outbox": _outbox_count(session),
         "tournament_status": tournaments_service.get_tournament(
@@ -208,6 +216,56 @@ def test_preview_after_priority_window_counts_first_come_and_fill(
     assert status == DrawStatus(can_draw=True, reason=None, expected_teams=3)
     assert _snapshot(session, tournament) == before
     assert _drawn_team_count(_draw(session, tournament)) == 3
+
+
+@pytest.mark.parametrize(
+    ("capacity", "late", "expected"),
+    [
+        # 名額 3、優先期 2 隊正取、優先期後 1 隊：先搶期補上
+        (3, 1, 3),
+        # 名額 2、優先期 2 隊已滿：優先期後的報名成為候補，不增加隊數
+        (2, 1, 2),
+        # 名額 4、優先期後沒有報名：只有已結算的 2 隊
+        (4, 0, 2),
+    ],
+)
+def test_preview_after_worker_settled_priority_window(
+    session: Session,
+    frozen_clock: FrozenClock,
+    capacity: int,
+    late: int,
+    expected: int,
+) -> None:
+    # open 且優先期已由 worker 結算：結算紀錄已存在，預估走先搶期／遞補分支，不得改到它
+    tournament = _tournament(session, frozen_clock, capacity=capacity)
+    for minutes in (30, 31):
+        _submitted(
+            session,
+            tournament,
+            _school(session),
+            submitted_at=_in_window(tournament, minutes),
+        )
+    for _ in range(late):
+        _submitted(
+            session,
+            tournament,
+            _school(session),
+            submitted_at=tournament.priority_end + timedelta(minutes=1),
+        )
+    frozen_clock.set(tournament.priority_end + timedelta(minutes=10))
+    assert allocate_priority_windows(session) is True
+    before = _snapshot(session, tournament)
+    assert before["settlement"] is not None
+    assert before["tournament_status"] == S.OPEN
+
+    first = _status(session, tournament)
+    second = _status(session, tournament)
+
+    expected_status = DrawStatus(can_draw=True, reason=None, expected_teams=expected)
+    assert first == expected_status
+    assert second == expected_status
+    assert _snapshot(session, tournament) == before
+    assert _drawn_team_count(_draw(session, tournament)) == expected
 
 
 # ---------------------------------------------------------------- I/O 矩陣
@@ -596,3 +654,24 @@ def test_api_permissions(
     )
     response = client.get(_url(uuid.uuid4()), headers=_auth(organizer))
     assert (response.status_code, _code(response)) == (404, "TOURNAMENT_NOT_FOUND")
+
+
+@pytest.mark.parametrize("status", [S.OPEN, S.CLOSED])
+@pytest.mark.usefixtures("registration_without_draw_functions")
+def test_api_registration_unavailable_is_503(
+    client: TestClient,
+    session: Session,
+    frozen_clock: FrozenClock,
+    status: TournamentStatus,
+) -> None:
+    # registration 沒有提供抽籤函式：open 缺 finalize_for_draw、closed 缺 list_accepted_teams
+    tournament = _open_with(session, frozen_clock, capacity=4, scores=("30", "28"))
+    _set_status(session, tournament.id, status)
+    organizer = session.get(Account, tournament.organizer_id)
+    assert organizer is not None
+    session.commit()
+
+    response = client.get(_url(tournament.id), headers=_auth(organizer))
+
+    assert response.status_code == 503, response.text
+    assert _code(response) == "REGISTRATION_UNAVAILABLE"
