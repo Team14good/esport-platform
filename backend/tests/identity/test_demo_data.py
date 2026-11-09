@@ -2,18 +2,24 @@
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from sqlmodel import Session, col, func, select
 
 from app import demo_data
 from app.core.config import settings
+from app.core.errors import BusinessError
 from app.core.security import get_password_hash, verify_password
 from app.demo_data import load
+from app.demo_data import registration as registration_step
 from app.demo_data.accounts import DEMO_SCHOOL_NAME
 from app.initial_data import init
+from app.modules.competition.models import Bracket, Match
 from app.modules.identity import service
 from app.modules.identity.models import Account, School
+from app.modules.registration import service as registration_service
+from app.modules.registration.models import Registration, Team, TeamMember
 
 DEMO_PASSWORD = "demo-password"
 DEMO_DOMAIN = "demo.example.com"
@@ -192,3 +198,88 @@ def test_failing_later_step_rolls_back_all_demo_data(
             ).first()
             is not None
         )
+
+
+def _count(session: Session, model: type) -> int:
+    return session.exec(select(func.count()).select_from(model)).one()
+
+
+@pytest.fixture
+def first_admin(session: Session) -> None:
+    """tournaments 步驟要有第一個平台管理員才會建立示範賽事。"""
+    service.ensure_first_admin(
+        session, email=settings.FIRST_ADMIN_EMAIL, password="admin-password"
+    )
+
+
+@pytest.mark.usefixtures("demo_settings", "first_admin")
+def test_demo_tournament_is_drawn_with_32_teams(session: Session) -> None:
+    assert load(session) is True
+
+    # 抽籤後正取隊伍轉為 drawn
+    drawn = session.exec(
+        select(func.count())
+        .select_from(Registration)
+        .where(Registration.status == "drawn")
+    ).one()
+    assert drawn == registration_step.DEMO_TEAM_COUNT
+    assert _count(session, Bracket) == 1
+    first_round = session.exec(select(Match).where(Match.round_no == 1)).all()
+    assert len(first_round) == registration_step.DEMO_TEAM_COUNT // 2
+    assert all(m.team_a_id and m.team_b_id for m in first_round)
+
+
+@pytest.mark.usefixtures("demo_settings", "first_admin")
+def test_demo_captain_and_player_share_first_team(session: Session) -> None:
+    load(session)
+
+    accounts = _demo_accounts(session)
+    captain = accounts[f"captain@{DEMO_DOMAIN}"]
+    player = accounts[f"player@{DEMO_DOMAIN}"]
+    [captain_card] = registration_service.list_my_teams(session, account_id=captain.id)
+    [player_card] = registration_service.list_my_teams(session, account_id=player.id)
+    assert captain_card.team_id == player_card.team_id
+    assert captain_card.team_name == f"{DEMO_SCHOOL_NAME}電競隊"
+    members = session.exec(
+        select(func.count())
+        .select_from(TeamMember)
+        .where(TeamMember.team_id == captain_card.team_id)
+    ).one()
+    assert members == registration_step.DEMO_TEAM_SIZE
+
+
+@pytest.mark.usefixtures("demo_settings", "first_admin")
+def test_load_twice_does_not_duplicate_demo_teams(session: Session) -> None:
+    load(session)
+    accounts = _account_count(session)
+
+    assert load(session) is True
+
+    assert _account_count(session) == accounts
+    assert _count(session, Team) == registration_step.DEMO_TEAM_COUNT
+    assert _count(session, Bracket) == 1
+
+
+@pytest.mark.usefixtures("demo_settings", "first_admin")
+def test_rejected_demo_team_is_skipped_with_its_accounts(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    real_submit = registration_service.submit_registration
+    calls = {"count": 0}
+
+    def fail_second_team(*args: Any, **kwargs: Any) -> Any:
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise BusinessError("REGISTRATION_CLOSED", "報名已截止", status_code=409)
+        return real_submit(*args, **kwargs)
+
+    monkeypatch.setattr(registration_service, "submit_registration", fail_second_team)
+
+    with caplog.at_level(logging.WARNING):
+        assert load(session) is True
+
+    assert "Demo team 2" in caplog.text
+    assert _count(session, Team) == registration_step.DEMO_TEAM_COUNT - 1
+    assert service.find_account_id_by_email(session, f"team02-m1@{DEMO_DOMAIN}") is None

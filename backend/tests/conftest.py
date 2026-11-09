@@ -68,6 +68,14 @@ def _test_database() -> None:
     command.upgrade(alembic_cfg, "head")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_uploads(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """上傳檔案寫到暫存資料夾：示範資料每次載入都會存 160 張段位截圖。"""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(settings, "UPLOAD_DIR", tmp_path_factory.mktemp("uploads"))
+        yield
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """依 tests/traceability.yaml 替每個案例加上 `unit`／`integration` marker（7.3）。
 
