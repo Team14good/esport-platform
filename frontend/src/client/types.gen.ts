@@ -768,6 +768,86 @@ export type MyTeamCard = {
 }
 
 /**
+ * NextMatch
+ *
+ * S12 一支已參賽隊伍的下一場：該隊未定案（不是已確認、已取消）的場次中輪次最小的一場。
+ */
+export type NextMatch = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Code
+   */
+  code: string
+  /**
+   * Round No
+   */
+  round_no: number
+  /**
+   * Slot No
+   */
+  slot_no: number
+  /**
+   * Is Third Place
+   */
+  is_third_place: boolean
+  team_a: PublicTeamRef | null
+  team_b: PublicTeamRef | null
+  /**
+   * Source A
+   */
+  source_a: string | null
+  /**
+   * Source B
+   */
+  source_b: string | null
+  /**
+   * Bye A
+   */
+  bye_a: boolean
+  /**
+   * Bye B
+   */
+  bye_b: boolean
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+  status: MatchStatus
+  outcome: MatchOutcome | null
+  /**
+   * Winner Id
+   */
+  winner_id: string | null
+  /**
+   * Wins A
+   */
+  wins_a: number
+  /**
+   * Wins B
+   */
+  wins_b: number
+  /**
+   * Team Id
+   */
+  team_id: string
+  /**
+   * Round Name
+   */
+  round_name: string
+  /**
+   * Check In Opens At
+   */
+  check_in_opens_at: string
+  /**
+   * Forfeit Deadline
+   */
+  forfeit_deadline: string | null
+}
+
+/**
  * OrganizerApplicationCreate
  *
  * S15 送出主辦方申請：社團名稱與學校（只能從學校清單選擇）。
@@ -3632,6 +3712,25 @@ export type competitionListMyRefereeMatchesResponses = {
 
 export type competitionListMyRefereeMatchesResponse =
   competitionListMyRefereeMatchesResponses[keyof competitionListMyRefereeMatchesResponses]
+
+export type competitionListMyNextMatchesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/me/next-matches"
+}
+
+export type competitionListMyNextMatchesResponses = {
+  /**
+   * Response Competition-List My Next Matches
+   *
+   * Successful Response
+   */
+  200: Array<NextMatch>
+}
+
+export type competitionListMyNextMatchesResponse =
+  competitionListMyNextMatchesResponses[keyof competitionListMyNextMatchesResponses]
 
 export type competitionListManagedMatchesData = {
   body?: never

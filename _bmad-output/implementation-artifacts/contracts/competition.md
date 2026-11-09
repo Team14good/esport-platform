@@ -165,6 +165,12 @@ class RefereeTournamentMatches(BaseModel):  # 4.4 S13：依賽事分組
     tournament: PublicTournamentRef
     matches: list[RefereeMatch]       # 依 scheduled_at、code
 
+class NextMatch(PublicMatch):         # 5.1 補遺 S12：一支已參賽隊伍的下一場
+    team_id: UUID                     # 這是登入者哪一支隊伍的下一場（前端依此對到 Registration status card）
+    round_name: str                   # 季軍賽為「季軍賽」，其他為決賽、4 強、8 強…
+    check_in_opens_at: datetime       # 報到開放時間（預定開始 − 30 分鐘）
+    forfeit_deadline: datetime | None # 報到截止（＝棄權期限），只在待開打且兩隊都確定時有值
+
 class DrawStatus(BaseModel):     # 4.1 S27：抽籤按鈕，與抽籤 API 同一套檢查順序與分配規則預估，不寫入
     can_draw: bool
     reason: Literal["already_drawn", "not_drawable", "start_passed",
@@ -198,6 +204,7 @@ class PublicBracket(BaseModel):
 | `DELETE /api/v1/tournaments/{tournament_id}/matches/{match_id}/games/{game_no}` | 記分者 | 200 `ScoreEntryState`（5.3）；只能刪最後一局；刪到沒有任何局時場次維持進行中 |
 | `POST /api/v1/tournaments/{tournament_id}/matches/{match_id}/submit` | 記分者 | 200 `ScoreEntryState`（5.4）；寫 `outcome=played`、勝隊、送出者與時間、`appeal_deadline`＝現在＋申訴時限，轉為申訴期並發 `MatchResultSubmitted`；不寫 `confirmed_at`、勝隊不晉級（5.5 申訴期滿才確認並推進） |
 | `GET /api/v1/me/referee/matches` | 登入者 | `list[RefereeTournamentMatches]`（4.4，S13）；只列 `referee_account_id` 為登入者、狀態不是 `voided` 的場次（含已結束）；沒有指派（或不是裁判）回 `[]`；所屬賽事為 `cancelled` 的場次不列出（取消賽事不會把場次改成 `voided`；`finished` 仍列出）。排序：組內依 `scheduled_at`、再依 `code`；各賽事依組內最早的 `scheduled_at`、再依賽事名稱；未登入 401。收回、改派後該場不再出現 |
+| `GET /api/v1/me/next-matches` | 登入者 | `list[NextMatch]`（5.1 補遺，S12）；只讀、不 commit。經 `registration_port.list_drawn_teams_of_account` 取登入者所屬、報名狀態為 `drawn` 的隊伍，每隊最多一場：該隊出現在 `team_a_id`／`team_b_id`、狀態不是 `confirmed`／`voided` 的場次中輪次最小的一場（同輪季軍賽在後、再依 `slot_no`）；沒有這種場次（已淘汰、賽事已結束）不回。所屬賽事為 `cancelled` 的不列出；賽事 `finished` 後已沒有未定案的場次，所以也不回（與 S13 不同，S13 仍列出已結束賽事）。順序沿用 registration `list_my_teams`（新加入的隊伍在前）；同一場有登入者的兩支隊伍時各回一筆。沒有已參賽隊伍回 `[]`；未登入 401；registration 沒有 `list_my_teams` 時 503 `REGISTRATION_UNAVAILABLE` |
 | `PUT /api/v1/tournaments/{tournament_id}/matches/{match_id}/referee` | 該賽事主辦方 | 200 `MatchRead`（4.4）；body `RefereeAssignIn`；指派或改派 |
 | `DELETE /api/v1/tournaments/{tournament_id}/matches/{match_id}/referee` | 該賽事主辦方 | 200 `MatchRead`（4.4）；收回後由主辦方代登，已登錄的局保留 |
 
@@ -280,6 +287,8 @@ class PublicBracket(BaseModel):
 | `is_member(session, *, team_id, account_id) -> bool` | 4.4（裁判不能是參賽隊員） | |
 | ★ `is_captain(session, *, team_id, account_id) -> bool` | 5.1 報到 | 經 `registration_port.is_captain`，缺函式回 503 `REGISTRATION_UNAVAILABLE` |
 | ★ `get_team_names(session, *, team_ids) -> dict[UUID, str]` | 4.1 公開對戰樹 | 一次查多隊，避免 N+1 |
+
+`list_my_teams(session, *, account_id) -> list[MyTeamCard]`（C 在 S12 已提供）：5.1 補遺 S12 下一場經 `registration_port.list_drawn_teams_of_account(session, *, account_id) -> list[DrawnTeamRef]` 呼叫，只讀 `team_id`、`tournament_id`、`registration_status`，在 port 內過濾 `drawn`，回傳 `DrawnTeamRef {team_id, tournament_id}`；不改 registration 的 service、models，registration 不呼叫 competition（S12 前端組合兩支 API）。
 
 上表 4 個 ★ 抽籤函式已由 C 在 Story 3.6 提供，名稱與關鍵字參數照上表：`finalize_for_draw` 在鎖內依序做優先期結算（優先期還沒結束也立即結算）、補做優先期後送出的報名（先搶期）、截止補位，操作者為傳入的 `actor_id`，重複呼叫結果不變，賽事不是開放報名或不是校園賽時不做任何事；`list_accepted_teams` 依隊伍 id 排序；`mark_drawn` 不發事件；`get_team_names` 不看賽事與報名狀態，不存在的 id 不出現。
 

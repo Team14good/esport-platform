@@ -65,6 +65,10 @@ competition/test_match_transitions.py:
   layer: integration
   stories: ["4.1"]
   frs: [FR-25, NFR-1]
+competition/test_next_matches.py:
+  layer: integration
+  stories: ["4.1", "5.1", "5.5"]
+  frs: [FR-24]
 competition/test_progression.py:
   layer: unit
   stories: ["5.5", "5.6"]

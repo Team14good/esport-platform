@@ -5,8 +5,10 @@ import { toast } from "sonner"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  CompetitionService,
   type Identity,
   type MyTeamCard,
+  type NextMatch,
   RegistrationService,
   type TeamDetail,
   type TeamInvitePreview,
@@ -29,6 +31,9 @@ type PreviewResult = Awaited<
 >
 type JoinResult = Awaited<ReturnType<typeof RegistrationService.joinTeam>>
 type MyTeamsResult = Awaited<ReturnType<typeof RegistrationService.listMyTeams>>
+type NextMatchesResult = Awaited<
+  ReturnType<typeof CompetitionService.listMyNextMatches>
+>
 type UpdateProfileResult = Awaited<
   ReturnType<typeof RegistrationService.updateMyPlayerProfile>
 >
@@ -618,6 +623,40 @@ describe("加入隊伍（S19）", () => {
   })
 })
 
+const DRAWN_CARD: MyTeamCard = {
+  team_id: "team-1",
+  team_name: "夜貓隊",
+  tournament_id: "tour-1",
+  tournament_name: "政大校園盃",
+  game_name: "特戰英豪",
+  registration_status: "drawn",
+  ...NO_WAITLIST,
+}
+
+const NEXT_MATCH: NextMatch = {
+  id: "m-5",
+  code: "M5",
+  round_no: 2,
+  slot_no: 1,
+  is_third_place: false,
+  team_a: { id: "team-1", name: "夜貓隊" },
+  team_b: { id: "team-9", name: "晨鳥隊" },
+  source_a: null,
+  source_b: null,
+  bye_a: false,
+  bye_b: false,
+  scheduled_at: "2099-11-10T12:00:00Z",
+  status: "scheduled",
+  outcome: null,
+  winner_id: null,
+  wins_a: 0,
+  wins_b: 0,
+  team_id: "team-1",
+  round_name: "4 強",
+  check_in_opens_at: "2099-11-10T11:30:00Z",
+  forfeit_deadline: "2099-11-10T12:15:00Z",
+}
+
 describe("我的隊伍（S12）", () => {
   it("每隊一張 Registration status card，點擊到 S17", async () => {
     const user = userEvent.setup()
@@ -649,6 +688,54 @@ describe("我的隊伍（S12）", () => {
     await waitFor(() =>
       expect(router.state.location.pathname).toBe("/teams/team-1"),
     )
+  })
+
+  it("已參賽隊伍：卡片下方一列下一場，點擊進入該場 S4（不巢狀在卡片連結裡）", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
+      data: [DRAWN_CARD],
+    } as MyTeamsResult)
+    vi.spyOn(CompetitionService, "listMyNextMatches").mockResolvedValue({
+      data: [NEXT_MATCH],
+    } as NextMatchesResult)
+    // S4 的資料不在這裡驗證，只看導向
+    vi.spyOn(CompetitionService, "readPublicMatch").mockReturnValue(
+      new Promise(() => {}) as never,
+    )
+    const router = renderApp("/me/teams")
+
+    const row = await screen.findByRole("link", { name: /下一場 vs 晨鳥隊/ })
+    const card = screen.getByRole("link", { name: /夜貓隊/ })
+    expect(card).toHaveAttribute("href", "/teams/team-1")
+    expect(card).not.toContainElement(row)
+    expect(row.closest("li")).toBe(card.closest("li"))
+
+    await user.click(row)
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/tournaments/tour-1/matches/m-5",
+      ),
+    )
+  })
+
+  it("下一場 API 失敗：卡片照常顯示，下一場列不出現", async () => {
+    signInAs()
+    vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
+      data: [DRAWN_CARD],
+    } as MyTeamsResult)
+    const nextMatches = vi
+      .spyOn(CompetitionService, "listMyNextMatches")
+      .mockRejectedValue(httpError(500, { detail: "Internal Server Error" }))
+    renderApp("/me/teams")
+
+    expect(
+      await screen.findByRole("link", { name: /夜貓隊/ }),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(nextMatches).toHaveBeenCalled())
+    expect(screen.queryByRole("link", { name: /下一場/ })).toBeNull()
+    expect(screen.queryByText(/重新載入/)).toBeNull()
   })
 
   it("沒有隊伍：「你還沒有加入任何隊伍。」＋「瀏覽賽事」", async () => {

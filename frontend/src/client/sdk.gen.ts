@@ -23,6 +23,8 @@ import type {
   competitionListManagedMatchesData,
   competitionListManagedMatchesErrors,
   competitionListManagedMatchesResponses,
+  competitionListMyNextMatchesData,
+  competitionListMyNextMatchesResponses,
   competitionListMyRefereeMatchesData,
   competitionListMyRefereeMatchesResponses,
   competitionReadCheckInStatusData,
@@ -1328,6 +1330,26 @@ export class CompetitionService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/me/referee/matches",
+      ...options,
+    })
+  }
+
+  /**
+   * List My Next Matches
+   *
+   * S12：登入者所屬、已參賽的每支隊伍的下一場（各最多一場）；沒有回空清單。只讀，不 commit。
+   */
+  public static listMyNextMatches<ThrowOnError extends boolean = true>(
+    options?: Options<competitionListMyNextMatchesData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      competitionListMyNextMatchesResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/me/next-matches",
       ...options,
     })
   }
