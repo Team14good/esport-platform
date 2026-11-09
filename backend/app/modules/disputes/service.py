@@ -805,7 +805,7 @@ def _handling_deadline(
 def count_open_disputes(
     session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
 ) -> OpenDisputes:
-    """S27 待處理：未結案的申訴與每筆的處理期限，依期限由近到遠；檢舉 6.4 合併前一律 0。
+    """S27 待處理：未結案的申訴與每筆的處理期限，依期限由近到遠；檢舉在 6.5 接上前一律 0（檢舉的處理期限由 6.5 決定）。
 
     只有該賽事主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）。
     """

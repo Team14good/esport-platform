@@ -942,7 +942,7 @@ export type OpenDisputeItem = {
 /**
  * OpenDisputes
  *
- * S27 待處理：未結案申訴數、檢舉數（6.4 合併前為 0）與每一筆，依處理期限由近到遠。
+ * S27 待處理：未結案申訴數、檢舉數（6.5 接上前為 0）與每一筆，依處理期限由近到遠。
  */
 export type OpenDisputes = {
   /**
