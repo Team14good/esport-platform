@@ -1,11 +1,16 @@
-// 主辦方處理申訴（6.2）：S32 申訴列表、處理申訴、重賽時間範圍，以及 S27 待處理清單。
+// 主辦方處理申訴（6.2）：S32 申訴列表、處理申訴、重賽時間範圍，以及 S27 待處理清單；
+// 主辦方處理檢舉（6.5）：S33 檢舉列表、處理檢舉。
 import { queryOptions, useQueryClient } from "@tanstack/react-query"
 
 import {
   type AppealResolveIn,
   DisputesService,
   type OpenDisputes,
+  type ReportResolveIn,
 } from "@/client"
+import { publicBracketQueryKey } from "@/features/competition/bracket-queries"
+import { managedMatchesQueryOptions } from "@/features/competition/organizer-matches-queries"
+import { myTournamentQueryOptions } from "@/features/tournaments/organizer-queries"
 import { parseApiError } from "@/lib/api-error"
 import { shouldRetryQuery } from "@/lib/query-client"
 
@@ -92,6 +97,64 @@ export function useRefetchAppeals(tournamentId: string) {
       }),
       queryClient.invalidateQueries({
         queryKey: openDisputesQueryOptions(tournamentId).queryKey,
+      }),
+    ])
+}
+
+/** S33：該賽事的檢舉（處理中在前，各組依提出時間由舊到新）。 */
+export const tournamentReportsQueryOptions = (tournamentId: string) =>
+  queryOptions({
+    queryKey: [...DISPUTES_KEY, "reports", tournamentId],
+    queryFn: async () =>
+      (
+        await DisputesService.listTournamentReports({
+          path: { tournament_id: tournamentId },
+        })
+      ).data,
+    retry: shouldRetry,
+  })
+
+/** 處理一筆檢舉（駁回或屬實）；失敗時拋出（AxiosError），由對話框顯示伺服器訊息。 */
+export async function resolveReport({
+  reportId,
+  body,
+}: {
+  reportId: string
+  body: ReportResolveIn
+}) {
+  return (
+    await DisputesService.resolveReport({
+      path: { report_id: reportId },
+      body,
+    })
+  ).data
+}
+
+/**
+ * 處理檢舉後（成功或失敗）重抓 S33 列表；屬實時會取消資格、改對戰表、一併結案申訴，
+ * 所以 S32 列表、S27 賽事與待處理清單、S30 場次與公開對戰樹也重抓。
+ */
+export function useRefetchReports(tournamentId: string) {
+  const queryClient = useQueryClient()
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: tournamentReportsQueryOptions(tournamentId).queryKey,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: tournamentAppealsQueryOptions(tournamentId).queryKey,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: openDisputesQueryOptions(tournamentId).queryKey,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: myTournamentQueryOptions(tournamentId).queryKey,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: managedMatchesQueryOptions(tournamentId).queryKey,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: publicBracketQueryKey(tournamentId),
       }),
     ])
 }

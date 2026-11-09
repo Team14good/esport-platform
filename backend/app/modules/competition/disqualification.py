@@ -6,12 +6,13 @@
 - 抽籤前、已淘汰或沒有下一場：只改報名狀態（抽籤前空出的名額交給 3.4 的分配）。
 - 有進行中、申訴期、申訴中的場次：該場以 `disqualified` 判對手獲勝並確認、晉級；不頂替。
 - 待開打的場次：
-  - 已贏過（依輪次往前第一場 `played`／`forfeit` 勝場的敗隊，略過其間 walkover／
-    取消資格的勝場）且敗隊未被取消資格：敗隊頂替原位置；更早的結果不變。頂替時刪除被
+  - 已贏過（依輪次往前第一場不是 walkover 的勝場；它是 `played`／`forfeit` 時取它的
+    敗隊，是取消資格勝時不往前找）且敗隊未被取消資格：敗隊頂替原位置；更早的結果不變。頂替時刪除被
     取消資格隊伍在該場的報到，兩隊湊齊則開始計時並發 `MatchOpponentsDecided`。
   - 決賽：頂替的是準決賽的敗隊，它在季軍賽，所以只有季軍賽仍待開打時才頂替，
     由它移到決賽、季軍賽由對手以 walkover 奪季軍；季軍賽已開打或已定案則不頂替。
-  - 季軍賽、還沒比過、勝場全是輪空或 walkover、或敗隊已被取消資格：
+  - 季軍賽、還沒比過、勝場全是輪空或 walkover、最近一場（略過 walkover）是取消資格勝、
+    或敗隊已被取消資格：
     該場以 `disqualified` 判對手獲勝並確認、晉級（兩隊都在場的 walkover 會被
     progression 拒絕，也看不出取消資格）。
 
@@ -135,7 +136,8 @@ def _replacement(
     by_id: dict[uuid.UUID, Match],
     team_id: uuid.UUID,
 ) -> _Replace | None:
-    """最近一場輸給它的隊伍；沒有（季軍賽、還沒贏過、只靠輪空或 walkover、已取消資格）回 None。"""
+    """最近一場輸給它的隊伍；沒有（季軍賽、還沒贏過、只靠輪空或 walkover、最近是取消資格勝、
+    敗隊已取消資格）回 None。"""
     if match.is_third_place:
         return None
     wins = [
@@ -148,8 +150,12 @@ def _replacement(
         if won_from is None or won_from.outcome not in _HAS_LOSER:
             return None
     else:
-        won_from = next((m for m in reversed(wins) if m.outcome in _HAS_LOSER), None)
-        if won_from is None:
+        # 略過 walkover 勝場往前找；最近一場是取消資格勝（沒有真的打敗對手）時不往前找，
+        # 比照「敗隊已取消資格」判對手獲勝（2026-11-09 使用者決定）
+        won_from = next(
+            (m for m in reversed(wins) if m.outcome != MatchOutcome.WALKOVER), None
+        )
+        if won_from is None or won_from.outcome not in _HAS_LOSER:
             return None
     loser = _loser(won_from)
     if loser is None:

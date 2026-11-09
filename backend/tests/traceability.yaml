@@ -173,6 +173,10 @@ disputes/test_resolve_appeals.py:
   layer: integration
   stories: ["6.2"]
   frs: [FR-31, NFR-3, NFR-5]
+disputes/test_resolve_report.py:
+  layer: integration
+  stories: ["6.5"]
+  frs: [FR-33, FR-22, NFR-3, NFR-5]
 identity/test_demo_data.py:
   layer: integration
   stories: ["7.1"]

@@ -144,9 +144,11 @@ export type AdminOrganizerApplication = {
 /**
  * AppealDecision
  *
- * 申訴處理結果：維持原結果、更正結果、重新比賽（只用於棄權判定）。
+ * 申訴處理結果：維持原結果、更正結果、重新比賽（只用於棄權判定）、取消資格。
+ *
+ * `disqualified`：檢舉屬實取消資格（6.5）時，受影響場次的未結案申訴一併以此結案。
  */
-export type AppealDecision = "upheld" | "corrected" | "rematch"
+export type AppealDecision = "upheld" | "corrected" | "rematch" | "disqualified"
 
 /**
  * AppealGroup
@@ -1110,12 +1112,14 @@ export type ProfileUpdate = {
  * PublicAppealResult
  *
  * 公開的申訴處理結果（S4）；不含申訴內容（AD-19）。未經申訴處理或重新比賽為 None。
+ *
+ * `disqualified`：檢舉屬實取消資格時一併結案（6.5）。
  */
 export type PublicAppealResult = {
   /**
    * Decision
    */
-  decision: "upheld" | "corrected" | null
+  decision: "upheld" | "corrected" | "disqualified" | null
 }
 
 /**
@@ -1747,6 +1751,22 @@ export type ReportRead = {
    * Handled At
    */
   handled_at: string | null
+}
+
+/**
+ * ReportResolveIn
+ *
+ * 處理檢舉的請求（S33）：`substantiated` 為 false 是駁回、true 是屬實。
+ */
+export type ReportResolveIn = {
+  /**
+   * Substantiated
+   */
+  substantiated: boolean
+  /**
+   * Reason
+   */
+  reason: string
 }
 
 /**
@@ -4082,6 +4102,38 @@ export type disputesListTournamentReportsResponses = {
 
 export type disputesListTournamentReportsResponse =
   disputesListTournamentReportsResponses[keyof disputesListTournamentReportsResponses]
+
+export type disputesResolveReportData = {
+  body: ReportResolveIn
+  path: {
+    /**
+     * Report Id
+     */
+    report_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/reports/{report_id}/resolution"
+}
+
+export type disputesResolveReportErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesResolveReportError =
+  disputesResolveReportErrors[keyof disputesResolveReportErrors]
+
+export type disputesResolveReportResponses = {
+  /**
+   * Successful Response
+   */
+  200: ReportRead
+}
+
+export type disputesResolveReportResponse =
+  disputesResolveReportResponses[keyof disputesResolveReportResponses]
 
 export type disputesDownloadReportAttachmentData = {
   body?: never
