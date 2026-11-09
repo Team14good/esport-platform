@@ -127,7 +127,8 @@ export function NextMatchRow({
       <NextMatchStatus match={match} opponentPending={opponentPending} />
       <ChevronRightIcon
         aria-hidden="true"
-        className="size-4 shrink-0 text-muted-foreground"
+        // 手機上倒數佔滿一列，箭頭會單獨掉到下一行，所以只在 sm 以上顯示
+        className="hidden size-4 shrink-0 text-muted-foreground sm:block"
       />
     </Link>
   )
