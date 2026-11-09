@@ -20,10 +20,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from app import demo_data
 from app.core import audit
 from app.core.config import settings
 from app.core.errors import BusinessError
 from app.demo_data import load, tournaments
+from app.demo_data import registration as registration_step
 from app.modules.competition import service as competition_service
 from app.modules.identity import service as identity_service
 from app.modules.identity.models import Account
@@ -856,6 +858,12 @@ def test_demo_load_leaves_no_settlement_on_demo_tournament(
 ) -> None:
     monkeypatch.setattr(settings, "DEMO_PASSWORD", "demo-password")
     monkeypatch.setattr(settings, "DEMO_EMAIL_DOMAIN", "demo.example.com")
+    # 沒有隊伍時抽籤失敗，savepoint 要連優先期結算一起撤銷（7.1 補上隊伍前的實際情況）
+    monkeypatch.setattr(
+        demo_data,
+        "STEPS",
+        [step for step in demo_data.STEPS if step is not registration_step.seed],
+    )
 
     assert load(session) is True
 

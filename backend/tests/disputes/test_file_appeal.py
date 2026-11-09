@@ -27,6 +27,7 @@ from app.modules.disputes.models import Appeal
 from app.modules.identity.models import Account
 from app.modules.registration import service as registration_service
 from app.modules.tournaments import service as tournaments_service
+from app.modules.tournaments.models import Tournament, TournamentStatus
 from tests.competition.conftest import (  # noqa: F401  fake_registration 是 fixture
     FakeRegistration,
     draw_with,
@@ -353,6 +354,37 @@ def test_wrong_match_status(
     assert response.status_code == 409
     assert _code(response) == "APPEAL_NOT_ALLOWED"
     assert setup.match(session).status == status
+    assert _counts(session, setup) == (0, 0, 0)
+    assert _files(upload_dir) == []
+
+
+@pytest.mark.parametrize(
+    "tournament_status", [TournamentStatus.FINISHED, TournamentStatus.CANCELLED]
+)
+def test_ended_tournament_rejects_appeal(
+    client: TestClient,
+    session: Session,
+    setup: Setup,
+    upload_dir: Path,
+    tournament_status: TournamentStatus,
+) -> None:
+    """賽事已結束或已取消時，申訴期的場次也不能申訴（與 6.4 檢舉一致）。"""
+    tournament = session.get(Tournament, setup.tournament_id)
+    assert tournament is not None
+    tournament.status = tournament_status
+    session.add(tournament)
+    session.commit()
+
+    state = _state(client, setup, setup.captain_a)
+    response = _file(
+        client, setup, setup.captain_a, attachment=("p.png", PNG, "image/png")
+    )
+
+    assert state["can_file"] is False
+    assert state["reason"] == "not_appealable"
+    assert response.status_code == 409
+    assert _code(response) == "APPEAL_NOT_ALLOWED"
+    assert setup.match(session).status == MatchStatus.APPEAL_WINDOW
     assert _counts(session, setup) == (0, 0, 0)
     assert _files(upload_dir) == []
 

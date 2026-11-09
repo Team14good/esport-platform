@@ -4,7 +4,7 @@ disputes 新增申訴：(match_id, team_id) 唯一（每隊每場一次）；處
 reminded_at 給 6.3（期中擱置）。
 
 Revision ID: a9d4f2c6e8b1
-Revises: b5c8e2f4a1d7
+Revises: e9a4c2f7b6d1
 Create Date: 2026-11-08 12:00:00.000000
 
 """
@@ -16,7 +16,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = "a9d4f2c6e8b1"
-down_revision = "b5c8e2f4a1d7"
+down_revision = "e9a4c2f7b6d1"
 branch_labels = None
 depends_on = None
 

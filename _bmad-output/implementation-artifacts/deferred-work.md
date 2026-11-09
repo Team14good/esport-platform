@@ -47,25 +47,11 @@
   summary: 上傳 API 沒有請求大小上限，5 MB 在 multipart 整個收完後才由 `core.storage` 檢查。
   evidence: 2026-10-30 Story 3.2 第一段 Code Review（Blind Hunter）。Starlette 會先把整個 body spool 到暫存檔，超大請求仍會被完整接收；第二段建 multipart API 時要決定請求大小上限（例如檢查 `Content-Length`）（medium）。
 
-## Deferred from: spec-5-2-forfeit-rules.md (2026-10-30)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-forfeit-rules.md`
-  summary: Story 5.2 第二階段尚未實作：第一階段只有 `competition/forfeit.py` 的純函式（`judge_forfeit`、`appeal_deadline`），還沒有 worker 工作、資料寫入、事件與畫面，所以逾時後實際上不會判棄權。
-  evidence: 依賴 D 的 4.1（Match 資料表、`lock_match`、`transition_match`）與 5.1（`list_forfeit_due`、`list_check_ins`），兩者尚未合併。合併後在 competition 新增檔案完成以下範圍（不修改 D 的 `service.py` 既有函式）：
-    - worker 工作：用 `list_forfeit_due` 選場次，`lock_match` 後以 `list_check_ins` 與賽事狀態重新呼叫 `judge_forfeit`；有結果時寫入 outcome、勝隊、wins 與 `appeal_deadline(decided_at=現在, appeal_minutes=賽事申訴時限)`，`submitted_by` 留空，再用 `transition_match` 轉為申訴期。重複執行沒有副作用。
-    - 操作紀錄以 `app.core.audit.record()` 記 actor 為 system；發出判棄權事件（期中只發不通知）。
-    - S4 顯示哪一隊棄權（雙方棄權時兩隊都標示）與申訴期倒數。
-    - 確認 D 的場次狀態轉換表允許「待開打 → 申訴期」；若不允許，請 D 在轉換表新增，不由 5.2 修改。
-
 ## Deferred from: Story 5.2（S4 申訴期區塊，2026-10-30）
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-1-game-settings-and-school-list.md`
   summary: （低）Pydantic 內建的 422 訊息是英文：缺欄位、列舉值不合法（例如 `score_type`）、型別不是 list／object 時，`detail[].msg` 不是繁中，前端直接顯示會出現英文。
   evidence: 2026-10-29 Story 2.1 第一階段審查（Edge Case Hunter）。既有問題，identity 的 API 也一樣（`core/errors.py` 沒有翻譯 `RequestValidationError`）。處理時在 core 加一個 `RequestValidationError` handler，依 `type`（missing、enum、list_type 等）換成繁中訊息，並補測試。
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-schedule-rules.md`
-  summary: （低）competition 純函式（schedule.py；4.1 合併後的 bracket.py、5.5 的 progression.py 也適用）要求的 90% 分支覆蓋率只靠 spec 的手動指令驗證，CI 沒有強制。
-  evidence: CI 在 backend 容器內執行 `scripts/test.sh`，其中 `coverage run` 沒有 `--branch`，全域門檻是 `fail_under = 85`。CI 要另加一步 `coverage run --branch -m pytest tests/competition` 再 `coverage report --include=... --fail-under=90`；若改成全域開 branch，要先確認整體覆蓋率仍高於 85%。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-5-confirm-advance.md`
   summary: `confirm_walkover` 不檢查空缺方是否真的確定不會有隊伍，6.5 呼叫前要自己確認（未驗證，若為真屬 medium）。
@@ -93,9 +79,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
   summary: `allocation.py` 沒有「優先期代表隊退出時，由同校平均段位積分次高的隊伍遞補」的對象函式（FR-17）。
   evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Blind Hunter）。只在代表隊撤回或被退回時觸發（3.7、3.8 期中擱置），期中不會發生；做 3.7 或 3.8 時在本模組新增，並讓先搶期名額釋出時的遞補先處理這個情況（medium）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
-  summary: epic-3-context 要求 `AllocationPolicy` 分支覆蓋率 ≥ 90%，但 `scripts/test.sh` 沒有 `--branch`，只靠 spec 的手動指令檢查。
-  evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Verification Gap）。目前實測 100%；之後修改 `allocation.py` 時若漏測分支，一般測試仍會通過。要自動檢查時，在 CI 加一步對 `app/modules/registration/allocation.py` 以 `--branch` 量測並設 `--fail-under=90`（low）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
   evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
@@ -174,15 +157,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
   summary: （低）示範賽事的時間在第一次建立時固定（開賽＝當時＋7 天）；保留資料庫、超過 7 天後再次啟動時，tournaments 步驟依「主辦方＋名稱」沿用這場已過開賽時間的賽事，competition 步驟的抽籤會因 `TOURNAMENT_START_PASSED` 一直略過。
   evidence: 2026-11-04 Story 7.1 tournaments 步驟第一輪審查（Blind Hunter、Edge Case Hunter）。凍結區塊規定已存在就沿用、不覆寫；Demo 前用 `docker compose down -v` 清掉資料庫即可。要自動處理時，需由人決定：過期就另建一場（會有兩場同名賽事）或改寫既有賽事的時間（違反「不覆寫」）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
-  summary: 示範資料的 tournaments 步驟已建立「FLOW 校園盃 特戰英豪」並寫入 `context.tournament_to_draw`（開放報名、開賽在啟動後 7 天），competition 步驟會嘗試抽籤；但目前沒有 registration 步驟建立 32 隊正取，registration 也還沒提供抽籤用的 `finalize_for_draw`、`list_accepted_teams` 等函式，實際啟動會記錄 `REGISTRATION_UNAVAILABLE` 並略過抽籤。
-  evidence: 2026-11-04 Story 7.1 tournaments 步驟（B）完成後，以 compose 實際啟動確認的 log。剩下的是 C 的 registration 步驟（32 隊正取，放在 `STEPS` 的 tournaments 之後、competition 之前）與 contracts/competition.md〈二〉的四個函式；賽事維持 `open`，所以 `draw` 會先呼叫 `finalize_for_draw`（spec-7-1-tournaments-demo-step.md Decisions）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
   summary: （中）先搶期釋出的是優先期代表隊（期中由 6.5 抽籤前取消資格觸發）時，`backfill_vacancies` 依先搶期順位把名額給別校，沒有依 FR-17「由同校平均段位積分次高的隊伍遞補」。
   evidence: 2026-11-04 PR #28 審查修正的 Code Review（Blind Hunter）。3.4 第一階段的 deferred 項目寫「代表隊退出只在撤回、退回時觸發，期中不會發生」，但期中 6.5 可在先搶期取消優先期代表隊的資格，之後分配時就會走到這條路；同校候補的 `representative_backfill` 也會因代表隊不再是正取而變成 False。修正需在本模組新增同校遞補規則（需確認 `priority_schools` 中哪一隊是代表隊），並讓 `backfill_vacancies` 先處理。
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-assign-referee-backend.md`
-  summary: S4 要隨 `is_scorer` 顯示或隱藏比分登錄面板：指派、改派、收回後（含晉級衝突自動收回），`ScoreEntryState.is_scorer` 會改變，S4 需重抓 `GET .../score-entry`（A 的 S4 工作）。
-  evidence: 2026-11-04 承接已刪除的 5.3 項目；後端端對端測試已在 `test_assign_referee.py`（指派／收回後 `is_scorer` 切換、晉級衝突收回），前端尚未接上。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-s30-matches-page.md`
   summary: 主辦方賽事後台側欄在子頁（例如 S30 `/organizer/tournaments/{id}/matches`）時，「總覽」（`/organizer/tournaments/{id}`）也顯示為目前位置：`BackofficeLayout` 的 `Link` 沒設 `activeOptions`，以前綴比對；「我的賽事」（`/organizer`）在所有賽事頁也同樣亮起。
   evidence: 2026-11-04 S30 實作時發現；B 的 S31 裁判頁也會遇到。修法需要改 B 的 `components/layout/BackofficeLayout.tsx`（例如 `BackofficeNavItem` 加選填的 `exact`，傳給 `activeOptions`），S30 spec 禁止改 B 的元件，交給 B 決定。
@@ -210,9 +187,3 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md`
   summary: （中）報名截止工作 `close_registrations` 每輪只取最早到期的一場；那場在 `close_registration` 一直拋錯（例如缺快照的 `RuntimeError`）時，worker 每輪都卡在它，之後到期的賽事永遠不會轉為「報名截止」。
   evidence: 2026-11-05 Story 3.6 截止 worker 審查第 1 輪（Blind Hunter、Edge Case Hunter、Verification Gap 都提出）。`find_due_registration_end_id` 依 `registration_end`、id 取第一筆，`run_once` 遇錯 rollback 後結束本輪該工作；`open_due_registration`、`allocate_due_priority_window` 是相同模式。處理時讓 worker 跳過本輪失敗過的候選（或逐筆在 savepoint 內嘗試），並補「第一場拋錯時第二場仍會關閉」的測試。
-
-## Deferred from: code review of spec-6-1-file-appeal.md (2026-11-09)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-1-file-appeal.md`
-  summary: （中，未驗證）賽事已取消時，仍在申訴期的場次可以提出申訴並轉為申訴中；`get_appeal_state` 也會回可提出。`file_appeal` 只看場次狀態與期限，沒有檢查賽事狀態。
-  evidence: 2026-11-09 Story 6.1 審查（Edge Case Hunter）。期中 2.6 取消賽事擱置，賽事只會在決賽與季軍賽都確認後轉為已結束（此時所有場次都已確認），所以目前走不到；2.6 實作時若取消賽事不作廢場次，就要在 `file_appeal` 鎖住賽事後檢查 `finished`／`cancelled` 並回 `APPEAL_NOT_ALLOWED`，`get_appeal_state` 同步，補測試。

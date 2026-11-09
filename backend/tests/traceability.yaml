@@ -1,0 +1,339 @@
+# 後端測試的分層與追溯對應（Story 7.3）：分層與 Story／FR 對應的單一來源。
+#
+# - 每個 tests/ 底下的 test_*.py 一列，鍵為相對於 tests/ 的路徑；新增測試檔時要在這裡加一列，
+#   tests/test_traceability.py 會檢查每個檔都有標、沒有多餘的列、格式正確。
+# - layer：unit（不連資料庫：純函式、靜態檢查）或 integration（連 compose 的 PostgreSQL 18）。
+#   tests/conftest.py 依這裡替每個案例加上同名的 pytest marker，`pytest -m unit` 只跑單元測試。
+# - stories：Story 編號（"3.4"）；frs：需求編號（FR-n 或 NFR-n），至少各一個。
+#   專案骨架、架構規則這類沒有直接對應功能需求的測試，標最接近的 NFR
+#   （骨架、架構規則與部署 NFR-8、定時規則 NFR-4、權限 NFR-5、操作紀錄 NFR-3、交易與併發 NFR-1）。
+# - 測試報告（scripts/test-all.sh）的追溯區塊依這裡替每個案例帶上 Story 與 FR。
+
+competition/test_assign_referee.py:
+  layer: integration
+  stories: ["4.4"]
+  frs: [FR-4]
+competition/test_bracket.py:
+  layer: unit
+  stories: ["4.1"]
+  frs: [FR-20]
+competition/test_bracket_api.py:
+  layer: integration
+  stories: ["4.1"]
+  frs: [FR-19, FR-20]
+competition/test_check_in.py:
+  layer: integration
+  stories: ["5.1"]
+  frs: [FR-24, NFR-4]
+competition/test_checkin.py:
+  layer: unit
+  stories: ["5.1"]
+  frs: [FR-24]
+competition/test_confirm_advance.py:
+  layer: integration
+  stories: ["5.5", "5.6"]
+  frs: [FR-21, FR-29]
+competition/test_demo_data.py:
+  layer: integration
+  stories: ["7.1"]
+  frs: [NFR-8]
+competition/test_draw.py:
+  layer: integration
+  stories: ["4.1"]
+  frs: [FR-19, FR-20]
+competition/test_draw_status.py:
+  layer: integration
+  stories: ["4.1"]
+  frs: [FR-19]
+competition/test_forfeit.py:
+  layer: unit
+  stories: ["5.2"]
+  frs: [FR-25]
+competition/test_forfeit_job.py:
+  layer: integration
+  stories: ["5.2"]
+  frs: [FR-25, NFR-4]
+competition/test_mark_appealed.py:
+  layer: integration
+  stories: ["6.1"]
+  frs: [FR-30]
+competition/test_match_api.py:
+  layer: integration
+  stories: ["5.8"]
+  frs: [FR-36]
+competition/test_match_transitions.py:
+  layer: integration
+  stories: ["4.1"]
+  frs: [FR-25, NFR-1]
+competition/test_progression.py:
+  layer: unit
+  stories: ["5.5", "5.6"]
+  frs: [FR-21]
+competition/test_referee_matches.py:
+  layer: integration
+  stories: ["4.4"]
+  frs: [FR-4]
+competition/test_registration_port.py:
+  layer: integration
+  stories: ["4.1"]
+  frs: [FR-19]
+competition/test_replay_clear.py:
+  layer: integration
+  stories: ["6.2"]
+  frs: [FR-31]
+competition/test_replay_hooks.py:
+  layer: integration
+  stories: ["6.2", "6.5"]
+  frs: [FR-31, FR-22, FR-4, FR-23]
+competition/test_reschedule.py:
+  layer: integration
+  stories: ["4.3"]
+  frs: [FR-23]
+competition/test_schedule.py:
+  layer: unit
+  stories: ["4.3"]
+  frs: [FR-23]
+competition/test_score_concurrency.py:
+  layer: integration
+  stories: ["5.3", "5.4", "7.3"]
+  frs: [FR-26, FR-27, NFR-1]
+competition/test_score_entry.py:
+  layer: integration
+  stories: ["5.3", "5.4"]
+  frs: [FR-26, FR-27]
+competition/test_scoring.py:
+  layer: unit
+  stories: ["5.3", "5.4"]
+  frs: [FR-26, FR-27]
+core/test_app.py:
+  layer: integration
+  stories: ["1.1"]
+  frs: [NFR-8]
+core/test_audit.py:
+  layer: integration
+  stories: ["1.1"]
+  frs: [NFR-3]
+core/test_authz.py:
+  layer: unit
+  stories: ["2.7"]
+  frs: [FR-5, NFR-5]
+core/test_clock.py:
+  layer: unit
+  stories: ["1.1"]
+  frs: [NFR-4]
+core/test_config.py:
+  layer: unit
+  stories: ["1.1"]
+  frs: [NFR-8]
+core/test_db.py:
+  layer: integration
+  stories: ["1.1"]
+  frs: [NFR-1]
+core/test_errors.py:
+  layer: unit
+  stories: ["1.1"]
+  frs: [NFR-8]
+core/test_events.py:
+  layer: integration
+  stories: ["1.3"]
+  frs: [FR-37]
+core/test_security.py:
+  layer: unit
+  stories: ["1.4"]
+  frs: [FR-1, NFR-6]
+core/test_storage.py:
+  layer: unit
+  stories: ["3.2"]
+  frs: [FR-12]
+disputes/test_appeal_concurrency.py:
+  layer: integration
+  stories: ["6.1"]
+  frs: [FR-30, NFR-1]
+disputes/test_file_appeal.py:
+  layer: integration
+  stories: ["6.1"]
+  frs: [FR-30, FR-5, NFR-5]
+disputes/test_report_concurrency.py:
+  layer: integration
+  stories: ["6.4"]
+  frs: [FR-32, NFR-1]
+disputes/test_reports.py:
+  layer: integration
+  stories: ["6.4"]
+  frs: [FR-32, FR-5, NFR-5]
+identity/test_demo_data.py:
+  layer: integration
+  stories: ["7.1"]
+  frs: [NFR-8]
+identity/test_first_admin.py:
+  layer: integration
+  stories: ["1.1"]
+  frs: [NFR-8]
+identity/test_initial_data.py:
+  layer: integration
+  stories: ["1.1"]
+  frs: [NFR-8]
+identity/test_login.py:
+  layer: integration
+  stories: ["1.4"]
+  frs: [FR-1, FR-5]
+identity/test_organizer_application.py:
+  layer: integration
+  stories: ["1.7"]
+  frs: [FR-2]
+identity/test_organizer_application_review.py:
+  layer: integration
+  stories: ["1.8"]
+  frs: [FR-3]
+identity/test_password_reset.py:
+  layer: integration
+  stories: ["1.5"]
+  frs: [FR-40]
+identity/test_school_admin.py:
+  layer: integration
+  stories: ["2.1"]
+  frs: [FR-6]
+identity/test_schools.py:
+  layer: integration
+  stories: ["1.3"]
+  frs: [FR-6]
+identity/test_signup.py:
+  layer: integration
+  stories: ["1.3"]
+  frs: [FR-1]
+notifications/test_email_delivery.py:
+  layer: integration
+  stories: ["1.3", "1.5"]
+  frs: [FR-37]
+registration/test_allocation.py:
+  layer: unit
+  stories: ["3.4", "3.5", "3.6"]
+  frs: [FR-14, FR-15, FR-16, FR-17]
+registration/test_draw_functions.py:
+  layer: integration
+  stories: ["3.6"]
+  frs: [FR-16, FR-19]
+registration/test_first_come_concurrency.py:
+  layer: integration
+  stories: ["3.5"]
+  frs: [FR-15, NFR-1]
+registration/test_first_come_submission.py:
+  layer: integration
+  stories: ["3.5"]
+  frs: [FR-15, FR-16, FR-17]
+registration/test_nfr1_registration_report.py:
+  layer: integration
+  stories: ["3.4", "7.3"]
+  frs: [FR-14, NFR-1]
+registration/test_player_profile.py:
+  layer: unit
+  stories: ["3.2"]
+  frs: [FR-12]
+registration/test_player_profile_api.py:
+  layer: integration
+  stories: ["3.2"]
+  frs: [FR-12]
+registration/test_report_functions.py:
+  layer: integration
+  stories: ["6.4"]
+  frs: [FR-32]
+registration/test_settlement_concurrency.py:
+  layer: integration
+  stories: ["3.4", "3.6"]
+  frs: [FR-14, FR-16, NFR-1]
+registration/test_submit_registration.py:
+  layer: integration
+  stories: ["3.3"]
+  frs: [FR-13, NFR-1]
+registration/test_team_concurrency.py:
+  layer: integration
+  stories: ["3.1"]
+  frs: [FR-11, NFR-1]
+registration/test_teams.py:
+  layer: integration
+  stories: ["3.1"]
+  frs: [FR-11]
+test_architecture.py:
+  layer: unit
+  stories: ["1.1"]
+  frs: [NFR-4, NFR-8]
+test_auth_required.py:
+  layer: integration
+  stories: ["1.4"]
+  frs: [FR-5, NFR-5]
+test_enums.py:
+  layer: unit
+  stories: ["1.1"]
+  frs: [NFR-8]
+test_migrations.py:
+  layer: integration
+  stories: ["1.1"]
+  frs: [NFR-8]
+test_module_structure.py:
+  layer: unit
+  stories: ["1.1"]
+  frs: [NFR-8]
+test_traceability.py:
+  layer: unit
+  stories: ["7.3"]
+  frs: [NFR-2]
+tournaments/test_demo_data.py:
+  layer: integration
+  stories: ["7.1"]
+  frs: [NFR-8]
+tournaments/test_find_due_registration_end.py:
+  layer: integration
+  stories: ["3.6"]
+  frs: [FR-16, NFR-4]
+tournaments/test_games.py:
+  layer: integration
+  stories: ["2.1"]
+  frs: [FR-6, NFR-9]
+tournaments/test_public_tournaments.py:
+  layer: integration
+  stories: ["2.4"]
+  frs: [FR-34]
+tournaments/test_referees.py:
+  layer: integration
+  stories: ["2.7"]
+  frs: [FR-4]
+tournaments/test_tournaments.py:
+  layer: integration
+  stories: ["2.2"]
+  frs: [FR-7]
+tournaments/test_transitions.py:
+  layer: integration
+  stories: ["2.2"]
+  frs: [FR-7]
+worker/test_confirm_expired_appeals.py:
+  layer: integration
+  stories: ["5.5"]
+  frs: [FR-29, NFR-4]
+worker/test_email_pipeline.py:
+  layer: integration
+  stories: ["1.3"]
+  frs: [FR-1, FR-37]
+worker/test_items.py:
+  layer: integration
+  stories: ["1.3"]
+  frs: [NFR-4]
+worker/test_judge_forfeits.py:
+  layer: integration
+  stories: ["5.2"]
+  frs: [FR-25, NFR-4]
+worker/test_open_registration.py:
+  layer: integration
+  stories: ["2.2"]
+  frs: [FR-7, NFR-4]
+worker/test_priority_window_allocation.py:
+  layer: integration
+  stories: ["3.4"]
+  frs: [FR-14, NFR-4]
+worker/test_registration_deadline.py:
+  layer: integration
+  stories: ["3.6"]
+  frs: [FR-16, NFR-4]
+worker/test_worker.py:
+  layer: integration
+  stories: ["1.1"]
+  frs: [NFR-4]

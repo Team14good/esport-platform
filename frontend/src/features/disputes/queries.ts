@@ -1,5 +1,5 @@
-// S4 申訴入口的資料：登入者本隊的申訴狀態，以及送出申訴（multipart）。
-import { useQuery } from "@tanstack/react-query"
+// disputes 的 query：S20 檢舉對象選單（6.4）、S4 申訴入口（6.1，登入者本隊的申訴狀態與送出申訴）。
+import { queryOptions, useQuery } from "@tanstack/react-query"
 
 import { DisputesService, type PublicMatchDetail } from "@/client"
 import {
@@ -8,6 +8,25 @@ import {
   samePlaceholder,
 } from "@/features/competition/match-source"
 import { useIsSignedIn } from "@/features/identity/auth"
+
+/** disputes 相關 query 的共同前綴。 */
+export const DISPUTES_QUERY_KEY = ["disputes"] as const
+
+/**
+ * S20 檢舉對象選單。不符資格（403、409）時重試也不會成功，所以不重試
+ * （全站預設會對 403／409 重試 3 次）。
+ */
+export const reportableTeamsQueryOptions = (tournamentId: string) =>
+  queryOptions({
+    queryKey: [...DISPUTES_QUERY_KEY, "reportable-teams", tournamentId],
+    queryFn: async () =>
+      (
+        await DisputesService.listReportableTeams({
+          path: { tournament_id: tournamentId },
+        })
+      ).data,
+    retry: false,
+  })
 
 /** 可以提出申訴、S4 顯示申訴期區塊的場次狀態 */
 export const APPEALABLE_STATUSES: ReadonlySet<PublicMatchDetail["status"]> =

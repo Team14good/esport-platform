@@ -23,6 +23,7 @@ from sqlalchemy.engine import make_url
 from sqlmodel import Session
 
 from app.core.config import settings
+from tests.report_support import TESTS_DIR, api_timings, load_traceability
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -67,6 +68,34 @@ def _test_database() -> None:
     command.upgrade(alembic_cfg, "head")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_uploads(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """上傳檔案寫到暫存資料夾：示範資料每次載入都會存 160 張段位截圖。"""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(settings, "UPLOAD_DIR", tmp_path_factory.mktemp("uploads"))
+        yield
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """依 tests/traceability.yaml 替每個案例加上 `unit`／`integration` marker（7.3）。
+
+    沒寫進對應檔的測試檔不加 marker；tests/test_traceability.py 會列出這些檔名並失敗。
+    """
+    layers = {path: entry.get("layer") for path, entry in load_traceability().items()}
+    for item in items:
+        try:
+            relative = item.path.resolve().relative_to(TESTS_DIR).as_posix()
+        except ValueError:
+            continue
+        layer = layers.get(relative)
+        if layer in ("unit", "integration"):
+            item.add_marker(getattr(pytest.mark, layer))
+
+
+def pytest_sessionfinish() -> None:
+    api_timings.flush()
+
+
 def _savepoint_session(connection: Connection) -> Session:
     return Session(bind=connection, join_transaction_mode="create_savepoint")
 
@@ -95,7 +124,9 @@ def session_factory(db_connection: Connection) -> Callable[[], Session]:
 
 
 @pytest.fixture
-def client(db_connection: Connection) -> Iterator[TestClient]:
+def client(
+    db_connection: Connection, request: pytest.FixtureRequest
+) -> Iterator[TestClient]:
     def _override_get_session() -> Iterator[Session]:
         with _savepoint_session(db_connection) as db_session:
             yield db_session
@@ -103,6 +134,8 @@ def client(db_connection: Connection) -> Iterator[TestClient]:
     app.dependency_overrides[get_session] = _override_get_session
     try:
         with TestClient(app) as test_client:
+            # 有設 TEST_TIMINGS_FILE 時記錄每次 API 的耗時（7.3 測試報告的 NFR-2）
+            api_timings.attach(test_client, request.node.nodeid)
             yield test_client
     finally:
         app.dependency_overrides.pop(get_session, None)

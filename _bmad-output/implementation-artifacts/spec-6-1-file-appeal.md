@@ -100,6 +100,8 @@ context:
 - 併發測試（`tests/disputes/test_appeal_concurrency.py`）用兩條真實連線：一方持鎖未提交時，另一方必須等鎖並在鎖後放棄。把 `file_appeal` 的兩個鎖拿掉時，第一個測試會失敗（已實測：申訴在場次確認後仍進到 `mark_appealed`）。測試結束時刪除申訴、場次、對戰表與相關事件。
 - 併發測試提交的 `appeal.filed` 操作紀錄只增不改、刪不掉，第一次跑全套時讓 `test_file_appeal.py` 的計數多 1 而失敗（單獨跑該檔不會發生）；計數改為只算該場次／賽事後全套通過。
 
+- 合併 main（#64 6.4 檢舉、#61、#67）時依 D 的審查：遷移 `a9d4f2c6e8b1` 改接在 6.4 的 `e9a4c2f7b6d1` 之後；`disputes/service.py` 與 6.4 同名的私有函式改名（`_clean_appeal_description`、`_appeal_to_read`），`_MEDIA_TYPES`、`_file_not_found` 共用 6.4 的；附件副檔名不在對照表時改回 404 `FILE_NOT_FOUND`；router 的下載改用 6.4 的 `_stream`，加 `Content-Disposition: attachment`，`_chunks` 刪除；`features/disputes/queries.ts` 保留兩邊；client 重新產生。
+- 同時採用 D 的建議 4：`file_appeal` 鎖住賽事後、`get_appeal_state` 讀賽事後，賽事已結束或已取消時回 `not_appealable`／409 `APPEAL_NOT_ALLOWED`（與 6.4 一致），補參數化測試；原本延後到 `deferred-work.md` 的這一項已處理並刪除。約定補 `APPEAL_DESCRIPTION_REQUIRED`、`APPEAL_DESCRIPTION_TOO_LONG`，並改正〈二〉〈四〉仍寫 `ensure_captain` 的兩處。
 ## Spec Change Log
 
 ## Review Triage Log
@@ -116,7 +118,7 @@ context:
 | 6 | Blind | 附件下載沒有 `X-Content-Type-Options: nosniff` | low：使用者上傳的檔案 | patch：加 header |
 | 7 | Blind | `disputes.md`〈三〉的新檔與不改既有函式規則與 D 負責四個函式矛盾；`competition.md` 刪除線加新規則讀起來像兩條規則 | low：之後 D 照約定會誤讀 | patch：寫清楚只適用 `mark_appealed` |
 | 8 | Blind | `sprint-status.yaml` 的 6.2、6.5 仍只寫負責 B | low | patch：註解改為 B（disputes 端）、D（competition 端） |
-| 9 | Edge | 賽事已取消時仍可對申訴期場次申訴 | maybe-false（medium）：期中 2.6 擱置、已結束時所有場次已確認，目前走不到 | defer：`deferred-work.md` |
+| 9 | Edge | 賽事已取消時仍可對申訴期場次申訴 | maybe-false（medium）：期中 2.6 擱置、已結束時所有場次已確認，目前走不到 | defer；合併 main 時依 D 的建議改為在本 Story 處理並刪除延後項目 |
 | 10 | Blind | 第二隊送出後沒有重抓觸發 | false：S4 的 `refresh` 會 invalidate `matchQueryKey` 前綴，申訴狀態的 key 也以它開頭 | 不處理 |
 | 11 | Edge | 期限在用戶端到了但版本沒變，按鈕仍可按 | false：申訴期倒數的 `onExpire` 會呼叫 `refresh`，申訴狀態隨之重抓成「已截止」 | 不處理 |
 | 12 | Blind | 產生的 API 型別只列 422 | false：全專案慣例，業務錯誤統一由 `parseApiError` 處理 | 不處理 |

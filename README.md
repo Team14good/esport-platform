@@ -36,12 +36,12 @@ docker compose up -d --build --wait
 | 平台管理員 | `admin@example.com` | `FIRST_ADMIN_PASSWORD` | 由 `FIRST_ADMIN_EMAIL` 設定 |
 | 主辦方 | `organizer@example.com` | `DEMO_PASSWORD` | 已具主辦方身分（`is_organizer`），不必再申請 |
 | 裁判 | `referee@example.com` | `DEMO_PASSWORD` | 目前只有帳號，指派到賽事待之後補上 |
-| 隊長 | `captain@example.com` | `DEMO_PASSWORD` | 目前只有帳號，隊伍待之後補上 |
-| 選手 | `player@example.com` | `DEMO_PASSWORD` | 目前只有帳號 |
+| 隊長 | `captain@example.com` | `DEMO_PASSWORD` | 示範賽事「國立中央大學電競隊」的隊長 |
+| 選手 | `player@example.com` | `DEMO_PASSWORD` | 「國立中央大學電競隊」的隊員 |
 
 舊的 `.env` 沒有 `DEMO_PASSWORD` 時只建立第一個平台管理員，backend log 會提示補上設定；從 `.env.example` 補上 `DEMO_PASSWORD`、`DEMO_EMAIL_DOMAIN` 後重新啟動即可。
 
-帳號之後接著建立《英雄聯盟》《特戰英豪》兩款遊戲（含段位對照表），以及一場 32 隊、開放報名的校園賽「FLOW 校園盃 特戰英豪」（主辦方為上表的主辦方，開賽在啟動後 7 天）。隊伍與抽籤會在 registration 步驟完成後加進來。
+帳號之後接著建立《英雄聯盟》《特戰英豪》兩款遊戲（含段位對照表），以及一場 32 隊、已抽籤的校園賽「FLOW 校園盃 特戰英豪」（主辦方為上表的主辦方，開賽在啟動後 7 天）。32 隊來自 32 所學校，每隊 5 人；其他隊員的帳號是 `team02-m1@example.com` 這類格式（隊號 02～32、隊員 m1～m5，第一隊為 m3～m5），密碼同 `DEMO_PASSWORD`，方便用其他隊伍的身分操作。
 
 **Demo 前請先清空資料庫再啟動**：`docker compose down -v && docker compose up -d --build --wait`。示範賽事的時間在第一次建立時固定；保留資料庫、超過 7 天後再啟動時會沿用已過開賽時間的賽事，抽籤會被拒絕。
 
@@ -123,6 +123,20 @@ docker compose --profile e2e run --rm e2e bunx playwright test --grep @story-1.7
   ```
 
 每個 PR 與 `main` 的 push 都由 GitHub Actions（`.github/workflows/ci.yml`）跑上面全部項目，另外檢查 Alembic 只有一個 head、`frontend/src/client` 與後端 API 一致；範本原本的 Actions 已移除，這份是本專案自己的。
+
+### 測試總指令與測試報告
+
+```bash
+# 依序跑單元（前端 Vitest、後端 pytest -m unit）、整合（後端 pytest -m integration）、端對端，最後產生報告
+bash scripts/test-all.sh
+# 略過端對端（報告註明「本次略過」）；--no-build 不重新 build 容器
+bash scripts/test-all.sh --skip-e2e
+```
+
+- 預設先 `docker compose up -d --build --wait`，測到的是目前的原始碼；任何一層失敗都會跑完其餘層，最後以非 0 結束。
+- 產出放在 `reports/`（已加進 `.gitignore`）：`test-report.md`（各層結果、後端覆蓋率、純函式分支覆蓋率、NFR-1 併發比對、NFR-2 回應時間、Story／FR 追溯）、`coverage/index.html`、`raw/`（JUnit、coverage.json、Playwright json、計時檔）。
+- 後端每個測試檔的層級（unit／integration）與 Story、FR 寫在 `backend/tests/traceability.yaml`；新增測試檔要加一列，否則 `tests/test_traceability.py` 會失敗並列出檔名。
+- `scripts/test.sh` 開啟分支覆蓋率，並要求 `allocation.py`、`bracket.py`、`schedule.py`、`progression.py` 逐檔達 90% 以上（CI 也會檢查）。
 
 測試不會寫入開發用資料庫：每個測試包在一個外層交易裡並在結束時回滾；`<POSTGRES_DB>_test` 在每次測試開始時刪除重建並跑完遷移。
 

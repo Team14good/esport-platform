@@ -1,9 +1,10 @@
 import { createMemoryHistory, createRouter } from "@tanstack/react-router"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeAll, describe, expect, it, vi } from "vitest"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  DisputesService,
   type IdentityService,
   type MyTeamCard,
   type PublicTournament,
@@ -35,6 +36,9 @@ type CreateTeamResult = Awaited<
   ReturnType<typeof RegistrationService.createTeam>
 >
 type ReadTeamResult = Awaited<ReturnType<typeof RegistrationService.readTeam>>
+type ReportableResult = Awaited<
+  ReturnType<typeof DisputesService.listReportableTeams>
+>
 
 const TOURNAMENT_ID = "t-1"
 
@@ -386,7 +390,59 @@ describe("S2 開放報名的「建立隊伍」入口", () => {
     renderApp(`/tournaments/${TOURNAMENT_ID}`)
 
     expect(await screen.findByText("抽籤準備中")).toBeInTheDocument()
+    // Story 6.4 的「檢舉隊伍」在任何未結束的狀態都會查我的隊伍（spec-6-4 Design Notes），
+    // 所以這裡改為等查詢完成後，確認仍沒有「建立隊伍」
+    await waitFor(() => expect(myTeams).toHaveBeenCalled())
     expect(screen.queryByRole("button", { name: "建立隊伍" })).toBeNull()
-    expect(myTeams).not.toHaveBeenCalled()
+  })
+})
+
+describe("S2 的「檢舉隊伍」掛載點（Story 6.4）", () => {
+  beforeEach(() => {
+    // 隊長的 S2 會掛載 S20；jsdom 沒有 matchMedia，useIsMobile 只用它監聽變化，寬度看 innerWidth
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+  })
+
+  function mockCaptainOfAcceptedTeam() {
+    mockMyTeams([{ ...MY_TEAM, registration_status: "accepted" }])
+    vi.spyOn(RegistrationService, "readTeam").mockResolvedValue({
+      data: { ...TEAM, id: "team-1", registration_status: "accepted" },
+    } as ReadTeamResult)
+    return vi.spyOn(DisputesService, "listReportableTeams").mockResolvedValue({
+      data: [{ id: "team-b", name: "晨鳥隊", has_open_report: false }],
+    } as ReportableResult)
+  }
+
+  it("正取隊伍的隊長：S2 出現「檢舉隊伍」，以本賽事查詢可檢舉的隊伍", async () => {
+    signInAs()
+    mockTournament("closed")
+    const reportable = mockCaptainOfAcceptedTeam()
+    renderApp(`/tournaments/${TOURNAMENT_ID}`)
+
+    expect(
+      await screen.findByRole("button", { name: "檢舉隊伍" }),
+    ).toBeInTheDocument()
+    expect(reportable).toHaveBeenCalledWith({
+      path: { tournament_id: TOURNAMENT_ID },
+    })
+  })
+
+  it("賽事已結束：S2 不顯示「檢舉隊伍」，也不查可檢舉的隊伍", async () => {
+    signInAs()
+    mockTournament("finished")
+    const reportable = mockCaptainOfAcceptedTeam()
+    renderApp(`/tournaments/${TOURNAMENT_ID}`)
+
+    expect(
+      await screen.findByRole("heading", { name: "期中盃", level: 1 }),
+    ).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.queryByRole("button", { name: "檢舉隊伍" })).toBeNull()
+    expect(reportable).not.toHaveBeenCalled()
   })
 })
