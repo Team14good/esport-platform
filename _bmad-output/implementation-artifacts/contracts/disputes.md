@@ -123,9 +123,10 @@ class DisqualifyResult(BaseModel):          # competition/models.py
 ```
 
 - 先 `lock_tournament`，再依 id 遞增鎖住對戰表全部場次，判斷完成後才寫入（AD-6）。賽事已結束或已取消 409 `TOURNAMENT_FINISHED`／`TOURNAMENT_CANCELLED`；隊伍不屬於該賽事 404 `REGISTRATION_NOT_FOUND`；已取消資格 409 `TEAM_ALREADY_DISQUALIFIED`；拒絕時不改資料。
-- 報名經 registration 新增的 `disqualify_registration(session, *, team_id, actor_id) -> RegistrationRead`（內部用 `mark_status`）改為 `disqualified`。
+- 報名經 registration 新增的 `disqualify_registration(session, *, team_id, actor_id) -> RegistrationRead`（內部用 `mark_status`）改為 `disqualified`；報名狀態不能轉為取消資格（組隊中、退回、撤回、退賽）時拋 409 `REGISTRATION_INVALID_TRANSITION`，不改資料。
+- 頂替時刪除被取消資格隊伍在該場的報到紀錄（決賽頂替時也刪除頂替隊伍在季軍賽的報到）；頂替後兩隊湊齊則 `start_forfeit_clock` 並發 `MatchOpponentsDecided`（與晉級填位相同）。
 - 兩隊都在場的場次判對手獲勝時 outcome 為 `disqualified`（不用 walkover）；待開打的場次走 `scheduled → confirmed` 再 `advance`，已開打的走 `confirm_match`。操作紀錄：確認為 `match.confirmed`、換隊為 `match.teams_changed`（`before`／`after` 含 `team_a_id`、`team_b_id`，`after` 另含 `disqualified_team_id`），操作者為 `actor_id`；隨後晉級推進與季軍賽的 walkover 確認操作者為系統。
-- 對手還沒確定、需要把一方標記為不會有隊伍的情況尚未支援（拋 `NotImplementedError`，見 deferred-work.md）。
+- 對手還沒確定、需要把一方標記為不會有隊伍的情況（輪空入座等另一場勝隊、決賽要由準決賽敗隊頂替而季軍賽另一方未定）拒絕：409 `DISQUALIFY_OPPONENT_PENDING`「對手尚未確定，請等對手確定後再取消資格。」，不改資料（2026-11-09 D 決定；progression 支援列為期中後，見 deferred-work.md）。
 
 順序（D 確認）：`uphold_result`、`correct_result`、`replay_match` 都是 `lock_match` → 狀態（只接受 `appealed`）→ outcome 檢查 → 其他，與 `confirm_match` 一致。
 

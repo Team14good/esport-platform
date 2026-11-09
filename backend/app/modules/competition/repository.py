@@ -256,6 +256,16 @@ def add_check_in(session: Session, check_in: CheckIn) -> bool:
     return True
 
 
+def delete_check_in(session: Session, match_id: uuid.UUID, team_id: uuid.UUID) -> None:
+    """刪除某隊在該場的報到紀錄（6.5 取消資格把隊伍移出場次時用）；沒有紀錄則不做事。"""
+    statement = select(CheckIn).where(
+        CheckIn.match_id == match_id, CheckIn.team_id == team_id
+    )
+    for check_in in session.exec(statement):
+        session.delete(check_in)
+    session.flush()
+
+
 def list_check_ins(session: Session, match_id: uuid.UUID) -> list[CheckIn]:
     """依報到時間排序（同時間依 id）。"""
     statement = (

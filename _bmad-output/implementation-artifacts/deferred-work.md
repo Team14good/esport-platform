@@ -194,5 +194,8 @@
   summary: 6.5 第二階段：disputes `resolve_report`（屬實時呼叫 competition `disqualify`，申訴一併結案）、S33 檢舉處理頁、S27 待處理清單的檢舉、對戰樹的「取消資格」標記（`destructive`）。
   evidence: 2026-11-08 使用者決定 Story 6.5 拆兩階段；第一階段只做 competition `disqualify` 與 registration `disqualify_registration`。檢舉資料表由 C 的 6.4 建立，6.4 合併後接上；`DisqualifyResult.affected_match_ids` 給 disputes 結案該場未結案的申訴。
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-5-disqualify.md`
-  summary: （高）取消資格時對手還沒確定（輪空入座、還沒比過，或只靠 walkover 晉級而等待另一場勝隊；決賽隊伍要由季軍賽的準決賽敗隊頂替、而季軍賽另一方未定）尚未支援，`disqualify` 拋 `NotImplementedError`、不改任何資料。
-  evidence: spec Design Notes 規定「先確認 progression 支援，不支援就停下回報」。`progression.advance` 的 `side_team` 只依 plan 的來源推導一方是否定案：輪空直接入座的一方沒有來源、永遠不會定案；由勝場進來的一方被清空後會被重新填回原隊伍（季軍賽一方會被填回已移到決賽的隊伍）。要支援需由 D 在 progression 新增「這一方確定不會有隊伍」的表示（例如 `MatchState` 加欄位、資料表加旗標並遷移），屬於修改既有函式，要 D 同意。
+  summary: （期中後）progression 支援「這一方確定不會有隊伍」，讓對手未定時也能取消資格，對手確定後自動判不戰而勝。
+  evidence: 2026-11-09 D 在 PR #65 決定期中版對手未定時拒絕（409 `DISQUALIFY_OPPONENT_PENDING`，涵蓋輪空入座等另一場勝隊的一方、決賽要由準決賽敗隊頂替而季軍賽另一方未定）。`progression.advance` 的 `side_team` 只依 plan 的來源推導一方是否定案：輪空直接入座的一方沒有來源、永遠不會定案；由勝場進來的一方被清空後會被重新填回原隊伍。要支援需在 progression 新增這種表示（例如 `MatchState` 加欄位、資料表加旗標並遷移），屬於修改 D 的既有函式。
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-disqualify.md`
+  summary: （未驗證，若成立為中）competition `get_registration_state` 若讀到鎖賽事前已載入 session 的報名，`disqualified` 可能是過時值，導致已取消資格的敗隊被選為頂替隊伍。
+  evidence: 2026-11-09 6.5 第一階段審查（Edge Case Hunter）。第一階段 `disqualify` 一開始就 `lock_tournament`，之前不讀報名，所以目前不會發生；第二階段 disputes `resolve_report` 若在呼叫 `disqualify` 前讀過同一隊的報名就可能成立。第二階段實作時確認呼叫順序，或在 registration 的 `get_registration` 讀取時 `populate_existing`。

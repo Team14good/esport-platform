@@ -14,12 +14,14 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, col, select
 
-from app.core import audit
+from app.core import audit, clock
 from app.core.errors import BusinessError
+from app.core.events import OutboxEvent
 from app.modules.competition import registration_port, repository, service
 from app.modules.competition.models import (
+    CheckIn,
     DisqualifyResult,
     Match,
     MatchOutcome,
@@ -116,6 +118,11 @@ def _logs(
         for log in audit.list_for_tournament(session, tournament_id)
         if log.action == action
     ]
+
+
+def _all_events(session: Session) -> list[uuid.UUID]:
+    """全部 outbox 事件的 id（斷言拒絕時沒有發任何事件）。"""
+    return list(session.exec(select(OutboxEvent.id).order_by(col(OutboxEvent.id))))
 
 
 def _update(session: Session, match: Match, **values: object) -> None:
@@ -315,6 +322,7 @@ def test_winner_waiting_for_next_match_is_replaced_by_last_loser(
     m1_before = _result(rows["M1"])
     public_before = service.get_public_bracket(session, tournament_id=tournament_id)
     assert public_before is not None
+    decided_before = _outbox(session, "MatchOpponentsDecided")
     frozen_clock.advance(timedelta(minutes=5))
 
     result, actor = _dq(session, fake, tournament_id, 7)
@@ -327,6 +335,11 @@ def test_winner_waiting_for_next_match_is_replaced_by_last_loser(
     assert rows["M5"].status == S.SCHEDULED
     assert _result(rows["M1"]) == m1_before == (S.CONFIRMED, O.PLAYED, _team(fake, 7))
     assert rows["M5"].forfeit_deadline == ROUND_2 + FORFEIT
+    # 與晉級填位相同：通知兩隊隊長新的對手
+    assert _outbox(session, "MatchOpponentsDecided") == [
+        *decided_before,
+        {"match_id": str(rows["M5"].id)},
+    ]
     assert fake.disqualified == [(_team(fake, 7), actor)]
     changed = _logs(session, tournament_id, "match.teams_changed")
     assert len(changed) == 1
@@ -347,6 +360,121 @@ def test_winner_waiting_for_next_match_is_replaced_by_last_loser(
     m5 = next(m for m in public.matches if m.code == "M5")
     assert m5.team_a is not None and m5.team_a.id == _team(fake, 8)
     assert public.updated_at > public_before.updated_at
+
+
+def test_replacement_deletes_check_in_of_disqualified_team(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament_id, rows = _eight_to_semis(session, fake)
+    for k in (7, 3):
+        repository.add_check_in(
+            session,
+            CheckIn(
+                match_id=rows["M5"].id,
+                team_id=_team(fake, k),
+                account_id=make_account(session).id,
+                at=clock.now(),
+            ),
+        )
+
+    _dq(session, fake, tournament_id, 7)
+
+    # 只留對手的報到；頂替隊伍要自己報到
+    remaining = repository.list_check_ins(session, rows["M5"].id)
+    assert [c.team_id for c in remaining] == [_team(fake, 3)]
+
+
+def _sixteen_to_semis(
+    session: Session,
+    fake: FakeRegistration,
+    *,
+    walkover_in_round_2: bool = False,
+) -> tuple[uuid.UUID, Match, Match, Match]:
+    """16 隊：第 1、2 輪由 team_a 獲勝；回傳（賽事 id、team_a 待打的準決賽、它的第 1 輪、第 2 輪）。
+
+    `walkover_in_round_2` 時，它第 2 輪的對手來源場以雙方棄權結束，第 2 輪由它 walkover 晉級。
+    """
+    tournament, _bracket = draw_with(session, fake, 16)
+    rows = _rows(session, tournament.id)
+    r1 = sorted((m for m in rows.values() if m.round_no == 1), key=lambda m: m.slot_no)
+    semis = sorted(
+        (m for m in rows.values() if m.round_no == 3 and not m.is_third_place),
+        key=lambda m: m.slot_no,
+    )
+    first = r1[0]
+    feeds_same_r2 = next(
+        m for m in r1[1:] if m.next_match_id == first.next_match_id
+    )
+    for m in r1:
+        if walkover_in_round_2 and m.id == feeds_same_r2.id:
+            _confirm(session, m, O.DOUBLE_FORFEIT, None)
+        else:
+            _confirm(session, m, O.PLAYED, m.team_a_id)
+    rows = _rows(session, tournament.id)
+    for m in sorted(
+        (m for m in rows.values() if m.round_no == 2), key=lambda m: m.slot_no
+    ):
+        if m.status == S.SCHEDULED:
+            _confirm(session, m, O.PLAYED, m.team_a_id)
+    rows = _rows(session, tournament.id)
+    team = rows[first.code].winner_id
+    r2 = next(m for m in rows.values() if m.id == first.next_match_id)
+    assert r2.winner_id == team
+    semi = next(m for m in rows.values() if m.id == r2.next_match_id)
+    assert semi.id in {s.id for s in semis} and semi.status == S.SCHEDULED
+    return tournament.id, semi, rows[first.code], r2
+
+
+def test_replacement_uses_loser_of_most_recent_played_win(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament_id, semi, r1, r2 = _sixteen_to_semis(session, fake)
+    team = r2.winner_id
+    assert team is not None and r2.outcome == O.PLAYED
+    r2_loser = r2.team_b_id if r2.team_a_id == team else r2.team_a_id
+
+    result = service.disqualify(
+        session,
+        tournament_id=tournament_id,
+        team_id=team,
+        actor_id=_organizer(session, tournament_id),
+    )
+
+    # 第 2 輪（最近一場）的敗隊頂替，不是第 1 輪的敗隊
+    assert result.replacement_team_id == r2_loser
+    assert result.replacement_team_id != _loser_of(r1)
+    rows = _rows(session, tournament_id)
+    assert team not in (rows[semi.code].team_a_id, rows[semi.code].team_b_id)
+    assert r2_loser in (rows[semi.code].team_a_id, rows[semi.code].team_b_id)
+
+
+def test_replacement_skips_walkover_win_back_to_played_win(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament_id, semi, r1, r2 = _sixteen_to_semis(
+        session, fake, walkover_in_round_2=True
+    )
+    team = r2.winner_id
+    assert team is not None and r2.outcome == O.WALKOVER
+
+    result = service.disqualify(
+        session,
+        tournament_id=tournament_id,
+        team_id=team,
+        actor_id=_organizer(session, tournament_id),
+    )
+
+    # 第 2 輪是 walkover（沒有敗隊），往前由第 1 輪的敗隊頂替
+    assert result.replacement_team_id == _loser_of(r1)
+    rows = _rows(session, tournament_id)
+    assert _loser_of(r1) in (rows[semi.code].team_a_id, rows[semi.code].team_b_id)
+
+
+def _loser_of(match: Match) -> uuid.UUID | None:
+    return match.team_b_id if match.winner_id == match.team_a_id else match.team_a_id
 
 
 def test_replacement_with_opponent_pending_starts_clock_when_both_known(
@@ -586,10 +714,18 @@ def test_team_of_another_tournament_is_not_found(
     assert fake.disqualified == []
 
 
-# ---------------------------------------------------------------- 尚未支援：對手未定
+# ---------------------------------------------------------------- 對手未定：拒絕（2026-11-09 D 決定）
 
 
-def test_unplayed_bye_team_with_pending_opponent_is_not_supported(
+def _assert_opponent_pending(caught: pytest.ExceptionInfo[BusinessError]) -> None:
+    assert (caught.value.code, caught.value.status_code) == (
+        "DISQUALIFY_OPPONENT_PENDING",
+        409,
+    )
+    assert caught.value.message == "對手尚未確定，請等對手確定後再取消資格。"
+
+
+def test_unplayed_bye_team_with_pending_opponent_is_rejected(
     session: Session, fake_registration: FakeRegistration
 ) -> None:
     fake = fake_registration
@@ -598,15 +734,20 @@ def test_unplayed_bye_team_with_pending_opponent_is_not_supported(
     assert m6.bye_a and m6.team_a_id is not None and m6.team_b_id is None
     bye_team = fake.teams.index(m6.team_a_id) + 1
     before = _snapshot(session, tournament.id)
+    actions_before = _actions(session, tournament.id)
+    events_before = _all_events(session)
 
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(BusinessError) as caught:
         _dq(session, fake, tournament.id, bye_team)
 
+    _assert_opponent_pending(caught)
     assert fake.disqualified == []
     assert _snapshot(session, tournament.id) == before
+    assert _actions(session, tournament.id) == actions_before
+    assert _all_events(session) == events_before
 
 
-def test_finalist_with_pending_opponent_is_not_supported(
+def test_finalist_with_pending_third_place_opponent_is_rejected(
     session: Session, fake_registration: FakeRegistration
 ) -> None:
     fake = fake_registration
@@ -616,12 +757,17 @@ def test_finalist_with_pending_opponent_is_not_supported(
     assert _slots(fake, rows["M7"]) == (3, None)
     assert _slots(fake, rows["M8"]) == (7, None)
     before = _snapshot(session, tournament_id)
+    actions_before = _actions(session, tournament_id)
+    events_before = _all_events(session)
 
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(BusinessError) as caught:
         _dq(session, fake, tournament_id, 3)
 
+    _assert_opponent_pending(caught)
     assert fake.disqualified == []
     assert _snapshot(session, tournament_id) == before
+    assert _actions(session, tournament_id) == actions_before
+    assert _all_events(session) == events_before
 
 
 def test_repository_clear_match_team_clears_one_side(

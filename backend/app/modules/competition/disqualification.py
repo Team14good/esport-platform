@@ -6,21 +6,23 @@
 - 抽籤前、已淘汰或沒有下一場：只改報名狀態（抽籤前空出的名額交給 3.4 的分配）。
 - 有進行中、申訴期、申訴中的場次：該場以 `disqualified` 判對手獲勝並確認、晉級；不頂替。
 - 待開打的場次：
-  - 已贏過（依輪次往前第一場 `played`／`forfeit` 勝場的敗隊）且敗隊未被取消資格：
-    敗隊頂替原位置；更早的結果不變。
+  - 已贏過（依輪次往前第一場 `played`／`forfeit` 勝場的敗隊，略過其間 walkover／
+    取消資格的勝場）且敗隊未被取消資格：敗隊頂替原位置；更早的結果不變。頂替時刪除被
+    取消資格隊伍在該場的報到，兩隊湊齊則開始計時並發 `MatchOpponentsDecided`。
   - 決賽：頂替的是準決賽的敗隊，它在季軍賽，所以只有季軍賽仍待開打時才頂替，
     由它移到決賽、季軍賽由對手以 walkover 奪季軍；季軍賽已開打或已定案則不頂替。
-  - 季軍賽、還沒比過、只靠輪空或 walkover 晉級、或敗隊已被取消資格：
+  - 季軍賽、還沒比過、勝場全是輪空或 walkover、或敗隊已被取消資格：
     該場以 `disqualified` 判對手獲勝並確認、晉級（兩隊都在場的 walkover 會被
     progression 拒絕，也看不出取消資格）。
 
 鎖的順序（AD-6）：`lock_tournament` → 依 id 遞增鎖住對戰表的全部場次 → 判斷 → 寫入。
 全部判斷完成後才寫入，任何拒絕都不改資料。
 
-**尚未支援**：對手還沒確定（等另一場的勝隊）而需要「把該隊移出、標記這一方不會有隊伍」
-的情況。`progression.advance` 只依 plan 的來源推導一方是否已定案：輪空直接入座的一方
-沒有來源、永遠不會定案；由勝場進來的一方會被重新填回原隊伍，所以沒有不改既有函式的
-標記方式。spec 規定不支援時停下回報，這裡拋 `NotImplementedError`、不改任何資料。
+**對手未定時拒絕**（2026-11-09 D 決定）：對手還沒確定（等另一場的勝隊），需要「把該隊
+移出、標記這一方不會有隊伍」的情況，回 409 `DISQUALIFY_OPPONENT_PENDING`、不改任何資料。
+`progression.advance` 只依 plan 的來源推導一方是否已定案：輪空直接入座的一方沒有來源、
+永遠不會定案；由勝場進來的一方會被重新填回原隊伍，所以沒有不改既有函式的標記方式。
+progression 支援「這一方確定不會有隊伍」列在 deferred-work（期中後）。
 """
 
 import uuid
@@ -28,13 +30,14 @@ from dataclasses import dataclass
 
 from sqlmodel import Session
 
-from app.core import audit, clock
+from app.core import audit, clock, events
 from app.core.errors import BusinessError
 from app.modules.competition import registration_port, repository, service
 from app.modules.competition.bracket import Side
 from app.modules.competition.models import (
     DisqualifyResult,
     Match,
+    MatchOpponentsDecided,
     MatchOutcome,
     MatchStatus,
 )
@@ -97,10 +100,11 @@ def _loser(match: Match) -> uuid.UUID | None:
     return match.team_b_id if match.winner_id == match.team_a_id else match.team_a_id
 
 
-def _unsupported(match: Match) -> NotImplementedError:
-    return NotImplementedError(
-        f"{match.code} 的對手尚未確定：progression 不支援把一方標記為不會有隊伍，"
-        "取消資格的這種情況尚未實作（spec-6-5 Design Notes）"
+def _opponent_pending() -> BusinessError:
+    return BusinessError(
+        "DISQUALIFY_OPPONENT_PENDING",
+        "對手尚未確定，請等對手確定後再取消資格。",
+        status_code=409,
     )
 
 
@@ -119,7 +123,7 @@ def _final_replacement(
     third_side = _side_of(third, loser)
     if _team(third, _other(third_side)) is None:
         # 季軍賽的對手（另一場準決賽的敗隊）未定：移出後這一方要標記為不會有隊伍
-        raise _unsupported(third)
+        raise _opponent_pending()
     return _Replace(match, side, loser, third=third, third_side=third_side)
 
 
@@ -181,7 +185,7 @@ def _plan(session: Session, matches: list[Match], team_id: uuid.UUID) -> _Plan:
     if replace is not None:
         return replace
     if opponent is None:
-        raise _unsupported(match)
+        raise _opponent_pending()
     return _AwardOpponent(match, opponent)
 
 
@@ -239,6 +243,8 @@ def _replace(
 ) -> DisqualifyResult:
     match = plan.match
     before = (match.team_a_id, match.team_b_id)
+    # 被取消資格的隊伍若已報到，移出場次時一併刪除，否則棄權判定會看到不屬於這場的報到
+    repository.delete_check_in(session, match.id, team_id)
     repository.set_match_team(session, match, plan.side, plan.replacement, clock.now())
     _record_teams(
         session, match=match, before=before, team_id=team_id, actor_id=actor_id
@@ -248,6 +254,7 @@ def _replace(
     if third is not None:
         assert plan.third_side is not None
         third_before = (third.team_a_id, third.team_b_id)
+        repository.delete_check_in(session, third.id, plan.replacement)
         repository.clear_match_team(session, third, plan.third_side, clock.now())
         _record_teams(
             session,
@@ -259,12 +266,10 @@ def _replace(
         affected.append(third.id)
 
     service.unassign_referee_if_member(session, match=match)
-    if (
-        match.team_a_id is not None
-        and match.team_b_id is not None
-        and match.status == MatchStatus.SCHEDULED
-    ):
+    if match.team_a_id is not None and match.team_b_id is not None:
+        # 與 `advance` 的填位相同：開始計時並通知兩隊隊長新的對手
         service.start_forfeit_clock(session, match=match)
+        events.publish(session, MatchOpponentsDecided(match_id=match.id))
     if third is not None:
         # 季軍賽只剩對手：以 walkover 奪季軍（操作者為系統，與 advance 的輪空確認相同）
         service.confirm_walkover(session, match=third)

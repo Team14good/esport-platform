@@ -2206,7 +2206,7 @@ def disqualify(
 ) -> DisqualifyResult:
     """取消隊伍資格，依 epic-6-context〈取消資格（期中版）〉判對手獲勝或頂替。
 
-    disputes `resolve_report` 屬實時呼叫；規則與尚未支援的情況見 `disqualification.py`。
+    disputes `resolve_report` 屬實時呼叫；規則與對手未定時拒絕的情況見 `disqualification.py`。
     先 `lock_tournament`，再依 id 遞增鎖住對戰表的全部場次（AD-6），判斷完成後才寫入。
     報名一律改為取消資格（registration `disqualify_registration`，操作者為 `actor_id`）；
     抽籤前只改報名狀態，不做遞補。判對手獲勝以 `disqualified` 確認並沿用 `advance`
@@ -2216,7 +2216,8 @@ def disqualify(
 
     賽事已結束或已取消拋 409 `TOURNAMENT_FINISHED`／`TOURNAMENT_CANCELLED`；隊伍不屬於
     該賽事拋 404 `REGISTRATION_NOT_FOUND`；已取消資格拋 409 `TEAM_ALREADY_DISQUALIFIED`；
-    任何拒絕都不改資料。不 commit（AD-5）。
+    對手尚未確定拋 409 `DISQUALIFY_OPPONENT_PENDING`；報名不能轉為取消資格時 registration
+    拋 409 `REGISTRATION_INVALID_TRANSITION`；任何拒絕都不改資料。不 commit（AD-5）。
     """
     return disqualification.disqualify(
         session, tournament_id=tournament_id, team_id=team_id, actor_id=actor_id
