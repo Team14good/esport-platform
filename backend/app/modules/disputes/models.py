@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel
-from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, text
 from sqlmodel import Field, SQLModel
 
 from app.core.events import Event
@@ -49,10 +49,12 @@ class ReportStatus(StrEnum):
 
 REPORT_DESCRIPTION_MAX_LENGTH = 1000
 REPORT_ATTACHMENT_KEY_MAX_LENGTH = 64
-# 申訴說明的字數上限（以 code point 計算，與前端一致）
+# 申訴說明的字數上限（以 code point 計算；前端以 UTF-16 計，emoji 等字元兩邊算法不同）
 APPEAL_DESCRIPTION_MAX_LENGTH = 1000
-# 處理理由的字數上限（以 code point 計算，與前端一致）
+# 處理理由的字數上限（同上，以 code point 計算）
 APPEAL_REASON_MAX_LENGTH = 1000
+# 同一隊對同一場只能有一筆未結案申訴（部分唯一索引）
+OPEN_APPEAL_INDEX = "uq_appeal_open_match_team"
 # 檢舉處理理由的字數上限（以 code point 計算，與前端一致）
 REPORT_REASON_MAX_LENGTH = 1000
 
@@ -63,19 +65,26 @@ REPORT_REASON_MAX_LENGTH = 1000
 class Appeal(SQLModel, table=True):
     """隊長對申訴期內的場次結果提出的申訴（6.1）；處理欄位由 6.2 寫入。
 
-    `(match_id, team_id)` 唯一：每隊每場一次，也是併發重複送出的最後防線。
+    同一隊對同一場只能有一筆未結案申訴（`status='open'` 的部分唯一索引），也是併發
+    重複送出的最後防線；重新比賽後上一輪的申訴已結案，原申訴隊可以對新結果再申訴。
     申訴內容與附件不出現在任何公開 API。
     """
 
     __tablename__ = "appeal"
     __table_args__ = (
-        UniqueConstraint("match_id", "team_id", name="uq_appeal_match_team"),
+        Index(
+            OPEN_APPEAL_INDEX,
+            "match_id",
+            "team_id",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+        ),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     tournament_id: uuid.UUID = Field(foreign_key="tournament.id", index=True)
-    # competition 的表：只建外鍵，disputes 不直接讀寫
-    match_id: uuid.UUID = Field(foreign_key="match.id")
+    # competition 的表：只建外鍵，disputes 不直接讀寫；依場次查申訴用索引
+    match_id: uuid.UUID = Field(foreign_key="match.id", index=True)
     # 隊伍屬 registration，不建跨模組外鍵（比照 match、check_in）
     team_id: uuid.UUID
     filed_by: uuid.UUID = Field(foreign_key="account.id")
@@ -261,7 +270,7 @@ class PublicAppealResult(BaseModel):
 
 
 class OpenDisputeItem(BaseModel):
-    """S27 待處理清單的一筆（期中只有申訴；6.4 起加入檢舉）。"""
+    """S27 待處理清單的一筆（目前只有申訴；檢舉由 6.5 接上）。"""
 
     kind: Literal["appeal", "report"]
     id: uuid.UUID

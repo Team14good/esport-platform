@@ -1708,7 +1708,7 @@ export class DisputesService {
   /**
    * Read Open Disputes
    *
-   * S27 待處理清單：未結案的申訴與檢舉，依處理期限由近到遠。
+   * S27 待處理清單：未結案的申訴，依處理期限由近到遠（檢舉由 6.5 接上，目前為 0）。
    */
   public static readOpenDisputes<ThrowOnError extends boolean = true>(
     options: Options<disputesReadOpenDisputesData, ThrowOnError>,

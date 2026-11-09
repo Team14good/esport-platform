@@ -1860,6 +1860,10 @@ def reschedule_match(
 
 # ---------------------------------------------------------------- 6.x 前置（B 呼叫）
 
+# 可以重新比賽的 outcome：判棄權（一方或雙方，6.2）。`get_replay_window` 與
+# `appeals.replay_match` 共用這一份
+REPLAYABLE_OUTCOMES = frozenset({MatchOutcome.FORFEIT, MatchOutcome.DOUBLE_FORFEIT})
+
 
 def check_replay_time(
     session: Session,
@@ -1909,9 +1913,9 @@ def get_replay_window(session: Session, *, match_id: uuid.UUID) -> RescheduleInf
     blocked: RescheduleBlockReason | None = None
     if tournament.status not in _RESCHEDULABLE_TOURNAMENT:
         blocked = "tournament_not_reschedulable"
-    elif MatchStatus(match.status) != MatchStatus.APPEALED or match.outcome not in (
-        MatchOutcome.FORFEIT,
-        MatchOutcome.DOUBLE_FORFEIT,
+    elif (
+        MatchStatus(match.status) != MatchStatus.APPEALED
+        or match.outcome not in REPLAYABLE_OUTCOMES
     ):
         blocked = "match_not_reschedulable"
     if blocked is not None:

@@ -599,3 +599,15 @@
   - 主代理在 commit 前檢查換行的腳本有語法錯誤、沒有實際執行，commit 後才發現並補查，30 個檔案都是 LF。
 - 成熟度：L4（固定流程：子代理實作，三個審查者並行，主代理逐點核對、交回修正，前後端完整驗證；人在範圍與規則上做決定）
 - 證據：commit `bf35b14`，`_bmad-output/implementation-artifacts/spec-6-5-resolve-report.md` 的 Review Triage Log
+
+### 2026-11-09｜程式／debug｜Story 6.2 審查後續：處理 #69 合併後 A 與 D 的建議
+
+- Story／範圍：6.2 審查後續（分支 `story/6-2-review-fixes`，PR #71，spec `_bmad-output/implementation-artifacts/spec-6-2-review-fixes.md`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理、Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：讀 #69 合併後 A 的 bmad-code-review（17 項）與 D 的審查（5 項）寫成 spec，唯一的需求決定（重賽後能否再申訴）交給使用者；子代理實作；三個審查者審 diff；主代理核對、交回修正，合併最新 main 後跑完整驗證
+- AI 產出：前端 4 項修正（409 錯誤改用 Toast、S32 取最新一次的決定、雙方棄權確認文字、處理後重抓賽事詳情與場次列表）；可重賽 outcome 共用一份；重賽後可再申訴（新遷移：未結案申訴的部分唯一索引）；S32 再申訴時只列本輪申訴並依其排序；約 20 個新測試（處理與申訴雙向併發、操作紀錄前後值、公開結果取最後一次、部分唯一索引定義等）；約定與延後項目更新
+- 人做了什麼：決定重新比賽後原申訴隊可以再申訴；核准 spec
+- 驗證：後端 lint 通過、全套 2394 passed、覆蓋率 97%；前端 Biome 275 個檔案、型別檢查通過，單元測試 70 個檔案 999 個全過（第一次全套在機器同時跑多個工作樹容器時有 7 個登入、註冊測試逾時，重跑全過，與本次修改無關）；Alembic 單一 head；子代理把對應程式改壞確認新測試會失敗
+- 問題與修正：審查找出 AI 新開的「重賽後再申訴」流程讓 S32 同一列混著兩輪申訴、還依上一輪時間排序，改為只列未結案申訴並依其排序；Alembic 的一致性測試不比對部分索引的條件，條件分岔不會被發現，改為直接讀 `pg_indexes.indexdef` 斷言；新遷移在已有再申訴資料時降版會中途失敗，改為先檢查並拋出清楚的錯誤。子代理的再申訴測試一開始失敗，原因是凍結時鐘下兩輪處理的 `handled_at` 相同，推進時鐘後通過（程式不變）。合併 main 時遇到另一個工作階段剛合併的 6.5 第二階段（#73），4 個衝突都是兩邊各自新增的內容，雙方保留後重新產生 client
+- 成熟度：L4（spec → 子代理實作 → 多個審查者 → 主代理核對與完整驗證，人在需求決策點介入）
+- 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；PR #71

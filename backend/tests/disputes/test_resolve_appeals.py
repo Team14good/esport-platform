@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text as sa_text
 from sqlmodel import Session, col, select
 
 from app.core import audit, clock
@@ -23,7 +24,7 @@ from app.modules.competition.models import (
     MatchOutcome,
     MatchStatus,
 )
-from app.modules.disputes import service
+from app.modules.disputes import repository, service
 from app.modules.disputes.models import Appeal, AppealStatus
 from app.modules.identity.models import Account
 from app.modules.registration import service as registration_service
@@ -37,6 +38,7 @@ from tests.competition.test_score_entry import (  # noqa: F401
     make_setup,
     setup,
 )
+from tests.conftest import FrozenClock
 from tests.helpers import API, bearer, make_account, token_for
 
 pytestmark = pytest.mark.usefixtures("frozen_clock")
@@ -70,11 +72,11 @@ def _appealed(
     sides: str = "aa",
     teams: str = "ab",
     deadline: timedelta = timedelta(minutes=30),
+    winner: str | None = "a",
 ) -> list[Appeal]:
-    """場次寫成申訴中（played 時依 `sides` 寫入各局、勝隊 a），`teams` 的每一隊各一筆申訴。"""
+    """場次寫成申訴中（played 時依 `sides` 寫入各局、勝隊預設 a），`teams` 的每一隊各一筆申訴。"""
     match = _row(session, setup, code)
     now = clock.now()
-    winner = "a"
     if outcome == MatchOutcome.PLAYED:
         for no, side in enumerate(sides, start=1):
             session.add(
@@ -90,7 +92,7 @@ def _appealed(
         match.wins_b = sides.count("b")
     match.status = MatchStatus.APPEALED
     match.outcome = outcome
-    match.winner_id = setup.team(winner, code)
+    match.winner_id = setup.team(winner, code) if winner else None
     match.appeal_deadline = now + deadline
     session.add(match)
     appeals = []
@@ -269,6 +271,8 @@ def test_correct_flips_winner_and_records_games(
     assert record.before is not None and record.after is not None
     assert [g["winner_side"] for g in record.before["games"]] == ["a", "a"]
     assert [g["winner_side"] for g in record.after["games"]] == ["a", "b", "b"]
+    # 翻盤：紀錄的前後勝隊不同
+    assert record.before["winner_id"] == str(setup.team("a"))
     assert record.after["winner_id"] == str(setup.team("b"))
     assert _public_result(client, setup).json() == {"decision": "corrected"}
 
@@ -338,6 +342,7 @@ def test_rematch_on_forfeit_reschedules(
 ) -> None:
     setup = make_setup(check_in=("a",))
     _appealed(session, setup, outcome=MatchOutcome.FORFEIT, teams="b")
+    original_at = _row(session, setup).scheduled_at
 
     window = client.get(
         f"{API}/organizer/tournaments/{setup.tournament_id}"
@@ -365,10 +370,58 @@ def test_rematch_on_forfeit_reschedules(
     assert match.scheduled_at == REPLAY_AT
     assert match.forfeit_deadline == REPLAY_AT + timedelta(minutes=15)
     record = _resolved_records(session, setup)[0]
-    assert record.after is not None
+    assert record.before is not None and record.after is not None
+    assert datetime.fromisoformat(record.before["scheduled_at"]) == original_at
+    assert original_at != REPLAY_AT
     assert record.after["scheduled_at"].startswith("2026-10-20T10:00")
+    rescheduled = [
+        p
+        for p in session.exec(
+            select(OutboxEvent.payload).where(OutboxEvent.type == "MatchRescheduled")
+        )
+        if p["match_id"] == str(match.id)
+    ]
+    assert [datetime.fromisoformat(p["scheduled_at"]) for p in rescheduled] == [
+        REPLAY_AT
+    ]
     # 重新比賽後不是已確認：公開結果為 null
     assert _public_result(client, setup).json() == {"decision": None}
+
+
+def test_rematch_on_double_forfeit_through_api(
+    client: TestClient, session: Session, setup: Setup
+) -> None:
+    """雙方棄權（沒有勝隊）也能經 API 重新比賽：重賽時間範圍可選、場次回到待開打。"""
+    _appealed(session, setup, outcome=MatchOutcome.DOUBLE_FORFEIT, winner=None)
+
+    window = client.get(
+        f"{API}/organizer/tournaments/{setup.tournament_id}"
+        f"/matches/{setup.match_id()}/replay-window",
+        headers=_headers(client, setup.organizer),
+    )
+    assert window.status_code == 200
+    assert window.json()["can_reschedule"] is True
+
+    response = _resolve(
+        client,
+        setup,
+        {
+            "decision": "rematch",
+            "reason": "雙方斷線",
+            "replay_at": REPLAY_AT.isoformat(),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert {a["decision"] for a in response.json()} == {"rematch"}
+    match = _row(session, setup)
+    assert match.status == MatchStatus.SCHEDULED
+    assert match.outcome is None
+    assert match.winner_id is None
+    assert match.scheduled_at == REPLAY_AT
+    record = _resolved_records(session, setup)[0]
+    assert record.before is not None
+    assert record.before["outcome"] == "double_forfeit"
 
 
 def test_rematch_without_replay_at_is_422(
@@ -498,6 +551,151 @@ def test_other_team_cannot_appeal_after_early_resolution(
     assert excinfo.value.code == "APPEAL_NOT_ALLOWED"
 
 
+def _file_as(session: Session, setup: Setup, account: Account) -> Any:
+    return service.file_appeal(
+        session,
+        tournament_id=setup.tournament_id,
+        match_id=setup.match_id(),
+        account_id=account.id,
+        description="重賽後的結果有誤",
+        attachment=None,
+        content_type=None,
+    )
+
+
+def _state_of(session: Session, setup: Setup, account: Account) -> Any:
+    return service.get_appeal_state(
+        session,
+        tournament_id=setup.tournament_id,
+        match_id=setup.match_id(),
+        account_id=account.id,
+    )
+
+
+def test_original_appellant_can_appeal_again_after_rematch(
+    client: TestClient,
+    session: Session,
+    make_setup: Factory,
+    monkeypatch: pytest.MonkeyPatch,
+    frozen_clock: FrozenClock,
+) -> None:
+    """重新比賽後，原申訴隊可以對重賽後的結果再申訴；同一輪仍不能重複申訴。
+
+    再申訴後判維持：公開結果（S4）以最後一次處理為準，顯示「維持原結果」。
+    """
+    setup = make_setup(check_in=("a",))
+    _appealed(session, setup, outcome=MatchOutcome.FORFEIT, teams="b")
+    captain_b = make_account(session)
+    session.commit()
+
+    def is_captain(
+        _session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+    ) -> bool:
+        return team_id == setup.team("b") and account_id == captain_b.id
+
+    monkeypatch.setattr(registration_service, "is_captain", is_captain)
+    response = _resolve(
+        client,
+        setup,
+        {"decision": "rematch", "reason": "重賽", "replay_at": REPLAY_AT.isoformat()},
+    )
+    assert response.status_code == 200, response.text
+    # 重賽打完、送出結果進入申訴期（直接寫入）；時間往後，第二輪的 handled_at 才會較晚
+    frozen_clock.set(REPLAY_AT + timedelta(hours=1))
+    match = _row(session, setup)
+    match.status = MatchStatus.APPEAL_WINDOW
+    match.outcome = MatchOutcome.PLAYED
+    match.winner_id = setup.team("a")
+    match.appeal_deadline = clock.now() + timedelta(minutes=30)
+    session.add(match)
+    session.commit()
+
+    state = _state_of(session, setup, captain_b)
+    assert (state.can_file, state.already_filed, state.reason) == (True, False, None)
+    refiled = _file_as(session, setup, captain_b)
+    session.commit()
+    filed_records = [
+        r
+        for r in audit.list_for_tournament(session, setup.tournament_id)
+        if r.action == "appeal.filed"
+    ]
+    assert [r.entity_id for r in filed_records] == [refiled.appeal.id]
+    filed_events = [
+        p
+        for p in session.exec(
+            select(OutboxEvent.payload).where(OutboxEvent.type == "AppealFiled")
+        )
+        if p["match_id"] == str(setup.match_id())
+    ]
+    assert filed_events == [
+        {
+            "appeal_id": str(refiled.appeal.id),
+            "match_id": str(setup.match_id()),
+            "team_id": str(setup.team("b")),
+        }
+    ]
+
+    state = _state_of(session, setup, captain_b)
+    assert (state.can_file, state.already_filed, state.reason) == (
+        False,
+        True,
+        "already_filed",
+    )
+    with pytest.raises(BusinessError) as excinfo:
+        _file_as(session, setup, captain_b)
+    assert excinfo.value.code == "APPEAL_ALREADY_FILED"
+    session.rollback()
+    appeals = _appeals(session, setup)
+    assert [(a.team_id, a.status) for a in appeals] == [
+        (setup.team("b"), AppealStatus.CLOSED),
+        (setup.team("b"), AppealStatus.OPEN),
+    ]
+    assert _row(session, setup).status == MatchStatus.APPEALED
+
+    response = _resolve(client, setup, {"decision": "upheld", "reason": "維持"})
+    assert response.status_code == 200, response.text
+    assert [a["decision"] for a in response.json()] == ["upheld"]
+    assert _public_result(client, setup).json() == {"decision": "upheld"}
+
+
+def test_open_appeal_index_definition(session: Session) -> None:
+    """遷移建出的索引條件與模型一致（`compare_metadata` 不比對 `postgresql_where`）。"""
+    indexdef = session.execute(
+        sa_text(
+            "SELECT indexdef FROM pg_indexes "
+            "WHERE tablename = 'appeal' AND indexname = 'uq_appeal_open_match_team'"
+        )
+    ).scalar_one()
+
+    assert indexdef.startswith("CREATE UNIQUE INDEX uq_appeal_open_match_team ")
+    assert "(match_id, team_id)" in indexdef
+    assert indexdef.endswith("WHERE ((status)::text = 'open'::text)")
+
+
+def test_open_appeal_index_allows_one_open_appeal_per_team(
+    session: Session, setup: Setup
+) -> None:
+    """部分唯一索引：已結案的申訴不擋新的申訴；同一隊同一場第二筆未結案的申訴被擋下。"""
+    match_id, team_id = setup.match_id(), setup.team("a")
+
+    def appeal(status: AppealStatus) -> Appeal:
+        return Appeal(
+            tournament_id=setup.tournament_id,
+            match_id=match_id,
+            team_id=team_id,
+            filed_by=make_account(session).id,
+            filed_at=clock.now(),
+            description="申訴",
+            status=status,
+        )
+
+    assert repository.add_appeal(session, appeal(AppealStatus.CLOSED)) is True
+    assert repository.add_appeal(session, appeal(AppealStatus.OPEN)) is True
+    assert repository.add_appeal(session, appeal(AppealStatus.OPEN)) is False
+    session.flush()
+    assert len(_appeals(session, setup)) == 2
+
+
 def test_no_open_appeals_is_409(
     client: TestClient, session: Session, setup: Setup
 ) -> None:
@@ -507,11 +705,24 @@ def test_no_open_appeals_is_409(
         == 200
     )
 
-    response = _resolve(client, setup, {"decision": "upheld", "reason": "再一次"})
+    # 同一場重複送出（例如另一個分頁）：第二次不論決定為何都回 NO_OPEN_APPEALS、不改資料
+    response = _resolve(
+        client,
+        setup,
+        {
+            "decision": "corrected",
+            "reason": "再一次",
+            "games": [{"winner_side": "b"}, {"winner_side": "b"}],
+        },
+    )
 
     assert response.status_code == 409
     assert _code(response) == "NO_OPEN_APPEALS"
     assert len(_resolved_records(session, setup)) == 1
+    assert len(_resolved_events(session, setup)) == 1
+    appeals = _appeals(session, setup)
+    assert {(a.decision, a.reason) for a in appeals} == {("upheld", "維持")}
+    assert _row(session, setup).winner_id == setup.team("a")
 
 
 def test_routes_reject_match_of_other_tournament(
@@ -585,35 +796,86 @@ def test_reason_is_required(
     assert {a.status for a in _appeals(session, setup)} == {AppealStatus.OPEN}
 
 
-def test_disqualified_decision_is_rejected(
+@pytest.mark.parametrize("reason", ["‮\u0007", " ⁦\u0000⁩ ", "‪‫‬"])
+def test_reason_of_only_control_characters_is_required(
+    client: TestClient, session: Session, setup: Setup, reason: str
+) -> None:
+    """理由只有控制字元或雙向控制字元時，清理後是空白：422 `APPEAL_REASON_REQUIRED`。"""
+    _appealed(session, setup)
+
+    response = _resolve(client, setup, {"decision": "upheld", "reason": reason})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"][0]
+    assert detail["type"] == "APPEAL_REASON_REQUIRED"
+    assert detail["loc"] == ["body", "reason"]
+    assert {a.status for a in _appeals(session, setup)} == {AppealStatus.OPEN}
+
+
+def test_reason_control_characters_are_removed(
     client: TestClient, session: Session, setup: Setup
 ) -> None:
-    """`disqualified` 只用於檢舉屬實時一併結案，主辦方不能直接選（6.5）。"""
+    """夾帶的控制字元與雙向控制字元被移除（換行保留），存入與紀錄的是清理後的理由。"""
     _appealed(session, setup)
-    match_before = _row(session, setup)
-    before = (match_before.status, match_before.outcome, match_before.winner_id)
 
     response = _resolve(
         client,
         setup,
-        {
-            "decision": "disqualified",
-            "reason": "取消資格",
-            "replay_at": REPLAY_AT.isoformat(),
-        },
+        {"decision": "upheld", "reason": " 證據‮不足\u0007\n維持⁦ "},
     )
 
-    assert response.status_code == 422
-    detail = response.json()["detail"][0]
-    assert (detail["type"], detail["loc"]) == (
-        "APPEAL_DECISION_INVALID",
-        ["body", "decision"],
-    )
-    assert {a.status for a in _appeals(session, setup)} == {AppealStatus.OPEN}
-    row = _row(session, setup)
-    assert (row.status, row.outcome, row.winner_id) == before
-    assert _resolved_records(session, setup) == []
-    assert _resolved_events(session, setup) == []
+    assert response.status_code == 200, response.text
+    assert {a.reason for a in _appeals(session, setup)} == {"證據不足\n維持"}
+    record = _resolved_records(session, setup)[0]
+    assert record.after is not None
+    assert record.after["reason"] == "證據不足\n維持"
+
+
+@pytest.mark.parametrize(
+    ("first", "last", "last_filed_first"),
+    [("corrected", "upheld", True), ("upheld", "corrected", False)],
+)
+def test_public_result_uses_last_handled_decision(
+    client: TestClient,
+    session: Session,
+    setup: Setup,
+    first: str,
+    last: str,
+    last_filed_first: bool,
+) -> None:
+    """同一場有兩次處理（重新比賽後再處理）：公開結果以 `handled_at` 最新的一筆為準。
+
+    兩組參數讓最後處理的一筆分別是先提出、後提出的申訴：依提出時間取第一筆或最後一筆
+    的寫法都會在其中一組失敗。
+    """
+    match = _row(session, setup)
+    match.status = MatchStatus.CONFIRMED
+    match.outcome = MatchOutcome.PLAYED
+    match.winner_id = setup.team("a")
+    session.add(match)
+    now = clock.now()
+    for team, decision, handled, filed in (
+        ("a", last, now + timedelta(hours=2), 0 if last_filed_first else 1),
+        ("b", first, now + timedelta(hours=1), 1 if last_filed_first else 0),
+    ):
+        session.add(
+            Appeal(
+                tournament_id=setup.tournament_id,
+                match_id=match.id,
+                team_id=setup.team(team),
+                filed_by=make_account(session).id,
+                filed_at=now + timedelta(minutes=filed),
+                description="申訴",
+                status=AppealStatus.CLOSED,
+                decision=decision,
+                reason="處理",
+                handled_by=setup.organizer.id,
+                handled_at=handled,
+            )
+        )
+    session.commit()
+
+    assert _public_result(client, setup).json() == {"decision": last}
 
 
 def test_public_result_is_null_before_handling_and_404_elsewhere(
@@ -676,6 +938,46 @@ def test_list_groups_by_match_with_open_first(
     assert m1["best_of"] == 3
     assert m1["score_type"] == "win_loss"
     assert "attachment_key" not in m1["appeals"][0]
+
+
+def test_list_sorts_open_groups_by_earliest_open_appeal(
+    client: TestClient, session: Session, setup: Setup
+) -> None:
+    """M1 上一輪的申訴（已結案）最早，本輪的未結案申訴最晚；M2 的未結案申訴在兩者之間。
+    依最早一筆未結案申訴排序：M2 在前（依 appeals[0] 排序會把 M1 排前面）。"""
+    _appealed(session, setup, code="M1", teams="")
+    _appealed(session, setup, code="M2", teams="b")
+    now = clock.now()
+    for filed, status in (
+        (now - timedelta(hours=2), AppealStatus.CLOSED),
+        (now + timedelta(hours=1), AppealStatus.OPEN),
+    ):
+        session.add(
+            Appeal(
+                tournament_id=setup.tournament_id,
+                match_id=setup.match_id("M1"),
+                team_id=setup.team("b"),
+                filed_by=make_account(session).id,
+                filed_at=filed,
+                description="申訴",
+                status=status,
+                decision="rematch" if status == AppealStatus.CLOSED else None,
+                handled_at=now - timedelta(hours=1)
+                if status == AppealStatus.CLOSED
+                else None,
+            )
+        )
+    session.commit()
+
+    response = client.get(
+        f"{API}/organizer/tournaments/{setup.tournament_id}/appeals",
+        headers=_headers(client, setup.organizer),
+    )
+
+    assert response.status_code == 200
+    groups = response.json()
+    assert [g["match_code"] for g in groups] == ["M2", "M1"]
+    assert [g["has_open"] for g in groups] == [True, True]
 
 
 def test_list_shows_original_appellant_name_after_replacement(
@@ -821,3 +1123,34 @@ def test_open_disputes_empty(client: TestClient, setup: Setup) -> None:
         "earliest_deadline": None,
         "items": [],
     }
+
+
+def test_disqualified_decision_is_rejected(
+    client: TestClient, session: Session, setup: Setup
+) -> None:
+    """`disqualified` 只用於檢舉屬實時一併結案，主辦方不能直接選（6.5）。"""
+    _appealed(session, setup)
+    match_before = _row(session, setup)
+    before = (match_before.status, match_before.outcome, match_before.winner_id)
+
+    response = _resolve(
+        client,
+        setup,
+        {
+            "decision": "disqualified",
+            "reason": "取消資格",
+            "replay_at": REPLAY_AT.isoformat(),
+        },
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"][0]
+    assert (detail["type"], detail["loc"]) == (
+        "APPEAL_DECISION_INVALID",
+        ["body", "decision"],
+    )
+    assert {a.status for a in _appeals(session, setup)} == {AppealStatus.OPEN}
+    row = _row(session, setup)
+    assert (row.status, row.outcome, row.winner_id) == before
+    assert _resolved_records(session, setup) == []
+    assert _resolved_events(session, setup) == []
