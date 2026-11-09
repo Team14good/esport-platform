@@ -472,3 +472,49 @@
 - 問題與修正：Edge Case Hunter 提的「隊長中途換人後一直 403」，主代理判斷要等期中擱置的 3.11（隊員異動）才會發生而排除；Blind Hunter 對 C 的 spec 與 AI 紀錄寫法的意見（任務勾選、計數）屬 C 自己的文件，不列入審查意見
 - 成熟度：L4（多個審查者並行，主代理逐筆核對並實際試合，人在送出前確認）
 - 證據：PR #64 的審查意見（B，APPROVED，2026-11-09）
+
+### 2026-11-09｜專案管理與流程／進度盤點與合併衝突處理｜Story 6.5 分支合併 main
+
+- Story／範圍：6.5（PR #65 草稿，分支 `story/6-5`，工作樹 `espory-6-5`）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：先請 AI 依 sprint-status、CONTRIBUTING 分工表、`gh pr list`、各工作樹的 git 狀態整理 Epic 6 各 Story 的負責人與進度。之後請它把 main 合併進 6.5：解衝突、跑測試，經人同意後 commit 並推上去
+- AI 產出：
+  - 盤點：整理出 6.1、6.2、6.4、6.5 的負責人與狀態，並指出 sprint-status 與實際情況不一致，以及 6.2 有約 780 行還沒 commit
+  - 第一次合併（#61、#64、#66、#67）：解 2 個衝突（`sprint-status.yaml`、`registration/service.py`，兩邊都保留），在 `traceability.yaml` 補上 6.5 的 2 個測試檔
+  - 第二次合併（含 6.1 的 #63）：解 `sprint-status.yaml` 衝突，順手把 6-1 改成 `done`
+- 人做了什麼：決定先處理 6.5（6.1 收尾另外處理），同意兩次合併的 commit 與推送
+- 驗證：
+  - 第一次合併後，全部後端測試 1 failed／2218 passed。失敗的是 #61 新增的 `test_every_test_file_is_listed`，補上 2 列後 2219 passed
+  - 第二次合併後 2276 passed
+  - 推上去後，`gh pr view 65` 顯示 `MERGEABLE`
+- 問題與修正：
+  - AI 第一次用 Python heredoc 解衝突時，腳本其實沒有執行，檔案沒變，也沒有報錯。AI 回頭讀檔才發現衝突標記還在，改用 Edit 工具。
+  - 合併 main 前不知道 #61 規定每個測試檔都要寫進 `traceability.yaml`，跑完全部測試才發現。
+  - 另一個工作階段傳來的交接訊息說 6-5 「合併到一半、有衝突」，AI 用 `git status` 與 `MERGE_HEAD` 核對後，確認那只是自己解好但還沒 `git add` 的狀態。
+- 成熟度：L3（AI 依專案規則合併並跑全部測試，commit 與推送都由人決定）
+- 證據：commit f96d871、ee0222e，PR #65
+
+### 2026-11-09｜程式／程式生成｜Story 6.5 第一階段：對手未定時拒絕取消資格
+
+- Story／範圍：6.5 第一階段（PR #65 草稿）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：依 D 在 #65 的決定實作「對手尚未確定時回 409 `DISQUALIFY_OPPONENT_PENDING`、不改任何資料」，並以 `origin/main..` 的完整 6.5 差異跑三個審查者
+- AI 產出：
+  - 原本拋 `NotImplementedError` 的地方改成 409，2 個測試改為也斷言操作紀錄與 outbox 事件都不變
+  - spec 情況表與 Decisions、contract、deferred-work 隨之更新
+  - 審查共 13 點，核對後修正 4 點：
+    - （高）被取消資格的隊伍已報到時，報到紀錄會殘留，棄權 worker 會一直卡在該場。新增 `repository.delete_check_in`
+    - （中）頂替後沒有發 `MatchOpponentsDecided`，兩隊收不到新對手的通知
+    - （中）沒有兩場以上勝場的頂替測試，補 16 隊的 2 個測試
+    - （低）contract 缺 `REGISTRATION_INVALID_TRANSITION`
+  - 另外延後 1 點（未驗證），排除 8 點
+- 人做了什麼：spec 的情況表在凍結區塊內，人同意依 D 的決定修改，其餘由 AI 完成
+- 驗證：
+  - lint（ty、ruff）通過
+  - 全部後端測試 2279 passed（新增 3 個），覆蓋率 97%，覆蓋率門檻通過
+- 問題與修正：
+  - 第一階段原本的實作漏了兩件事：頂替時清除報到紀錄、發對手確定的事件。這次的審查者找出來；Edge Case Hunter 和 Blind Hunter 都提到，AI 對照 `forfeit.judge_forfeit` 確認報到殘留會讓棄權 worker 拋 `ValueError`。
+  - AI 跑 `scripts/test.sh` 時帶了 `-q` 等參數，結果覆蓋率門檻被設成 0，前兩次全部測試其實沒檢查到門檻。AI 從輸出的 `--fail-under=0` 發現後，改成不帶參數重跑。
+  - 審查者另有 8 點是誤判，例如「已退賽的敗隊會被放回對戰表」：目前沒有程式會把報名改為退賽。這些都在 spec 的 Review Triage Log 記下排除理由。
+- 成熟度：L4（固定流程實作，三個審查者並行，主代理逐筆核對並修正，全部測試與覆蓋率門檻驗證，人只在凍結區塊的修改做決定）
+- 證據：commit 7cd8eb2，PR #65，`_bmad-output/implementation-artifacts/spec-6-5-disqualify.md`
