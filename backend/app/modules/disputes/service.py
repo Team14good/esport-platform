@@ -451,11 +451,12 @@ def _evaluate(
 
     回傳（登入者的隊伍、本隊是否已申訴、不能提出的原因）。順序：隊長、賽事已結束或
     已取消與場次狀態（皆為 `not_appealable`）、期限、本隊已申訴。`already_filed` 不論其他原因都照實回傳（S4 優先顯示）。
+    「本隊已申訴」只看未結案的申訴：重新比賽後上一輪的申訴已結案，原申訴隊可以再申訴。
     """
     team_id = _captain_team(session, match=match, account_id=account_id)
     if team_id is None:
         return None, False, "not_captain"
-    already = repository.find_team_appeal(session, match.id, team_id) is not None
+    already = repository.find_open_team_appeal(session, match.id, team_id) is not None
     if tournament.status in _ENDED_TOURNAMENT or match.status not in _APPEALABLE:
         return team_id, already, "not_appealable"
     if match.appeal_deadline is None or now >= match.appeal_deadline:
@@ -511,8 +512,8 @@ def file_appeal(
 
     鎖順序與 worker `auto_confirm_expired` 相同（賽事 → 場次，AD-6），鎖住後才判斷
     狀態與期限，所以與期滿確認只有一方成功。檢查順序：說明欄位（422）→ 場次屬於
-    該賽事（404）→ 隊長（403）→ 賽事已結束或已取消、場次狀態（409）→ 期限（409）→ 本隊未申訴（409，唯一鍵
-    是最後防線）。全部通過才存附件；之後任何失敗都刪掉附件。場次仍是申訴期時轉為
+    該賽事（404）→ 隊長（403）→ 賽事已結束或已取消、場次狀態（409）→ 期限（409）→ 本隊沒有未結案的申訴
+    （409，未結案申訴的部分唯一索引是最後防線）。全部通過才存附件；之後任何失敗都刪掉附件。場次仍是申訴期時轉為
     申訴中（competition `mark_appealed`），寫 `appeal.filed`、發 `AppealFiled`。
     任何拒絕都不寫資料、紀錄與事件。
     """
@@ -741,7 +742,8 @@ def resolve_appeals(
 def list_tournament_appeals(
     session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
 ) -> list[AppealGroup]:
-    """S32：該賽事的申訴依場次分組；有未結案申訴的場次在前，再依最早提出時間。
+    """S32：該賽事的申訴依場次分組；有未結案申訴的場次在前，依最早一筆未結案申訴的
+    提出時間（重新比賽後再申訴時不以上一輪的申訴排序）；已結案的場次依最早提出時間。
 
     只有該賽事主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）。附件只回 `has_attachment`。
     """
@@ -786,7 +788,15 @@ def list_tournament_appeals(
                 ],
             )
         )
-    groups.sort(key=lambda g: (not g.has_open, g.appeals[0].filed_at))
+
+    def sort_key(group: AppealGroup) -> tuple[bool, datetime]:
+        open_at = [a.filed_at for a in group.appeals if a.status == AppealStatus.OPEN]
+        return (
+            not group.has_open,
+            min(open_at) if open_at else group.appeals[0].filed_at,
+        )
+
+    groups.sort(key=sort_key)
     return groups
 
 

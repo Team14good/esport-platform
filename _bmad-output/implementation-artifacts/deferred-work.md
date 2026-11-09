@@ -196,18 +196,11 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-5-disqualify.md`
   summary: （未驗證，若成立為中）competition `get_registration_state` 若讀到鎖賽事前已載入 session 的報名，`disqualified` 可能是過時值，導致已取消資格的敗隊被選為頂替隊伍。
   evidence: 2026-11-09 6.5 第一階段審查（Edge Case Hunter）。第一階段 `disqualify` 一開始就 `lock_tournament`，之前不讀報名，所以目前不會發生；第二階段 disputes `resolve_report` 若在呼叫 `disqualify` 前讀過同一隊的報名就可能成立。第二階段實作時確認呼叫順序，或在 registration 的 `get_registration` 讀取時 `populate_existing`。
-## Deferred from: code review of spec-6-1-file-appeal.md (2026-11-09)
+## Deferred from: code review of spec-6-2-review-fixes.md (2026-11-09)
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-1-file-appeal.md`
-  summary: （中，未驗證）賽事已取消時，仍在申訴期的場次可以提出申訴並轉為申訴中；`get_appeal_state` 也會回可提出。`file_appeal` 只看場次狀態與期限，沒有檢查賽事狀態。
-  evidence: 2026-11-09 Story 6.1 審查（Edge Case Hunter）。期中 2.6 取消賽事擱置，賽事只會在決賽與季軍賽都確認後轉為已結束（此時所有場次都已確認），所以目前走不到；2.6 實作時若取消賽事不作廢場次，就要在 `file_appeal` 鎖住賽事後檢查 `finished`／`cancelled` 並回 `APPEAL_NOT_ALLOWED`，`get_appeal_state` 同步，補測試。
-
-## Deferred from: spec-6-2-resolve-appeals.md (2026-11-09)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-resolve-appeals.md`
-  summary: （中）「重新比賽」後的場次再次送出結果進入申訴期時，上一輪已申訴過的隊伍不能再申訴：`appeal` 的 `(match_id, team_id)` 唯一鍵與 `file_appeal` 的「本隊已申訴」檢查都不分輪次，舊的已結案申訴（`decision=rematch`）會擋下新申訴（S4 顯示「本隊已對此場次提出申訴」）。
-  evidence: 2026-11-09 Story 6.2 實作時發現；spec 與 epic 沒有規定重賽後能否再申訴，需要問人。若要允許，`file_appeal`／`get_appeal_state` 改成只看未結案或本輪（`filed_at` 晚於最後一次 `rematch` 的 `handled_at`）的申訴，唯一鍵改成部分唯一索引（例如只限 `status='open'`）並另開一支 Alembic 遷移；`get_public_appeal_result` 已以最後一次處理為準，不受影響。
-
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-review-fixes.md`
+  summary: （低）申訴說明與處理理由的 1000 字上限，前端以 UTF-16 單位計算、後端以 code point 計算；含大量 emoji 的文字可能前端顯示未超過、送出後回 422（或反過來）。
+  evidence: 2026-11-09 審查（Blind Hunter）。`disputes/models.py` 的註解已寫明差異；修法是前端改用 `[...text].length` 計數並補測試，6.1、6.2、6.4 的表單一併處理。
 ## Deferred from: unified code review of 5.6／5.8／7.1／7.3 (2026-11-09)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-registration-demo-step.md`

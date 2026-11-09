@@ -23,7 +23,18 @@ from app.modules.competition.models import (
     MatchOutcome,
     MatchStatus,
 )
-from app.modules.tournaments.models import ScoreType
+from app.modules.tournaments.models import ScoreType, Tournament, TournamentStatus
+from tests.competition.conftest import FakeRegistration
+from tests.competition.test_confirm_advance import (
+    _confirm,
+    _eight_to_semis,
+    _podium_k,
+    _rows,
+    _slots,
+    _status,
+    _team,
+    _to_finals,
+)
 from tests.competition.test_score_entry import (  # noqa: F401
     Factory,
     Setup,
@@ -272,6 +283,76 @@ def test_correct_rounds_tie_is_rejected(session: Session, make_setup: Factory) -
     assert _error(excinfo) == ("SCORE_TIE", 409)
 
 
+def _appeal_played(session: Session, match: Match, sides: str = "aa") -> None:
+    """抽籤後推進到的場次寫成申訴中（played，依 `sides` 寫入各局，勝隊為勝局較多的一方）。"""
+    now = clock.now()
+    for no, side in enumerate(sides, start=1):
+        session.add(
+            MatchGame(
+                match_id=match.id,
+                game_no=no,
+                winner_side=side,
+                recorded_by=make_account(session).id,
+                recorded_at=now,
+            )
+        )
+    match.wins_a = sides.count("a")
+    match.wins_b = sides.count("b")
+    match.status = MatchStatus.APPEALED
+    match.outcome = MatchOutcome.PLAYED
+    match.winner_id = (
+        match.team_a_id if match.wins_a > match.wins_b else match.team_b_id
+    )
+    match.appeal_deadline = now + timedelta(minutes=30)
+    session.add(match)
+    session.flush()
+
+
+def test_correct_semifinal_sends_new_loser_to_third_place(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    """準決賽 M5（隊伍7–隊伍3）原判隊伍7 勝，更正為隊伍3 勝：3 進決賽、7 進季軍賽。"""
+    fake = fake_registration
+    tournament_id, rows = _eight_to_semis(session, fake)
+    _appeal_played(session, rows["M5"])
+    organizer = make_account(session)
+
+    service.correct_result(
+        session,
+        match_id=rows["M5"].id,
+        games=_wl("b", "b"),
+        actor_id=organizer.id,
+    )
+
+    rows = _rows(session, tournament_id)
+    assert rows["M5"].winner_id == _team(fake, 3)
+    assert _slots(fake, rows["M7"]) == (3, None)
+    assert _slots(fake, rows["M8"]) == (7, None)
+
+
+def test_correct_final_finishes_tournament_with_new_champion(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    """決賽（隊伍3–隊伍1）原判隊伍3 勝，季軍賽已確認；更正為隊伍1 勝後賽事結束，冠軍為 1。"""
+    fake = fake_registration
+    tournament_id, rows = _to_finals(session, fake)
+    _confirm(session, rows["M8"], MatchOutcome.PLAYED, _team(fake, 2))
+    rows = _rows(session, tournament_id)
+    _appeal_played(session, rows["M7"])
+    assert _status(session, tournament_id) != TournamentStatus.FINISHED
+    organizer = make_account(session)
+
+    service.correct_result(
+        session,
+        match_id=rows["M7"].id,
+        games=_wl("b", "b"),
+        actor_id=organizer.id,
+    )
+
+    assert _status(session, tournament_id) == TournamentStatus.FINISHED
+    assert _podium_k(fake, session, tournament_id) == (1, 3, 2)
+
+
 @pytest.mark.parametrize("outcome", [MatchOutcome.FORFEIT, MatchOutcome.DOUBLE_FORFEIT])
 def test_correct_only_for_played(
     session: Session, setup: Setup, outcome: MatchOutcome
@@ -358,6 +439,43 @@ def test_replay_only_for_forfeit(session: Session, setup: Setup) -> None:
 
     assert _error(excinfo) == ("REPLAY_ONLY_FOR_FORFEIT", 409)
     assert _row(session, setup).status == MatchStatus.APPEALED
+
+
+@pytest.mark.parametrize(
+    "status",
+    [TournamentStatus.CLOSED, TournamentStatus.FINISHED, TournamentStatus.CANCELLED],
+)
+def test_replay_rejects_tournament_not_reschedulable(
+    session: Session, make_setup: Factory, status: TournamentStatus
+) -> None:
+    setup = make_setup(check_in=("a",))
+    _appealed(session, setup, outcome=MatchOutcome.FORFEIT, winner="a")
+    tournament = session.get(Tournament, setup.tournament_id)
+    assert tournament is not None
+    tournament.status = status
+    session.add(tournament)
+    session.commit()
+
+    with pytest.raises(BusinessError) as excinfo:
+        service.replay_match(
+            session,
+            match_id=setup.match_id(),
+            scheduled_at=REPLAY_AT,
+            actor_id=setup.organizer.id,
+        )
+    session.rollback()
+
+    assert _error(excinfo) == ("TOURNAMENT_NOT_RESCHEDULABLE", 409)
+    match = _row(session, setup)
+    assert match.status == MatchStatus.APPEALED
+    assert match.outcome == MatchOutcome.FORFEIT
+    assert session.exec(select(CheckIn).where(CheckIn.match_id == match.id)).all()
+    assert "match.replay_scheduled" not in _actions(session, setup)
+    assert [
+        p
+        for p in _outbox(session, "MatchRescheduled")
+        if p["match_id"] == str(match.id)
+    ] == []
 
 
 def test_replay_time_out_of_range_changes_nothing(

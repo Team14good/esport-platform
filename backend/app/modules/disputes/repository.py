@@ -20,18 +20,20 @@ def get_appeal(session: Session, appeal_id: uuid.UUID) -> Appeal | None:
     return session.get(Appeal, appeal_id)
 
 
-def find_team_appeal(
+def find_open_team_appeal(
     session: Session, match_id: uuid.UUID, team_id: uuid.UUID
 ) -> Appeal | None:
-    """某隊對某場次的申訴（每隊每場最多一筆）。"""
+    """某隊對某場次未結案的申訴（每隊每場最多一筆；已結案的不算）。"""
     statement = select(Appeal).where(
-        Appeal.match_id == match_id, Appeal.team_id == team_id
+        Appeal.match_id == match_id,
+        Appeal.team_id == team_id,
+        Appeal.status == AppealStatus.OPEN,
     )
     return session.exec(statement).first()
 
 
 def add_appeal(session: Session, appeal: Appeal) -> bool:
-    """新增申訴；撞 `(match_id, team_id)` 唯一鍵回 False（外層交易不受影響）。"""
+    """新增申訴；撞未結案申訴的部分唯一索引回 False（外層交易不受影響）。"""
     try:
         with session.begin_nested():
             session.add(appeal)

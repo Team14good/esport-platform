@@ -3,6 +3,8 @@
 import { queryOptions, useQueryClient } from "@tanstack/react-query"
 
 import {
+  type AppealDecision,
+  type AppealGroup,
   type AppealResolveIn,
   DisputesService,
   type OpenDisputes,
@@ -39,7 +41,7 @@ export const tournamentAppealsQueryOptions = (tournamentId: string) =>
     retry: shouldRetry,
   })
 
-/** S27 待處理清單：未結案的申訴（與 6.4 起的檢舉）。 */
+/** S27 待處理清單：未結案的申訴（檢舉由 6.5 接上，目前一律 0）。 */
 export const openDisputesQueryOptions = (tournamentId: string) =>
   queryOptions({
     queryKey: [...DISPUTES_KEY, "open-disputes", tournamentId],
@@ -87,18 +89,43 @@ export async function resolveAppeals({
   ).data
 }
 
-/** 處理後（成功或失敗）重抓 S32 列表與 S27 待處理清單。 */
+/**
+ * 處理後（成功或失敗）重抓 S32 列表與 S27 待處理清單，以及會隨處理改變的主辦方賽事詳情
+ * （決賽處理後賽事轉為已結束，S27 摘要要跟著變）與 S30 場次列表。
+ */
 export function useRefetchAppeals(tournamentId: string) {
   const queryClient = useQueryClient()
   return () =>
-    Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: tournamentAppealsQueryOptions(tournamentId).queryKey,
-      }),
-      queryClient.invalidateQueries({
-        queryKey: openDisputesQueryOptions(tournamentId).queryKey,
-      }),
-    ])
+    Promise.all(
+      [
+        tournamentAppealsQueryOptions(tournamentId).queryKey,
+        openDisputesQueryOptions(tournamentId).queryKey,
+        myTournamentQueryOptions(tournamentId).queryKey,
+        managedMatchesQueryOptions(tournamentId).queryKey,
+      ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    )
+}
+
+/**
+ * 同一場次的申訴中最後一次處理的決定（`handled_at` 最新的一筆），與 S4 公開結果一致。
+ * 結案時一定會寫 `handled_at`；萬一缺少，排在有時間的處理之前。
+ */
+export function latestDecision(
+  appeals: AppealGroup["appeals"],
+): AppealDecision | null {
+  let latest: AppealDecision | null = null
+  let latestAt = Number.NEGATIVE_INFINITY
+  for (const appeal of appeals) {
+    if (!appeal.decision) continue
+    const at = appeal.handled_at
+      ? Date.parse(appeal.handled_at)
+      : Number.NEGATIVE_INFINITY
+    if (latest === null || at > latestAt) {
+      latest = appeal.decision
+      latestAt = at
+    }
+  }
+  return latest
 }
 
 /** S33：該賽事的檢舉（處理中在前，各組依提出時間由舊到新）。 */

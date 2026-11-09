@@ -27,9 +27,6 @@ from app.modules.competition.models import (
 )
 from app.modules.tournaments import service as tournaments_service
 
-# 重新比賽只用於判棄權的場次（一方或雙方棄權）
-_REPLAYABLE = frozenset({MatchOutcome.FORFEIT, MatchOutcome.DOUBLE_FORFEIT})
-
 
 def mark_appealed(session: Session, *, match_id: uuid.UUID) -> MatchRead:
     """場次由申訴期轉為申訴中（第一筆申訴）；已是申訴中不動（第二隊申訴）。
@@ -181,7 +178,8 @@ def replay_match(
     `MatchRescheduled`。裁判保留。回傳清除前的內容。
     """
     match, outcome = _locked_appealed(session, match_id)
-    if outcome not in _REPLAYABLE:
+    # 與 `get_replay_window` 共用同一份可重賽的 outcome
+    if outcome not in service.REPLAYABLE_OUTCOMES:
         raise BusinessError(
             "REPLAY_ONLY_FOR_FORFEIT",
             "只有判棄權的場次可以重新比賽。",

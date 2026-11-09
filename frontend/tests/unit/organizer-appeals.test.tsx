@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { toast } from "sonner"
 import { describe, expect, it, vi } from "vitest"
 
 import {
@@ -20,11 +21,15 @@ import {
 } from "@/client"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { AppealResultBadge } from "@/features/disputes/AppealResultBadge"
-import { NO_OPEN_APPEALS_TEXT } from "@/features/disputes/AppealsPage"
+import {
+  NO_OPEN_APPEALS_TEXT,
+  POPUP_BLOCKED_TEXT,
+} from "@/features/disputes/AppealsPage"
 import { NO_OPEN_DISPUTES_TEXT } from "@/features/disputes/OpenDisputesPanel"
 import {
   CORRECT_TEXT,
   GO_TO_MATCHES_TEXT,
+  NO_VALID_TIME_TEXT,
   REASON_LABEL,
   REMATCH_TEXT,
   REPLAY_BLOCKED_TEXT,
@@ -137,6 +142,29 @@ const FORFEIT = group({
   team_b: { id: "d", name: "丁隊" },
 })
 
+const DOUBLE_FORFEIT = group({
+  match_id: "m-3",
+  match_code: "M3",
+  outcome: "double_forfeit",
+  winner_id: null,
+  games: [],
+  wins_a: 0,
+  appeals: [appeal({ id: "ap-4", match_id: "m-3" })],
+})
+
+const HANDLED_ELSEWHERE = group({
+  has_open: false,
+  match_status: "confirmed",
+  appeals: [
+    appeal({
+      status: "closed",
+      decision: "upheld",
+      reason: "另一個分頁處理",
+      handled_at: "2026-10-26T12:30:00Z",
+    }),
+  ],
+})
+
 type ListResult = Awaited<
   ReturnType<typeof DisputesService.listTournamentAppeals>
 >
@@ -242,6 +270,86 @@ describe("S32 申訴：列表", () => {
     ).toBeNull()
   })
 
+  it("重新比賽後再申訴：列中只列本輪未結案的申訴，不混入上一輪已結案的", async () => {
+    mockList([
+      group({
+        appeals: [
+          appeal({
+            id: "ap-old",
+            team_id: "b",
+            team_name: "乙隊",
+            filed_at: "2026-10-26T12:10:00Z",
+            status: "closed",
+            decision: "rematch",
+            reason: "重賽",
+            handled_at: "2026-10-26T12:30:00Z",
+          }),
+          appeal({
+            id: "ap-new",
+            team_id: "b",
+            team_name: "乙隊",
+            filed_at: "2026-10-27T12:10:00Z",
+          }),
+        ],
+      }),
+    ])
+    open()
+
+    const cells = within(await rowOf("M1")).getAllByRole("cell")
+    expect(cells[1].textContent).toBe("乙隊")
+    expect(cells[2].textContent).toBe(
+      formatMatchDateTime("2026-10-27T12:10:00Z"),
+    )
+  })
+
+  it("雙方棄權的場次：有「重新比賽」，沒有「更正結果」", async () => {
+    mockList([DOUBLE_FORFEIT])
+    open()
+
+    const row = await rowOf("M3")
+    expect(
+      within(row).getByRole("button", { name: REMATCH_TEXT }),
+    ).toBeInTheDocument()
+    expect(within(row).queryByRole("button", { name: CORRECT_TEXT })).toBeNull()
+  })
+
+  it.each([
+    ["重新比賽後提出的申訴較晚處理", true],
+    ["較晚處理的申訴排在前面", false],
+  ])(
+    "兩輪處理：狀態顯示最後一次處理的決定，與 S4 一致（%s）",
+    async (_label, rematchFirst) => {
+      const rematch = appeal({
+        id: "ap-r",
+        team_id: "b",
+        team_name: "乙隊",
+        status: "closed",
+        decision: "rematch",
+        reason: "重賽",
+        handled_at: "2026-10-26T12:30:00Z",
+      })
+      const upheld = appeal({
+        id: "ap-u",
+        status: "closed",
+        decision: "upheld",
+        reason: "維持",
+        handled_at: "2026-10-27T12:30:00Z",
+      })
+      mockList([
+        group({
+          has_open: false,
+          match_status: "confirmed",
+          appeals: rematchFirst ? [rematch, upheld] : [upheld, rematch],
+        }),
+      ])
+      open()
+
+      const row = await rowOf("M1")
+      const status = within(row).getAllByRole("cell")[3]
+      expect(status.textContent).toBe("維持原結果")
+    },
+  )
+
   it("已結案的場次沒有操作，顯示決定；沒有未結案申訴時顯示空狀態文字", async () => {
     mockList([
       group({
@@ -328,6 +436,55 @@ describe("S32 申訴：列表", () => {
     expect(tab.close).not.toHaveBeenCalled()
   })
 
+  async function clickViewAttachment() {
+    const user = userEvent.setup()
+    const row = await rowOf("M1")
+    await user.click(within(row).getByRole("button", { name: "查看說明" }))
+    const dialog = await screen.findByRole("dialog")
+    await user.click(within(dialog).getByRole("button", { name: "查看附件" }))
+  }
+
+  it("查看附件：瀏覽器擋下新分頁（window.open 回 null）時顯示提示，不下載", async () => {
+    mockList([PLAYED])
+    vi.spyOn(window, "open").mockReturnValue(null)
+    const download = vi.spyOn(DisputesService, "downloadAppealAttachment")
+    const toastError = vi.spyOn(toast, "error")
+    open()
+
+    await clickViewAttachment()
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        POPUP_BLOCKED_TEXT,
+        expect.anything(),
+      ),
+    )
+    expect(download).not.toHaveBeenCalled()
+  })
+
+  it("查看附件：下載失敗時關閉剛開的分頁並顯示錯誤", async () => {
+    mockList([PLAYED])
+    const tab = {
+      opener: window as Window | null,
+      location: { href: "" },
+      close: vi.fn(),
+    }
+    vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window)
+    vi.spyOn(DisputesService, "downloadAppealAttachment").mockRejectedValue(
+      httpError(404, {
+        detail: { code: "FILE_NOT_FOUND", message: "找不到這個檔案" },
+      }),
+    )
+    const toastError = vi.spyOn(toast, "error")
+    open()
+
+    await clickViewAttachment()
+
+    await waitFor(() => expect(tab.close).toHaveBeenCalled())
+    expect(toastError).toHaveBeenCalledWith("找不到這個檔案", expect.anything())
+    expect(tab.location.href).toBe("")
+  })
+
   it("非主辦方（403）：顯示無權限畫面", async () => {
     vi.spyOn(DisputesService, "listTournamentAppeals").mockRejectedValue(
       httpError(403, {
@@ -358,6 +515,8 @@ describe("S32 申訴：處理", () => {
     expect(confirm).toBeDisabled()
     await user.type(within(dialog).getByLabelText(REASON_LABEL), "證據不足")
     expect(confirm).toBeEnabled()
+    const readTournament = vi.mocked(TournamentsService.readMyTournament)
+    const tournamentReads = readTournament.mock.calls.length
     await user.click(confirm)
 
     await waitFor(() =>
@@ -368,6 +527,99 @@ describe("S32 申訴：處理", () => {
     )
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
     expect(list.mock.calls.length).toBeGreaterThanOrEqual(2)
+    // 決賽處理後賽事會轉為已結束：主辦方賽事詳情也要重抓
+    await waitFor(() =>
+      expect(readTournament.mock.calls.length).toBeGreaterThan(tournamentReads),
+    )
+  })
+
+  it("雙方棄權：確認文字寫雙方都不晉級，不寫勝隊晉級", async () => {
+    const user = userEvent.setup()
+    mockList([DOUBLE_FORFEIT])
+    open()
+
+    const row = await rowOf("M3")
+    await user.click(within(row).getByRole("button", { name: UPHOLD_TEXT }))
+    const dialog = await screen.findByRole("alertdialog")
+    expect(dialog.textContent).toContain("雙方都不晉級")
+    expect(dialog.textContent).not.toContain("勝隊晉級")
+  })
+
+  it("更正結果、重新比賽：填理由前確認鈕停用", async () => {
+    const user = userEvent.setup()
+    mockList([PLAYED, FORFEIT])
+    vi.spyOn(DisputesService, "readReplayWindow").mockResolvedValue({
+      data: {
+        can_reschedule: true,
+        reason: null,
+        earliest: "2026-10-26T12:00:00Z",
+        latest: null,
+      },
+    } as WindowResult)
+    open()
+
+    await user.click(
+      within(await rowOf("M1")).getByRole("button", { name: CORRECT_TEXT }),
+    )
+    const correct = await screen.findByRole("alertdialog")
+    // 各局已預填完整，只差理由
+    const correctConfirm = within(correct).getByRole("button", {
+      name: CORRECT_TEXT,
+    })
+    expect(correctConfirm).toBeDisabled()
+    await user.type(within(correct).getByLabelText(REASON_LABEL), "  ")
+    expect(correctConfirm).toBeDisabled()
+    await user.type(within(correct).getByLabelText(REASON_LABEL), "更正")
+    expect(correctConfirm).toBeEnabled()
+    await user.click(within(correct).getByRole("button", { name: "取消" }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+
+    await user.click(
+      within(await rowOf("M2")).getByRole("button", { name: REMATCH_TEXT }),
+    )
+    const rematch = await screen.findByRole("alertdialog")
+    fireEvent.change(
+      await within(rematch).findByLabelText("重新比賽的時間（台北時間）"),
+      { target: { value: "2026-10-26T21:00" } },
+    )
+    const rematchConfirm = within(rematch).getByRole("button", {
+      name: REMATCH_TEXT,
+    })
+    expect(rematchConfirm).toBeDisabled()
+    await user.type(within(rematch).getByLabelText(REASON_LABEL), "重賽")
+    expect(rematchConfirm).toBeEnabled()
+  })
+
+  it("另一個分頁已處理（409 NO_OPEN_APPEALS）：錯誤 Toast 顯示伺服器訊息，列表重抓後顯示最新狀態", async () => {
+    const user = userEvent.setup()
+    const message = "這場比賽沒有待處理的申訴。"
+    const list = mockList([PLAYED])
+    vi.spyOn(DisputesService, "resolveAppeals").mockImplementation((() => {
+      // 另一個分頁已維持原結果：之後重抓的列表沒有未結案申訴
+      list.mockResolvedValue({ data: [HANDLED_ELSEWHERE] } as ListResult)
+      return Promise.reject(
+        httpError(409, { detail: { code: "NO_OPEN_APPEALS", message } }),
+      )
+    }) as unknown as typeof DisputesService.resolveAppeals)
+    const toastError = vi.spyOn(toast, "error")
+    open()
+
+    const row = await rowOf("M1")
+    await user.click(within(row).getByRole("button", { name: UPHOLD_TEXT }))
+    const dialog = await screen.findByRole("alertdialog")
+    await user.type(within(dialog).getByLabelText(REASON_LABEL), "維持")
+    await user.click(within(dialog).getByRole("button", { name: UPHOLD_TEXT }))
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(message, expect.anything()),
+    )
+    // 列表重抓後這一列沒有操作，對話框跟著關閉
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    const updated = await rowOf("M1")
+    expect(within(updated).getByText("維持原結果")).toBeInTheDocument()
+    expect(
+      within(updated).queryByRole("button", { name: UPHOLD_TEXT }),
+    ).toBeNull()
   })
 
   it.each([
@@ -485,6 +737,7 @@ describe("S32 申訴：處理", () => {
         },
       }),
     )
+    const toastError = vi.spyOn(toast, "error")
     open()
 
     const row = await rowOf("M1")
@@ -500,6 +753,8 @@ describe("S32 申訴：處理", () => {
       await within(dialog).findByText("任一隊拿到 2 勝後才能送出。"),
     ).toBeInTheDocument()
     expect(screen.getByRole("alertdialog")).toBeInTheDocument()
+    // 只有 NO_OPEN_APPEALS 另外用 Toast；其他錯誤只在對話框顯示，不重複
+    expect(toastError).not.toHaveBeenCalled()
   })
 
   it("更正結果（回合數型態）：輸入兩隊回合數", async () => {
@@ -616,6 +871,34 @@ describe("S32 申訴：處理", () => {
     ).toHaveAttribute("href", "/organizer/tournaments/t-1/matches")
     // RESCHEDULE_* 409 後重抓時間範圍
     await waitFor(() => expect(replayWindow).toHaveBeenCalledTimes(2))
+  })
+
+  it("重賽時間範圍為空（no_valid_time）：顯示提示與「前往場次管理」，不能送出", async () => {
+    const user = userEvent.setup()
+    mockList([FORFEIT])
+    const resolve = mockResolve()
+    vi.spyOn(DisputesService, "readReplayWindow").mockResolvedValue({
+      data: {
+        can_reschedule: false,
+        reason: "no_valid_time",
+        earliest: "2026-10-26T12:00:00Z",
+        latest: "2026-10-26T11:00:00Z",
+      },
+    } as WindowResult)
+    open()
+
+    const row = await rowOf("M2")
+    await user.click(within(row).getByRole("button", { name: REMATCH_TEXT }))
+    const dialog = await screen.findByRole("alertdialog")
+    expect(await within(dialog).findByText(NO_VALID_TIME_TEXT)).toBeVisible()
+    expect(
+      within(dialog).getByRole("link", { name: GO_TO_MATCHES_TEXT }),
+    ).toHaveAttribute("href", "/organizer/tournaments/t-1/matches")
+    await user.type(within(dialog).getByLabelText(REASON_LABEL), "重賽")
+    expect(
+      within(dialog).getByRole("button", { name: REMATCH_TEXT }),
+    ).toBeDisabled()
+    expect(resolve).not.toHaveBeenCalled()
   })
 
   it.each(["match_not_reschedulable", "tournament_not_reschedulable"] as const)(
