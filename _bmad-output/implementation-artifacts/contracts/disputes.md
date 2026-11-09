@@ -29,7 +29,7 @@ class Appeal(SQLModel, table=True):        # appeal；6.1 建立
     description: str                        # 1～1000 字
     attachment_key: str | None              # core.storage 的 key；只有主辦方能下載
     status: AppealStatus                    # open → closed
-    decision: AppealDecision | None         # upheld／corrected／rematch；結案時寫入
+    decision: AppealDecision | None         # upheld／corrected／rematch／disqualified（6.5 取消資格時一併結案）；結案時寫入
     reason: str | None                      # 處理理由，結案時必填
     handled_by: UUID | None                 # 處理的主辦方帳號，不覆寫 filed_by
     handled_at: datetime | None
@@ -68,10 +68,10 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | `list_reportable_teams(session, *, tournament_id, account_id) -> list[ReportableTeam]` | router（S20） | 檢舉人資格檢查後（錯誤同 `file_report`），回可被檢舉的隊伍 `{id, name, has_open_report}`（排除自己；`has_open_report`＝本隊對它已有處理中的檢舉），依隊名排序 | 6.4（C） |
 | `file_report(session, *, tournament_id, account_id, reported_team_id, description, attachment, content_type) -> FiledReport` | router（S20） | 先 `lock_tournament`。賽事未結束；檢舉人是報名狀態為 `pending`／`accepted`／`waitlisted`／`drawn` 的隊伍隊長；對象同樣四種狀態且不是自己；同一隊對同一對象已有處理中的檢舉時拒絕（結案後可再檢舉）；說明去頭尾空白後 1～1000 字（code point）；全部通過才存附件；寫 `report.filed`，發 `ReportFiled`。回傳 `FiledReport {report: ReportRead, attachment_key}`：router 在交易提交失敗時刪掉剛存的附件 | 6.4（C） |
 | `list_tournament_reports(session, *, tournament_id, actor_id) -> list[ReportRead]` | router（S33） | 主辦方；處理中在前，各組依 `filed_at` 由舊到新、再依 id | 6.4（C） |
-| `resolve_report(session, *, tournament_id, report_id, actor_id, substantiated: bool, reason: str) -> ReportRead` | router（S33） | 主辦方；駁回只結案；屬實時賽事未結束才呼叫 competition `disqualify`，已結束只記錄屬實。寫 `report.resolved`，發 `ReportResolved` | 6.5 |
+| `resolve_report(session, *, tournament_id, report_id, actor_id, substantiated: bool, reason: str) -> ReportRead` | router（S33） | router 先以不鎖定的讀取取得檢舉所屬賽事（不存在 404 `REPORT_NOT_FOUND`，先於理由的 422），再呼叫本函式。本函式順序：理由去頭尾空白後 1～1000 字（422 `REPORT_REASON_REQUIRED`／`REPORT_REASON_TOO_LONG`，`loc` 為 `body.reason`）→ `lock_tournament` → 主辦方（403）→ 鎖住檢舉、屬於該賽事（404 `REPORT_NOT_FOUND`）、仍為 `open`（409 `REPORT_ALREADY_RESOLVED`）→ 寫入。駁回只結案（`dismissed`）。屬實（`substantiated`）且賽事未結束、未取消時呼叫 competition `disqualify`（錯誤原樣往外拋、不改資料，例如 409 `DISQUALIFY_OPPONENT_PENDING`），同一交易：`affected_match_ids` 每一場未結案的申訴以 `disqualified` 結案（理由、處理者同檢舉，寫 `appeal.resolved`、發 `AppealResolved`），被取消資格隊伍的其他未結案檢舉一併結案為 `substantiated`；賽事已結束或已取消只記錄屬實。每筆結案寫 `report.resolved`（`before` `{status, reason}`；`after` `{status, reason}`，本筆屬實取消資格時另含 `disqualified`、`affected_match_ids`、`replacement_team_id`，一併結案的另含 `with_report_id`），發 `ReportResolved` | 6.5 |
 | `open_report_attachment(session, *, report_id, actor_id) -> tuple[BinaryIO, str]` | router | 只有該賽事主辦方 | 6.4（C） |
 | `count_open_disputes(session, *, tournament_id, actor_id) -> OpenDisputes` | router（S27 待處理清單） | 主辦方（403）。`{appeals, reports, earliest_deadline, items: list[OpenDisputeItem]}`；`OpenDisputeItem {kind: appeal\|report, id, match_id, match_code, filed_at, deadline}`，依處理期限由近到遠。處理期限＝等待結果的下一場（勝隊、敗隊去的場次中最早）的預定時間；決賽與季軍賽為申訴提出後 1 小時。6.5 接上前 `reports` 為 0、沒有檢舉項目（檢舉的處理期限與排序由 6.5 決定，2026-11-09 使用者決定）。S27 前端直接呼叫 disputes 的 API（tournaments 不能呼叫 disputes） | 6.2 |
-| `get_public_appeal_result(session, *, tournament_id, match_id) -> PublicAppealResult` | router（S4，公開） | `{decision: upheld\|corrected\|null}`：場次已確認且最後一次處理是維持或更正時才有值；未處理、未確認、重新比賽為 null。不含申訴內容（AD-19）。場次不屬於該賽事 404 `MATCH_NOT_FOUND` | 6.2 |
+| `get_public_appeal_result(session, *, tournament_id, match_id) -> PublicAppealResult` | router（S4，公開） | `{decision: upheld\|corrected\|disqualified\|null}`：場次已確認且最後一次處理是維持、更正或取消資格（6.5）時才有值；未處理、未確認、重新比賽為 null。不含申訴內容（AD-19）。場次不屬於該賽事 404 `MATCH_NOT_FOUND` | 6.2 |
 | `get_replay_window(session, *, tournament_id, match_id, actor_id) -> RescheduleInfo` | router（S32 重新比賽） | 主辦方（403）、場次屬於該賽事（404）後呼叫 competition `get_replay_window` | 6.2 |
 
 ### API（提議）
@@ -88,11 +88,11 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | `GET /api/v1/tournaments/{tid}/reportable-teams` | `VerifiedAccount` | S20 選單 |
 | `POST /api/v1/tournaments/{tid}/reports` | `VerifiedAccount` | multipart：`reported_team_id`、`description`（預設空字串）、`attachment?`（空檔視為未附）；201 `ReportRead` |
 | `GET /api/v1/organizer/tournaments/{tid}/reports` | `Organizer` | S33 |
-| `POST /api/v1/organizer/reports/{report_id}/resolution` | `Organizer` | `{substantiated, reason}` |
+| `POST /api/v1/organizer/reports/{report_id}/resolution` | `Organizer` | `ReportResolveIn {substantiated: bool, reason: str}`；200 `ReportRead` |
 | `GET /api/v1/organizer/reports/{report_id}/attachment` | `Organizer` | 下載附件 |
 | `GET /api/v1/organizer/tournaments/{tid}/open-disputes` | `Organizer` | S27 待處理 |
 
-錯誤碼（提議）：`APPEAL_DEADLINE_PASSED` 409、`APPEAL_NOT_ALLOWED` 409（賽事已結束或已取消、場次不是申訴期／申訴中）、`APPEAL_DESCRIPTION_REQUIRED`／`APPEAL_DESCRIPTION_TOO_LONG` 422（申訴說明空白或超過 1000 字）、`APPEAL_ALREADY_FILED` 409、`CAPTAIN_REQUIRED` 403（沿用）、`NO_OPEN_APPEALS` 409、`REPLAY_ONLY_FOR_FORFEIT` 409、`CORRECTION_ONLY_FOR_PLAYED` 409（6.2：更正結果只用於 `outcome=played`）、`APPEAL_REASON_REQUIRED`／`APPEAL_REASON_TOO_LONG`／`APPEAL_GAMES_REQUIRED`／`APPEAL_REPLAY_AT_REQUIRED` 422（6.2）、`REPORT_NOT_ALLOWED` 409（檢舉人或對象的報名狀態不符、賽事已結束）、`REPORT_SELF` 422、`REPORT_ALREADY_FILED` 409（同一隊對同一對象已有處理中的檢舉）、`REPORT_DESCRIPTION_INVALID` 422（欄位錯誤，`loc` 為 `body.description`）、`REPORT_ALREADY_RESOLVED` 409、`APPEAL_NOT_FOUND`／`REPORT_NOT_FOUND` 404；附件沿用 `core.storage` 的錯誤（格式、大小）。
+錯誤碼（提議）：`APPEAL_DEADLINE_PASSED` 409、`APPEAL_NOT_ALLOWED` 409（賽事已結束或已取消、場次不是申訴期／申訴中）、`APPEAL_DESCRIPTION_REQUIRED`／`APPEAL_DESCRIPTION_TOO_LONG` 422（申訴說明空白或超過 1000 字）、`APPEAL_ALREADY_FILED` 409、`CAPTAIN_REQUIRED` 403（沿用）、`NO_OPEN_APPEALS` 409、`REPLAY_ONLY_FOR_FORFEIT` 409、`CORRECTION_ONLY_FOR_PLAYED` 409（6.2：更正結果只用於 `outcome=played`）、`APPEAL_REASON_REQUIRED`／`APPEAL_REASON_TOO_LONG`／`APPEAL_GAMES_REQUIRED`／`APPEAL_REPLAY_AT_REQUIRED` 422（6.2）、`APPEAL_DECISION_INVALID` 422（6.5：處理申訴 API 不接受 `disqualified`，`loc` 為 `body.decision`）、`REPORT_NOT_ALLOWED` 409（檢舉人或對象的報名狀態不符、賽事已結束）、`REPORT_SELF` 422、`REPORT_ALREADY_FILED` 409（同一隊對同一對象已有處理中的檢舉）、`REPORT_DESCRIPTION_INVALID` 422（欄位錯誤，`loc` 為 `body.description`）、`REPORT_ALREADY_RESOLVED` 409、`REPORT_REASON_REQUIRED`／`REPORT_REASON_TOO_LONG` 422（6.5：處理理由空白或超過 1000 字，`loc` 為 `body.reason`）、`APPEAL_NOT_FOUND`／`REPORT_NOT_FOUND` 404；附件沿用 `core.storage` 的錯誤（格式、大小）。
 
 ### 事件（`core.events.publish`，期中只發不通知）
 

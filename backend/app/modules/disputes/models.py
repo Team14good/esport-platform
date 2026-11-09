@@ -28,11 +28,15 @@ class AppealStatus(StrEnum):
 
 
 class AppealDecision(StrEnum):
-    """申訴處理結果：維持原結果、更正結果、重新比賽（只用於棄權判定）。"""
+    """申訴處理結果：維持原結果、更正結果、重新比賽（只用於棄權判定）、取消資格。
+
+    `disqualified`：檢舉屬實取消資格（6.5）時，受影響場次的未結案申訴一併以此結案。
+    """
 
     UPHELD = "upheld"
     CORRECTED = "corrected"
     REMATCH = "rematch"
+    DISQUALIFIED = "disqualified"
 
 
 class ReportStatus(StrEnum):
@@ -51,6 +55,8 @@ APPEAL_DESCRIPTION_MAX_LENGTH = 1000
 APPEAL_REASON_MAX_LENGTH = 1000
 # 同一隊對同一場只能有一筆未結案申訴（部分唯一索引）
 OPEN_APPEAL_INDEX = "uq_appeal_open_match_team"
+# 檢舉處理理由的字數上限（以 code point 計算，與前端一致）
+REPORT_REASON_MAX_LENGTH = 1000
 
 
 # ---------------------------------------------------------------- 資料表
@@ -160,6 +166,13 @@ class ReportFiled(Event):
     reported_team_id: uuid.UUID
 
 
+class ReportResolved(Event):
+    """主辦方處理檢舉（Story 6.5）：駁回或屬實；期中只發事件，不通知。"""
+
+    report_id: uuid.UUID
+    substantiated: bool
+
+
 # ---------------------------------------------------------------- API schema
 
 
@@ -248,9 +261,12 @@ class AppealResolveIn(BaseModel):
 
 
 class PublicAppealResult(BaseModel):
-    """公開的申訴處理結果（S4）；不含申訴內容（AD-19）。未經申訴處理或重新比賽為 None。"""
+    """公開的申訴處理結果（S4）；不含申訴內容（AD-19）。未經申訴處理或重新比賽為 None。
 
-    decision: Literal["upheld", "corrected"] | None
+    `disqualified`：檢舉屬實取消資格時一併結案（6.5）。
+    """
+
+    decision: Literal["upheld", "corrected", "disqualified"] | None
 
 
 class OpenDisputeItem(BaseModel):
@@ -291,6 +307,14 @@ class ReportRead(BaseModel):
     reason: str | None
     handled_by: uuid.UUID | None
     handled_at: datetime | None
+
+
+class ReportResolveIn(BaseModel):
+    """處理檢舉的請求（S33）：`substantiated` 為 false 是駁回、true 是屬實。"""
+
+    substantiated: bool
+    # 去頭尾空白後 1～1000 字，由 service 驗證（422 指向 reason）
+    reason: str
 
 
 class ReportableTeam(BaseModel):

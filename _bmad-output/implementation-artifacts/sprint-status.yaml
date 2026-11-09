@@ -90,9 +90,9 @@ development_status:
   5-3-裁判逐局登錄比分: done  # 負責：D；第一階段（#8）、第二階段後端（#25）、S4 比分登錄面板（A，#47）完成；記分者指派由 4.4（#46）處理
   5-4-送出系列結果: done  # 負責：D；規則在 5.3 的 scoring.py；第二階段與 5.3 合併（#25）、S4 送出面板與申訴期倒數（A，#47、#43）完成
   5-5-申訴期滿自動確認與一般晉級: done  # 負責：D；第一階段（#6）、第二階段後端（#20）、晉級後裁判衝突（4.4，#46）、S4 申訴期倒數（A，#39、#43）、S12 下一場（spec-5-1-s12-next-match.md）完成
-  5-6-季軍賽-雙方棄權與賽事結束: review  # 負責：D；規則在 progression.py，寫入資料庫與賽事結束在 5.5 第二階段完成；S2／S3 頒獎台與名次標記（A，spec-5-6-podium-and-placement-marks.md）完成，待統一 code review
+  5-6-季軍賽-雙方棄權與賽事結束: done  # 負責：D；規則在 progression.py，寫入資料庫與賽事結束在 5.5 第二階段完成；S2／S3 頒獎台與名次標記（A，spec-5-6-podium-and-placement-marks.md）完成；2026-11-09 統一 code review 對照 AC 全數完成
   5-7-勝隊上傳結算截圖: backlog  # 擱置（期中後）
-  5-8-場次頁與對戰樹結果標示: review  # 負責：A；第一階段（#12）、公開單場 API（#21）、第二階段接真資料與報到、比分面板（spec-5-8-real-match-data.md）完成，待統一 code review
+  5-8-場次頁與對戰樹結果標示: done  # 負責：A；第一階段（#12）、公開單場 API（#21）、第二階段接真資料與報到、比分面板（spec-5-8-real-match-data.md）完成；2026-11-09 統一 code review 修正雙方棄權場次的下一輪位置仍顯示「勝者」待定列
   epic-5-retrospective: optional
 
   epic-6: in-progress
@@ -100,11 +100,11 @@ development_status:
   6-2-主辦方處理申訴: done  # 負責：B（含 competition 端，D 審查）；spec-6-2-resolve-appeals.md，PR #69 已合併（例外修改 D 的 get_replay_window）；審查後續 PR #71（spec-6-2-review-fixes.md）
   6-3-申訴逾期提醒與受影響場次暫停: backlog  # 擱置（期中後）
   6-4-提出檢舉: done  # 負責：C
-  6-5-查證檢舉與取消資格: in-progress  # 負責：B（含 competition 端，D 審查）；第一階段（competition disqualify，spec-6-5-disqualify.md）進行中，第二階段的前置 6.4 已合併
+  6-5-查證檢舉與取消資格: in-progress  # 負責：B（含 competition 端，D 審查）；第一階段（competition disqualify，spec-6-5-disqualify.md，PR #65）已合併；第二階段 A（resolve_report＋S33，spec-6-5-resolve-report.md）進行中，B（S27 檢舉）、C（對戰樹標記）見 deferred-work
   epic-6-retrospective: optional
 
   epic-7: in-progress
-  7-1-一鍵載入示範資料: review  # 負責：A
+  7-1-一鍵載入示範資料: done  # 負責：A；2026-11-09 統一 code review 對照 AC 完成，直播連結（使用者 2026-11-04 決定不做）與回滾殘留截圖登記於 deferred-work
   7-2-端對端演練-兩款遊戲的完整賽事: in-progress  # 負責：A
-  7-3-測試覆蓋率與測試報告素材: review  # 負責：A；總指令、併發測試、報告與追溯完成，待統一 code review
+  7-3-測試覆蓋率與測試報告素材: done  # 負責：A；總指令、併發測試、報告與追溯完成；2026-11-09 統一 code review 對照 AC 完成，小問題登記於 deferred-work
   epic-7-retrospective: optional

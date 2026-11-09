@@ -552,3 +552,50 @@
 - 問題與修正：AI 的實作直接改了 D 的既有函式與 D 的測試，和 spec 自己寫的「不改 D 的既有行為」衝突，第 1 輪審查（主持人核對 diff）發現後標為 intent_gap 交給使用者，使用者決定保留並在 Decisions 記錄例外。第 1 輪審查的 12 項 patch 在前一個工作階段只分類、沒有套用，接手時對照程式逐項確認後才補做。6.2 是從 6.1 squash 合併前的舊 commit 開始做的，直接合併 main 有 19 個衝突檔（git 認不出兩份相同的 6.1）；AI 改為先合併本機 6.1 最終分支（樹與 main 相同），衝突降到 9 個，解完後確認樹相等，再把分支整理成 main 之上只含 6.2 的一個 commit。子代理也指出 6.4 已合併但 S27 待處理仍不計檢舉，屬需求決定，交給使用者
 - 成熟度：L4（spec → 子代理實作 → 多個審查者 → 子代理修正與合併 → 主代理完整驗證，人在 intent_gap 介入）
 - 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；commit `bded082`
+
+### 2026-11-09｜需求／範圍調整與驗收條件｜Story 6.5 第二階段 A 的 spec
+
+- Story／範圍：6.5 第二階段（檢舉處理 `resolve_report`＋S33）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（step 01～02，兩個調查子代理）
+- 怎麼用：AI 依 epic-6-context、deferred-work、D 在 #65 的 3 點建議寫 spec。先用 git 確認 epic context 沒過期，再派後端、前端兩個子代理調查程式碼，只回傳摘要
+- AI 產出：
+  - 指出第二階段包含 3 個可以各自合併的成果，建議拆開
+  - 列出 4 個需要人決定的問題：申訴因取消資格結案時的結果、賽事已取消時怎麼處理、被檢舉隊伍其他檢舉、D 建議的頂替規則
+  - spec `spec-6-5-resolve-report.md`，含 11 列情況表
+- 人做了什麼：
+  - 決定拆成三個 PR，這次只做檢舉處理
+  - 4 個問題都選建議的做法
+  - 知道 spec 約 3,000 tokens、超過建議長度，仍保留完整
+- 驗證：調查時發現 `Report` 的處理欄位在 6.4 的遷移已建好，不需要新遷移；產生的 client 還沒有處理檢舉的函式，寫進 Code Map
+- 問題與修正：
+  - 規劃時只列了 4 個問題，沒料到新增 `disqualified` 會影響既有的申訴處理 API。這點後來在審查才被找出（見下一筆）
+- 成熟度：L3（AI 調查並寫 spec，人做範圍與規則決定）
+- 證據：`_bmad-output/implementation-artifacts/spec-6-5-resolve-report.md` 的 Decisions
+
+### 2026-11-09｜程式／程式生成｜Story 6.5 第二階段 A：檢舉處理與 S33
+
+- Story／範圍：6.5 第二階段（分支 `story/6-5-phase2`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理；Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：沒有對話脈絡的子代理只依 spec 實作；主代理讀差異對照 spec 的任務與情況表，再跑三個審查者，核對後把修正交回同一個子代理
+- AI 產出：
+  - 後端：`resolve_report` 與處理路由。屬實時呼叫 `disqualify`，同一個交易結案受影響場次的申訴，被檢舉隊伍的其他檢舉也一併結案。另外新增 `AppealDecision.DISQUALIFIED`，並改了頂替規則
+  - 前端：S33 檢舉處理頁、後台側欄「檢舉」、S4 顯示「取消資格」
+  - 測試：新增 `test_resolve_report.py`（15 個測試函式）、`organizer-reports.test.tsx`
+  - 共 30 個檔案
+- 人做了什麼：批准 spec；被排除的「隊伍撤回後只能駁回」由人知悉
+- 驗證：
+  - 後端 2350 passed，覆蓋率 97%，覆蓋率門檻通過；lint 通過
+  - 前端 typecheck、lint 通過，單元測試 973 passed
+  - 審查 20 點：修正 5 點、排除 15 點，排除理由逐點記在 spec 的 Review Triage Log
+- 問題與修正：
+  - **（中）實作的 AI 新增 `AppealDecision.DISQUALIFIED` 時，沒注意到處理申訴的 API 也用同一個 enum。** `resolve_appeals` 會把它當成重新比賽，可能回 500，或把重賽記成取消資格。Verification Gap 審查者找出來後，改成回 422，並補了測試。
+  - 審查也找出四個低度問題：
+    - S33 在賽事資料還沒載入時，已結束的賽事會顯示「取消資格」；
+    - 取消資格後，主辦方的場次管理與對戰表沒有重抓；
+    - 確認對話框的說明寫得太滿；
+    - 文件寫的錯誤順序與實際不符。
+  - 實作子代理做到一半碰到用量上限中斷，額度恢復後用同一個子代理接續完成。
+  - 前端單元測試第一次跑有 22 個失敗，當時另一個工作階段的後端測試正吃掉約 195% CPU，造成逾時；之後連續兩次重跑都全部通過。
+  - 主代理在 commit 前檢查換行的腳本有語法錯誤、沒有實際執行，commit 後才發現並補查，30 個檔案都是 LF。
+- 成熟度：L4（固定流程：子代理實作，三個審查者並行，主代理逐點核對、交回修正，前後端完整驗證；人在範圍與規則上做決定）
+- 證據：commit `bf35b14`，`_bmad-output/implementation-artifacts/spec-6-5-resolve-report.md` 的 Review Triage Log

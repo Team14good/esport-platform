@@ -4,7 +4,7 @@
 registration 的 `find_team_of_account`、`get_team`、`get_registration`、
 `list_teams_by_status`、`get_team_names`、`is_captain`；場次只透過 competition 的
 `get_match`、`get_public_match`、`lock_match`、`mark_appealed`、`uphold_result`、
-`correct_result`、`replay_match`、`get_replay_window`（contracts/disputes.md）。
+`correct_result`、`replay_match`、`get_replay_window`、`disqualify`（contracts/disputes.md）。
 """
 
 import unicodedata
@@ -31,6 +31,7 @@ from app.modules.disputes.models import (
     APPEAL_DESCRIPTION_MAX_LENGTH,
     APPEAL_REASON_MAX_LENGTH,
     REPORT_DESCRIPTION_MAX_LENGTH,
+    REPORT_REASON_MAX_LENGTH,
     Appeal,
     AppealDecision,
     AppealFiled,
@@ -48,6 +49,7 @@ from app.modules.disputes.models import (
     ReportableTeam,
     ReportFiled,
     ReportRead,
+    ReportResolved,
     ReportStatus,
 )
 from app.modules.registration import service as registration_service
@@ -644,7 +646,7 @@ def resolve_appeals(
 ) -> list[AppealRead]:
     """主辦方處理同一場次的申訴：未結案的申訴一次以相同決定與理由結案（FR-31）。
 
-    順序：理由（422）→ 決定需要的欄位（`corrected` 的 `games`、`rematch` 的 `replay_at`，
+    順序：決定不能是 `disqualified`（422 `APPEAL_DECISION_INVALID`）→ 理由（422）→ 決定需要的欄位（`corrected` 的 `games`、`rematch` 的 `replay_at`，
     422）→ 場次屬於該賽事（404）→ `lock_tournament` → 主辦方（403）→ `lock_match` →
     有未結案申訴（409 `NO_OPEN_APPEALS`）→ competition `uphold_result`／
     `correct_result`／`replay_match`（狀態、outcome 等檢查在 competition）→ 結案（寫
@@ -652,6 +654,13 @@ def resolve_appeals(
     前後各局）→ 發 `AppealResolved`。另一隊的申訴期限未到也可以處理；處理後場次不再是
     申訴期或申訴中，另一隊不能再申訴。任何拒絕都不寫資料。
     """
+    if decision == AppealDecision.DISQUALIFIED:
+        # 只用於檢舉屬實取消資格時一併結案（6.5），主辦方不能直接選
+        raise FieldError(
+            "APPEAL_DECISION_INVALID",
+            "請選擇維持原結果、更正結果或重新比賽",
+            loc=("body", "decision"),
+        )
     cleaned = _clean_appeal_reason(reason)
     if decision == AppealDecision.CORRECTED and games is None:
         raise FieldError(
@@ -854,7 +863,7 @@ def count_open_disputes(
 def get_public_appeal_result(
     session: Session, *, tournament_id: uuid.UUID, match_id: uuid.UUID
 ) -> PublicAppealResult:
-    """S4：已確認的場次經申訴處理的結果（`upheld`／`corrected`）；不含申訴內容（AD-19）。
+    """S4：已確認的場次經申訴處理的結果（`upheld`／`corrected`／`disqualified`）；不含申訴內容（AD-19）。
 
     沒有申訴、尚未處理、場次未確認或處理結果是重新比賽時為 None。場次不屬於該賽事 404。
     """
@@ -875,6 +884,8 @@ def get_public_appeal_result(
         return PublicAppealResult(decision="upheld")
     if decision == AppealDecision.CORRECTED:
         return PublicAppealResult(decision="corrected")
+    if decision == AppealDecision.DISQUALIFIED:
+        return PublicAppealResult(decision="disqualified")
     return PublicAppealResult(decision=None)
 
 
@@ -889,3 +900,201 @@ def get_replay_window(
     _owned_tournament(session, tournament_id=tournament_id, actor_id=actor_id)
     _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
     return competition_service.get_replay_window(session, match_id=match_id)
+
+
+# ---------------------------------------------------------------- 處理檢舉（6.5）
+
+
+def get_report_tournament_id(session: Session, *, report_id: uuid.UUID) -> uuid.UUID:
+    """檢舉所屬的賽事（不鎖定；給處理檢舉 API 先取得要鎖的賽事）；不存在 404 `REPORT_NOT_FOUND`。"""
+    report = repository.get_report(session, report_id)
+    if report is None:
+        raise _report_not_found()
+    return report.tournament_id
+
+
+def _clean_report_reason(value: str) -> str:
+    """檢舉處理理由：與申訴處理理由相同的清理，去頭尾空白後 1～1000 字；否則拋 422（指向 reason）。"""
+    cleaned = "".join(ch for ch in value if _keeps(ch)).strip()
+    if not cleaned:
+        raise FieldError(
+            "REPORT_REASON_REQUIRED", "請輸入處理理由", loc=("body", "reason")
+        )
+    if len(cleaned) > REPORT_REASON_MAX_LENGTH:
+        raise FieldError(
+            "REPORT_REASON_TOO_LONG",
+            f"處理理由最多 {REPORT_REASON_MAX_LENGTH} 個字",
+            loc=("body", "reason"),
+        )
+    return cleaned
+
+
+def _close_disqualified_appeals(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    affected_match_ids: list[uuid.UUID],
+    open_appeals: dict[uuid.UUID, list[Appeal]],
+    before: dict[uuid.UUID, MatchRead],
+    report_id: uuid.UUID,
+    reason: str,
+    actor_id: uuid.UUID,
+    handled_at: datetime,
+) -> None:
+    """取消資格直接改動的場次：未結案的申訴以 `disqualified` 結案（同一場一次）。"""
+    for match_id in affected_match_ids:
+        appeals = open_appeals.get(match_id)
+        if not appeals:
+            continue
+        repository.close_appeals(
+            session,
+            appeals,
+            decision=AppealDecision.DISQUALIFIED,
+            reason=reason,
+            handled_by=actor_id,
+            handled_at=handled_at,
+        )
+        match_before = before[match_id]
+        match = competition_service.get_match(session, match_id=match_id)
+        audit.record(
+            session,
+            actor_id=actor_id,
+            tournament_id=tournament_id,
+            action="appeal.resolved",
+            entity_type="match",
+            entity_id=match_id,
+            before={
+                "match_status": match_before.status,
+                "outcome": match_before.outcome,
+                "winner_id": match_before.winner_id,
+            },
+            after={
+                "decision": AppealDecision.DISQUALIFIED,
+                "reason": reason,
+                "appeal_ids": [appeal.id for appeal in appeals],
+                "match_status": match.status,
+                "outcome": match.outcome,
+                "winner_id": match.winner_id,
+                "report_id": report_id,
+            },
+        )
+        events.publish(
+            session,
+            AppealResolved(match_id=match_id, decision=AppealDecision.DISQUALIFIED),
+        )
+
+
+def resolve_report(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    report_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    substantiated: bool,
+    reason: str,
+) -> ReportRead:
+    """S33 主辦方處理檢舉：駁回（只結案）或屬實。
+
+    router 先以 `get_report_tournament_id` 不鎖定讀出檢舉所屬賽事（不存在 404
+    `REPORT_NOT_FOUND`，先於理由的 422），再呼叫本函式。
+
+    順序（AD-6）：理由（422 `REPORT_REASON_REQUIRED`／`REPORT_REASON_TOO_LONG`）→
+    `lock_tournament` → 主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）→ 鎖住檢舉並確認屬於
+    該賽事（404 `REPORT_NOT_FOUND`）、仍為 `open`（409 `REPORT_ALREADY_RESOLVED`）→
+    判斷 → 寫入。
+
+    屬實且賽事未結束、未取消時呼叫 competition `disqualify`（它拋的錯誤原樣往外拋；呼叫前
+    沒有任何寫入，所以不改資料），並在同一交易：
+    - `affected_match_ids` 每一場未結案的申訴以 `disqualified` 結案（理由、處理者同檢舉），
+      寫 `appeal.resolved`、發 `AppealResolved`；
+    - 對被取消資格隊伍的其他未結案檢舉一併結案為 `substantiated`（理由、處理者同本次）。
+    賽事已結束或已取消時只記錄屬實，不呼叫 `disqualify`、不結案其他檢舉。每筆結案的檢舉寫
+    `report.resolved`（before／after 含狀態與理由）、發 `ReportResolved`。
+    """
+    cleaned = _clean_report_reason(reason)
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=tournament_id
+    )
+    authz.ensure_tournament_owner(tournament, actor_id)
+    report = repository.lock_report(session, report_id)
+    if report is None or report.tournament_id != tournament.id:
+        raise _report_not_found()
+    if report.status != ReportStatus.OPEN:
+        raise BusinessError(
+            "REPORT_ALREADY_RESOLVED", "這筆檢舉已經處理過了。", status_code=409
+        )
+
+    now = clock.now()
+    status = ReportStatus.SUBSTANTIATED if substantiated else ReportStatus.DISMISSED
+    reports = [report]
+    primary_after: dict[str, object] = {}
+    if substantiated and tournament.status not in _ENDED_TOURNAMENT:
+        # 取消資格前記下未結案申訴的場次狀態，給 `appeal.resolved` 的 before
+        open_appeals: dict[uuid.UUID, list[Appeal]] = {}
+        for appeal in repository.list_tournament_appeals(
+            session, tournament.id, open_only=True
+        ):
+            open_appeals.setdefault(appeal.match_id, []).append(appeal)
+        before = {
+            match_id: competition_service.get_match(session, match_id=match_id)
+            for match_id in open_appeals
+        }
+        result = competition_service.disqualify(
+            session,
+            tournament_id=tournament.id,
+            team_id=report.reported_team_id,
+            actor_id=actor_id,
+        )
+        _close_disqualified_appeals(
+            session,
+            tournament_id=tournament.id,
+            affected_match_ids=result.affected_match_ids,
+            open_appeals=open_appeals,
+            before=before,
+            report_id=report.id,
+            reason=cleaned,
+            actor_id=actor_id,
+            handled_at=now,
+        )
+        primary_after = {
+            "disqualified": True,
+            "affected_match_ids": result.affected_match_ids,
+            "replacement_team_id": result.replacement_team_id,
+        }
+        reports += [
+            other
+            for other in repository.list_open_reports_against(
+                session, tournament.id, report.reported_team_id
+            )
+            if other.id != report.id
+        ]
+
+    repository.close_reports(
+        session,
+        reports,
+        status=status,
+        reason=cleaned,
+        handled_by=actor_id,
+        handled_at=now,
+    )
+    for closed in reports:
+        extra = (
+            primary_after if closed.id == report.id else {"with_report_id": report.id}
+        )
+        audit.record(
+            session,
+            actor_id=actor_id,
+            tournament_id=tournament.id,
+            action="report.resolved",
+            entity_type="report",
+            entity_id=closed.id,
+            before={"status": ReportStatus.OPEN, "reason": None},
+            after={"status": status, "reason": cleaned, **extra},
+        )
+        events.publish(
+            session, ReportResolved(report_id=closed.id, substantiated=substantiated)
+        )
+    names = registration_service.get_team_names(
+        session, team_ids=[report.reporter_team_id, report.reported_team_id]
+    )
+    return _to_read(report, names)

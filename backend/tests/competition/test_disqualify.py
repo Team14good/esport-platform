@@ -473,6 +473,49 @@ def test_replacement_skips_walkover_win_back_to_played_win(
     assert _loser_of(r1) in (rows[semi.code].team_a_id, rows[semi.code].team_b_id)
 
 
+def test_disqualified_win_is_not_skipped_and_opponent_wins(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    """最近一場勝場是取消資格勝（沒有真的打敗對手）：判對手獲勝，不往前由第 1 輪敗隊頂替。"""
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 16)
+    rows = _rows(session, tournament.id)
+    for m in sorted(
+        (m for m in rows.values() if m.round_no == 1), key=lambda m: m.slot_no
+    ):
+        _confirm(session, m, O.PLAYED, m.team_a_id)
+    rows = _rows(session, tournament.id)
+    r2_all = sorted(
+        (m for m in rows.values() if m.round_no == 2), key=lambda m: m.slot_no
+    )
+    r2 = r2_all[0]
+    for m in r2_all[1:]:
+        _confirm(session, m, O.PLAYED, m.team_a_id)
+    # T 的第 2 輪進行中時對手被取消資格：T 以取消資格勝晉級
+    team, opponent = r2.team_a_id, r2.team_b_id
+    assert team is not None and opponent is not None
+    _update(session, rows[r2.code], status=S.LIVE)
+    actor = _organizer(session, tournament.id)
+    service.disqualify(
+        session, tournament_id=tournament.id, team_id=opponent, actor_id=actor
+    )
+    rows = _rows(session, tournament.id)
+    assert _result(rows[r2.code]) == (S.CONFIRMED, O.DISQUALIFIED, team)
+    semi = rows[next(c for c, m in rows.items() if m.id == r2.next_match_id)]
+    assert semi.status == S.SCHEDULED
+    semi_opponent = semi.team_b_id if semi.team_a_id == team else semi.team_a_id
+    assert semi_opponent is not None
+
+    result = service.disqualify(
+        session, tournament_id=tournament.id, team_id=team, actor_id=actor
+    )
+
+    rows = _rows(session, tournament.id)
+    assert result.replacement_team_id is None
+    assert _codes(rows, result.affected_match_ids) == [semi.code]
+    assert _result(rows[semi.code]) == (S.CONFIRMED, O.DISQUALIFIED, semi_opponent)
+
+
 def _loser_of(match: Match) -> uuid.UUID | None:
     return match.team_b_id if match.winner_id == match.team_a_id else match.team_a_id
 

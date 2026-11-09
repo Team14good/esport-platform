@@ -83,9 +83,6 @@
   summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
   evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-replay-clear-helper.md`
-  summary: 6.2 `replay_match`（B）要呼叫 `clear_for_replay` 並串完整重賽流程，目前尚未實作。
-  evidence: 呼叫順序：`lock_tournament` → `clear_for_replay` → `transition_match` 回待開打 → 寫入新 `scheduled_at` → `start_forfeit_clock` → 操作紀錄 → 事件；全部在同一個交易內。操作紀錄的變更前內容用 `ReplayCleared`（報到、各局、結果、勝隊、勝局數與各期限）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: （低）公開賽事列表 `GET /tournaments` 沒有分頁或上限，未登入的請求一次取回所有賽事（含已結束、已取消）。
   evidence: 2026-11-02 Story 2.4 第一輪審查（Blind Hunter、Edge Case Hunter）。期中賽事數量少；賽事累積後在 S1 改為分頁（沿用 1.8 的分頁格式）或只回最近的已結束賽事。
@@ -210,3 +207,23 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-review-fixes.md`
   summary: （低）申訴說明與處理理由的 1000 字上限，前端以 UTF-16 單位計算、後端以 code point 計算；含大量 emoji 的文字可能前端顯示未超過、送出後回 422（或反過來）。
   evidence: 2026-11-09 審查（Blind Hunter）。`disputes/models.py` 的註解已寫明差異；修法是前端改用 `[...text].length` 計數並補測試，6.1、6.2、6.4 的表單一併處理。
+## Deferred from: unified code review of 5.6／5.8／7.1／7.3 (2026-11-09)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-registration-demo-step.md`
+  summary: （低）示範資料的段位截圖在資料庫寫入前就存到磁碟；單隊的 savepoint 或整個示範交易回滾時，已存的截圖留在磁碟（#67 審查提過）。
+  evidence: 2026-11-09 統一 code review。`registration.py` 的 `update_player_profile` 先 `storage.save_image` 再寫資料庫，`initial_data.py` 失敗時整批回滾；每次失敗的啟動最多留下 160 個 1×1 PNG。修法：回滾時刪掉本次存的檔案，或先寫資料庫、提交後再存檔。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
+  summary: 示範賽事沒有直播連結，與 epics.md 的 7.1 AC 不同。
+  evidence: 2026-11-04 使用者決定不做（spec 第 19、46 行），spec 要求在 PR 記錄差異；統一 code review 補登於此，期中後若 S2 要展示直播連結再補。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
+  summary: （低）同名遊戲已存在但段位名稱不同時，示範資料沿用舊遊戲，32 隊的 `update_player_profile` 全部失敗、只記警告，接著對 0 隊抽籤，啟動不會報錯。
+  evidence: 2026-11-09 統一 code review。`tournaments.py` 依名稱沿用遊戲；只有手動改過遊戲設定的保留資料庫會遇到。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-3-test-coverage-report.md`
+  summary: （低）純函式 90% 分支覆蓋率是單元＋整合合併計算（`coverage run --append`），AC 寫的是單元測試；`test-all.sh` 複製前端 JUnit 與 Playwright JSON 時丟掉錯誤，檔案不存在時報告不會明確失敗。
+  evidence: 2026-11-09 統一 code review。`scripts/test.sh`、`scripts/test-all.sh`。修法：README 註明計算方式（或只用單元測試算），`cp` 失敗時在報告標出缺漏。
+- source_spec: none
+  summary: 6.5 第二階段（B）：S27 待處理清單加入未結案的檢舉（`count_open_disputes` 的 `reports` 與 `items`），並決定檢舉的處理期限與排序。
+  evidence: 2026-11-09 使用者決定把 6.5 第二階段拆開，先做檢舉處理（`resolve_report`＋S33），S27 與對戰樹標記各自另開 PR；本項與上一項（spec-6-2）是同一件事。
+- source_spec: none
+  summary: 6.5 第二階段（C）：對戰樹的「取消資格」標記（`destructive`），公開對戰表 API 帶出隊伍是否已取消資格，S3／S4 顯示；S17、S12 顯示處理理由。
+  evidence: 2026-11-09 使用者決定把 6.5 第二階段拆開，先做檢舉處理（`resolve_report`＋S33）；標記需要公開對戰表 API 新增欄位與前端顯示，可獨立審查合併。

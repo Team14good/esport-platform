@@ -20,6 +20,7 @@ from app.modules.disputes.models import (
     PublicAppealResult,
     ReportableTeam,
     ReportRead,
+    ReportResolveIn,
 )
 from app.modules.identity.deps import CurrentAccount, Organizer, VerifiedAccount
 
@@ -86,6 +87,27 @@ def list_tournament_reports(
     return service.list_tournament_reports(
         session, tournament_id=tournament_id, actor_id=account.id
     )
+
+
+@router.post("/organizer/reports/{report_id}/resolution")
+def resolve_report(
+    session: SessionDep,
+    account: Organizer,
+    report_id: uuid.UUID,
+    body: ReportResolveIn,
+) -> ReportRead:
+    """S33 處理檢舉：駁回或屬實（賽事未結束時取消資格，已結束或已取消只記錄屬實）。"""
+    tournament_id = service.get_report_tournament_id(session, report_id=report_id)
+    result = service.resolve_report(
+        session,
+        tournament_id=tournament_id,
+        report_id=report_id,
+        actor_id=account.id,
+        substantiated=body.substantiated,
+        reason=body.reason,
+    )
+    session.commit()
+    return result
 
 
 def _stream(file: BinaryIO) -> Iterator[bytes]:

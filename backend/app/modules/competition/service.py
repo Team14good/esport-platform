@@ -3,7 +3,7 @@
 import logging
 import secrets
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -112,16 +112,25 @@ def _source(
     planned: bracket_rules.PlannedMatch,
     side: bracket_rules.Side,
     team_id: uuid.UUID | None,
+    by_code: Mapping[str, Match],
 ) -> str | None:
     """待定列字串；該方已有隊伍、或確定不會有隊伍時為 None。
 
-    確定不會有隊伍：已確認的 walkover 空缺方，或已取消（voided）場次的空缺方。
+    確定不會有隊伍：已確認的 walkover 空缺方、已取消（voided）場次的空缺方，
+    或來源場次已確認卻沒有送出隊伍（例如雙方棄權；確認時晉級已同步寫入）。
+    `by_code` 是同一對戰表全部場次，用來查來源場次。
     """
     if team_id is not None:
         return None
     if match.status == MatchStatus.VOIDED:
         return None
     if match.status == MatchStatus.CONFIRMED and match.outcome == MatchOutcome.WALKOVER:
+        return None
+    src = planned.source(side)
+    if src is None:
+        return None
+    feeder = by_code.get(src.code)
+    if feeder is not None and feeder.status == MatchStatus.CONFIRMED:
         return None
     return bracket_rules.source_label(planned, side)
 
@@ -443,6 +452,8 @@ def _public_matches(
 ) -> tuple[list[PublicMatch], Callable[[uuid.UUID | None], PublicTeamRef | None]]:
     """組 `PublicMatch`（公開對戰樹與公開單場共用）；一併回傳查隊名的 `team_ref`。"""
     plan = bracket_rules.plan(bracket.team_count)
+    # 待定列要看來源場次；呼叫端可能只給部分場次，所以另外讀整張對戰表
+    by_code = {m.code: m for m in repository.list_matches(session, bracket.id)}
     team_ids = sorted(
         {
             team_id
@@ -470,8 +481,8 @@ def _public_matches(
                 is_third_place=match.is_third_place,
                 team_a=team_ref(match.team_a_id),
                 team_b=team_ref(match.team_b_id),
-                source_a=_source(match, planned, "a", match.team_a_id),
-                source_b=_source(match, planned, "b", match.team_b_id),
+                source_a=_source(match, planned, "a", match.team_a_id, by_code),
+                source_b=_source(match, planned, "b", match.team_b_id, by_code),
                 bye_a=match.bye_a,
                 bye_b=match.bye_b,
                 scheduled_at=match.scheduled_at,
@@ -2348,6 +2359,10 @@ def disqualify(
     該賽事拋 404 `REGISTRATION_NOT_FOUND`；已取消資格拋 409 `TEAM_ALREADY_DISQUALIFIED`；
     對手尚未確定拋 409 `DISQUALIFY_OPPONENT_PENDING`；報名不能轉為取消資格時 registration
     拋 409 `REGISTRATION_INVALID_TRANSITION`；任何拒絕都不改資料。不 commit（AD-5）。
+
+    呼叫端須在同一交易把 `affected_match_ids` 每一場未結案的申訴結案（competition 不碰
+    disputes 的資料表）。`affected_match_ids` 只含直接改動的場次，不含之後晉級推進連帶
+    確認的場次；之後要通知時從事件或操作紀錄取得。
     """
     return disqualification.disqualify(
         session, tournament_id=tournament_id, team_id=team_id, actor_id=actor_id

@@ -983,7 +983,7 @@ describe("S27 待處理清單", () => {
 
 describe("S4 申訴處理結果", () => {
   function renderBadge(
-    decision: "upheld" | "corrected" | null,
+    decision: "upheld" | "corrected" | "disqualified" | null,
     status: "confirmed" | "appealed" = "confirmed",
   ) {
     const spy = vi
@@ -1001,6 +1001,7 @@ describe("S4 申訴處理結果", () => {
   it.each([
     ["upheld", "維持原結果"],
     ["corrected", "更正結果"],
+    ["disqualified", "取消資格"],
   ] as const)(
     "已確認且經申訴處理（%s）：顯示「%s」",
     async (decision, text) => {

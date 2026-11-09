@@ -200,6 +200,30 @@ def test_walkover_empty_side_has_no_source(
     assert (matches["M6"].source_a, matches["M6"].source_b) == ("M3 勝者", "M4 勝者")
 
 
+def test_double_forfeit_feeder_clears_next_round_source(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    # M1 已確認為雙方棄權、M2 還沒打：M5 的 a 方確定不會有隊伍，不再顯示「M1 勝者」；
+    # b 方的來源 M2 未確認，仍顯示「M2 勝者」
+    tournament, bracket = draw_with(session, fake_registration, 8)
+    by_code = {m.code: m for m in bracket.matches}
+    row = session.get(Match, by_code["M1"].id)
+    assert row is not None
+    row.status = MatchStatus.CONFIRMED
+    row.outcome = MatchOutcome.DOUBLE_FORFEIT
+    row.winner_id = None
+    session.add(row)
+    session.flush()
+
+    public = service.get_public_bracket(session, tournament_id=tournament.id)
+
+    assert public is not None
+    matches = {m.code: m for m in public.matches}
+    assert matches["M5"].team_a is None
+    assert (matches["M5"].source_a, matches["M5"].source_b) == (None, "M2 勝者")
+    assert (matches["M6"].source_a, matches["M6"].source_b) == ("M3 勝者", "M4 勝者")
+
+
 def test_voided_third_place_has_no_source(
     session: Session, fake_registration: FakeRegistration
 ) -> None:

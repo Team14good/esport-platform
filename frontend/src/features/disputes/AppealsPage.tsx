@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
 import { type ReactNode, useState } from "react"
-import { toast } from "sonner"
 
 import { type AppealGroup, type AppealItem, DisputesService } from "@/client"
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
@@ -19,8 +18,8 @@ import {
 import { matchLabel } from "@/features/competition/match-status"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
-import { notifyError } from "@/lib/feedback"
 import { DECISION_LABEL } from "./decision-label"
+import { openAttachment } from "./open-attachment"
 import {
   latestDecision,
   tournamentAppealsQueryOptions,
@@ -38,40 +37,15 @@ export const NO_OPEN_APPEALS_TEXT = "目前沒有待處理的申訴。"
 export const VIEW_DESCRIPTION_TEXT = "查看說明"
 export const VIEW_ATTACHMENT_TEXT = "查看附件"
 export const OPEN_STATUS_TEXT = "待處理"
-export const POPUP_BLOCKED_TEXT =
-  "瀏覽器擋下了新分頁，請允許這個網站開啟彈出式視窗後再查看附件。"
+export { POPUP_BLOCKED_TEXT } from "./open-attachment"
 
-// 附件的物件網址在新分頁開啟後保留一段時間再釋放
-const ATTACHMENT_URL_TTL_MS = 60_000
-
-/**
- * 以登入者的權杖下載附件，於新分頁開啟；失敗時關閉分頁並以錯誤 Toast 顯示。
- * 分頁要在點擊當下（`await` 之前）開啟，Firefox、Safari 才不會當成彈出式視窗擋下；
- * 下載完成後再把分頁導到附件。
- */
-async function openAttachment(appealId: string) {
-  const tab = window.open("", "_blank")
-  if (!tab) {
-    toast.error(POPUP_BLOCKED_TEXT, {
-      id: POPUP_BLOCKED_TEXT,
-      duration: Number.POSITIVE_INFINITY,
-      closeButton: true,
-    })
-    return
-  }
-  // 新分頁不能反過來操作本頁（等同 noopener）
-  tab.opener = null
-  try {
-    const { data } = await DisputesService.downloadAppealAttachment({
+/** 申訴附件：以登入者的權杖下載後於新分頁開啟。 */
+function openAppealAttachment(appealId: string) {
+  return openAttachment(() =>
+    DisputesService.downloadAppealAttachment({
       path: { appeal_id: appealId },
-    })
-    const url = URL.createObjectURL(data as Blob)
-    tab.location.href = url
-    setTimeout(() => URL.revokeObjectURL(url), ATTACHMENT_URL_TTL_MS)
-  } catch (error) {
-    tab.close()
-    notifyError(error)
-  }
+    }),
+  )
 }
 
 function Stack({ children }: { children: ReactNode }) {
@@ -119,7 +93,7 @@ function AppealDetail({ appeal }: { appeal: AppealItem }) {
           variant="outline"
           size="sm"
           className="self-start"
-          onClick={() => void openAttachment(appeal.id)}
+          onClick={() => void openAppealAttachment(appeal.id)}
         >
           {VIEW_ATTACHMENT_TEXT}
         </Button>
