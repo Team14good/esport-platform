@@ -137,6 +137,19 @@ def list_tournament_reports(session: Session, tournament_id: uuid.UUID) -> list[
     return list(session.exec(statement))
 
 
+def list_open_tournament_reports(
+    session: Session, tournament_id: uuid.UUID
+) -> list[Report]:
+    """某賽事處理中（`open`）的檢舉，依提出時間、再依 id（S27 待處理）。"""
+    statement = (
+        select(Report)
+        .where(Report.tournament_id == tournament_id)
+        .where(Report.status == ReportStatus.OPEN)
+        .order_by(col(Report.filed_at), col(Report.id))
+    )
+    return list(session.exec(statement))
+
+
 def list_open_reports_against(
     session: Session, tournament_id: uuid.UUID, reported_team_id: uuid.UUID
 ) -> list[Report]:

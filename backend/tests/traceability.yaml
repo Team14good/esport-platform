@@ -161,6 +161,10 @@ disputes/test_appeal_concurrency.py:
   layer: integration
   stories: ["6.1"]
   frs: [FR-30, NFR-1]
+disputes/test_open_disputes_reports.py:
+  layer: integration
+  stories: ["6.5"]
+  frs: [FR-31, FR-33, NFR-5]
 disputes/test_file_appeal.py:
   layer: integration
   stories: ["6.1"]

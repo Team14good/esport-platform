@@ -224,7 +224,7 @@ class PublicBracket(BaseModel):
 | `get_bracket(session, *, tournament_id) -> BracketRead \| None` | A（4.6、5.8、7.1） | 尚未抽籤回 None | 4.1 |
 | `get_public_bracket(session, *, tournament_id) -> PublicBracket \| None` | A（4.6） | 公開對戰樹 | 4.1 |
 | `get_match(session, *, match_id) -> MatchRead` | A（5.2）、B（6.1、6.2、6.5） | 不存在拋 `MATCH_NOT_FOUND` 404 | 4.1 |
-| `list_team_matches(session, *, tournament_id, team_id) -> list[MatchRead]` | B（6.4、6.5） | 依輪次排序，判斷「還沒比過」「最近一場輸給誰」 | 4.1 |
+| `list_team_matches(session, *, tournament_id, team_id) -> list[MatchRead]` | B（6.4、6.5） | 依輪次排序，判斷「還沒比過」「最近一場輸給誰」；disputes（6.5 第二階段 B）取被檢舉隊伍最早一場 `scheduled` 場次的預定時間，作為 S27 檢舉的處理期限 | 4.1 |
 | `lock_match(session, *, match_id) -> Match` | competition 內的新檔案（A 的 5.2、B 的 6.5） | `SELECT … FOR UPDATE`；同時需要賽事鎖時先鎖賽事（AD-6） | 4.1 |
 | `transition_match(session, *, match, to: MatchStatus) -> None` | 同上 | 唯一改場次狀態的入口，非法轉換拋 `MATCH_INVALID_TRANSITION` 409 | 4.1 |
 | `start_forfeit_clock(session, *, match) -> None` | 同上 | 唯一設定 `forfeit_deadline` 的入口 | 4.1 |

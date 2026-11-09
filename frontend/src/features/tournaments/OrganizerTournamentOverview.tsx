@@ -222,8 +222,10 @@ export function OrganizerTournamentSummary({
   )
 }
 
-/** S27 待處理清單（6.2）顯示的賽事狀態：抽籤後才會有申訴 */
+/** S27 待處理清單顯示的賽事狀態：檢舉在報名期間就能提出（6.5），申訴在抽籤後（6.2） */
 const DISPUTE_STATUSES: ReadonlySet<TournamentRead["status"]> = new Set([
+  "open",
+  "closed",
   "published",
   "ongoing",
   "finished",
@@ -241,7 +243,7 @@ export function OrganizerTournamentOverview({
     <>
       <OrganizerTournamentSummary tournament={tournament.data} />
       <DrawButton tournament={tournament.data} />
-      {/* 6.2：抽籤後才會有申訴，待處理清單只在賽程已公布起顯示 */}
+      {/* 待處理清單從開放報名起顯示（檢舉在報名期間就能提出） */}
       {DISPUTE_STATUSES.has(tournament.data.status) && (
         <OpenDisputesPanel tournamentId={tournament.data.id} />
       )}

@@ -208,12 +208,6 @@
   summary: （中）「重新比賽」後的場次再次送出結果進入申訴期時，上一輪已申訴過的隊伍不能再申訴：`appeal` 的 `(match_id, team_id)` 唯一鍵與 `file_appeal` 的「本隊已申訴」檢查都不分輪次，舊的已結案申訴（`decision=rematch`）會擋下新申訴（S4 顯示「本隊已對此場次提出申訴」）。
   evidence: 2026-11-09 Story 6.2 實作時發現；spec 與 epic 沒有規定重賽後能否再申訴，需要問人。若要允許，`file_appeal`／`get_appeal_state` 改成只看未結案或本輪（`filed_at` 晚於最後一次 `rematch` 的 `handled_at`）的申訴，唯一鍵改成部分唯一索引（例如只限 `status='open'`）並另開一支 Alembic 遷移；`get_public_appeal_result` 已以最後一次處理為準，不受影響。
 
-## Deferred from: spec-6-2-resolve-appeals.md (2026-11-09)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-resolve-appeals.md`
-  summary: S27 待處理清單還沒有算檢舉：`count_open_disputes` 的 `reports` 一律 0、`items` 只有申訴；EXPERIENCE.md 要求未結案的申訴與檢舉列在一起、依處理期限排序。
-  evidence: 2026-11-09 使用者決定留給 6.5。6.4 已合併、`Report` 可查，但規劃文件沒有定義檢舉的處理期限，而 `OpenDisputeItem.deadline` 必填；6.5 接上 S33 時一併決定檢舉的期限（或無期限排在申訴之後）並補測試。
-
 ## Deferred from: unified code review of 5.6／5.8／7.1／7.3 (2026-11-09)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-registration-demo-step.md`
@@ -228,9 +222,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-3-test-coverage-report.md`
   summary: （低）純函式 90% 分支覆蓋率是單元＋整合合併計算（`coverage run --append`），AC 寫的是單元測試；`test-all.sh` 複製前端 JUnit 與 Playwright JSON 時丟掉錯誤，檔案不存在時報告不會明確失敗。
   evidence: 2026-11-09 統一 code review。`scripts/test.sh`、`scripts/test-all.sh`。修法：README 註明計算方式（或只用單元測試算），`cp` 失敗時在報告標出缺漏。
-- source_spec: none
-  summary: 6.5 第二階段（B）：S27 待處理清單加入未結案的檢舉（`count_open_disputes` 的 `reports` 與 `items`），並決定檢舉的處理期限與排序。
-  evidence: 2026-11-09 使用者決定把 6.5 第二階段拆開，先做檢舉處理（`resolve_report`＋S33），S27 與對戰樹標記各自另開 PR；本項與上一項（spec-6-2）是同一件事。
 - source_spec: none
   summary: 6.5 第二階段（C）：對戰樹的「取消資格」標記（`destructive`），公開對戰表 API 帶出隊伍是否已取消資格，S3／S4 顯示；S17、S12 顯示處理理由。
   evidence: 2026-11-09 使用者決定把 6.5 第二階段拆開，先做檢舉處理（`resolve_report`＋S33）；標記需要公開對戰表 API 新增欄位與前端顯示，可獨立審查合併。

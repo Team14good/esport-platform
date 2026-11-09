@@ -3,15 +3,15 @@
 賽事只透過 tournaments 的 `get_tournament`、`lock_tournament`；隊伍與報名只透過
 registration 的 `find_team_of_account`、`get_team`、`get_registration`、
 `list_teams_by_status`、`get_team_names`、`is_captain`；場次只透過 competition 的
-`get_match`、`get_public_match`、`lock_match`、`mark_appealed`、`uphold_result`、
-`correct_result`、`replay_match`、`get_replay_window`、`disqualify`（contracts/disputes.md）。
+`get_match`、`list_team_matches`、`get_public_match`、`lock_match`、`mark_appealed`、
+`uphold_result`、`correct_result`、`replay_match`、`get_replay_window`、`disqualify`（contracts/disputes.md）。
 """
 
 import unicodedata
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import PurePath
 from typing import BinaryIO
 
@@ -811,12 +811,48 @@ def _handling_deadline(
     return min(times) if times else filed_at + _FINAL_HANDLING_TIME
 
 
+def _report_deadline(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    team_id: uuid.UUID,
+    cache: dict[uuid.UUID, datetime | None],
+) -> datetime | None:
+    """檢舉的處理期限：被檢舉隊伍下一場待開打場次的預定時間；沒有下一場為 None。"""
+    if team_id not in cache:
+        times = [
+            match.scheduled_at
+            for match in competition_service.list_team_matches(
+                session, tournament_id=tournament_id, team_id=team_id
+            )
+            if match.status == MatchStatus.SCHEDULED
+        ]
+        cache[team_id] = min(times) if times else None
+    return cache[team_id]
+
+
+_NO_DEADLINE = datetime.min.replace(tzinfo=UTC)
+
+
+def _open_item_order(
+    item: OpenDisputeItem,
+) -> tuple[bool, datetime, datetime, uuid.UUID]:
+    """沒有期限的排在最後；再依期限、提出時間、id（id 讓順序固定）。"""
+    return (
+        item.deadline is None,
+        item.deadline or _NO_DEADLINE,
+        item.filed_at,
+        item.id,
+    )
+
+
 def count_open_disputes(
     session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
 ) -> OpenDisputes:
-    """S27 待處理：未結案的申訴與每筆的處理期限，依期限由近到遠；檢舉在 6.5 接上前一律 0（檢舉的處理期限由 6.5 決定）。
+    """S27 待處理：未結案的申訴與檢舉、每筆的處理期限，依期限由近到遠。
 
-    只有該賽事主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）。
+    申訴的期限見 `_handling_deadline`；檢舉的期限見 `_report_deadline`，沒有期限的
+    排在所有有期限的項目之後、依提出時間。只有該賽事主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）。
     """
     _owned_tournament(session, tournament_id=tournament_id, actor_id=actor_id)
     cache: dict[uuid.UUID, MatchRead] = {}
@@ -841,11 +877,37 @@ def count_open_disputes(
                 ),
             )
         )
-    items.sort(key=lambda item: (item.deadline, item.filed_at))
+    appeal_count = len(items)
+
+    reports = repository.list_open_tournament_reports(session, tournament_id)
+    names = registration_service.get_team_names(
+        session, team_ids=list({report.reported_team_id for report in reports})
+    )
+    deadlines: dict[uuid.UUID, datetime | None] = {}
+    for report in reports:
+        items.append(
+            OpenDisputeItem(
+                kind="report",
+                id=report.id,
+                match_id=None,
+                match_code=None,
+                filed_at=report.filed_at,
+                deadline=_report_deadline(
+                    session,
+                    tournament_id=tournament_id,
+                    team_id=report.reported_team_id,
+                    cache=deadlines,
+                ),
+                team_name=names.get(report.reported_team_id, "未知隊伍"),
+            )
+        )
+
+    items.sort(key=_open_item_order)
+    with_deadline = [item.deadline for item in items if item.deadline is not None]
     return OpenDisputes(
-        appeals=len(items),
-        reports=0,
-        earliest_deadline=items[0].deadline if items else None,
+        appeals=appeal_count,
+        reports=len(reports),
+        earliest_deadline=min(with_deadline) if with_deadline else None,
         items=items,
     )
 
