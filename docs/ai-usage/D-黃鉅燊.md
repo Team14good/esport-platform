@@ -659,6 +659,17 @@
 - 成熟度：L3（AI 實作、審查與修正，人決定取捨）
 - 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
 
+### 2026-11-09｜需求／程式／測試｜S12 我的隊伍顯示下一場（4.1、5.1、5.5 的 UX-DR37）
+
+- Story／範圍：盤點時發現 4.1、5.1、5.5 共有的 AC「S12 顯示下一場對手、時間、報到倒數並可進 S4」沒有實作也沒有延後；`spec-5-1-s12-next-match.md`
+- 工具：Claude Code（Opus 5.5）＋ BMAD `bmad-build`；調查、實作、三個審查員都是子代理
+- 怎麼用：依專案規則以 git 判斷 epic-5-context 過期（#50 改過 epics.md）後重新產生；調查子代理整理 S12、registration 公開函式、S13 範本與報到倒數；AI 寫 spec，兩處使用者會看到的選擇先問人；實作子代理照 spec 做；Blind Hunter、Edge Case Hunter、Verification Gap 三層審查
+- AI 產出：competition `GET /me/next-matches`（經 `registration_port` 呼叫 C 既有的 `list_my_teams`，不改 registration）、`NextMatch`；S12 卡片下方的下一場列（對手、時間、報到倒數、進行中／等待結果確認，連 S4）、`MyTeamsPage` 可選插槽；後端 `test_next_matches.py` 與 port 測試、前端 `next-match-row.test.tsx` 與 S12 兩案；contracts、traceability；5.1、5.5 改 done
+- 人做了什麼：使用者決定補做而非延後；決定下一場放卡片下方另一列、進行中與申訴期也顯示並連 S4；核准 spec
+- 驗證：實作子代理回報後端 competition＋registration 1443 passed、lint 通過，審查修正後相關 34 passed；AI 自己在容器重跑前端 tsc、相關 61 個測試、改動檔的 biome 通過；修正後的後端全套因本機記憶體不足被中止，改以 PR 的 CI 為準
+- 問題與修正：三層審查共 13 點，修 7 點、駁回 6 點（理由在 spec 的 Review Triage Log）。實際修正：後端測試全用替身取代 `list_my_teams`，C 改欄位名稱時 S12 下一場會靜默消失而測試全過；停在 S12 時下一場不會更新，過棄權期限後列上沒有狀態；「對手未定」靠比對中文標籤；缺輪空與季軍賽的測試。mypy 抓到實作把前一個迴圈的 `match` 變數用在下一個迴圈，原本的測試沒抓到，補了回歸測試。AI 第一次重跑前端時新測試在冷啟動失敗一次（報到開放只留 1.5 秒），放寬到 3 秒後連跑 4 次都過
+- 成熟度：L3（AI 實作、審查與修正，人決定範圍與版面）
+- 證據：spec 的 Review Triage Log；本 PR 的 CI 紀錄
 ### 2026-11-09｜審查／合併｜#61、#63、#64、#66、#67 與 #65 的設計回覆
 
 - Story／範圍：A 的 7.3（#61）、5.6 第二階段（#66）、7.1 第三階段（#67）；B 的 6.1（#63）、6.5 第一階段草稿（#65）；C 的 6.4（#64）

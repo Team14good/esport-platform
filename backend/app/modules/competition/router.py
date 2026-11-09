@@ -15,6 +15,7 @@ from app.modules.competition.models import (
     GameScoreIn,
     ManagedMatch,
     MatchRead,
+    NextMatch,
     PublicBracket,
     PublicMatchDetail,
     RefereeAssignIn,
@@ -175,6 +176,14 @@ def list_my_referee_matches(
 ) -> list[RefereeTournamentMatches]:
     """S13：指派給登入者、未取消的場次，依賽事分組；沒有指派回空清單（不要求有裁判身分）。"""
     return service.list_my_referee_matches(session, account_id=account.id)
+
+
+@router.get("/me/next-matches")
+def list_my_next_matches(
+    session: SessionDep, account: CurrentAccount
+) -> list[NextMatch]:
+    """S12：登入者所屬、已參賽的每支隊伍的下一場（各最多一場）；沒有回空清單。只讀，不 commit。"""
+    return service.list_my_next_matches(session, account_id=account.id)
 
 
 @router.get("/tournaments/{tournament_id}/manage/matches")

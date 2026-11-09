@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
+import type { MyTeamCard } from "@/client"
+import { MyTeamNextMatch } from "@/features/competition/NextMatchRow"
 import { requireSignedIn } from "@/features/identity/auth"
 import { MyTeamsPage } from "@/features/registration/MyTeamsPage"
 
@@ -7,5 +9,14 @@ import { MyTeamsPage } from "@/features/registration/MyTeamsPage"
 export const Route = createFileRoute("/me_/teams")({
   beforeLoad: requireSignedIn,
   head: () => ({ meta: [{ title: "我的隊伍 · FLOW" }] }),
-  component: MyTeamsPage,
+  component: MyTeamsRoute,
 })
+
+// 已參賽的隊伍在卡片下方加一列下一場（competition）；registration 的頁面不依賴 competition
+function renderNextMatch(card: MyTeamCard) {
+  return <MyTeamNextMatch card={card} />
+}
+
+function MyTeamsRoute() {
+  return <MyTeamsPage renderTeamExtra={renderNextMatch} />
+}
