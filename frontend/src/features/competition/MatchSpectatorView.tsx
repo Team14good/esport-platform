@@ -30,6 +30,8 @@ type MatchSpectatorViewProps = {
   appealCountdown?: ReactNode
   /** 申訴期區塊的動作插槽（6.1）：S4 路由傳入申訴入口（`AppealPanel`） */
   appealAction?: ReactNode
+  /** 頁首狀態徽章後面的插槽（6.2）：S4 路由傳入申訴處理結果 */
+  headerExtra?: ReactNode
   /** 報到面板（MatchCheckIn）：右欄最上方 */
   checkIn?: ReactNode
   /** 比分登錄面板（記分者才有）：有值時取代左欄的公開各局列表 */
@@ -51,6 +53,7 @@ export function MatchSpectatorView({
   changed = false,
   appealCountdown,
   appealAction,
+  headerExtra,
   checkIn,
   scoreEntry,
   className,
@@ -64,7 +67,7 @@ export function MatchSpectatorView({
       data-slot="match-spectator-view"
       className={cn("flex min-w-0 flex-col gap-5", className)}
     >
-      <MatchHeader detail={detail} />
+      <MatchHeader detail={detail} extra={headerExtra} />
       <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_var(--spacing-match-aside-width)] lg:gap-match-column-gap">
         <div
           data-slot="match-main"

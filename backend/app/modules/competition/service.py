@@ -30,6 +30,7 @@ from app.modules.competition.models import (
     CheckInRead,
     CheckInStatus,
     CheckInStatusReason,
+    CorrectionResult,
     DisqualifyResult,
     DrawStatus,
     DrawStatusReason,
@@ -1881,7 +1882,7 @@ def get_replay_window(session: Session, *, match_id: uuid.UUID) -> RescheduleInf
 
     判斷順序（與 `replay_match` 的拒絕條件一致）：場次不存在拋 404 `MATCH_NOT_FOUND`；
     賽事不是賽程已公布或進行中 → `tournament_not_reschedulable`、範圍為 None；
-    場次不是申訴中或結果不是棄權 → `match_not_reschedulable`、範圍為 None；
+    場次不是申訴中或結果不是棄權（一方或雙方，6.2）→ `match_not_reschedulable`、範圍為 None；
     其餘有可選範圍時 `can_reschedule=True`，範圍為空時 `reason="no_valid_time"`，
     仍附 `earliest`、`latest`（主辦方要先到 S30 把下一場改晚）。
     本場與相鄰場次都以資料庫最新值讀取（與 `check_replay_time` 一致）。
@@ -1896,9 +1897,9 @@ def get_replay_window(session: Session, *, match_id: uuid.UUID) -> RescheduleInf
     blocked: RescheduleBlockReason | None = None
     if tournament.status not in _RESCHEDULABLE_TOURNAMENT:
         blocked = "tournament_not_reschedulable"
-    elif (
-        MatchStatus(match.status) != MatchStatus.APPEALED
-        or match.outcome != MatchOutcome.FORFEIT
+    elif MatchStatus(match.status) != MatchStatus.APPEALED or match.outcome not in (
+        MatchOutcome.FORFEIT,
+        MatchOutcome.DOUBLE_FORFEIT,
     ):
         blocked = "match_not_reschedulable"
     if blocked is not None:
@@ -1926,6 +1927,57 @@ def mark_appealed(session: Session, *, match_id: uuid.UUID) -> MatchRead:
     from app.modules.competition import appeals
 
     return appeals.mark_appealed(session, match_id=match_id)
+
+
+def uphold_result(
+    session: Session, *, match_id: uuid.UUID, actor_id: uuid.UUID
+) -> MatchRead:
+    """申訴處理「維持原結果」（6.2 disputes `resolve_appeals` 呼叫）。
+
+    只接受申訴中；沿用已寫入的 outcome、勝隊呼叫 `confirm_match`（內含晉級）。
+    呼叫端先 `lock_tournament`，函式內再 `lock_match`（AD-6）。實作在 `appeals.py`。
+    """
+    from app.modules.competition import appeals
+
+    return appeals.uphold_result(session, match_id=match_id, actor_id=actor_id)
+
+
+def correct_result(
+    session: Session,
+    *,
+    match_id: uuid.UUID,
+    games: Sequence[GameScoreIn],
+    actor_id: uuid.UUID,
+) -> CorrectionResult:
+    """申訴處理「更正結果」（6.2）：整份替換各局、重算勝隊後確認並晉級。
+
+    只接受申訴中、`outcome=played`；各局規則與 5.3 相同，另加 `SERIES_NOT_DECIDED`、
+    `REDUNDANT_GAMES`。回傳前後各局與新勝隊。實作在 `appeals.py`。
+    """
+    from app.modules.competition import appeals
+
+    return appeals.correct_result(
+        session, match_id=match_id, games=games, actor_id=actor_id
+    )
+
+
+def replay_match(
+    session: Session,
+    *,
+    match_id: uuid.UUID,
+    scheduled_at: datetime,
+    actor_id: uuid.UUID,
+) -> ReplayCleared:
+    """申訴處理「重新比賽」（6.2）：只用於判棄權（一方或雙方）的場次。
+
+    清除結果與報到、回到待開打、寫入新時間並重新起算棄權；其他 outcome 拋 409
+    `REPLAY_ONLY_FOR_FORFEIT`，時間不合法沿用 `RESCHEDULE_*`。實作在 `appeals.py`。
+    """
+    from app.modules.competition import appeals
+
+    return appeals.replay_match(
+        session, match_id=match_id, scheduled_at=scheduled_at, actor_id=actor_id
+    )
 
 
 def unassign_referee_if_member(session: Session, *, match: Match) -> None:

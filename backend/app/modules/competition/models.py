@@ -385,6 +385,14 @@ class DisqualifyResult(BaseModel):
     replacement_team_id: uuid.UUID | None
 
 
+class CorrectionResult(BaseModel):
+    """更正結果（6.2 `correct_result`）前後的各局與新勝隊（供 disputes 寫操作紀錄）。"""
+
+    before_games: list[PublicGame]
+    after_games: list[PublicGame]
+    winner_id: uuid.UUID
+
+
 class PublicTournamentRef(BaseModel):
     id: uuid.UUID
     name: str
