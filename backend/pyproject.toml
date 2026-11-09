@@ -68,9 +68,16 @@ filterwarnings = [
     # 開發環境的預設密碼 changethis 只會警告，測試輸出不需要它
     'ignore:The value of .* is "changethis":UserWarning',
 ]
+# 分層依 tests/traceability.yaml 由 tests/conftest.py 自動加上（Story 7.3）
+markers = [
+    "unit: 單元測試（不連資料庫：純函式、靜態檢查）",
+    "integration: 整合測試（連 compose 的 PostgreSQL 18）",
+]
 
 [tool.coverage.run]
 source = ["app"]
+# 量分支覆蓋率；四個純函式另在 scripts/test.sh 要求 90% 以上（Story 7.3）
+branch = true
 dynamic_context = "test_function"
 
 [tool.coverage.report]

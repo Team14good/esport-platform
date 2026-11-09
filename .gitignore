@@ -24,6 +24,8 @@ coverage/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+# scripts/test-all.sh 產生的測試報告與覆蓋率
+/reports/
 
 # 期中文件排版的中間檔（node docs/midterm/_build/build.mjs 產生）
 docs/midterm/_build/html/

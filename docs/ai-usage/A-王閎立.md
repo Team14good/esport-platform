@@ -602,3 +602,83 @@
 - 問題與修正：(1) AI 想用暫存資料庫驗證，下了 `-e POSTGRES_DB=...`，但 compose 的 `DATABASE_URL` 是寫死的，環境變數沒有作用，示範資料實際寫進本機開發資料庫（含 158 個產生的帳號、32 隊，截圖存到容器的 `/tmp/up71`，重建後就消失）。後續查詢暫存資料庫時出現 `relation does not exist` 才發現；AI 沒有自行刪除，回報由我決定是否清空。(2) 第一版測試斷言抽籤後狀態是 `accepted`，實際會轉成 `drawn`。(3) 每個帳號各算一次雜湊使一次載入需 19 秒，改為共用雜湊後 5.5 秒
 - 成熟度：L3（人決定範圍，AI 實作並驗證）
 - 證據：`backend/app/demo_data/registration.py`、`backend/tests/identity/test_demo_data.py`、`frontend/tests/unit/match-score-entry.test.tsx`
+### 2026-11-05｜審查｜審 D 的 #51（S13 我執法的場次與「裁判」身分）
+
+- Story／範圍：4.4 S13（D），動到我負責的 identity 模組（`list_identities`、`IdentityKey.REFEREE`、`register_referee_lookup`）
+- 工具：Claude Code（Opus 5.5），沒有用子代理，直接審查
+- 怎麼用：AI 讀 spec（含 D 的 Review Triage Log）、contracts 與前後端 diff；以 identity 負責人的角度檢查呼叫方向（組裝層註冊、identity 不 import tournaments）、例外處理、登出時快取是否清除（`removeQueries`），以及測試是否會污染全域註冊
+- AI 產出：核准，附 2 個低嚴重度意見（吞掉的例外如果是資料庫錯誤，PostgreSQL 交易會進入中止狀態；S31 接受邀請後要重抓身分清單）
+- 人做了什麼：指定審查 #51
+- 驗證：在暫存 worktree 合併 main 後跑全套：後端 1943 個測試中 1942 個通過、lint 通過；前端 biome、typecheck 通過，單元測試 804 個全過
+- 問題與修正：後端唯一的失敗是 `test_smtp_sender_delivers_to_mailpit_from_flow`。AI 一開始只啟動了 db，沒有啟動 mailpit；這個 PR 也沒有改 notifications。啟動 mailpit 後重跑該檔案，26 個全部通過，確認是測試環境的問題
+- 成熟度：L2（AI 審查，人決定是否核准）
+- 證據：PR #51 的審查意見
+
+### 2026-11-08｜審查｜以 bmad-code-review 審 #56、#57、#59
+
+- Story／範圍：4.1 S27 抽籤按鈕（D，#56）、6.2／6.5 前置的 competition 公開函式（D，#57）、3.5 先搶期即時分配（C，#59）
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review，每個 PR 4 個子代理（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor），共 12 個平行執行
+- 怎麼用：AI 從 origin/main 取三個 PR 的 diff（排除產生檔與 docs/ai-usage），各自對照該 PR 的 spec 與 context 文件審查；再到 PR 分支逐項查證、分類，駁回誤報
+- AI 產出：三個 PR 都沒有高嚴重度問題，也沒有違反 AC 或 frozen 規則。待修正共 14 項：#56 7 項（1 中 6 低，最主要的是預估回滾測試的結算紀錄比對無效，且沒涵蓋已結算的開放報名賽事）、#57 4 項、#59 3 項；以 PR 留言交給作者
+- 人做了什麼：決定 #57 的 `unassign_referee_if_member` 在非 scheduled／live 時拋 `ValueError`（原本只寫在 docstring）；決定以 PR 留言交付，不改組員的分支
+- 驗證：每項 finding 都到 PR 分支讀程式查證；Verification Gap 三個 PR 都回報沒有驗證缺口。這次沒有跑測試
+- 問題與修正：子代理有幾項誤報，在查證時駁回：
+  - 「#59 併發測試以 dict 收集會漏掉重複報名」：`Registration.team_id` 有 unique 限制。
+  - 「#57 `populate_existing` 會蓋掉呼叫端未 flush 的修改」：查詢前會 autoflush，後端沒有用 `no_autoflush`。
+  - 兩則「PR 沒附 ai-usage 紀錄」：其實是 AI 建 diff 時排除了 `docs/ai-usage/`，造成審查員誤判。之後排除檔案時，要在審查員的指示中說明。
+- 成熟度：L4（多代理審查＋逐項查證，人只在決策點決定）
+- 證據：PR #56、#57、#59 的審查留言（issuecomment-6717676635、6717676986、6717677315）
+
+### 2026-11-08｜專案管理與流程｜核對 Story 5.2 並收成 done
+
+- Story／範圍：5.2 逾時判棄權
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 依 `deferred-work.md` 那筆「第二階段尚未實作」列的範圍，逐項到 main 的程式核對
+- AI 產出：確認 worker 工作、操作紀錄與事件、狀態轉換、S4 棄權標記與申訴期倒數都已完成；刪除過時的 deferred 項目，`sprint-status.yaml` 改為 done
+- 人做了什麼：決定收成 done
+- 驗證：讀 `forfeit_job.py`、`worker/jobs.py`、`match-status.ts`；這次沒有跑測試
+- 問題與修正：無
+- 成熟度：L3（人決定範圍，AI 查證並修改）
+- 證據：`_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+### 2026-11-08｜需求｜Story 7.3 測試報告的 spec
+
+- Story／範圍：7.3 測試覆蓋率與測試報告素材
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，1 個子代理調查測試現況
+- 怎麼用：AI 調查測試腳本、覆蓋率設定、併發測試、回應時間紀錄與標註慣例，寫成 spec，並把需要人決定的地方列成問題
+- AI 產出：`spec-7-3-test-coverage-report.md`（約 2,500 token）
+- 人做了什麼：決定 Story／FR 用集中對應檔、200 筆報名自建 3.4 情境、總指令預設含 e2e、spec 不拆開
+- 驗證：spec 由人核准；AI 查到 C 的 #59 已有 200 筆測試但不輸出數字，才提出這個問題
+- 問題與修正：spec 的 I/O 矩陣寫「同時登錄同一局時其餘請求收到業務錯誤」，是 AI 沒查 5.3 規則的假設。實作時發現 5.3 是依序覆寫，8 個請求全部成功。凍結區塊未改，差異寫在 Implementation Notes 與 PR 說明
+- 成熟度：L3（人決定範圍與取捨，AI 調查與撰寫）
+- 證據：`_bmad-output/implementation-artifacts/spec-7-3-test-coverage-report.md`
+
+### 2026-11-08｜測試｜Story 7.3 測試總指令、併發測試與測試報告
+
+- Story／範圍：7.3 測試覆蓋率與測試報告素材
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，1 個子代理實作，主對話接手驗證
+- 怎麼用：AI 依 spec 新增 `scripts/test-all.sh`、報告腳本、Story／FR 對應檔、2 個併發測試檔與 API 耗時紀錄
+- AI 產出：一個指令跑完三層並產生繁中報告；後端分層與追溯對應檔涵蓋所有測試檔
+- 人做了什麼：決定跑完沒問題就直接開 PR
+- 驗證：實跑總指令（含 e2e）：Vitest 831 通過、後端單元 791 通過、整合 1230 通過、e2e 12 通過 60 略過；整體覆蓋率 97.0%（分支 95.6%）；四個純函式分支 100%、100%、100%、98.7%；200 筆報名正取 32、名額 32、候補 168；整合 P95 52 ms、e2e P95 109 ms；CI 用的 `scripts/test.sh` 全部通過
+- 問題與修正：
+  - 子代理寫的 90% 門檻用 `coverage report --fail-under`，判斷的是敘述加分支的合計，不是 AC 要的分支覆蓋率。主對話讀 diff 時發現，改成新增 `check_branch_coverage.py` 只看分支，再用竄改的 json 確認低於門檻會失敗
+  - 子代理跑驗證時 10 分鐘沒有進展被中止，但它啟動的腳本還在跑；主對話查 process 後等它跑完，沒有重跑
+  - 「某層失敗」只用竄改的 junit 測了報告腳本，沒有實際注入失敗跑過一次總指令
+- 成熟度：L3（人決定範圍，AI 實作，主對話逐項查證）
+- 證據：`scripts/test-all.sh`、`backend/scripts/check_branch_coverage.py`、`backend/tests/traceability.yaml`
+
+### 2026-11-09｜測試｜依 D 的審查修正 #61 的併發測試與追溯標註
+
+- Story／範圍：7.3（PR #61）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 D 的審查意見，修正 `test_score_concurrency.py` 的錯誤分類與 `traceability.yaml` 的 FR，合併 main 並補上 #64 新增的 3 個測試檔
+- AI 產出：非預期錯誤改以 `unexpected:` 前綴區分，並斷言其餘結果都是 `RESULT_ALREADY_SUBMITTED`
+- 人做了什麼：指示依 D 的訊息完成修正
+- 驗證：對應檔與併發測試 5 passed；在容器內把重複送出改成拋 `RuntimeError`，新斷言確實失敗，還原後重跑通過；2,179 個後端測試都有分層
+- 問題與修正：
+  - AI 原本用 `not o.startswith("<")` 判斷業務錯誤，但 `repr(IntegrityError(...))` 不是 `<` 開頭，死結或鎖逾時會被算成業務錯誤，測試照樣通過。這是 D 審查時發現的，AI 自己的驗證沒抓到
+  - AI 替 D 的 `test_replay_hooks.py`、`test_match_transitions.py` 標錯 FR，由 D 確認後改正
+  - 第一次變異測試找錯拋錯的位置，改在 `_ENTRY_REJECTIONS` 查表處才真正驗到
+- 成熟度：L3（組員審查指出問題，AI 修正並驗證）
+- 證據：PR #61 的 OG-Matcha 審查意見、`backend/tests/competition/test_score_concurrency.py`
