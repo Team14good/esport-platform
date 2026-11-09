@@ -96,6 +96,7 @@ export function BracketTree({
                 match={match}
                 flash={flash}
                 matchHref={matchHref}
+                placements={bracket}
                 className="absolute"
                 style={{ left: x, top: y }}
               />

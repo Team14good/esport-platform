@@ -1,6 +1,11 @@
 // 場次狀態與結果的顯示規則：對戰樹場次卡（4.6）與 S4 場次頁（5.8）共用同一份對照。
 
-import type { MatchOutcome, MatchStatus, PublicMatch } from "@/client"
+import type {
+  MatchOutcome,
+  MatchStatus,
+  PublicBracket,
+  PublicMatch,
+} from "@/client"
 import type { StatusTone } from "@/components/common/StatusBadge"
 
 /** 場次的兩方：A 方、B 方 */
@@ -55,7 +60,39 @@ export function hasScore(match: Pick<PublicMatch, "status" | "outcome">) {
   )
 }
 
-export type SideMark = { label: string; tone: "default" | "destructive" }
+export type SideMark = {
+  label: string
+  tone: "default" | "destructive" | "brand"
+}
+
+/** 名次標記（DESIGN.md〈Bracket mark tag〉）：冠軍用 brand，亞軍、季軍用 muted-foreground */
+export const PLACEMENT_MARKS = {
+  champion: { label: "冠軍", tone: "brand" },
+  runnerUp: { label: "亞軍", tone: "default" },
+  thirdPlace: { label: "季軍", tone: "default" },
+} as const satisfies Record<string, SideMark>
+
+/** 對戰樹判斷名次標記需要的資料；podium 只在賽事結束後有值 */
+export type BracketPlacements = Pick<PublicBracket, "podium" | "rounds">
+
+/** 決賽與季軍賽卡的名次標記；其他場次、賽事未結束或這一方不在名次內時回傳 null。 */
+export function placementMark(
+  match: PublicMatch,
+  side: BracketSide,
+  { podium, rounds }: BracketPlacements,
+): SideMark | null {
+  const team = side === "a" ? match.team_a : match.team_b
+  if (podium === null || team === null) return null
+  if (match.is_third_place) {
+    return podium.third_place?.id === team.id
+      ? PLACEMENT_MARKS.thirdPlace
+      : null
+  }
+  if (match.round_no !== rounds) return null
+  if (podium.champion?.id === team.id) return PLACEMENT_MARKS.champion
+  if (podium.runner_up?.id === team.id) return PLACEMENT_MARKS.runnerUp
+  return null
+}
 
 export type SideView = {
   /** 隊名；未定時為來源說明（「M4 勝者」），確定沒有隊伍時為「—」 */

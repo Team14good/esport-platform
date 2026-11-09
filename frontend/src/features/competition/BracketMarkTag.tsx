@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils"
 
 type BracketMarkTagProps = {
-  /** 取消資格用 destructive，其餘（輪空、棄權）用預設的 muted-foreground */
-  tone?: "default" | "destructive"
+  /** 取消資格用 destructive，冠軍用 brand，其餘（輪空、棄權、亞軍、季軍）用預設的 muted-foreground */
+  tone?: "default" | "destructive" | "brand"
   children: string
 }
 
@@ -18,7 +18,9 @@ export function BracketMarkTag({
       className={cn(
         // 淘汰列的名稱有刪除線，標記本身不跟著劃線
         "shrink-0 whitespace-nowrap rounded-xs border border-current px-1 text-caption leading-4 no-underline",
-        tone === "destructive" ? "text-destructive" : "text-muted-foreground",
+        tone === "destructive" && "text-destructive",
+        tone === "brand" && "text-brand",
+        tone === "default" && "text-muted-foreground",
       )}
     >
       {children}
