@@ -5,4 +5,5 @@ export const DECISION_LABEL: Record<AppealDecision, string> = {
   upheld: "維持原結果",
   corrected: "更正結果",
   rematch: "重新比賽",
+  disqualified: "取消資格",
 }

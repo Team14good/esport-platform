@@ -90,6 +90,9 @@ import type {
   disputesResolveAppealsData,
   disputesResolveAppealsErrors,
   disputesResolveAppealsResponses,
+  disputesResolveReportData,
+  disputesResolveReportErrors,
+  disputesResolveReportResponses,
   identityApproveOrganizerApplicationData,
   identityApproveOrganizerApplicationErrors,
   identityApproveOrganizerApplicationResponses,
@@ -1524,6 +1527,30 @@ export class DisputesService {
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/organizer/tournaments/{tournament_id}/reports",
       ...options,
+    })
+  }
+
+  /**
+   * Resolve Report
+   *
+   * S33 處理檢舉：駁回或屬實（賽事未結束時取消資格，已結束或已取消只記錄屬實）。
+   */
+  public static resolveReport<ThrowOnError extends boolean = true>(
+    options: Options<disputesResolveReportData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      disputesResolveReportResponses,
+      disputesResolveReportErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/reports/{report_id}/resolution",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 

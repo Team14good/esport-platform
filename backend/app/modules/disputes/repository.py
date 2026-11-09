@@ -100,6 +100,17 @@ def get_report(session: Session, report_id: uuid.UUID) -> Report | None:
     return session.get(Report, report_id)
 
 
+def lock_report(session: Session, report_id: uuid.UUID) -> Report | None:
+    """`SELECT … FOR UPDATE` 鎖住檢舉並回傳最新值（呼叫端已先鎖賽事，AD-6）。"""
+    statement = (
+        select(Report)
+        .where(Report.id == report_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return session.exec(statement).first()
+
+
 def list_open_reported_team_ids(
     session: Session, reporter_team_id: uuid.UUID
 ) -> set[uuid.UUID]:
@@ -124,3 +135,36 @@ def list_tournament_reports(session: Session, tournament_id: uuid.UUID) -> list[
         )
     )
     return list(session.exec(statement))
+
+
+def list_open_reports_against(
+    session: Session, tournament_id: uuid.UUID, reported_team_id: uuid.UUID
+) -> list[Report]:
+    """某賽事中對某隊處理中（`open`）的檢舉，依提出時間、再依 id。"""
+    statement = (
+        select(Report)
+        .where(Report.tournament_id == tournament_id)
+        .where(Report.reported_team_id == reported_team_id)
+        .where(Report.status == ReportStatus.OPEN)
+        .order_by(col(Report.filed_at), col(Report.id))
+    )
+    return list(session.exec(statement))
+
+
+def close_reports(
+    session: Session,
+    reports: list[Report],
+    *,
+    status: ReportStatus,
+    reason: str,
+    handled_by: uuid.UUID,
+    handled_at: datetime,
+) -> None:
+    """以相同結果與理由結案；不改 `filed_by`。"""
+    for report in reports:
+        report.status = status
+        report.reason = reason
+        report.handled_by = handled_by
+        report.handled_at = handled_at
+        session.add(report)
+    session.flush()
