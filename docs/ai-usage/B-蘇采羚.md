@@ -518,3 +518,26 @@
   - 審查者另有 8 點是誤判，例如「已退賽的敗隊會被放回對戰表」：目前沒有程式會把報名改為退賽。這些都在 spec 的 Review Triage Log 記下排除理由。
 - 成熟度：L4（固定流程實作，三個審查者並行，主代理逐筆核對並修正，全部測試與覆蓋率門檻驗證，人只在凍結區塊的修改做決定）
 - 證據：commit 7cd8eb2，PR #65，`_bmad-output/implementation-artifacts/spec-6-5-disqualify.md`
+
+### 2026-11-09｜程式／程式審查｜審查 D 的 #68：Story 5.3、5.4 對照 AC 後改為 done
+
+- Story／範圍：5.3、5.4（D 的 PR #68，2 個檔案、+25／-3 行：`sprint-status.yaml` 與 D 的 AI 紀錄）
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）
+- 怎麼用：PR 沒有改程式，重點是「改成 done 是否合理」。所以把 epics.md 的 5.3、5.4 段落（12 條 Given）當規格，請 Acceptance Auditor 到 main 的程式逐條確認實作與測試；主代理核對後擬審查意見，人確認全文才送出
+- AI 產出：
+  - 四個審查者共 19 點（Blind Hunter 11、Edge Case Hunter 3、Verification Gap 1、Acceptance Auditor 4）
+  - 核對後留 2 點建議：S12 缺的 AC（UX-DR37）只記在 AI 紀錄、沒寫進 deferred-work，4.1 仍標 done；`last_updated` 時間倒退
+  - 1 點順帶發現：比分面板的「可開始」徽章只看局數，進行中的場次刪掉唯一一局後會重新出現（非本 PR 造成）
+  - 排除 16 點
+- 人做了什麼：選擇對照 AC 完整審查，決定以核准附建議送出，確認留言全文
+- 驗證：
+  - 誤判都在程式或文件中查證後排除：
+    - 「比分寫入沒先鎖賽事」：對照 AD-6 原文，Match 寫入只需鎖 Match 列
+    - 「進行中場次改時間沒有測試」：`test_reschedule.py` 的 `test_match_not_scheduled_rejected` 有參數化 `LIVE`
+    - 「5.3、5.4 沒經過審查」：三份 5.3 spec 都有 Review Triage Log
+  - 「可開始」徽章對照了 `ScoreEntryPanel.tsx:238` 與後端 `test_delete_only_game_keeps_match_live`
+- 問題與修正：
+  - 審查者有 3 點誤判，主代理讀程式與架構文件後排除
+  - Blind Hunter 有 6 點在挑 D 個人 AI 紀錄的寫法，依「不改別人的紀錄」的規則不列入審查意見
+- 成熟度：L4（多個審查者並行，主代理逐筆核對，人決定送出方式並確認全文）
+- 證據：PR #68 的審查意見（B，APPROVED，2026-11-09）
