@@ -166,6 +166,14 @@ context:
 | 22 | BH | `_file_not_found` 與 `core.storage` 重複 | low | 拒絕 | 共用要在 core 新增公開函式 |
 | 23 | BH | S33 前端未做、路由未宣告 4xx 回應 | false | 拒絕 | S33 屬 6.5（frozen Never）；各模組路由都未宣告 4xx，既有慣例 |
 
+合併後審查（2026-11-09，D 在 #64；處理見 [spec-6-4-followup-review.md](spec-6-4-followup-review.md)）：
+
+| # | 來源 | 發現 | 判定 | 處理 | 依據 |
+|---|------|------|------|------|------|
+| 24 | D（M1） | `test_report_concurrency.py` 拿掉 `lock_tournament` 也可能通過 | medium | patch | 實測：把 `file_report` 的 `lock_tournament` 暫時換成 `get_tournament`，舊版測試連跑 5 次都通過；改成「先檢查的一方等另一方也檢查完才寫入」後，同樣拿掉鎖連跑 3 次都失敗（`['ok', 'ok']`），有鎖時通過。暫時的改動只在容器內，跑完已還原 |
+| 25 | D | 兩支刪檔測試只斷言目錄是空的，沒存檔也會過 | low | patch | spy `storage.save_image`，斷言存過一次且該鍵值的檔案已不在 |
+| 26 | D | 送出回 403 `CAPTAIN_REQUIRED` 時只重抓檢舉對象，入口不會消失 | low | patch | 另讓我的隊伍與隊伍詳情失效；403 由 `parseApiError` 歸類為 `forbidden` 而不是 `business`，判斷改看業務代碼 |
+
 ## Design Notes
 
 - 隊長身分：`MyTeamCard` 沒有角色欄位，不改 S12 的回應；改用 S17 已有快取的 `TeamDetail.my_role`，只有隊長才呼叫 `reportable-teams`。非 `open` 狀態時 `CreateTeamEntry` 不掛載，`ReportTeamEntry` 會讓登入者多取一次 `/accounts/me/teams`（與 S12 共用快取）。

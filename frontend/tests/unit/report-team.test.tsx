@@ -347,6 +347,53 @@ describe("S2「檢舉隊伍」入口", () => {
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey)
     expect(keys).toEqual([["disputes", "reportable-teams", TOURNAMENT_ID]])
   })
+
+  it("送出時已不是隊長（403）：重抓我的隊伍與隊伍詳情，關閉對話框後入口消失", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    const { readTeam } = mockApis()
+    vi.spyOn(DisputesService, "fileReport").mockRejectedValue(
+      httpError(403, {
+        detail: { code: "CAPTAIN_REQUIRED", message: "只有隊長可以提出檢舉。" },
+      }),
+    )
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const invalidate = vi.spyOn(client, "invalidateQueries")
+    renderEntry("open", client)
+
+    await user.click(
+      await screen.findByRole("button", { name: REPORT_ENTRY_TEXT }),
+    )
+    const dialog = await screen.findByRole("dialog", { name: "提出檢舉" })
+    await user.click(within(dialog).getByRole("combobox", { name: "檢舉對象" }))
+    await user.click(await screen.findByRole("option", { name: "晨鳥隊" }))
+    await user.type(within(dialog).getByLabelText("說明"), "隊員不同校")
+    // 送出期間隊長被轉讓：重抓的隊伍詳情回隊員
+    readTeam.mockResolvedValue({ data: teamDetail("player") } as ReadTeamResult)
+    await user.click(within(dialog).getByRole("button", { name: "送出檢舉" }))
+
+    // 錯誤仍顯示在對話框內
+    expect(
+      await within(dialog).findByText("只有隊長可以提出檢舉。"),
+    ).toBeInTheDocument()
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey)
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        ["disputes", "reportable-teams", TOURNAMENT_ID],
+        ["registration", "my-teams"],
+        ["registration", "team"],
+      ]),
+    )
+
+    await user.keyboard("{Escape}")
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: REPORT_ENTRY_TEXT }),
+      ).toBeNull(),
+    )
+  })
 })
 
 function renderDialog(props: Partial<ReportTeamDialogProps> = {}) {

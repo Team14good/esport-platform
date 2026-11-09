@@ -497,3 +497,24 @@
 - 問題與修正：新增的 S2 頁面層測試第一次失敗，找不到「檢舉隊伍」，5 秒後逾時。AI 單獨重跑讀錯誤訊息，發現是 jsdom 沒有 `window.matchMedia`：隊長的 S2 會掛載 S20，`useIsMobile` 呼叫它而讓整頁出錯。這不是產品問題（瀏覽器實測正常），照其他測試檔的做法 mock `matchMedia` 後通過。這也說明 B 指出的缺口是真的：之前的測試都直接渲染元件，沒有走過整頁的路徑。
 - 成熟度：L4（組員以多代理審查提出建議，AI 實作並以自動測試驗證，人在 checkpoint 決策）
 - 證據：PR #64（B 的審查）；_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Spec Change Log 2026-11-09）；commit 未記錄（尚未 commit）
+
+### 2026-11-09｜測試／依合併後審查補強｜Story 6.4 合併後審查的後續
+
+- Story／範圍：6.4 後續（分支 story/6-4-followup）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（oneshot，Blind Hunter 一層審查）
+- 怎麼用：AI 整理 D 在 #64 合併後的審查與留言，使用者選擇處理 M1 與兩個順手項目；AI 寫 spec、實作，並實際拿掉鎖驗證測試
+- AI 產出：
+  - 改 4 個檔：併發測試、刪檔測試、`useFileReport.ts`、前端單元測試。
+  - 新增 1 個前端測試；後端在既有的 3 支測試加入 spy 與斷言。
+  - 新 spec `spec-6-4-followup-review.md`，spec-6-4 的 Review Triage Log 補 3 列。
+- 人做了什麼：D 審查指出問題；使用者決定處理範圍
+- 驗證：
+  - 拿掉鎖時，舊版併發測試連跑 5 次都通過，證實 D 的觀察；新版連跑 3 次都失敗，有鎖時通過。
+  - 完整驗證：後端 2376 個、前端 990 個測試通過；lint、typecheck、biome 通過。
+  - Blind Hunter 提出 9 項：修 5、延後 1、駁回 3。
+- 問題與修正：
+  - AI 第一版前端判斷用 `apiError.kind === "business"`，新測試失敗才發現 403 被 `parseApiError` 歸類為 `forbidden`，改成直接比對錯誤碼。
+  - AI 第一版併發測試沒有斷言先到的一方是「逾時」才繼續，Blind Hunter 指出後補上。
+  - 開分支時，AI 用的 main 是舊的，查 git log 才發現，重新 fetch 後把分支重建在最新的 main 上。
+- 成熟度：L4（組員審查，AI 依流程實作並用「拿掉鎖」驗證測試有效，加上審查與自動測試）
+- 證據：PR #64（D 的審查與留言）；_bmad-output/implementation-artifacts/spec-6-4-followup-review.md；spec-6-4-file-report.md（Review Triage Log #24～#26）；commit 未記錄（尚未 commit）
