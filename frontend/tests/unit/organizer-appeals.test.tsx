@@ -25,6 +25,7 @@ import {
   NO_OPEN_APPEALS_TEXT,
   POPUP_BLOCKED_TEXT,
 } from "@/features/disputes/AppealsPage"
+import { NO_OPEN_DISPUTES_TEXT } from "@/features/disputes/OpenDisputesPanel"
 import {
   CORRECT_TEXT,
   GO_TO_MATCHES_TEXT,
@@ -51,6 +52,7 @@ configure({ asyncUtilTimeout: 5000 })
 
 const ORGANIZER = { ...ACCOUNT, is_organizer: true }
 const APPEALS_URL = "/organizer/tournaments/t-1/appeals"
+const REPORTS_URL = "/organizer/tournaments/t-1/reports"
 
 const TOURNAMENT = {
   id: "t-1",
@@ -978,6 +980,149 @@ describe("S27 待處理清單", () => {
       ),
     ).toBeInTheDocument()
     expect(screen.getByText(/待處理申訴/).textContent).toContain("2")
+  })
+
+  it("申訴與檢舉列在一起：標示類型，檢舉進 S33，沒有期限的檢舉排最後", async () => {
+    const disputes: OpenDisputes = {
+      appeals: 1,
+      reports: 2,
+      earliest_deadline: "2026-10-26T13:00:00Z",
+      items: [
+        {
+          kind: "report",
+          id: "rp-2",
+          match_id: null,
+          match_code: null,
+          filed_at: "2026-10-26T11:00:00Z",
+          deadline: null,
+          team_name: "丙隊",
+        },
+        {
+          kind: "appeal",
+          id: "ap-1",
+          match_id: "m-1",
+          match_code: "M1",
+          filed_at: "2026-10-26T12:10:00Z",
+          deadline: "2026-10-26T14:00:00Z",
+        },
+        {
+          kind: "report",
+          id: "rp-1",
+          match_id: null,
+          match_code: null,
+          filed_at: "2026-10-26T12:20:00Z",
+          deadline: "2026-10-26T13:00:00Z",
+          team_name: "乙隊",
+        },
+      ],
+    }
+    vi.spyOn(DisputesService, "readOpenDisputes").mockResolvedValue({
+      data: disputes,
+    } as OpenResult)
+    open("/organizer/tournaments/t-1")
+
+    await screen.findByRole("heading", { name: "待處理" })
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll("[data-slot=open-dispute]"),
+      ).toHaveLength(3),
+    )
+    const items = [
+      ...document.querySelectorAll<HTMLElement>("[data-slot=open-dispute]"),
+    ]
+    expect(items.map((item) => item.textContent?.split("提出")[0])).toEqual([
+      "檢舉 · 乙隊",
+      "申訴 · M1",
+      "檢舉 · 丙隊",
+    ])
+    expect(items[0]).toHaveAttribute("href", REPORTS_URL)
+    expect(items[1]).toHaveAttribute("href", APPEALS_URL)
+    expect(items[2]).toHaveAttribute("href", REPORTS_URL)
+    expect(
+      within(items[0]).getByText(
+        `提出 ${formatMatchDateTime("2026-10-26T12:20:00Z")}`,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(items[0]).getByText(
+        `處理期限 ${formatMatchDateTime("2026-10-26T13:00:00Z")}`,
+      ),
+    ).toBeInTheDocument()
+    // 沒有期限的檢舉不顯示處理期限
+    expect(within(items[2]).queryByText(/處理期限/)).toBeNull()
+    expect(screen.getByText(/待處理申訴/).textContent).toContain("1")
+    expect(screen.getByText(/待處理檢舉/).textContent).toContain("2")
+  })
+
+  it.each(["open", "closed"] as const)(
+    "報名期間（%s）也顯示待處理區塊與檢舉",
+    async (status) => {
+      vi.spyOn(DisputesService, "readOpenDisputes").mockResolvedValue({
+        data: {
+          appeals: 0,
+          reports: 1,
+          earliest_deadline: null,
+          items: [
+            {
+              kind: "report",
+              id: "rp-1",
+              match_id: null,
+              match_code: null,
+              filed_at: "2026-10-03T12:00:00Z",
+              deadline: null,
+              team_name: "乙隊",
+            },
+          ],
+        },
+      } as OpenResult)
+      vi.spyOn(TournamentsService, "readMyTournament").mockResolvedValue({
+        data: { ...TOURNAMENT, status },
+      } as ReadResult)
+      signInAs({ account: ORGANIZER })
+      renderApp("/organizer/tournaments/t-1")
+
+      await screen.findByRole("heading", { name: "待處理" })
+      const item = await waitFor(() => {
+        const found = document.querySelector<HTMLElement>(
+          "[data-slot=open-dispute]",
+        )
+        expect(found).not.toBeNull()
+        return found as HTMLElement
+      })
+      expect(item.textContent).toContain("檢舉 · 乙隊")
+      expect(item).toHaveAttribute("href", REPORTS_URL)
+    },
+  )
+
+  it.each(["upcoming", "cancelled"] as const)(
+    "賽事狀態為 %s：不顯示待處理區塊",
+    async (status) => {
+      const spy = vi.spyOn(DisputesService, "readOpenDisputes")
+      vi.spyOn(TournamentsService, "readMyTournament").mockResolvedValue({
+        data: { ...TOURNAMENT, status },
+      } as ReadResult)
+      signInAs({ account: ORGANIZER })
+      renderApp("/organizer/tournaments/t-1")
+
+      expect(await screen.findByText("先發／替補")).toBeInTheDocument()
+      expect(screen.queryByRole("heading", { name: "待處理" })).toBeNull()
+      expect(spy).not.toHaveBeenCalled()
+    },
+  )
+
+  it("沒有待處理項目：顯示空狀態", async () => {
+    const empty: OpenDisputes = {
+      appeals: 0,
+      reports: 0,
+      earliest_deadline: null,
+      items: [],
+    }
+    vi.spyOn(DisputesService, "readOpenDisputes").mockResolvedValue({
+      data: empty,
+    } as OpenResult)
+    open("/organizer/tournaments/t-1")
+
+    expect(await screen.findByText(NO_OPEN_DISPUTES_TEXT)).toBeInTheDocument()
   })
 })
 

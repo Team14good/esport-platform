@@ -186,11 +186,18 @@ export function useRefetchReports(tournamentId: string) {
     ])
 }
 
-/** 待處理清單依處理期限由近到遠（同期限依提出時間）。 */
+/**
+ * 待處理清單與後端同一順序：沒有期限的檢舉排在最後；
+ * 再依處理期限由近到遠、提出時間、id（id 讓順序固定）。
+ */
 export function sortOpenItems(items: OpenDisputes["items"]) {
   return [...items].sort(
     (a, b) =>
-      Date.parse(a.deadline) - Date.parse(b.deadline) ||
-      Date.parse(a.filed_at) - Date.parse(b.filed_at),
+      Number(a.deadline === null) - Number(b.deadline === null) ||
+      (a.deadline !== null && b.deadline !== null
+        ? Date.parse(a.deadline) - Date.parse(b.deadline)
+        : 0) ||
+      Date.parse(a.filed_at) - Date.parse(b.filed_at) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   )
 }

@@ -270,19 +270,27 @@ class PublicAppealResult(BaseModel):
 
 
 class OpenDisputeItem(BaseModel):
-    """S27 待處理清單的一筆（目前只有申訴；檢舉由 6.5 接上）。"""
+    """S27 待處理清單的一筆：申訴（`match_id`、`match_code`）或檢舉（`team_name`）。"""
 
     kind: Literal["appeal", "report"]
     id: uuid.UUID
+    # 申訴的場次；檢舉為 None
     match_id: uuid.UUID | None
     match_code: str | None
     filed_at: datetime
-    # 處理期限：等待結果的下一場預定時間；決賽與季軍賽為提出後 1 小時
-    deadline: datetime
+    # 處理期限。申訴：等待結果的下一場預定時間，決賽與季軍賽為提出後 1 小時。
+    # 檢舉：被檢舉隊伍下一場待開打場次的預定時間；沒有下一場時為 None
+    deadline: datetime | None
+    # 檢舉：被檢舉隊伍的隊名；申訴為 None
+    team_name: str | None = None
 
 
 class OpenDisputes(BaseModel):
-    """S27 待處理：未結案申訴數、檢舉數（6.5 接上前為 0）與每一筆，依處理期限由近到遠。"""
+    """S27 待處理：未結案申訴數、檢舉數與每一筆。
+
+    依處理期限由近到遠（同期限依提出時間）；沒有期限的檢舉排在最後、依提出時間。
+    `earliest_deadline` 只看有期限的項目。
+    """
 
     appeals: int
     reports: int

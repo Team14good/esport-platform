@@ -992,7 +992,7 @@ export type NextMatch = {
 /**
  * OpenDisputeItem
  *
- * S27 待處理清單的一筆（目前只有申訴；檢舉由 6.5 接上）。
+ * S27 待處理清單的一筆：申訴（`match_id`、`match_code`）或檢舉（`team_name`）。
  */
 export type OpenDisputeItem = {
   /**
@@ -1018,13 +1018,20 @@ export type OpenDisputeItem = {
   /**
    * Deadline
    */
-  deadline: string
+  deadline: string | null
+  /**
+   * Team Name
+   */
+  team_name?: string | null
 }
 
 /**
  * OpenDisputes
  *
- * S27 待處理：未結案申訴數、檢舉數（6.5 接上前為 0）與每一筆，依處理期限由近到遠。
+ * S27 待處理：未結案申訴數、檢舉數與每一筆。
+ *
+ * 依處理期限由近到遠（同期限依提出時間）；沒有期限的檢舉排在最後、依提出時間。
+ * `earliest_deadline` 只看有期限的項目。
  */
 export type OpenDisputes = {
   /**

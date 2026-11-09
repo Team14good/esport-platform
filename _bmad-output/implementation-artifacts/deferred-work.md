@@ -196,12 +196,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-5-disqualify.md`
   summary: （未驗證，若成立為中）competition `get_registration_state` 若讀到鎖賽事前已載入 session 的報名，`disqualified` 可能是過時值，導致已取消資格的敗隊被選為頂替隊伍。
   evidence: 2026-11-09 6.5 第一階段審查（Edge Case Hunter）。第一階段 `disqualify` 一開始就 `lock_tournament`，之前不讀報名，所以目前不會發生；第二階段 disputes `resolve_report` 若在呼叫 `disqualify` 前讀過同一隊的報名就可能成立。第二階段實作時確認呼叫順序，或在 registration 的 `get_registration` 讀取時 `populate_existing`。
-## Deferred from: spec-6-2-resolve-appeals.md (2026-11-09)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-resolve-appeals.md`
-  summary: S27 待處理清單還沒有算檢舉：`count_open_disputes` 的 `reports` 一律 0、`items` 只有申訴；EXPERIENCE.md 要求未結案的申訴與檢舉列在一起、依處理期限排序。
-  evidence: 2026-11-09 使用者決定留給 6.5。6.4 已合併、`Report` 可查，但規劃文件沒有定義檢舉的處理期限，而 `OpenDisputeItem.deadline` 必填；6.5 接上 S33 時一併決定檢舉的期限（或無期限排在申訴之後）並補測試。
-
 ## Deferred from: code review of spec-6-2-review-fixes.md (2026-11-09)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-review-fixes.md`
@@ -221,9 +215,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-3-test-coverage-report.md`
   summary: （低）純函式 90% 分支覆蓋率是單元＋整合合併計算（`coverage run --append`），AC 寫的是單元測試；`test-all.sh` 複製前端 JUnit 與 Playwright JSON 時丟掉錯誤，檔案不存在時報告不會明確失敗。
   evidence: 2026-11-09 統一 code review。`scripts/test.sh`、`scripts/test-all.sh`。修法：README 註明計算方式（或只用單元測試算），`cp` 失敗時在報告標出缺漏。
-- source_spec: none
-  summary: 6.5 第二階段（B）：S27 待處理清單加入未結案的檢舉（`count_open_disputes` 的 `reports` 與 `items`），並決定檢舉的處理期限與排序。
-  evidence: 2026-11-09 使用者決定把 6.5 第二階段拆開，先做檢舉處理（`resolve_report`＋S33），S27 與對戰樹標記各自另開 PR；本項與上一項（spec-6-2）是同一件事。
 - source_spec: none
   summary: 6.5 第二階段（C）：對戰樹的「取消資格」標記（`destructive`），公開對戰表 API 帶出隊伍是否已取消資格，S3／S4 顯示；S17、S12 顯示處理理由。
   evidence: 2026-11-09 使用者決定把 6.5 第二階段拆開，先做檢舉處理（`resolve_report`＋S33）；標記需要公開對戰表 API 新增欄位與前端顯示，可獨立審查合併。

@@ -600,6 +600,43 @@
 - 成熟度：L4（固定流程：子代理實作，三個審查者並行，主代理逐點核對、交回修正，前後端完整驗證；人在範圍與規則上做決定）
 - 證據：commit `bf35b14`，`_bmad-output/implementation-artifacts/spec-6-5-resolve-report.md` 的 Review Triage Log
 
+### 2026-11-09｜需求與設計｜Story 6.5 第二階段 B：S27 待處理清單加入檢舉的 spec
+
+- Story／範圍：6.5 第二階段 B（分支 `story/6-5-s27-reports`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：AI 讀 `count_open_disputes`、`OpenDisputesPanel`、`deferred-work.md` 的兩個相關項目與 FR-31，寫 spec 並列出需要人決定的問題
+- AI 產出：
+  - spec `spec-6-5-s27-reports.md`，含 8 列情況表
+  - 找出規劃文件沒有定義檢舉的處理期限，列出三個選項（被檢舉隊伍下一場、沒有期限、固定 24 小時）
+  - 找出待處理區塊只在抽籤後顯示，但檢舉在報名期間就能提出，所以要加上開放報名、報名截止
+- 人做了什麼：選「被檢舉隊伍下一場的開始時間，沒有下一場就不設期限、排在後面」；批准 spec
+- 驗證：調查時確認不需要改資料表，`list_team_matches` 已能查被檢舉隊伍的場次
+- 問題與修正：無
+- 成熟度：L3（AI 調查並寫 spec，人做規則決定）
+- 證據：`_bmad-output/implementation-artifacts/spec-6-5-s27-reports.md` 的 Decisions
+
+### 2026-11-09｜程式／程式生成｜Story 6.5 第二階段 B：S27 待處理清單加入檢舉
+
+- Story／範圍：6.5 第二階段 B（分支 `story/6-5-s27-reports`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作子代理；Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：沒有對話脈絡的子代理只依 spec 實作；主代理讀差異對照 spec，再並行跑三個審查者，逐點核對後把修正交回同一個子代理，最後自己重跑全部檢查
+- AI 產出：
+  - 後端：`count_open_disputes` 加入未結案檢舉、處理期限與被檢舉隊名，`OpenDisputeItem.deadline` 改為可空
+  - 前端：S27 清單依類型連到 S32／S33、沒有期限的列不顯示期限；開放報名、報名截止也顯示待處理區塊
+  - 測試：新增 `test_open_disputes_reports.py`（6 個測試函式），`organizer-appeals.test.tsx` 新增 S27 的測試
+  - 共 15 個檔案
+- 人做了什麼：批准 spec；S27 的介面文字（計數分兩行、空狀態文字）在提交時仍待確認
+- 驗證：
+  - 後端 2382 passed，覆蓋率 97%；lint 通過
+  - 前端 build、typecheck、biome 通過，單元測試 996 passed
+  - 審查 13 點：修正 4 點、排除 8 點（含 1 點不成立）、1 點請人確認介面文字，理由逐點記在 spec 的 Review Triage Log
+- 問題與修正：
+  - 實作的 AI 自己定了 spec 沒規定的介面文字（S27 計數分兩行、空狀態改成「目前沒有待處理的申訴或檢舉。」），在報告中標為待確認；Blind Hunter 也指出這點，交由人確認。
+  - 審查找出同期限、同提出時間的兩筆排序不固定（後端與前端都沒有用 id 排），改成依 id 排序並補測試。
+  - 子代理第一次全跑後端測試時有 1 個與本次無關的裁判指派測試失敗，單獨連跑 3 次與全部重跑都通過，判斷為時好時壞的測試，未處理。
+  - `scripts/generate-client.sh` 在 Windows Git Bash 解開 tar 時失敗，子代理改用容器內產生、`tar --force-local` 解開。
+- 成熟度：L4（固定流程：子代理實作，三個審查者並行，主代理逐點核對、交回修正，前後端完整驗證；人在規則上做決定）
+- 證據：`_bmad-output/implementation-artifacts/spec-6-5-s27-reports.md` 的 Review Triage Log
 ### 2026-11-09｜程式／debug｜Story 6.2 審查後續：處理 #69 合併後 A 與 D 的建議
 
 - Story／範圍：6.2 審查後續（分支 `story/6-2-review-fixes`，PR #71，spec `_bmad-output/implementation-artifacts/spec-6-2-review-fixes.md`）
