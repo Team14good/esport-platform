@@ -290,7 +290,7 @@ class PublicBracket(BaseModel):
 | `is_member(session, *, team_id, account_id) -> bool` | 4.4（裁判不能是參賽隊員） | |
 | ★ `is_captain(session, *, team_id, account_id) -> bool` | 5.1 報到 | 經 `registration_port.is_captain`，缺函式回 503 `REGISTRATION_UNAVAILABLE` |
 | ★ `get_team_names(session, *, team_ids) -> dict[UUID, str]` | 4.1 公開對戰樹 | 一次查多隊，避免 N+1 |
-| `list_teams_by_status(session, *, tournament_id, statuses) -> list[TeamSummary]` | 6.5 公開對戰樹的「取消資格」 | 已有（6.4 新增）；經 `registration_port.list_disqualified_team_ids(session, *, tournament_id) -> set[UUID]`（`statuses=[disqualified]`，只取 id）一次查該賽事所有已取消資格的隊伍；公開對戰表與公開單場的 `PublicTeamRef.disqualified` 由此判斷，`get_podium`、S30 一律 `false`；缺函式回 503 `REGISTRATION_UNAVAILABLE` |
+| `list_teams_by_status(session, *, tournament_id, statuses) -> list[TeamSummary]` | 6.5 公開對戰樹的「取消資格」 | 已有（6.4 新增）；經 `registration_port.list_disqualified_team_ids(session, *, tournament_id) -> set[UUID]`（`statuses=[disqualified]`，只取 id）一次查該賽事所有已取消資格的隊伍；凡經 `_public_matches` 組出的場次（公開對戰表、公開單場、S12、S13、S30）的 `PublicTeamRef.disqualified` 由此判斷，只有 `get_podium` 一律 `false`；缺函式回 503 `REGISTRATION_UNAVAILABLE` |
 
 `list_my_teams(session, *, account_id) -> list[MyTeamCard]`（C 在 S12 已提供）：5.1 補遺 S12 下一場經 `registration_port.list_drawn_teams_of_account(session, *, account_id) -> list[DrawnTeamRef]` 呼叫，只讀 `team_id`、`tournament_id`、`registration_status`，在 port 內過濾 `drawn`，回傳 `DrawnTeamRef {team_id, tournament_id}`；不改 registration 的 service、models，registration 不呼叫 competition（S12 前端組合兩支 API）。
 

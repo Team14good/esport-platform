@@ -1,5 +1,17 @@
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query"
 import { createMemoryHistory, createRouter } from "@tanstack/react-router"
-import { render, screen, waitFor, within } from "@testing-library/react"
+import {
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
+import type { ReactNode } from "react"
 import { beforeAll, describe, expect, it, vi } from "vitest"
 
 import {
@@ -14,9 +26,11 @@ import {
 import { RouteErrorPage } from "@/components/layout/ErrorPage"
 import { BracketTree } from "@/features/competition/BracketTree"
 import { createBracketFixture } from "@/features/competition/bracket-fixtures"
+import { publicBracketQueryKey } from "@/features/competition/bracket-queries"
 import { MatchScoreDisplay } from "@/features/competition/MatchScoreDisplay"
 import { matchDetailFromBracket } from "@/features/competition/match-fixtures"
 import { disqualifiedLastMatches } from "@/features/competition/match-status"
+import { useDisqualifiedMarks } from "@/features/competition/use-disqualified-marks"
 import { routeTree } from "@/routeTree.gen"
 import { renderApp, signInAs } from "./auth-fixtures"
 import { httpError } from "./helpers"
@@ -91,6 +105,27 @@ describe("取消資格標記：只標在最後一張場次卡", () => {
     expect(last.size).toBe(2)
     // 沒有取消資格的隊伍不在裡面
     expect(disqualifiedLastMatches(FINISHED.matches).size).toBe(0)
+  })
+
+  it("輪空直接進第二輪的隊伍：最後一場是它唯一的那張卡", () => {
+    const six = createBracketFixture({ teamCount: 6, scenario: "scheduled" })
+    const byeMatch = six.matches.find(
+      (m) => (m.bye_a && m.team_a !== null) || (m.bye_b && m.team_b !== null),
+    )!
+    const team = (byeMatch.bye_a ? byeMatch.team_a : byeMatch.team_b)!
+    const last = disqualifiedLastMatches(disqualify(six, team.id).matches)
+    expect(last.get(team.id)).toBe(byeMatch.id)
+    expect(last.size).toBe(1)
+  })
+
+  it("第一輪就淘汰的隊伍：最後一場是第一輪那張卡", () => {
+    const eight = createBracketFixture({ teamCount: 8, scenario: "finished" })
+    const first = eight.matches.find((m) => m.code === "M1")!
+    const loser = [first.team_a!, first.team_b!].find(
+      (team) => team.id !== first.winner_id,
+    )!
+    const last = disqualifiedLastMatches(disqualify(eight, loser.id).matches)
+    expect(last.get(loser.id)).toBe(first.id)
   })
 
   it("對戰樹：決賽隊伍只在決賽卡帶標記，準決賽卡照舊", () => {
@@ -222,19 +257,36 @@ describe("S4 路由的取消資格標記", () => {
     expect(readBracket).toHaveBeenCalled()
   })
 
-  it("不是該隊最後一場時不顯示", async () => {
+  it("不是該隊最後一場時不顯示（對戰表讀完後才斷言）", async () => {
     const readBracket = mockMatchAndBracket()
-    renderAt(M1.id)
-
-    await waitFor(() =>
-      expect(
-        document.querySelector("[data-slot=score-display]"),
-      ).not.toBeNull(),
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
     )
-    await waitFor(() => expect(readBracket).toHaveBeenCalled())
-    // 等對戰表的回應套用到畫面
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(scoreTags()).not.toContain("取消資格")
+    const key = publicBracketQueryKey(bracket.tournament_id)
+    // 同一次 render 讀出 hook 結果與對戰表快取：快取有資料時，hook 一定已依它計算
+    const probe = (matchId: string) => () => ({
+      marks: useDisqualifiedMarks(
+        matchDetailFromBracket(bracket, matchId) as PublicMatchDetail,
+      ),
+      cached: useQuery({
+        queryKey: key,
+        queryFn: () => Promise.resolve(bracket),
+        enabled: false,
+      }).data,
+    })
+
+    const semi = renderHook(probe(M1.id), { wrapper })
+    await waitFor(() => expect(semi.result.current.cached).toBeDefined())
+    expect([...semi.result.current.marks]).toEqual([])
+    expect(readBracket).toHaveBeenCalledTimes(1)
+
+    // 對照：同一份對戰表在決賽會標記，證明上面不是因為沒讀到資料才空
+    const final = renderHook(probe(FINAL.id), { wrapper })
+    await waitFor(() => expect(final.result.current.cached).toBeDefined())
+    expect([...final.result.current.marks]).toEqual([FINALIST.id])
   })
 
   it("兩隊都沒有取消資格時不讀對戰表", async () => {

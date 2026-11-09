@@ -703,3 +703,15 @@
 - 驗證：改動檔 ruff、mypy 通過；資料庫測試以本 PR 的 CI 為準（本機記憶體不足以跑全套）
 - 成熟度：L2（AI 審查與修正，人授權）
 - 證據：本 PR 的 diff、CI 紀錄
+
+### 2026-11-10｜接手審查與驗證｜Story 6.5 第二階段 C（#76）
+
+- Story／範圍：B 的 #76（對戰樹取消資格標記與處理理由），B 的 AI 額度用完，依 PR 交接由 D 收尾
+- 工具：Claude Code（Opus 5.5）；後端、前端各一個審查子代理；Playwright 實際開瀏覽器
+- 怎麼用：子代理讀 diff、spec 與 contracts 找問題，AI 逐點判斷並修；在獨立的 compose 專案載入示範資料，經 API 檢舉並判屬實，再用 Playwright 開 S3、S4、S12、S17（桌面與 375 px）截圖並檢查標記數與橫向捲動
+- AI 產出：S4 不穩的負向測試改成等對戰表快取有資料才斷言（故意改壞確認會紅）；補輪空、第一輪淘汰、一般隊員讀理由、公開單場與 S30 帶旗標的測試；對戰樹輪詢比對 `disqualified`；修正 contracts 與註解（S30 也帶真值）、503 訊息、理由查詢依賴的規則說明；spec 補 Review Triage Log 10 列與驗證結果
+- 人做了什麼：使用者決定由 D 全部接手；介面文字「主辦方的處理理由」「處理時間：」交給 B 確認
+- 驗證：容器內後端相關 38 passed、前端相關 61 passed，ruff、mypy、tsc、biome 通過；瀏覽器實走四個畫面桌面與 375 px 都正確；完整測試以 CI 為準
+- 問題與修正：Chrome 擴充沒連上，改用本機 Python Playwright；本機 Playwright 版本對不上下載的瀏覽器，改指定已安裝的 chromium；中文 JSON 從 Git Bash 送出被截斷，改用 UTF-8 檔案送
+- 成熟度：L3（AI 審查、修正與實測，人決定接手範圍與介面文字）
+- 證據：#76 的 spec Review Triage Log、本次提交、CI 紀錄

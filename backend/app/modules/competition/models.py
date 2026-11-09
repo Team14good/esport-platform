@@ -304,8 +304,8 @@ class DrawStatus(BaseModel):
 class PublicTeamRef(BaseModel):
     id: uuid.UUID
     name: str
-    # 6.5：報名狀態為取消資格（不含理由，AD-19）。只有公開對戰表（含其名次）與公開單場會判斷，
-    # `get_podium`、S30 場次列表一律 False
+    # 6.5：報名狀態為取消資格（不含理由，AD-19）。凡經 `_public_matches` 組出的場次都會判斷
+    # （公開對戰表含其名次、公開單場、S12、S13、S30）；只有 `get_podium` 一律 False
     disqualified: bool = False
 
 

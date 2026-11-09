@@ -21,6 +21,7 @@ from app.modules.competition import service as competition_service
 from app.modules.competition.models import Match, MatchOutcome
 from app.modules.disputes.models import Report, ReportStatus
 from app.modules.identity.models import Account
+from app.modules.registration.models import MemberRole, TeamMember
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
 from tests.competition.test_confirm_advance import _confirm, _enter_appeal, _rows
 from tests.disputes.test_reports import _team
@@ -239,6 +240,63 @@ def test_member_reads_reason_and_handled_at(
     assert body["reason"] == REASON
     assert body["handled_at"] is not None
     assert set(body) == {"reason", "handled_at"}
+
+
+def test_regular_member_reads_reason(client: TestClient, session: Session) -> None:
+    # 不是隊長的一般隊員也能讀（只限隊員，不限隊長）
+    w = _drawn(client, session, 4)
+    team = w.teams[1]
+    player = _make_account(session)
+    session.add(
+        TeamMember(
+            team_id=team,
+            tournament_id=w.tid,
+            account_id=player.id,
+            role=MemberRole.PLAYER,
+        )
+    )
+    session.flush()
+    _disqualify(client, session, w, team)
+
+    response = _reason(client, team, player)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["reason"] == REASON
+
+
+def test_single_match_and_s30_carry_flag_without_reason(
+    client: TestClient, session: Session
+) -> None:
+    # 公開單場與 S30 場次列表也帶 `disqualified`，且隊伍參照只有 id、name、disqualified
+    w = _drawn(client, session, 4)
+    first = _first_round(session, w)[0]
+    team = first.team_a_id
+    assert team is not None
+    _disqualify(client, session, w, team)
+
+    single = client.get(f"{API}/tournaments/{w.tid}/matches/{first.id}")
+    assert single.status_code == 200, single.text
+    refs = {
+        ref["id"]: ref
+        for ref in (single.json()["team_a"], single.json()["team_b"])
+        if ref is not None
+    }
+    assert refs[str(team)]["disqualified"] is True
+    for ref in refs.values():
+        assert set(ref) == {"id", "name", "disqualified"}
+
+    managed = client.get(
+        f"{API}/tournaments/{w.tid}/manage/matches", headers=_auth(w.organizer)
+    )
+    assert managed.status_code == 200, managed.text
+    flags = {
+        ref["id"]: ref["disqualified"]
+        for row in managed.json()
+        for ref in (row["team_a"], row["team_b"])
+        if ref is not None
+    }
+    assert flags[str(team)] is True
+    assert [t for t, dq in flags.items() if dq] == [str(team)]
 
 
 def test_non_member_is_forbidden_and_anonymous_unauthorized(

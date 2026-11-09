@@ -86,7 +86,29 @@ context:
 
 ## Review Triage Log
 
+2026-11-10 由 D 接手審查（作者額度用完，bmad 三位審查者沒跑）：後端、前端各一個審查子代理讀完整 diff 與 spec，D 逐點判斷。
+
+| # | 來源 | 發現 | 判斷 | 處理 |
+|---|---|---|---|---|
+| 1 | 前端 | S4「不是最後一場」的測試等 50 ms 才做負向斷言，標記從不出現也會綠 | 修 | 改成 `renderHook` 同一次 render 讀 hook 結果與對戰表快取，快取有資料才斷言；加決賽的對照組。故意把判斷改成「有取消資格就標」確認會紅 |
+| 2 | 前端 | `disqualifiedLastMatches` 缺輪空、第一輪就淘汰的案例 | 修 | 補兩支純函式測試（6 隊輪空、8 隊第一輪敗隊） |
+| 3 | 前端 | 對戰樹輪詢的 `sameTeam` 沒比 `disqualified`，標記出現時不會閃示 | 修 | `use-bracket-polling.ts` 一併比對 |
+| 4 | 前端 | S4 讀的對戰表可能是 S3 留下的舊快取 | 駁回 | 預設 `staleTime` 0，進 S4 時會重抓；短暫顯示舊值可接受 |
+| 5 | 前端 | 理由查詢沒有失效 | 駁回 | 只在報名狀態為取消資格時掛載，狀態改變才會出現；focus／mount 會重抓 |
+| 6 | 後端 | 註解與 contracts 寫「S30 一律 false」，實際 S30、S12、S13 都經 `_public_matches` 帶真值 | 修 | `models.py` 註解與 `contracts/competition.md` 改成只有 `get_podium` 為 false |
+| 7 | 後端 | 理由取「最近一筆屬實」而不是「造成取消資格的那一筆」 | 修（文件） | 目前規則下兩者相同（取消資格時同隊檢舉一起結案、已取消資格不能再被檢舉、兩條路徑都先鎖賽事）；在 `find_latest_substantiated_report_against` 寫明依賴的規則，同時間改依 id 由大到小 |
+| 8 | 後端 | `registration_port` 的 503 訊息寫「查詢對戰表」，S12、S13、S30 也會用到 | 修 | 改成「查詢取消資格的隊伍」 |
+| 9 | 後端 | 測試只有隊長、沒測一般隊員讀理由，也沒測公開單場與 S30 帶旗標 | 修 | 補 `test_regular_member_reads_reason`、`test_single_match_and_s30_carry_flag_without_reason`（含隊伍參照只有 id、name、disqualified） |
+| 10 | 後端 | 分支看起來疊了 #71、#74、#75 的提交 | 駁回 | 審查子代理的 main 是舊的；分支只比 main 多一個提交 |
+
 ## Verification
+
+**D 接手後的驗證（2026-11-10）：**
+- 容器內後端 `test_disqualification_marks.py`、`test_bracket_api.py`、`test_match_api.py` 38 passed；ruff、ruff format、mypy 通過。
+- 容器內前端 `disqualification-marks.test.tsx` 與對戰樹相關 4 檔 61 passed；tsc、biome 通過。
+- 瀏覽器實走（Playwright、本機示範資料：以 `captain@` 檢舉第 2 隊、主辦方判屬實）：S3、S4 未登入時「取消資格」標記各 1 個（M2）；S12、S17 以第 2 隊隊員登入看到「主辦方的處理理由」與處理時間；桌面 1280 px 與 375 px 都沒有橫向捲動。
+- 完整測試以本 PR 的 CI 為準。
+
 
 本工作樹與其他工作樹的容器同時在跑，compose 指令都加 `-p espory-6-5c -f compose.yml -f "C:/Users/grace/AppData/Local/Temp/claude/e0d68722dc8fbcc4/1fabc1f3-312d-4d81-a1f5-4b734a9929d3/scratchpad/ports-6-5c.yml"`（以下簡寫 `dc`）；不要停止或重建其他專案的容器。產生 client 時 `scripts/generate-client.sh` 在 Git Bash 解 tar 會失敗，改在容器內產生後用 `tar --force-local` 解開。
 

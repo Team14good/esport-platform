@@ -27,7 +27,11 @@ export class BracketNotFoundError extends Error {
 }
 
 function sameTeam(a: PublicMatch["team_a"], b: PublicMatch["team_a"]) {
-  return a?.id === b?.id && a?.name === b?.name
+  return (
+    a?.id === b?.id &&
+    a?.name === b?.name &&
+    a?.disqualified === b?.disqualified
+  )
 }
 
 function sameMatch(a: PublicMatch, b: PublicMatch): boolean {

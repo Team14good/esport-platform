@@ -92,7 +92,7 @@ def list_disqualified_team_ids(
 
     沿用 registration `list_teams_by_status`（只取 id）；尚未提供時拋 503。
     """
-    teams = _lookup("list_teams_by_status", action="查詢對戰表")(
+    teams = _lookup("list_teams_by_status", action="查詢取消資格的隊伍")(
         session, tournament_id=tournament_id, statuses=[_DISQUALIFIED]
     )
     return {team.id for team in teams}
