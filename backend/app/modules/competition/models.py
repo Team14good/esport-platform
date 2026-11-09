@@ -560,6 +560,21 @@ class RefereeTournamentMatches(BaseModel):
     matches: list[RefereeMatch]
 
 
+# ---------------------------------------------------------------- 我的隊伍下一場（5.1 補遺 S12）
+
+
+class NextMatch(PublicMatch):
+    """S12 一支已參賽隊伍的下一場：該隊未定案（不是已確認、已取消）的場次中輪次最小的一場。"""
+
+    # 這一場是登入者哪一支隊伍的下一場（前端依此對到 Registration status card）
+    team_id: uuid.UUID
+    round_name: str
+    # 報到開放時間（預定開始 − 30 分鐘）
+    check_in_opens_at: datetime
+    # 報到截止（＝棄權期限），只在待開打且兩隊都確定時有值；給「棄權期限」倒數
+    forfeit_deadline: datetime | None
+
+
 # ---------------------------------------------------------------- 指派裁判（4.4）
 
 

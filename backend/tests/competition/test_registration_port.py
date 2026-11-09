@@ -10,6 +10,7 @@ from sqlmodel import Session
 from app.core.errors import BusinessError
 from app.modules.competition import registration_port
 from app.modules.registration import service as registration_service
+from app.modules.registration.models import MyTeamCard, RegistrationStatus
 
 NAMES = ("list_accepted_teams", "finalize_for_draw", "mark_drawn", "get_team_names")
 TOURNAMENT = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
@@ -119,3 +120,41 @@ def test_get_team_names_with_no_teams_skips_registration(
     monkeypatch.delattr(registration_service, "get_team_names", raising=False)
 
     assert registration_port.get_team_names(session, team_ids=[]) == {}
+
+
+def test_list_drawn_teams_reads_real_my_team_cards(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S12 下一場：用 registration 真正的 `MyTeamCard`，欄位改名時這裡會失敗。"""
+
+    def card(team_id: uuid.UUID, status: RegistrationStatus) -> MyTeamCard:
+        return MyTeamCard(
+            team_id=team_id,
+            team_name="隊伍",
+            tournament_id=TOURNAMENT,
+            tournament_name="賽事",
+            game_name="遊戲",
+            registration_status=status,
+            waitlist_position=None,
+            waitlist_reason=None,
+            representative_backfill=None,
+            waitlist_phase=None,
+        )
+
+    calls: list[uuid.UUID] = []
+
+    def list_my_teams(_session: Session, *, account_id: uuid.UUID) -> list[MyTeamCard]:
+        calls.append(account_id)
+        return [
+            card(TEAM_1, RegistrationStatus.DRAWN),
+            card(TEAM_2, RegistrationStatus.ACCEPTED),
+        ]
+
+    monkeypatch.setattr(registration_service, "list_my_teams", list_my_teams)
+
+    result = registration_port.list_drawn_teams_of_account(session, account_id=ACTOR)
+
+    assert result == [
+        registration_port.DrawnTeamRef(team_id=TEAM_1, tournament_id=TOURNAMENT)
+    ]
+    assert calls == [ACTOR]

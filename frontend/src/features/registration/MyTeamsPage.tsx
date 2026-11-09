@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import type { ReactNode } from "react"
 
+import type { MyTeamCard } from "@/client"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
@@ -31,8 +33,16 @@ function NoTeams() {
   )
 }
 
+type MyTeamsPageProps = {
+  /**
+   * 每張卡片下方、同一個 `<li>` 內的額外內容（可選）；例如 competition 的下一場列。
+   * 不放進卡片裡：卡片整張是連結，不能再巢狀另一個連結。
+   */
+  renderTeamExtra?: (card: MyTeamCard) => ReactNode
+}
+
 /** S12 我的隊伍：每支隊伍一張 Registration status card，點擊到 S17。 */
-export function MyTeamsPage() {
+export function MyTeamsPage({ renderTeamExtra }: MyTeamsPageProps = {}) {
   const teams = useQuery(myTeamsQueryOptions())
 
   return (
@@ -58,8 +68,9 @@ export function MyTeamsPage() {
       ) : (
         <ul className="flex flex-col gap-3">
           {teams.data.map((card) => (
-            <li key={card.team_id}>
+            <li key={card.team_id} className="flex flex-col gap-2">
               <RegistrationStatusCard card={card} />
+              {renderTeamExtra?.(card)}
             </li>
           ))}
         </ul>

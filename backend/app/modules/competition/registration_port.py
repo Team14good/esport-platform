@@ -5,7 +5,8 @@
 在呼叫當下才到 `app.modules.registration.service` 查找：C 的函式尚未合併時拋
 503 `REGISTRATION_UNAVAILABLE`，合併後不必修改 competition。
 
-這裡只回傳抽籤需要的資料：隊伍 id 與公開對戰樹用的隊名。
+這裡只回傳 competition 需要的資料：隊伍 id、公開對戰樹用的隊名，以及 S12 下一場用的
+「登入者所屬、已參賽的隊伍」。
 """
 
 import uuid
@@ -94,6 +95,32 @@ def is_member(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) ->
     """帳號是不是該隊的隊員（指派裁判用）；registration 尚未提供時拋 503。"""
     lookup = _lookup("is_member", action="指派裁判")
     return bool(lookup(session, team_id=team_id, account_id=account_id))
+
+
+@dataclass(frozen=True)
+class DrawnTeamRef:
+    """登入者所屬、報名狀態為已參賽（`drawn`）的一支隊伍。"""
+
+    team_id: uuid.UUID
+    tournament_id: uuid.UUID
+
+
+def list_drawn_teams_of_account(
+    session: Session, *, account_id: uuid.UUID
+) -> list[DrawnTeamRef]:
+    """帳號加入、且已參賽的隊伍（S12 下一場用），順序沿用 registration `list_my_teams`。
+
+    registration 回傳 `MyTeamCard`，這裡只讀 `team_id`、`tournament_id`、`registration_status`；
+    尚未提供時拋 503。
+    """
+    cards = _lookup("list_my_teams", action="查詢下一場")(
+        session, account_id=account_id
+    )
+    return [
+        DrawnTeamRef(team_id=card.team_id, tournament_id=card.tournament_id)
+        for card in cards
+        if card.registration_status == "drawn"
+    ]
 
 
 @dataclass(frozen=True)

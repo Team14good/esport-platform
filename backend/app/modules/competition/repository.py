@@ -73,6 +73,27 @@ def list_team_matches(
     return list(session.exec(statement))
 
 
+def list_unsettled_team_matches(
+    session: Session, team_ids: Collection[uuid.UUID]
+) -> list[Match]:
+    """這些隊伍（任一方）尚未定案的場次：狀態不是已確認、已取消。
+
+    依輪次、季軍賽在後、同輪由上到下排序；一次查多隊，避免 N+1。
+    """
+    if not team_ids:
+        return []
+    ids = list(team_ids)
+    statement = (
+        select(Match)
+        .where(
+            or_(col(Match.team_a_id).in_(ids), col(Match.team_b_id).in_(ids)),
+            col(Match.status).not_in([MatchStatus.CONFIRMED, MatchStatus.VOIDED]),
+        )
+        .order_by(col(Match.round_no), col(Match.is_third_place), col(Match.slot_no))
+    )
+    return list(session.exec(statement))
+
+
 def list_referee_matches(session: Session, account_id: uuid.UUID) -> list[Match]:
     """指派給某帳號、未取消的場次（跨賽事），依預定時間、代號排序。"""
     statement = (

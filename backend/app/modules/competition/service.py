@@ -45,6 +45,7 @@ from app.modules.competition.models import (
     MatchResultConfirmed,
     MatchResultSubmitted,
     MatchStatus,
+    NextMatch,
     PublicBracket,
     PublicGame,
     PublicMatch,
@@ -2050,6 +2051,79 @@ def list_my_referee_matches(
             )
         )
     result.sort(key=lambda g: (g.matches[0].scheduled_at, g.tournament.name))
+    return result
+
+
+def list_my_next_matches(session: Session, *, account_id: uuid.UUID) -> list[NextMatch]:
+    """S12：登入者所屬、已參賽的每支隊伍各回最多一場下一場（只讀）。
+
+    下一場＝該隊出現在 `team_a_id`／`team_b_id`、狀態不是已確認或已取消的場次中輪次最小的一場；
+    沒有這種場次（已淘汰、賽事已結束）就不回。已取消賽事的隊伍略過（照 S13）。
+    順序沿用 registration `list_my_teams`（新加入的隊伍在前）。
+    """
+    teams = registration_port.list_drawn_teams_of_account(
+        session, account_id=account_id
+    )
+    if not teams:
+        return []
+    tournament_of = {team.team_id: team.tournament_id for team in teams}
+    picked: dict[uuid.UUID, Match] = {}
+    # 已依輪次排序：每隊第一次出現的就是輪次最小的一場
+    for match in repository.list_unsettled_team_matches(session, list(tournament_of)):
+        for team_id in _match_teams(match):
+            if (
+                team_id not in picked
+                and tournament_of.get(team_id) == match.tournament_id
+            ):
+                picked[team_id] = match
+    if not picked:
+        return []
+
+    tournaments: dict[uuid.UUID, TournamentRead] = {}
+    brackets: dict[uuid.UUID, Bracket] = {}
+    public_by_id: dict[uuid.UUID, PublicMatch] = {}
+    for bracket_id in dict.fromkeys(m.bracket_id for m in picked.values()):
+        bracket = repository.get_bracket(session, bracket_id)
+        if bracket is None:
+            # 場次的外鍵保證對戰表存在；萬一不在，略過這些場次，不讓整頁失敗
+            logger.error("場次的對戰表不存在：bracket_id=%s", bracket_id)
+            continue
+        if bracket.tournament_id not in tournaments:
+            tournaments[bracket.tournament_id] = tournaments_service.get_tournament(
+                session, tournament_id=bracket.tournament_id
+            )
+        if tournaments[bracket.tournament_id].status == TournamentStatus.CANCELLED:
+            continue
+        brackets[bracket_id] = bracket
+        mine = list(
+            {m.id: m for m in picked.values() if m.bracket_id == bracket_id}.values()
+        )
+        public_matches, _team_ref = _public_matches(session, bracket, mine)
+        public_by_id.update((p.id, p) for p in public_matches)
+
+    result = []
+    for team in teams:
+        chosen = picked.get(team.team_id)
+        if chosen is None or chosen.id not in public_by_id:
+            continue
+        bracket = brackets[chosen.bracket_id]
+        result.append(
+            NextMatch(
+                **public_by_id[chosen.id].model_dump(),
+                team_id=team.team_id,
+                round_name="季軍賽"
+                if chosen.is_third_place
+                else bracket_rules.round_name(chosen.round_no, bracket.rounds),
+                check_in_opens_at=checkin_rules.check_in_opens_at(chosen.scheduled_at),
+                # 與公開單場相同：只對兩隊都確定的待開打場次給報到截止，其他情況的值可能已過期
+                forfeit_deadline=(
+                    chosen.forfeit_deadline
+                    if chosen.status == MatchStatus.SCHEDULED
+                    and len(_match_teams(chosen)) == 2
+                    else None
+                ),
+            )
+        )
     return result
 
 
