@@ -2344,6 +2344,10 @@ def disqualify(
     該賽事拋 404 `REGISTRATION_NOT_FOUND`；已取消資格拋 409 `TEAM_ALREADY_DISQUALIFIED`；
     對手尚未確定拋 409 `DISQUALIFY_OPPONENT_PENDING`；報名不能轉為取消資格時 registration
     拋 409 `REGISTRATION_INVALID_TRANSITION`；任何拒絕都不改資料。不 commit（AD-5）。
+
+    呼叫端須在同一交易把 `affected_match_ids` 每一場未結案的申訴結案（competition 不碰
+    disputes 的資料表）。`affected_match_ids` 只含直接改動的場次，不含之後晉級推進連帶
+    確認的場次；之後要通知時從事件或操作紀錄取得。
     """
     return disqualification.disqualify(
         session, tournament_id=tournament_id, team_id=team_id, actor_id=actor_id

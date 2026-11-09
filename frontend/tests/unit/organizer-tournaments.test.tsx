@@ -769,6 +769,7 @@ describe("S27 賽事總覽", () => {
       "場次管理",
       "裁判",
       "申訴",
+      "檢舉",
     ])
     expect(links[0]).toHaveAttribute("href", "/tournaments/t-1")
     expect(links[1]).toHaveAttribute("href", "/organizer/tournaments/t-1")

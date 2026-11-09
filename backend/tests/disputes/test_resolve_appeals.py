@@ -585,6 +585,37 @@ def test_reason_is_required(
     assert {a.status for a in _appeals(session, setup)} == {AppealStatus.OPEN}
 
 
+def test_disqualified_decision_is_rejected(
+    client: TestClient, session: Session, setup: Setup
+) -> None:
+    """`disqualified` 只用於檢舉屬實時一併結案，主辦方不能直接選（6.5）。"""
+    _appealed(session, setup)
+    match_before = _row(session, setup)
+    before = (match_before.status, match_before.outcome, match_before.winner_id)
+
+    response = _resolve(
+        client,
+        setup,
+        {
+            "decision": "disqualified",
+            "reason": "取消資格",
+            "replay_at": REPLAY_AT.isoformat(),
+        },
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"][0]
+    assert (detail["type"], detail["loc"]) == (
+        "APPEAL_DECISION_INVALID",
+        ["body", "decision"],
+    )
+    assert {a.status for a in _appeals(session, setup)} == {AppealStatus.OPEN}
+    row = _row(session, setup)
+    assert (row.status, row.outcome, row.winner_id) == before
+    assert _resolved_records(session, setup) == []
+    assert _resolved_events(session, setup) == []
+
+
 def test_public_result_is_null_before_handling_and_404_elsewhere(
     client: TestClient, session: Session, setup: Setup, make_setup: Factory
 ) -> None:

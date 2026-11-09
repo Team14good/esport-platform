@@ -38,6 +38,7 @@ import { Route as OrganizerTournamentsTournamentIdIndexRouteImport } from './rou
 import { Route as OrganizerTournamentsTournamentIdAppealsRouteImport } from './routes/organizer/tournaments/$tournamentId/appeals'
 import { Route as OrganizerTournamentsTournamentIdMatchesRouteImport } from './routes/organizer/tournaments/$tournamentId/matches'
 import { Route as OrganizerTournamentsTournamentIdRefereesRouteImport } from './routes/organizer/tournaments/$tournamentId/referees'
+import { Route as OrganizerTournamentsTournamentIdReportsRouteImport } from './routes/organizer/tournaments/$tournamentId/reports'
 import { Route as TournamentsTournamentIdMatchesMatchIdRouteImport } from './routes/tournaments/$tournamentId/matches/$matchId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -193,6 +194,12 @@ const OrganizerTournamentsTournamentIdRefereesRoute =
     path: '/referees',
     getParentRoute: () => OrganizerTournamentsTournamentIdRouteRoute,
   } as any)
+const OrganizerTournamentsTournamentIdReportsRoute =
+  OrganizerTournamentsTournamentIdReportsRouteImport.update({
+    id: '/reports',
+    path: '/reports',
+    getParentRoute: () => OrganizerTournamentsTournamentIdRouteRoute,
+  } as any)
 const TournamentsTournamentIdMatchesMatchIdRoute =
   TournamentsTournamentIdMatchesMatchIdRouteImport.update({
     id: '/tournaments/$tournamentId/matches/$matchId',
@@ -229,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/organizer/tournaments/$tournamentId/appeals': typeof OrganizerTournamentsTournamentIdAppealsRoute
   '/organizer/tournaments/$tournamentId/matches': typeof OrganizerTournamentsTournamentIdMatchesRoute
   '/organizer/tournaments/$tournamentId/referees': typeof OrganizerTournamentsTournamentIdRefereesRoute
+  '/organizer/tournaments/$tournamentId/reports': typeof OrganizerTournamentsTournamentIdReportsRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
   '/organizer/tournaments/$tournamentId/': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
@@ -260,6 +268,7 @@ export interface FileRoutesByTo {
   '/organizer/tournaments/$tournamentId/appeals': typeof OrganizerTournamentsTournamentIdAppealsRoute
   '/organizer/tournaments/$tournamentId/matches': typeof OrganizerTournamentsTournamentIdMatchesRoute
   '/organizer/tournaments/$tournamentId/referees': typeof OrganizerTournamentsTournamentIdRefereesRoute
+  '/organizer/tournaments/$tournamentId/reports': typeof OrganizerTournamentsTournamentIdReportsRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
   '/organizer/tournaments/$tournamentId': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
@@ -293,6 +302,7 @@ export interface FileRoutesById {
   '/organizer/tournaments/$tournamentId/appeals': typeof OrganizerTournamentsTournamentIdAppealsRoute
   '/organizer/tournaments/$tournamentId/matches': typeof OrganizerTournamentsTournamentIdMatchesRoute
   '/organizer/tournaments/$tournamentId/referees': typeof OrganizerTournamentsTournamentIdRefereesRoute
+  '/organizer/tournaments/$tournamentId/reports': typeof OrganizerTournamentsTournamentIdReportsRoute
   '/tournaments/$tournamentId/matches/$matchId': typeof TournamentsTournamentIdMatchesMatchIdRoute
   '/organizer/tournaments/$tournamentId/': typeof OrganizerTournamentsTournamentIdIndexRoute
 }
@@ -327,6 +337,7 @@ export interface FileRouteTypes {
     | '/organizer/tournaments/$tournamentId/appeals'
     | '/organizer/tournaments/$tournamentId/matches'
     | '/organizer/tournaments/$tournamentId/referees'
+    | '/organizer/tournaments/$tournamentId/reports'
     | '/tournaments/$tournamentId/matches/$matchId'
     | '/organizer/tournaments/$tournamentId/'
   fileRoutesByTo: FileRoutesByTo
@@ -358,6 +369,7 @@ export interface FileRouteTypes {
     | '/organizer/tournaments/$tournamentId/appeals'
     | '/organizer/tournaments/$tournamentId/matches'
     | '/organizer/tournaments/$tournamentId/referees'
+    | '/organizer/tournaments/$tournamentId/reports'
     | '/tournaments/$tournamentId/matches/$matchId'
     | '/organizer/tournaments/$tournamentId'
   id:
@@ -390,6 +402,7 @@ export interface FileRouteTypes {
     | '/organizer/tournaments/$tournamentId/appeals'
     | '/organizer/tournaments/$tournamentId/matches'
     | '/organizer/tournaments/$tournamentId/referees'
+    | '/organizer/tournaments/$tournamentId/reports'
     | '/tournaments/$tournamentId/matches/$matchId'
     | '/organizer/tournaments/$tournamentId/'
   fileRoutesById: FileRoutesById
@@ -623,6 +636,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizerTournamentsTournamentIdRefereesRouteImport
       parentRoute: typeof OrganizerTournamentsTournamentIdRouteRoute
     }
+    '/organizer/tournaments/$tournamentId/reports': {
+      id: '/organizer/tournaments/$tournamentId/reports'
+      path: '/reports'
+      fullPath: '/organizer/tournaments/$tournamentId/reports'
+      preLoaderRoute: typeof OrganizerTournamentsTournamentIdReportsRouteImport
+      parentRoute: typeof OrganizerTournamentsTournamentIdRouteRoute
+    }
     '/tournaments/$tournamentId/matches/$matchId': {
       id: '/tournaments/$tournamentId/matches/$matchId'
       path: '/tournaments/$tournamentId/matches/$matchId'
@@ -657,6 +677,7 @@ interface OrganizerTournamentsTournamentIdRouteRouteChildren {
   OrganizerTournamentsTournamentIdAppealsRoute: typeof OrganizerTournamentsTournamentIdAppealsRoute
   OrganizerTournamentsTournamentIdMatchesRoute: typeof OrganizerTournamentsTournamentIdMatchesRoute
   OrganizerTournamentsTournamentIdRefereesRoute: typeof OrganizerTournamentsTournamentIdRefereesRoute
+  OrganizerTournamentsTournamentIdReportsRoute: typeof OrganizerTournamentsTournamentIdReportsRoute
   OrganizerTournamentsTournamentIdIndexRoute: typeof OrganizerTournamentsTournamentIdIndexRoute
 }
 
@@ -668,6 +689,8 @@ const OrganizerTournamentsTournamentIdRouteRouteChildren: OrganizerTournamentsTo
       OrganizerTournamentsTournamentIdMatchesRoute,
     OrganizerTournamentsTournamentIdRefereesRoute:
       OrganizerTournamentsTournamentIdRefereesRoute,
+    OrganizerTournamentsTournamentIdReportsRoute:
+      OrganizerTournamentsTournamentIdReportsRoute,
     OrganizerTournamentsTournamentIdIndexRoute:
       OrganizerTournamentsTournamentIdIndexRoute,
   }

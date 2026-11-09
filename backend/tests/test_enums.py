@@ -55,7 +55,7 @@ from app.modules.tournaments.models import ScoreType, TournamentMode, Tournament
             ["played", "forfeit", "double_forfeit", "walkover", "disqualified"],
         ),
         (AppealStatus, ["open", "closed"]),
-        (AppealDecision, ["upheld", "corrected", "rematch"]),
+        (AppealDecision, ["upheld", "corrected", "rematch", "disqualified"]),
         (ReportStatus, ["open", "dismissed", "substantiated"]),
         (DeliveryStatus, ["pending", "sent", "failed"]),
     ],
