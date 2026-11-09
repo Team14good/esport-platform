@@ -2,6 +2,7 @@ import type { LinkOptions } from "@tanstack/react-router"
 import {
   CalendarClockIcon,
   EyeIcon,
+  GavelIcon,
   LayoutDashboardIcon,
   TrophyIcon,
   UserCheckIcon,
@@ -43,6 +44,11 @@ export function tournamentNav(tournamentId: string): BackofficeNavItem[] {
       to: `/organizer/tournaments/${id}/referees` as LinkOptions["to"],
       label: "裁判",
       icon: UserCheckIcon,
+    },
+    {
+      to: `/organizer/tournaments/${id}/appeals` as LinkOptions["to"],
+      label: "申訴",
+      icon: GavelIcon,
     },
   ]
 }

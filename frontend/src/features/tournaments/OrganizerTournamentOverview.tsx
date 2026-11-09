@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { DrawButton } from "@/features/competition/DrawButton"
 import { drawStatusQueryOptions } from "@/features/competition/draw-queries"
 import { formatMatchDateTime } from "@/features/competition/match-time"
+import { OpenDisputesPanel } from "@/features/disputes/OpenDisputesPanel"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { tournamentNav } from "./organizer-nav"
 import {
@@ -221,6 +222,13 @@ export function OrganizerTournamentSummary({
   )
 }
 
+/** S27 待處理清單（6.2）顯示的賽事狀態：抽籤後才會有申訴 */
+const DISPUTE_STATUSES: ReadonlySet<TournamentRead["status"]> = new Set([
+  "published",
+  "ongoing",
+  "finished",
+])
+
 /** S27 賽事總覽（主辦方）。資料由版面先載入，這裡讀同一份快取。 */
 export function OrganizerTournamentOverview({
   tournamentId,
@@ -233,6 +241,10 @@ export function OrganizerTournamentOverview({
     <>
       <OrganizerTournamentSummary tournament={tournament.data} />
       <DrawButton tournament={tournament.data} />
+      {/* 6.2：抽籤後才會有申訴，待處理清單只在賽程已公布起顯示 */}
+      {DISPUTE_STATUSES.has(tournament.data.status) && (
+        <OpenDisputesPanel tournamentId={tournament.data.id} />
+      )}
     </>
   )
 }
