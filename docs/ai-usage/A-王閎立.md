@@ -590,3 +590,15 @@
 - 問題與修正：AI 做突變檢查時，用 `sed -i` 改的是掛進容器的原始碼，等於直接改到本機檔案，跑完沒有還原。看 `git diff` 發現後手動改回，再重跑全套確認。之後突變檢查要用不掛載的容器，或先複製一份
 - 成熟度：L3（人決定範圍，AI 實作並驗證）
 - 證據：`frontend/src/features/competition/MatchCheckIn.tsx`、`frontend/tests/unit/match-check-in.test.tsx`
+
+### 2026-11-09｜實作／測試｜Story 7.1 示範資料 registration 步驟與 S4 is_scorer 測試
+
+- Story／範圍：7.1 第三階段（32 隊報名）；deferred-work 的「S4 要隨 is_scorer 顯示或隱藏」
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：我請 AI 盤點自己還沒做的工作並動手。AI 判斷 7.1 的 registration 步驟沒有人開工，實作後接上既有的抽籤步驟；S4 那一項查證後端指派裁判會更新 `updated_at`、前端查詢 key 已含它，只補測試鎖住行為
+- AI 產出：`backend/app/demo_data/registration.py`；`ensure_demo_account` 共用密碼雜湊；測試的上傳目錄隔離；4 個後端測試、1 個前端測試；README 與 spec
+- 人做了什麼：指定範圍，授權有問題時採最推薦作法
+- 驗證：`initial_data` 第一次 7.1 秒、再次 1.5 秒；資料庫查得 32 筆 `drawn`、1 張對戰表、32 場；後端全套 2177 passed，新增的前端測試經突變檢查（拿掉查詢 key 的場次版本會失敗）
+- 問題與修正：(1) AI 想用暫存資料庫驗證，下了 `-e POSTGRES_DB=...`，但 compose 的 `DATABASE_URL` 是寫死的，環境變數沒有作用，示範資料實際寫進本機開發資料庫（含 158 個產生的帳號、32 隊，截圖存到容器的 `/tmp/up71`，重建後就消失）。後續查詢暫存資料庫時出現 `relation does not exist` 才發現；AI 沒有自行刪除，回報由我決定是否清空。(2) 第一版測試斷言抽籤後狀態是 `accepted`，實際會轉成 `drawn`。(3) 每個帳號各算一次雜湊使一次載入需 19 秒，改為共用雜湊後 5.5 秒
+- 成熟度：L3（人決定範圍，AI 實作並驗證）
+- 證據：`backend/app/demo_data/registration.py`、`backend/tests/identity/test_demo_data.py`、`frontend/tests/unit/match-score-entry.test.tsx`

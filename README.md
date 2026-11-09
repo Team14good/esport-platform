@@ -36,12 +36,12 @@ docker compose up -d --build --wait
 | 平台管理員 | `admin@example.com` | `FIRST_ADMIN_PASSWORD` | 由 `FIRST_ADMIN_EMAIL` 設定 |
 | 主辦方 | `organizer@example.com` | `DEMO_PASSWORD` | 已具主辦方身分（`is_organizer`），不必再申請 |
 | 裁判 | `referee@example.com` | `DEMO_PASSWORD` | 目前只有帳號，指派到賽事待之後補上 |
-| 隊長 | `captain@example.com` | `DEMO_PASSWORD` | 目前只有帳號，隊伍待之後補上 |
-| 選手 | `player@example.com` | `DEMO_PASSWORD` | 目前只有帳號 |
+| 隊長 | `captain@example.com` | `DEMO_PASSWORD` | 示範賽事「國立中央大學電競隊」的隊長 |
+| 選手 | `player@example.com` | `DEMO_PASSWORD` | 「國立中央大學電競隊」的隊員 |
 
 舊的 `.env` 沒有 `DEMO_PASSWORD` 時只建立第一個平台管理員，backend log 會提示補上設定；從 `.env.example` 補上 `DEMO_PASSWORD`、`DEMO_EMAIL_DOMAIN` 後重新啟動即可。
 
-帳號之後接著建立《英雄聯盟》《特戰英豪》兩款遊戲（含段位對照表），以及一場 32 隊、開放報名的校園賽「FLOW 校園盃 特戰英豪」（主辦方為上表的主辦方，開賽在啟動後 7 天）。隊伍與抽籤會在 registration 步驟完成後加進來。
+帳號之後接著建立《英雄聯盟》《特戰英豪》兩款遊戲（含段位對照表），以及一場 32 隊、已抽籤的校園賽「FLOW 校園盃 特戰英豪」（主辦方為上表的主辦方，開賽在啟動後 7 天）。32 隊來自 32 所學校，每隊 5 人；其他隊員的帳號是 `team02-m1@example.com` 這類格式（隊號 02～32、隊員 m1～m5，第一隊為 m3～m5），密碼同 `DEMO_PASSWORD`，方便用其他隊伍的身分操作。
 
 **Demo 前請先清空資料庫再啟動**：`docker compose down -v && docker compose up -d --build --wait`。示範賽事的時間在第一次建立時固定；保留資料庫、超過 7 天後再啟動時會沿用已過開賽時間的賽事，抽籤會被拒絕。
 
