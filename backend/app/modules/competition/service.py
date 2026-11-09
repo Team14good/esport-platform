@@ -1909,6 +1909,18 @@ def get_replay_window(session: Session, *, match_id: uuid.UUID) -> RescheduleInf
     )
 
 
+def mark_appealed(session: Session, *, match_id: uuid.UUID) -> MatchRead:
+    """申訴期 → 申訴中（6.1 disputes `file_appeal` 呼叫）；已是申訴中不動。
+
+    其他狀態拋 409 `MATCH_INVALID_TRANSITION`；不改 `appeal_deadline`。呼叫端先
+    `lock_tournament`，函式內再 `lock_match`（AD-6）。實作在 `appeals.py`（B 新增）。
+    """
+    # appeals.py 會 import 本模組，放在函式內避免循環 import
+    from app.modules.competition import appeals
+
+    return appeals.mark_appealed(session, match_id=match_id)
+
+
 def unassign_referee_if_member(session: Session, *, match: Match) -> None:
     """該場裁判是任一隊的隊員時收回（6.5 `disqualify` 頂替後呼叫）。
 

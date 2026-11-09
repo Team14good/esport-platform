@@ -53,6 +53,10 @@ competition/test_forfeit_job.py:
   layer: integration
   stories: ["5.2"]
   frs: [FR-25, NFR-4]
+competition/test_mark_appealed.py:
+  layer: integration
+  stories: ["6.1"]
+  frs: [FR-30]
 competition/test_match_api.py:
   layer: integration
   stories: ["5.8"]
@@ -141,6 +145,14 @@ core/test_storage.py:
   layer: unit
   stories: ["3.2"]
   frs: [FR-12]
+disputes/test_appeal_concurrency.py:
+  layer: integration
+  stories: ["6.1"]
+  frs: [FR-30, NFR-1]
+disputes/test_file_appeal.py:
+  layer: integration
+  stories: ["6.1"]
+  frs: [FR-30, FR-5, NFR-5]
 disputes/test_report_concurrency.py:
   layer: integration
   stories: ["6.4"]
