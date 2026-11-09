@@ -1,9 +1,10 @@
 import { createMemoryHistory, createRouter } from "@tanstack/react-router"
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import {
   CompetitionService,
+  DisputesService,
   type PublicMatchDetail,
   type ScoreEntryState,
 } from "@/client"
@@ -28,6 +29,9 @@ type ReadScoreEntryResult = Awaited<
 >
 type ReadStatusResult = Awaited<
   ReturnType<typeof CompetitionService.readCheckInStatus>
+>
+type ReadAppealStateResult = Awaited<
+  ReturnType<typeof DisputesService.readAppealState>
 >
 
 // 單元測試的場次資料：32 隊「進行中」對戰樹推導（match-fixtures 只給測試用）
@@ -127,6 +131,41 @@ describe("S4 場次頁路由", () => {
       // Countdown 下方「{絕對時間} 截止」一次；已過期時另有「已截止 · 系統處理中」
       region.textContent?.includes("已截止") ? 2 : 1,
     )
+  })
+
+  it("申訴期的場次：隊長在申訴期區塊看到「提出申訴」", async () => {
+    signInAs()
+    mockPublicMatch()
+    vi.spyOn(CompetitionService, "readScoreEntry").mockResolvedValue({
+      data: {
+        is_scorer: false,
+        reason: null,
+        games: [],
+        series: null,
+        submitted_by_name: null,
+        submitted_at: null,
+      },
+    } as unknown as ReadScoreEntryResult)
+    const readAppeal = vi
+      .spyOn(DisputesService, "readAppealState")
+      .mockResolvedValue({
+        data: {
+          can_file: true,
+          already_filed: false,
+          deadline: "2026-10-18T06:22:00Z",
+          reason: null,
+        },
+      } as unknown as ReadAppealStateResult)
+    // 假資料第二輪位置 1（M18）是申訴期
+    renderAt(matchUrl("match-M18"))
+
+    const region = await screen.findByRole("region", { name: "申訴期" })
+    expect(
+      await within(region).findByRole("button", { name: "提出申訴" }),
+    ).toBeEnabled()
+    expect(readAppeal).toHaveBeenCalledWith({
+      path: { tournament_id: TOURNAMENT_ID, match_id: "match-M18" },
+    })
   })
 
   it("找不到場次（API 404）：顯示 404", async () => {

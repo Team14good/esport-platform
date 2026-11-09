@@ -14,6 +14,7 @@ import {
   matchQueryKey,
 } from "@/features/competition/match-source"
 import { useMatchPolling } from "@/features/competition/use-match-polling"
+import { AppealPanel } from "@/features/disputes/AppealPanel"
 
 export const Route = createFileRoute(
   "/tournaments/$tournamentId/matches/$matchId",
@@ -107,6 +108,7 @@ function MatchContent({
       detail={detail}
       changed={changed}
       appealCountdown={appealCountdown}
+      appealAction={<AppealPanel detail={detail} refresh={refresh} />}
       checkIn={
         showsCheckIn(detail) ? (
           <MatchCheckIn detail={detail} refresh={refresh} />

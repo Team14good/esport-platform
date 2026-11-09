@@ -28,6 +28,8 @@ type MatchSpectatorViewProps = {
   changed?: boolean
   /** 申訴期區塊的倒數插槽：S4 路由傳入 Countdown（`appeal` 變體） */
   appealCountdown?: ReactNode
+  /** 申訴期區塊的動作插槽（6.1）：S4 路由傳入申訴入口（`AppealPanel`） */
+  appealAction?: ReactNode
   /** 報到面板（MatchCheckIn）：右欄最上方 */
   checkIn?: ReactNode
   /** 比分登錄面板（記分者才有）：有值時取代左欄的公開各局列表 */
@@ -48,6 +50,7 @@ export function MatchSpectatorView({
   detail,
   changed = false,
   appealCountdown,
+  appealAction,
   checkIn,
   scoreEntry,
   className,
@@ -96,6 +99,7 @@ export function MatchSpectatorView({
           <MatchAppealWindow
             detail={detail}
             countdown={appealCountdown}
+            action={appealAction}
             className="min-w-0 max-lg:order-2"
           />
           <SameRoundMatches

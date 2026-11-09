@@ -142,11 +142,129 @@ export type AdminOrganizerApplication = {
 }
 
 /**
+ * AppealDecision
+ *
+ * 申訴處理結果：維持原結果、更正結果、重新比賽（只用於棄權判定）。
+ */
+export type AppealDecision = "upheld" | "corrected" | "rematch"
+
+/**
+ * AppealRead
+ *
+ * 一筆申訴（給提出的隊長與主辦方；不出現在公開 API）。
+ *
+ * 附件只回 `has_attachment`，不回鍵值（AD-15）；主辦方經下載 API 取得檔案。
+ */
+export type AppealRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Tournament Id
+   */
+  tournament_id: string
+  /**
+   * Match Id
+   */
+  match_id: string
+  /**
+   * Team Id
+   */
+  team_id: string
+  /**
+   * Filed By
+   */
+  filed_by: string
+  /**
+   * Filed At
+   */
+  filed_at: string
+  /**
+   * Description
+   */
+  description: string
+  /**
+   * Has Attachment
+   */
+  has_attachment: boolean
+  status: AppealStatus
+  decision: AppealDecision | null
+  /**
+   * Reason
+   */
+  reason: string | null
+  /**
+   * Handled By
+   */
+  handled_by: string | null
+  /**
+   * Handled At
+   */
+  handled_at: string | null
+}
+
+/**
+ * AppealState
+ *
+ * 登入者對某場次的申訴狀態（S4 入口），和提出申訴 API 用同一套檢查。
+ *
+ * 只回登入者本隊的狀態，不透露另一隊有沒有申訴。
+ * `reason` 與 API 錯誤碼一一對應：`not_captain`→`CAPTAIN_REQUIRED`、
+ * `not_appealable`→`APPEAL_NOT_ALLOWED`、`deadline_passed`→`APPEAL_DEADLINE_PASSED`、
+ * `already_filed`→`APPEAL_ALREADY_FILED`；可以提出時為 None。
+ */
+export type AppealState = {
+  /**
+   * Can File
+   */
+  can_file: boolean
+  /**
+   * Already Filed
+   */
+  already_filed: boolean
+  /**
+   * Deadline
+   */
+  deadline: string | null
+  /**
+   * Reason
+   */
+  reason:
+    | "not_captain"
+    | "not_appealable"
+    | "deadline_passed"
+    | "already_filed"
+    | null
+}
+
+/**
+ * AppealStatus
+ *
+ * 申訴狀態：處理中、已結案。
+ */
+export type AppealStatus = "open" | "closed"
+
+/**
  * ApplicationStatus
  *
  * 主辦方申請（OrganizerApplication）的狀態：待審核、核准、退回。
  */
 export type ApplicationStatus = "pending" | "approved" | "rejected"
+
+/**
+ * Body_disputes-file_appeal
+ */
+export type Body_disputes_file_appeal = {
+  /**
+   * Description
+   */
+  description?: string
+  /**
+   * Attachment
+   */
+  attachment?: Blob | File | null
+}
 
 /**
  * Body_disputes-file_report
@@ -3780,6 +3898,107 @@ export type disputesDownloadReportAttachmentError =
   disputesDownloadReportAttachmentErrors[keyof disputesDownloadReportAttachmentErrors]
 
 export type disputesDownloadReportAttachmentResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown
+}
+
+export type disputesReadAppealStateData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/appeal-state"
+}
+
+export type disputesReadAppealStateErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesReadAppealStateError =
+  disputesReadAppealStateErrors[keyof disputesReadAppealStateErrors]
+
+export type disputesReadAppealStateResponses = {
+  /**
+   * Successful Response
+   */
+  200: AppealState
+}
+
+export type disputesReadAppealStateResponse =
+  disputesReadAppealStateResponses[keyof disputesReadAppealStateResponses]
+
+export type disputesFileAppealData = {
+  body?: Body_disputes_file_appeal
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/appeals"
+}
+
+export type disputesFileAppealErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesFileAppealError =
+  disputesFileAppealErrors[keyof disputesFileAppealErrors]
+
+export type disputesFileAppealResponses = {
+  /**
+   * Successful Response
+   */
+  201: AppealRead
+}
+
+export type disputesFileAppealResponse =
+  disputesFileAppealResponses[keyof disputesFileAppealResponses]
+
+export type disputesDownloadAppealAttachmentData = {
+  body?: never
+  path: {
+    /**
+     * Appeal Id
+     */
+    appeal_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/appeals/{appeal_id}/attachment"
+}
+
+export type disputesDownloadAppealAttachmentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesDownloadAppealAttachmentError =
+  disputesDownloadAppealAttachmentErrors[keyof disputesDownloadAppealAttachmentErrors]
+
+export type disputesDownloadAppealAttachmentResponses = {
   /**
    * Successful Response
    */
