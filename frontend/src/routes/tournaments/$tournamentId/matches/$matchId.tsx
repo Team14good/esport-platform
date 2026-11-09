@@ -13,6 +13,7 @@ import {
   fetchMatchDetail,
   matchQueryKey,
 } from "@/features/competition/match-source"
+import { useDisqualifiedMarks } from "@/features/competition/use-disqualified-marks"
 import { useMatchPolling } from "@/features/competition/use-match-polling"
 import { AppealPanel } from "@/features/disputes/AppealPanel"
 import { AppealResultBadge } from "@/features/disputes/AppealResultBadge"
@@ -94,6 +95,8 @@ function MatchContent({
   refresh: () => Promise<unknown>
 }) {
   const scoreEntry = useMatchScoreEntry({ detail, refresh })
+  // 6.5：已取消資格的隊伍在它最後一場加「取消資格」標記
+  const disqualifiedTeamIds = useDisqualifiedMarks(detail)
   // 申訴期倒數（appeal 變體，進度條從申訴期開始時間起算）；歸零後由 Countdown 每 5 秒呼叫 onExpire 重抓，直到伺服器回傳新狀態
   const appealCountdown = detail.appeal_deadline ? (
     <Countdown
@@ -117,6 +120,7 @@ function MatchContent({
         ) : undefined
       }
       scoreEntry={scoreEntry}
+      disqualifiedTeamIds={disqualifiedTeamIds}
     />
   )
 }

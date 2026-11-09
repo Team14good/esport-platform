@@ -1495,6 +1495,10 @@ export type PublicTeamRef = {
    * Name
    */
   name: string
+  /**
+   * Disqualified
+   */
+  disqualified?: boolean
 }
 
 /**
@@ -2150,6 +2154,24 @@ export type TeamDetail = {
    * Submitted At
    */
   submitted_at: string | null
+}
+
+/**
+ * TeamDisqualification
+ *
+ * S12、S17：隊伍被取消資格的處理理由（只給該隊隊員；不出現在公開 API，AD-19）。
+ *
+ * 理由取自對該隊判定屬實的檢舉（同時結案的檢舉理由相同，取最近處理的一筆）。
+ */
+export type TeamDisqualification = {
+  /**
+   * Reason
+   */
+  reason: string
+  /**
+   * Handled At
+   */
+  handled_at: string
 }
 
 /**
@@ -4546,3 +4568,37 @@ export type disputesReadAppealResultResponses = {
 
 export type disputesReadAppealResultResponse =
   disputesReadAppealResultResponses[keyof disputesReadAppealResultResponses]
+
+export type disputesReadTeamDisqualificationData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/disqualification"
+}
+
+export type disputesReadTeamDisqualificationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesReadTeamDisqualificationError =
+  disputesReadTeamDisqualificationErrors[keyof disputesReadTeamDisqualificationErrors]
+
+export type disputesReadTeamDisqualificationResponses = {
+  /**
+   * Response Disputes-Read Team Disqualification
+   *
+   * Successful Response
+   */
+  200: TeamDisqualification | null
+}
+
+export type disputesReadTeamDisqualificationResponse =
+  disputesReadTeamDisqualificationResponses[keyof disputesReadTeamDisqualificationResponses]

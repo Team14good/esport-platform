@@ -12,30 +12,41 @@ import {
   placementMark,
   type SideView,
   sideView,
+  withDisqualifiedMark,
 } from "./match-status"
 import { formatMatchDateTime } from "./match-time"
 
 type RowView = SideView & { score: string }
 
-/** sideView 再加上決賽與季軍賽卡的名次標記（只有對戰樹傳 placements） */
+/**
+ * sideView 再加上決賽與季軍賽卡的名次標記（只有對戰樹傳 placements），
+ * 以及已取消資格隊伍在它最後一張卡上的「取消資格」標記（只有對戰樹傳 disqualifiedLast，6.5）。
+ */
 function cardSideView(
   match: PublicMatch,
   side: BracketSide,
   placements?: BracketPlacements,
+  disqualifiedLast?: ReadonlyMap<string, string>,
 ): SideView {
   const view = sideView(match, side)
   const mark = placements ? placementMark(match, side, placements) : null
-  return mark ? { ...view, marks: [...view.marks, mark] } : view
+  const withPlacement = mark ? { ...view, marks: [...view.marks, mark] } : view
+  const team = side === "a" ? match.team_a : match.team_b
+  return withDisqualifiedMark(
+    withPlacement,
+    team !== null && disqualifiedLast?.get(team.id) === match.id,
+  )
 }
 
 function rowView(
   match: PublicMatch,
   side: BracketSide,
   placements?: BracketPlacements,
+  disqualifiedLast?: ReadonlyMap<string, string>,
 ): RowView {
   const wins = side === "a" ? match.wins_a : match.wins_b
   return {
-    ...cardSideView(match, side, placements),
+    ...cardSideView(match, side, placements, disqualifiedLast),
     score: hasScore(match) ? String(wins) : "",
   }
 }
@@ -53,12 +64,13 @@ function sideName(view: SideView) {
 export function matchCardAccessibleName(
   match: PublicMatch,
   placements?: BracketPlacements,
+  disqualifiedLast?: ReadonlyMap<string, string>,
 ): string {
   const scheduled = match.status === "scheduled"
   return [
     matchLabel(match),
     scheduled ? formatMatchDateTime(match.scheduled_at) : "",
-    `${sideName(cardSideView(match, "a", placements))} 對 ${sideName(cardSideView(match, "b", placements))}`,
+    `${sideName(cardSideView(match, "a", placements, disqualifiedLast))} 對 ${sideName(cardSideView(match, "b", placements, disqualifiedLast))}`,
     hasScore(match) ? `${match.wins_a} 比 ${match.wins_b}` : "",
     MATCH_STATUS_BADGES[match.status].label,
   ]
@@ -118,6 +130,8 @@ type BracketMatchCardProps = {
   matchHref?: (matchId: string) => string
   /** 有提供時決賽與季軍賽卡加名次標記（賽事結束後） */
   placements?: BracketPlacements
+  /** 有提供時已取消資格的隊伍在它最後一張卡上加「取消資格」標記（隊伍 id → 場次 id，6.5） */
+  disqualifiedLast?: ReadonlyMap<string, string>
   className?: string
   style?: CSSProperties
 }
@@ -128,6 +142,7 @@ export function BracketMatchCard({
   flash = false,
   matchHref,
   placements,
+  disqualifiedLast,
   className,
   style,
 }: BracketMatchCardProps) {
@@ -171,8 +186,14 @@ export function BracketMatchCard({
           </StatusBadge>
         )}
       </div>
-      <TeamRow view={rowView(match, "a", placements)} side="a" />
-      <TeamRow view={rowView(match, "b", placements)} side="b" />
+      <TeamRow
+        view={rowView(match, "a", placements, disqualifiedLast)}
+        side="a"
+      />
+      <TeamRow
+        view={rowView(match, "b", placements, disqualifiedLast)}
+        side="b"
+      />
     </article>
   )
 
@@ -181,7 +202,7 @@ export function BracketMatchCard({
   return (
     <Link
       to={href}
-      aria-label={matchCardAccessibleName(match, placements)}
+      aria-label={matchCardAccessibleName(match, placements, disqualifiedLast)}
       data-slot="bracket-match-link"
       className={cn(
         "group block w-bracket-column-min rounded-md focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",

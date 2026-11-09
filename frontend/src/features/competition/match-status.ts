@@ -145,3 +145,49 @@ export function sideView(match: PublicMatch, side: BracketSide): SideView {
       confirmed && team !== null && (outcome === "double_forfeit" || isLoser),
   }
 }
+
+/** 取消資格標記（UX-DR26：destructive，與淘汰樣式並存） */
+export const DISQUALIFIED_MARK = {
+  label: "取消資格",
+  tone: "destructive",
+} as const satisfies SideMark
+
+type DisqualifiedLastMatchSource = Pick<
+  PublicMatch,
+  "id" | "round_no" | "slot_no" | "is_third_place" | "team_a" | "team_b"
+>
+
+/**
+ * 每支已取消資格（`team.disqualified`）的隊伍出現的最後一張場次卡：隊伍 id → 場次 id。
+ * 依輪次排序，同一輪的季軍賽排在決賽之後（6.5 C Decisions）。
+ */
+export function disqualifiedLastMatches(
+  matches: readonly DisqualifiedLastMatchSource[],
+): ReadonlyMap<string, string> {
+  const ordered = [...matches].sort(
+    (x, y) =>
+      x.round_no - y.round_no ||
+      Number(x.is_third_place) - Number(y.is_third_place) ||
+      x.slot_no - y.slot_no,
+  )
+  const last = new Map<string, string>()
+  for (const match of ordered) {
+    for (const team of [match.team_a, match.team_b]) {
+      if (team?.disqualified) last.set(team.id, match.id)
+    }
+  }
+  return last
+}
+
+/**
+ * 在一方的顯示內容加上「取消資格」標記；已經有（以取消資格判負的那一場）時不重複。
+ * `show` 為 false 時原樣回傳。
+ */
+export function withDisqualifiedMark(view: SideView, show: boolean): SideView {
+  if (
+    !show ||
+    view.marks.some((mark) => mark.label === DISQUALIFIED_MARK.label)
+  )
+    return view
+  return { ...view, marks: [...view.marks, DISQUALIFIED_MARK] }
+}

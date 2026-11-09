@@ -183,3 +183,22 @@ def close_reports(
         report.handled_at = handled_at
         session.add(report)
     session.flush()
+
+
+def find_latest_substantiated_report_against(
+    session: Session, reported_team_id: uuid.UUID
+) -> Report | None:
+    """對某隊判定屬實的檢舉中最近處理的一筆（同時間再依 id）；沒有時為 None。
+
+    取「最近一筆」等於「造成取消資格的那一筆」，依賴下列規則（改動時要一併檢查）：
+    取消資格時同隊其他未結案檢舉以同一理由結案（`resolve_report`）；已取消資格的隊伍
+    不能再被檢舉（`REPORTABLE_STATUSES`）；`file_report`、`resolve_report` 都先鎖賽事。
+    """
+    statement = (
+        select(Report)
+        .where(Report.reported_team_id == reported_team_id)
+        .where(Report.status == ReportStatus.SUBSTANTIATED)
+        .order_by(col(Report.handled_at).desc(), col(Report.id).desc())
+        .limit(1)
+    )
+    return session.exec(statement).first()

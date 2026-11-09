@@ -463,11 +463,23 @@ def _public_matches(
         }
     )
     names = registration_port.get_team_names(session, team_ids=team_ids)
+    # 6.5：已取消資格的隊伍一次查完（避免逐隊查詢）
+    disqualified = (
+        registration_port.list_disqualified_team_ids(
+            session, tournament_id=bracket.tournament_id
+        )
+        if team_ids
+        else set()
+    )
 
     def team_ref(team_id: uuid.UUID | None) -> PublicTeamRef | None:
         if team_id is None:
             return None
-        return PublicTeamRef(id=team_id, name=names.get(team_id, "未知隊伍"))
+        return PublicTeamRef(
+            id=team_id,
+            name=names.get(team_id, "未知隊伍"),
+            disqualified=team_id in disqualified,
+        )
 
     public_matches = []
     for match in matches:

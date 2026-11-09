@@ -36,6 +36,8 @@ type MatchSpectatorViewProps = {
   checkIn?: ReactNode
   /** 比分登錄面板（記分者才有）：有值時取代左欄的公開各局列表 */
   scoreEntry?: ReactNode
+  /** Score display 加「取消資格」標記的隊伍（6.5）：S4 路由傳入 useDisqualifiedMarks 的結果 */
+  disqualifiedTeamIds?: ReadonlySet<string>
   className?: string
 }
 
@@ -56,6 +58,7 @@ export function MatchSpectatorView({
   headerExtra,
   checkIn,
   scoreEntry,
+  disqualifiedTeamIds,
   className,
 }: MatchSpectatorViewProps) {
   const hasScoreEntry =
@@ -77,6 +80,7 @@ export function MatchSpectatorView({
             key={changed ? `flash:${flashGeneration(detail)}` : "static"}
             detail={detail}
             flash={changed}
+            disqualifiedTeamIds={disqualifiedTeamIds}
             className="min-w-0 max-lg:order-1"
           />
           {hasScoreEntry ? (

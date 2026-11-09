@@ -648,3 +648,21 @@
 - 問題與修正：審查找出 AI 新開的「重賽後再申訴」流程讓 S32 同一列混著兩輪申訴、還依上一輪時間排序，改為只列未結案申訴並依其排序；Alembic 的一致性測試不比對部分索引的條件，條件分岔不會被發現，改為直接讀 `pg_indexes.indexdef` 斷言；新遷移在已有再申訴資料時降版會中途失敗，改為先檢查並拋出清楚的錯誤。子代理的再申訴測試一開始失敗，原因是凍結時鐘下兩輪處理的 `handled_at` 相同，推進時鐘後通過（程式不變）。合併 main 時遇到另一個工作階段剛合併的 6.5 第二階段（#73），4 個衝突都是兩邊各自新增的內容，雙方保留後重新產生 client
 - 成熟度：L4（spec → 子代理實作 → 多個審查者 → 主代理核對與完整驗證，人在需求決策點介入）
 - 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；PR #71
+
+### 2026-11-10｜程式／程式生成｜Story 6.5 第二階段 C：對戰樹取消資格標記與處理理由（未審查，交接）
+
+- Story／範圍：6.5 第二階段 C（分支 `story/6-5-dq-marks`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（只跑到實作子代理）
+- 怎麼用：AI 調查後寫 spec，人決定標記只放在該隊最後一張卡；沒有對話脈絡的子代理只依 spec 實作
+- AI 產出：
+  - 後端：`PublicTeamRef.disqualified`、registration_port `list_disqualified_team_ids`、`GET /teams/{team_id}/disqualification`（只限隊員）
+  - 前端：S3、S4 的「取消資格」標記（只標最後一張卡）、S12／S17 的處理理由
+  - 測試：新增 `test_disqualification_marks.py`、`disqualification-marks.test.tsx`
+- 人做了什麼：決定不拆小、分段檢查用量；用量超過門檻時先推上去交給組員
+- 驗證：子代理回報後端 `scripts/test.sh` 結束碼 0、覆蓋率 97%，lint 通過；前端 1019 個單元測試通過，build、typecheck、biome 通過。主代理沒有重跑，也沒有跑審查
+- 問題與修正：
+  - 子代理第一次完整跑後端時有 3 個失敗：`PublicTeamRef` 多了欄位，D 的兩個測試鍵值斷言失敗，以及新測試檔漏列在 traceability；修正後重跑通過。
+  - 子代理自訂了介面文字「主辦方的處理理由」「處理時間：…」，未經使用者確認。
+  - 子代理把 `sprint-status.yaml` 的 6-5 改成 `done`，但審查還沒跑；主代理改回 `in-progress`。
+- 成熟度：L3（子代理實作，未經審查）
+- 證據：`_bmad-output/implementation-artifacts/spec-6-5-dq-marks.md` 的 Implementation Notes

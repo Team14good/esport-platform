@@ -8,6 +8,7 @@ import {
   hasScore,
   type SideView,
   sideView,
+  withDisqualifiedMark,
 } from "./match-status"
 
 function TeamName({ view, side }: { view: SideView; side: BracketSide }) {
@@ -45,6 +46,8 @@ type MatchScoreDisplayProps = {
   detail: PublicMatchDetail
   /** 輪詢時比分或狀態有變動：底色以 muted 淡入淡出一次 */
   flash?: boolean
+  /** 這一場是其最後一場的已取消資格隊伍：加「取消資格」標記（6.5，S4 路由由 useDisqualifiedMarks 算出） */
+  disqualifiedTeamIds?: ReadonlySet<string>
   className?: string
 }
 
@@ -55,10 +58,13 @@ type MatchScoreDisplayProps = {
 export function MatchScoreDisplay({
   detail,
   flash = false,
+  disqualifiedTeamIds,
   className,
 }: MatchScoreDisplayProps) {
-  const a = sideView(detail, "a")
-  const b = sideView(detail, "b")
+  const marked = (team: PublicMatchDetail["team_a"]) =>
+    team !== null && (disqualifiedTeamIds?.has(team.id) ?? false)
+  const a = withDisqualifiedMark(sideView(detail, "a"), marked(detail.team_a))
+  const b = withDisqualifiedMark(sideView(detail, "b"), marked(detail.team_b))
   const scored = hasScore(detail)
   return (
     <Card

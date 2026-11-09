@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 
-import type { TeamInvitePreview } from "@/client"
+import type { TeamDetail, TeamInvitePreview } from "@/client"
 import { RouteErrorPage } from "@/components/layout/ErrorPage"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentAccount } from "@/features/identity/auth"
@@ -42,7 +42,17 @@ export const PROFILE_SAVED_TEXT = "已儲存參賽資料"
  * S17 隊伍頁：隊名與報名狀態、邀請連結（Invite link field）、名單（Roster list）；
  * 自己那列的「填寫我的資料」開 S18；名單下方是送出報名（3.3）。
  */
-export function TeamPage({ teamId }: { teamId: string }) {
+export function TeamPage({
+  teamId,
+  renderStatusExtra,
+}: {
+  teamId: string
+  /**
+   * 報名狀態下方的額外內容（可選）；例如 disputes 的取消資格理由（6.5）。
+   * registration 的頁面不依賴 disputes，由路由傳入。
+   */
+  renderStatusExtra?: (team: TeamDetail) => ReactNode
+}) {
   const team = useQuery(teamQueryOptions(teamId))
   const queryClient = useQueryClient()
   const account = useCurrentAccount()
@@ -90,6 +100,7 @@ export function TeamPage({ teamId }: { teamId: string }) {
           />
         </div>
         <WaitlistDetails status={data.registration_status} waitlist={data} />
+        {renderStatusExtra?.(data)}
       </header>
       <section
         aria-labelledby="team-invite-heading"

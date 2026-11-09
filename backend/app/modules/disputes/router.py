@@ -21,6 +21,7 @@ from app.modules.disputes.models import (
     ReportableTeam,
     ReportRead,
     ReportResolveIn,
+    TeamDisqualification,
 )
 from app.modules.identity.deps import CurrentAccount, Organizer, VerifiedAccount
 
@@ -288,4 +289,14 @@ def read_appeal_result(
     """S4（公開，不需登入）：已確認場次的申訴處理結果；不含申訴內容（AD-19）。"""
     return service.get_public_appeal_result(
         session, tournament_id=tournament_id, match_id=match_id
+    )
+
+
+@router.get("/teams/{team_id}/disqualification")
+def read_team_disqualification(
+    session: SessionDep, account: CurrentAccount, team_id: uuid.UUID
+) -> TeamDisqualification | None:
+    """S12、S17：隊伍被取消資格的處理理由；只有該隊隊員（否則 403），沒有取消資格時為 null。"""
+    return service.get_team_disqualification(
+        session, team_id=team_id, account_id=account.id
     )

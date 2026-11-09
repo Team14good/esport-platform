@@ -643,9 +643,9 @@ def test_final_and_third_confirmed_finishes_tournament(
     public = service.get_public_bracket(session, tournament_id=tournament_id)
     assert public is not None and public.podium is not None
     assert public.podium.model_dump(mode="json") == {
-        "champion": {"id": str(_team(fake, 1)), "name": "隊伍1"},
-        "runner_up": {"id": str(_team(fake, 3)), "name": "隊伍3"},
-        "third_place": {"id": str(_team(fake, 2)), "name": "隊伍2"},
+        "champion": {"id": str(_team(fake, 1)), "name": "隊伍1", "disqualified": False},
+        "runner_up": {"id": str(_team(fake, 3)), "name": "隊伍3", "disqualified": False},
+        "third_place": {"id": str(_team(fake, 2)), "name": "隊伍2", "disqualified": False},
     }
 
 
