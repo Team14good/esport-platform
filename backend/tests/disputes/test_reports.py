@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.core import clock, events
+from app.core import clock, events, storage
 from app.core.config import settings
 from app.core.events import OutboxEvent
 from app.core.storage import MAX_IMAGE_BYTES
@@ -560,8 +560,10 @@ def test_invalid_description_is_422_and_keeps_no_file(
     session: Session,
     upload_dir: Path,
     description: str | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     w = _world(client, session)
+    saved = _spy_save_image(monkeypatch)
 
     response = _post(
         client,
@@ -580,6 +582,8 @@ def test_invalid_description_is_422_and_keeps_no_file(
             "msg": "說明須為 1～1000 字。",
         }
     ]
+    # 說明在存檔前就驗證：根本沒有存過檔，而不是存了又刪
+    assert saved == []
     assert _files(upload_dir) == []
     assert _reports(session, w.tid) == []
 
@@ -622,6 +626,20 @@ def test_invalid_attachment_creates_no_report(
     assert _reports(session, w.tid) == []
 
 
+def _spy_save_image(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """包住真實的 `storage.save_image`，記下每次存檔回傳的鍵值。"""
+    saved: list[str] = []
+    real_save = storage.save_image
+
+    def spy(*args: Any, **kwargs: Any) -> str:
+        key = real_save(*args, **kwargs)
+        saved.append(key)
+        return key
+
+    monkeypatch.setattr(storage, "save_image", spy)
+    return saved
+
+
 def test_service_failure_after_saving_leaves_no_file(
     client: TestClient,
     session: Session,
@@ -629,6 +647,7 @@ def test_service_failure_after_saving_leaves_no_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     w = _world(client, session)
+    saved = _spy_save_image(monkeypatch)
 
     def boom(*_args: Any, **_kwargs: Any) -> Any:
         raise RuntimeError("publish failed")
@@ -643,6 +662,9 @@ def test_service_failure_after_saving_leaves_no_file(
             attachment=("p.png", PNG, "image/png"),
         )
 
+    # 確實存過檔，而且存下的那個檔案後來被刪掉
+    assert len(saved) == 1
+    assert not (upload_dir / saved[0]).exists()
     assert _files(upload_dir) == []
 
 
@@ -653,6 +675,7 @@ def test_commit_failure_deletes_the_new_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     w = _world(client, session)
+    saved = _spy_save_image(monkeypatch)
 
     def boom(_self: Session) -> None:
         raise RuntimeError("commit failed")
@@ -667,6 +690,9 @@ def test_commit_failure_deletes_the_new_file(
             attachment=("p.png", PNG, "image/png"),
         )
 
+    # 確實存過檔，而且存下的那個檔案後來被刪掉
+    assert len(saved) == 1
+    assert not (upload_dir / saved[0]).exists()
     assert _files(upload_dir) == []
 
 
