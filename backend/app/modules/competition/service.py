@@ -14,7 +14,13 @@ from app.core import audit, authz, clock, events
 from app.core.errors import BusinessError
 from app.modules.competition import bracket as bracket_rules
 from app.modules.competition import checkin as checkin_rules
-from app.modules.competition import progression, registration_port, repository, scoring
+from app.modules.competition import (
+    disqualification,
+    progression,
+    registration_port,
+    repository,
+    scoring,
+)
 from app.modules.competition import schedule as schedule_rules
 from app.modules.competition.models import (
     Bracket,
@@ -24,6 +30,8 @@ from app.modules.competition.models import (
     CheckInRead,
     CheckInStatus,
     CheckInStatusReason,
+    CorrectionResult,
+    DisqualifyResult,
     DrawStatus,
     DrawStatusReason,
     GameScoreIn,
@@ -1875,7 +1883,7 @@ def get_replay_window(session: Session, *, match_id: uuid.UUID) -> RescheduleInf
 
     判斷順序（與 `replay_match` 的拒絕條件一致）：場次不存在拋 404 `MATCH_NOT_FOUND`；
     賽事不是賽程已公布或進行中 → `tournament_not_reschedulable`、範圍為 None；
-    場次不是申訴中或結果不是棄權 → `match_not_reschedulable`、範圍為 None；
+    場次不是申訴中或結果不是棄權（一方或雙方，6.2）→ `match_not_reschedulable`、範圍為 None；
     其餘有可選範圍時 `can_reschedule=True`，範圍為空時 `reason="no_valid_time"`，
     仍附 `earliest`、`latest`（主辦方要先到 S30 把下一場改晚）。
     本場與相鄰場次都以資料庫最新值讀取（與 `check_replay_time` 一致）。
@@ -1890,9 +1898,9 @@ def get_replay_window(session: Session, *, match_id: uuid.UUID) -> RescheduleInf
     blocked: RescheduleBlockReason | None = None
     if tournament.status not in _RESCHEDULABLE_TOURNAMENT:
         blocked = "tournament_not_reschedulable"
-    elif (
-        MatchStatus(match.status) != MatchStatus.APPEALED
-        or match.outcome != MatchOutcome.FORFEIT
+    elif MatchStatus(match.status) != MatchStatus.APPEALED or match.outcome not in (
+        MatchOutcome.FORFEIT,
+        MatchOutcome.DOUBLE_FORFEIT,
     ):
         blocked = "match_not_reschedulable"
     if blocked is not None:
@@ -1920,6 +1928,57 @@ def mark_appealed(session: Session, *, match_id: uuid.UUID) -> MatchRead:
     from app.modules.competition import appeals
 
     return appeals.mark_appealed(session, match_id=match_id)
+
+
+def uphold_result(
+    session: Session, *, match_id: uuid.UUID, actor_id: uuid.UUID
+) -> MatchRead:
+    """申訴處理「維持原結果」（6.2 disputes `resolve_appeals` 呼叫）。
+
+    只接受申訴中；沿用已寫入的 outcome、勝隊呼叫 `confirm_match`（內含晉級）。
+    呼叫端先 `lock_tournament`，函式內再 `lock_match`（AD-6）。實作在 `appeals.py`。
+    """
+    from app.modules.competition import appeals
+
+    return appeals.uphold_result(session, match_id=match_id, actor_id=actor_id)
+
+
+def correct_result(
+    session: Session,
+    *,
+    match_id: uuid.UUID,
+    games: Sequence[GameScoreIn],
+    actor_id: uuid.UUID,
+) -> CorrectionResult:
+    """申訴處理「更正結果」（6.2）：整份替換各局、重算勝隊後確認並晉級。
+
+    只接受申訴中、`outcome=played`；各局規則與 5.3 相同，另加 `SERIES_NOT_DECIDED`、
+    `REDUNDANT_GAMES`。回傳前後各局與新勝隊。實作在 `appeals.py`。
+    """
+    from app.modules.competition import appeals
+
+    return appeals.correct_result(
+        session, match_id=match_id, games=games, actor_id=actor_id
+    )
+
+
+def replay_match(
+    session: Session,
+    *,
+    match_id: uuid.UUID,
+    scheduled_at: datetime,
+    actor_id: uuid.UUID,
+) -> ReplayCleared:
+    """申訴處理「重新比賽」（6.2）：只用於判棄權（一方或雙方）的場次。
+
+    清除結果與報到、回到待開打、寫入新時間並重新起算棄權；其他 outcome 拋 409
+    `REPLAY_ONLY_FOR_FORFEIT`，時間不合法沿用 `RESCHEDULE_*`。實作在 `appeals.py`。
+    """
+    from app.modules.competition import appeals
+
+    return appeals.replay_match(
+        session, match_id=match_id, scheduled_at=scheduled_at, actor_id=actor_id
+    )
 
 
 def unassign_referee_if_member(session: Session, *, match: Match) -> None:
@@ -2259,3 +2318,33 @@ def unassign_referee(
         session, RefereeUnassigned(match_id=match.id, referee_account_id=previous)
     )
     return _match_to_read(match)
+
+
+# ---------------------------------------------------------------- 取消資格（6.5）
+
+
+def disqualify(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    team_id: uuid.UUID,
+    actor_id: uuid.UUID,
+) -> DisqualifyResult:
+    """取消隊伍資格，依 epic-6-context〈取消資格（期中版）〉判對手獲勝或頂替。
+
+    disputes `resolve_report` 屬實時呼叫；規則與對手未定時拒絕的情況見 `disqualification.py`。
+    先 `lock_tournament`，再依 id 遞增鎖住對戰表的全部場次（AD-6），判斷完成後才寫入。
+    報名一律改為取消資格（registration `disqualify_registration`，操作者為 `actor_id`）；
+    抽籤前只改報名狀態，不做遞補。判對手獲勝以 `disqualified` 確認並沿用 `advance`
+    晉級；頂替後對該場呼叫 `unassign_referee_if_member`，兩隊湊齊且待開打時
+    `start_forfeit_clock`。每個被改動的場次寫操作紀錄（操作者為 `actor_id`；
+    隨後晉級推進的變更操作者為系統）。
+
+    賽事已結束或已取消拋 409 `TOURNAMENT_FINISHED`／`TOURNAMENT_CANCELLED`；隊伍不屬於
+    該賽事拋 404 `REGISTRATION_NOT_FOUND`；已取消資格拋 409 `TEAM_ALREADY_DISQUALIFIED`；
+    對手尚未確定拋 409 `DISQUALIFY_OPPONENT_PENDING`；報名不能轉為取消資格時 registration
+    拋 409 `REGISTRATION_INVALID_TRANSITION`；任何拒絕都不改資料。不 commit（AD-5）。
+    """
+    return disqualification.disqualify(
+        session, tournament_id=tournament_id, team_id=team_id, actor_id=actor_id
+    )

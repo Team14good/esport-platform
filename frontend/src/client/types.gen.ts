@@ -149,6 +149,125 @@ export type AdminOrganizerApplication = {
 export type AppealDecision = "upheld" | "corrected" | "rematch"
 
 /**
+ * AppealGroup
+ *
+ * S32 依場次分組的申訴（只給該賽事主辦方）；同一場次的申訴一次處理。
+ */
+export type AppealGroup = {
+  /**
+   * Match Id
+   */
+  match_id: string
+  /**
+   * Match Code
+   */
+  match_code: string
+  /**
+   * Round Name
+   */
+  round_name: string
+  /**
+   * Is Third Place
+   */
+  is_third_place: boolean
+  /**
+   * Scheduled At
+   */
+  scheduled_at: string
+  match_status: MatchStatus
+  outcome: MatchOutcome | null
+  /**
+   * Winner Id
+   */
+  winner_id: string | null
+  /**
+   * Wins A
+   */
+  wins_a: number
+  /**
+   * Wins B
+   */
+  wins_b: number
+  score_type: ScoreType
+  /**
+   * Best Of
+   */
+  best_of: number
+  /**
+   * Games
+   */
+  games: Array<PublicGame>
+  team_a: PublicTeamRef | null
+  team_b: PublicTeamRef | null
+  /**
+   * Has Open
+   */
+  has_open: boolean
+  /**
+   * Appeals
+   */
+  appeals: Array<AppealItem>
+}
+
+/**
+ * AppealItem
+ *
+ * S32 列表的一筆申訴：加上提出隊伍的隊名。
+ */
+export type AppealItem = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Tournament Id
+   */
+  tournament_id: string
+  /**
+   * Match Id
+   */
+  match_id: string
+  /**
+   * Team Id
+   */
+  team_id: string
+  /**
+   * Filed By
+   */
+  filed_by: string
+  /**
+   * Filed At
+   */
+  filed_at: string
+  /**
+   * Description
+   */
+  description: string
+  /**
+   * Has Attachment
+   */
+  has_attachment: boolean
+  status: AppealStatus
+  decision: AppealDecision | null
+  /**
+   * Reason
+   */
+  reason: string | null
+  /**
+   * Handled By
+   */
+  handled_by: string | null
+  /**
+   * Handled At
+   */
+  handled_at: string | null
+  /**
+   * Team Name
+   */
+  team_name: string
+}
+
+/**
  * AppealRead
  *
  * 一筆申訴（給提出的隊長與主辦方；不出現在公開 API）。
@@ -202,6 +321,27 @@ export type AppealRead = {
    * Handled At
    */
   handled_at: string | null
+}
+
+/**
+ * AppealResolveIn
+ *
+ * 處理申訴的請求：`corrected` 要給整組新的 `games`；`rematch` 要給帶時區的 `replay_at`。
+ */
+export type AppealResolveIn = {
+  decision: AppealDecision
+  /**
+   * Reason
+   */
+  reason: string
+  /**
+   * Games
+   */
+  games?: Array<GameScoreIn> | null
+  /**
+   * Replay At
+   */
+  replay_at?: string | null
 }
 
 /**
@@ -848,6 +988,62 @@ export type NextMatch = {
 }
 
 /**
+ * OpenDisputeItem
+ *
+ * S27 待處理清單的一筆（期中只有申訴；6.4 起加入檢舉）。
+ */
+export type OpenDisputeItem = {
+  /**
+   * Kind
+   */
+  kind: "appeal" | "report"
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Match Id
+   */
+  match_id: string | null
+  /**
+   * Match Code
+   */
+  match_code: string | null
+  /**
+   * Filed At
+   */
+  filed_at: string
+  /**
+   * Deadline
+   */
+  deadline: string
+}
+
+/**
+ * OpenDisputes
+ *
+ * S27 待處理：未結案申訴數、檢舉數（6.5 接上前為 0）與每一筆，依處理期限由近到遠。
+ */
+export type OpenDisputes = {
+  /**
+   * Appeals
+   */
+  appeals: number
+  /**
+   * Reports
+   */
+  reports: number
+  /**
+   * Earliest Deadline
+   */
+  earliest_deadline: string | null
+  /**
+   * Items
+   */
+  items: Array<OpenDisputeItem>
+}
+
+/**
  * OrganizerApplicationCreate
  *
  * S15 送出主辦方申請：社團名稱與學校（只能從學校清單選擇）。
@@ -988,6 +1184,18 @@ export type ProfileUpdate = {
    * School Id
    */
   school_id?: string | null
+}
+
+/**
+ * PublicAppealResult
+ *
+ * 公開的申訴處理結果（S4）；不含申訴內容（AD-19）。未經申訴處理或重新比賽為 None。
+ */
+export type PublicAppealResult = {
+  /**
+   * Decision
+   */
+  decision: "upheld" | "corrected" | null
 }
 
 /**
@@ -4103,3 +4311,179 @@ export type disputesDownloadAppealAttachmentResponses = {
    */
   200: unknown
 }
+
+export type disputesListTournamentAppealsData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/appeals"
+}
+
+export type disputesListTournamentAppealsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesListTournamentAppealsError =
+  disputesListTournamentAppealsErrors[keyof disputesListTournamentAppealsErrors]
+
+export type disputesListTournamentAppealsResponses = {
+  /**
+   * Response Disputes-List Tournament Appeals
+   *
+   * Successful Response
+   */
+  200: Array<AppealGroup>
+}
+
+export type disputesListTournamentAppealsResponse =
+  disputesListTournamentAppealsResponses[keyof disputesListTournamentAppealsResponses]
+
+export type disputesResolveAppealsData = {
+  body: AppealResolveIn
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/matches/{match_id}/appeal-resolution"
+}
+
+export type disputesResolveAppealsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesResolveAppealsError =
+  disputesResolveAppealsErrors[keyof disputesResolveAppealsErrors]
+
+export type disputesResolveAppealsResponses = {
+  /**
+   * Response Disputes-Resolve Appeals
+   *
+   * Successful Response
+   */
+  200: Array<AppealRead>
+}
+
+export type disputesResolveAppealsResponse =
+  disputesResolveAppealsResponses[keyof disputesResolveAppealsResponses]
+
+export type disputesReadReplayWindowData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/matches/{match_id}/replay-window"
+}
+
+export type disputesReadReplayWindowErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesReadReplayWindowError =
+  disputesReadReplayWindowErrors[keyof disputesReadReplayWindowErrors]
+
+export type disputesReadReplayWindowResponses = {
+  /**
+   * Successful Response
+   */
+  200: RescheduleInfo
+}
+
+export type disputesReadReplayWindowResponse =
+  disputesReadReplayWindowResponses[keyof disputesReadReplayWindowResponses]
+
+export type disputesReadOpenDisputesData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/open-disputes"
+}
+
+export type disputesReadOpenDisputesErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesReadOpenDisputesError =
+  disputesReadOpenDisputesErrors[keyof disputesReadOpenDisputesErrors]
+
+export type disputesReadOpenDisputesResponses = {
+  /**
+   * Successful Response
+   */
+  200: OpenDisputes
+}
+
+export type disputesReadOpenDisputesResponse =
+  disputesReadOpenDisputesResponses[keyof disputesReadOpenDisputesResponses]
+
+export type disputesReadAppealResultData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/appeal-result"
+}
+
+export type disputesReadAppealResultErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type disputesReadAppealResultError =
+  disputesReadAppealResultErrors[keyof disputesReadAppealResultErrors]
+
+export type disputesReadAppealResultResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicAppealResult
+}
+
+export type disputesReadAppealResultResponse =
+  disputesReadAppealResultResponses[keyof disputesReadAppealResultResponses]

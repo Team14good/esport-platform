@@ -69,12 +69,27 @@ import type {
   disputesListReportableTeamsData,
   disputesListReportableTeamsErrors,
   disputesListReportableTeamsResponses,
+  disputesListTournamentAppealsData,
+  disputesListTournamentAppealsErrors,
+  disputesListTournamentAppealsResponses,
   disputesListTournamentReportsData,
   disputesListTournamentReportsErrors,
   disputesListTournamentReportsResponses,
+  disputesReadAppealResultData,
+  disputesReadAppealResultErrors,
+  disputesReadAppealResultResponses,
   disputesReadAppealStateData,
   disputesReadAppealStateErrors,
   disputesReadAppealStateResponses,
+  disputesReadOpenDisputesData,
+  disputesReadOpenDisputesErrors,
+  disputesReadOpenDisputesResponses,
+  disputesReadReplayWindowData,
+  disputesReadReplayWindowErrors,
+  disputesReadReplayWindowResponses,
+  disputesResolveAppealsData,
+  disputesResolveAppealsErrors,
+  disputesResolveAppealsResponses,
   identityApproveOrganizerApplicationData,
   identityApproveOrganizerApplicationErrors,
   identityApproveOrganizerApplicationResponses,
@@ -1595,6 +1610,109 @@ export class DisputesService {
       responseType: "blob",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/organizer/appeals/{appeal_id}/attachment",
+      ...options,
+    })
+  }
+
+  /**
+   * List Tournament Appeals
+   *
+   * S32：該賽事的申訴，依場次分組（未結案在前）；只有該賽事主辦方。
+   */
+  public static listTournamentAppeals<ThrowOnError extends boolean = true>(
+    options: Options<disputesListTournamentAppealsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesListTournamentAppealsResponses,
+      disputesListTournamentAppealsErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/appeals",
+      ...options,
+    })
+  }
+
+  /**
+   * Resolve Appeals
+   *
+   * S32 處理同一場次的申訴：維持原結果、更正結果（整組各局）或重新比賽（只用於棄權）。
+   */
+  public static resolveAppeals<ThrowOnError extends boolean = true>(
+    options: Options<disputesResolveAppealsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      disputesResolveAppealsResponses,
+      disputesResolveAppealsErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/matches/{match_id}/appeal-resolution",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Read Replay Window
+   *
+   * S32 重新比賽的時間範圍（與 4.3 改期同一個規則）；只有該賽事主辦方。
+   */
+  public static readReplayWindow<ThrowOnError extends boolean = true>(
+    options: Options<disputesReadReplayWindowData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesReadReplayWindowResponses,
+      disputesReadReplayWindowErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/matches/{match_id}/replay-window",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Open Disputes
+   *
+   * S27 待處理清單：未結案的申訴與檢舉，依處理期限由近到遠。
+   */
+  public static readOpenDisputes<ThrowOnError extends boolean = true>(
+    options: Options<disputesReadOpenDisputesData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesReadOpenDisputesResponses,
+      disputesReadOpenDisputesErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/open-disputes",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Appeal Result
+   *
+   * S4（公開，不需登入）：已確認場次的申訴處理結果；不含申訴內容（AD-19）。
+   */
+  public static readAppealResult<ThrowOnError extends boolean = true>(
+    options: Options<disputesReadAppealResultData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesReadAppealResultResponses,
+      disputesReadAppealResultErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/appeal-result",
       ...options,
     })
   }

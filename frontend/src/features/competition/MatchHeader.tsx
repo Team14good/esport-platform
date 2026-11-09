@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router"
+import type { ReactNode } from "react"
 import type { PublicMatchDetail } from "@/client"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { cn } from "@/lib/utils"
@@ -16,11 +17,13 @@ export function matchTitle(
 
 type MatchHeaderProps = {
   detail: PublicMatchDetail
+  /** 狀態徽章後面的插槽（6.2）：S4 路由傳入申訴處理結果（`AppealResultBadge`） */
+  extra?: ReactNode
   className?: string
 }
 
 /** Match header：返回連結、標題＋狀態徽章、遊戲 · BO · 預定時間（DESIGN.md〈場次頁（S4）〉），不放在 Card 內。 */
-export function MatchHeader({ detail, className }: MatchHeaderProps) {
+export function MatchHeader({ detail, extra, className }: MatchHeaderProps) {
   const badge = MATCH_STATUS_BADGES[detail.status]
   const time = formatMatchDateTime(detail.scheduled_at)
   return (
@@ -43,6 +46,7 @@ export function MatchHeader({ detail, className }: MatchHeaderProps) {
         <StatusBadge tone={badge.tone} pulse={badge.pulse}>
           {badge.label}
         </StatusBadge>
+        {extra}
       </div>
       <p
         data-slot="match-subtitle"
