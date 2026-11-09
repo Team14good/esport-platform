@@ -2,7 +2,7 @@
 title: 'Story 6.5（第二階段 C）：對戰樹的取消資格標記與處理理由'
 type: 'feature'
 created: '2026-11-09'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'a015464817b5017e1dd5d170a9d8a34aee17bdec'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -48,6 +48,7 @@ context:
 - 2026-11-09（使用者）：6.5 第二階段 C 不再拆小，後端欄位、S3／S4 標記、S12／S17 理由在同一個 PR；因每週額度剩約 6%，每個步驟後查用量，超過 98% 先提交到本機再停。
 - 2026-11-09（使用者）：對戰樹的「取消資格」標記只標在該隊出現的最後一張場次卡（依輪次，季軍賽排在決賽之後），其他卡照舊；S4 只在該隊出現的最後一場顯示。
 - 2026-11-10（使用者）：每週額度超過 98% 時，先把目前進度提交、推上 GitHub 並開草稿 PR，交給其他組員接手。實作完成時額度已達 97%，因此不跑 bmad-build 的三位審查者，直接交接；審查、修正與介面文字確認（「主辦方的處理理由」「處理時間：…」）由接手的人完成。
+- 2026-11-10（使用者）：介面文字照實作定案：S12、S17 標題「主辦方的處理理由」，時間顯示為「處理時間：YYYY/MM/DD HH:mm」。
 
 </frozen-after-approval>
 
@@ -80,7 +81,7 @@ context:
 - `PublicTeamRef.disqualified` 預設 `False`（產生的 client 為選填 `disqualified?: boolean`）。公開對戰表的名次（`podium`）也經同一個 `team_ref`，會帶出實際值；`get_podium`、S30 的 `ManagedMatch` 不判斷，一律 `False`。既有測試中斷言 `PublicTeamRef` 鍵值的兩處（`test_bracket_api.py`、`test_confirm_advance.py` 名次）補上 `disqualified`；`FakeRegistration` 新增 `list_disqualified_team_ids`（不記入 `calls`，以免改變呼叫順序斷言）。
 - 理由 API：`GET /teams/{team_id}/disqualification`（`CurrentAccount`）。非隊員與隊伍不存在都回 403 `TEAM_MEMBER_REQUIRED`（沿用 registration S17 的錯誤碼）；報名狀態不是取消資格（含賽事結束後只記錄屬實）回 null；理由取對該隊屬實、`handled_at` 最近的檢舉（一併結案的檢舉理由相同）。
 - 前端：`match-status.ts` 新增 `disqualifiedLastMatches`（依 `round_no`、季軍賽在決賽之後、`slot_no` 找每隊最後一張卡）與 `withDisqualifiedMark`（已有以取消資格判負的標記時不重複）。S3 由 `BracketTree` 算好傳給 `BracketMatchCard`（新增選填 prop）。S4 只有公開單場帶回的兩隊之一已取消資格時，`useDisqualifiedMarks` 才讀公開對戰表（與 S3 同一個 query key）判斷這一場是否為該隊最後一場，經 `MatchSpectatorView` 的新 prop 傳給 `MatchScoreDisplay`；同輪其他場次的小卡不標。
-- S12、S17：新元件 `features/disputes/TeamDisqualificationReason.tsx`（標題「主辦方的處理理由」、理由、「處理時間：…」）只在報名狀態為取消資格時由路由掛載：S12 加在 `renderTeamExtra`（卡片連結外），S17 在 `TeamPage` 新增選填 `renderStatusExtra`（報名狀態徽章下方），registration 的頁面不依賴 disputes。理由為 null、讀取中或失敗時不顯示。介面文字「主辦方的處理理由」「處理時間：」為實作時自訂，待人確認。
+- S12、S17：新元件 `features/disputes/TeamDisqualificationReason.tsx`（標題「主辦方的處理理由」、理由、「處理時間：…」）只在報名狀態為取消資格時由路由掛載：S12 加在 `renderTeamExtra`（卡片連結外），S17 在 `TeamPage` 新增選填 `renderStatusExtra`（報名狀態徽章下方），registration 的頁面不依賴 disputes。理由為 null、讀取中或失敗時不顯示。介面文字「主辦方的處理理由」「處理時間：」為實作時自訂，2026-11-10 使用者確認定案（見 Decisions）。
 
 ## Spec Change Log
 

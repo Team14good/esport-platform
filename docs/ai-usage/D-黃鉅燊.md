@@ -715,3 +715,4 @@
 - 問題與修正：Chrome 擴充沒連上，改用本機 Python Playwright；本機 Playwright 版本對不上下載的瀏覽器，改指定已安裝的 chromium；中文 JSON 從 Git Bash 送出被截斷，改用 UTF-8 檔案送
 - 成熟度：L3（AI 審查、修正與實測，人決定接手範圍與介面文字）
 - 證據：#76 的 spec Review Triage Log、本次提交、CI 紀錄
+- 後續（同日）：使用者確認介面文字照 B 的實作定案、不再回問 B；AI 依使用者指示把決定寫進 spec 的 Decisions，spec 與 sprint-status 的 6-5 改為 done
