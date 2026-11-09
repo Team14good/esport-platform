@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-09-2026 23:45
+last_updated: 11-09-2026 10:25
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -87,8 +87,8 @@ development_status:
   epic-5: in-progress
   5-1-場次頁與隊長報到: in-progress  # 負責：D；第一階段（checkin.py、CheckInPanel）完成；第二階段後端（報到 API、賽事開始 worker）完成並已合併（#22），S4 接上待 A
   5-2-逾時判棄權: done  # 負責：A；第一階段規則與 worker 工作（#16）、接上 worker（#34）、S4 申訴期倒數與棄權標記（#39）完成
-  5-3-裁判逐局登錄比分: in-progress  # 負責：D；第一階段（scoring.py 純函式，含 5.4 規則）完成；第二階段後端（逐局資料表、登錄／刪除／送出 API）完成並已合併（#25），S4 接面板待 A，記分者接指派已由 4.4 後端處理
-  5-4-送出系列結果: in-progress  # 負責：D；系列結果與送出條件已在 5.3 的 scoring.py；第二階段與 5.3 合併做（spec-5-3-referee-score-backend.md），後端完成並已合併（#25）
+  5-3-裁判逐局登錄比分: done  # 負責：D；第一階段（#8）、第二階段後端（#25）、S4 比分登錄面板（A，#47）完成；記分者指派由 4.4（#46）處理
+  5-4-送出系列結果: done  # 負責：D；規則在 5.3 的 scoring.py；第二階段與 5.3 合併（#25）、S4 送出面板與申訴期倒數（A，#47、#43）完成
   5-5-申訴期滿自動確認與一般晉級: in-progress  # 負責：D；第一階段（progression.py）完成；第二階段（確認、晉級、申訴期滿自動確認、賽事結束）後端完成
   5-6-季軍賽-雙方棄權與賽事結束: review  # 負責：D；規則在 progression.py，寫入資料庫與賽事結束在 5.5 第二階段完成；S2／S3 頒獎台與名次標記（A，spec-5-6-podium-and-placement-marks.md）完成，待統一 code review
   5-7-勝隊上傳結算截圖: backlog  # 擱置（期中後）
