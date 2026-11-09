@@ -5,11 +5,19 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from app.core.events import Event
+from app.modules.competition.models import (
+    GameScoreIn,
+    MatchOutcome,
+    MatchStatus,
+    PublicGame,
+    PublicTeamRef,
+)
+from app.modules.tournaments.models import ScoreType
 
 
 class AppealStatus(StrEnum):
@@ -37,7 +45,10 @@ class ReportStatus(StrEnum):
 
 REPORT_DESCRIPTION_MAX_LENGTH = 1000
 REPORT_ATTACHMENT_KEY_MAX_LENGTH = 64
+# 申訴說明的字數上限（以 code point 計算，與前端一致）
 APPEAL_DESCRIPTION_MAX_LENGTH = 1000
+# 處理理由的字數上限（以 code point 計算，與前端一致）
+APPEAL_REASON_MAX_LENGTH = 1000
 
 
 # ---------------------------------------------------------------- 資料表
@@ -125,6 +136,13 @@ class AppealFiled(Event):
     team_id: uuid.UUID
 
 
+class AppealResolved(Event):
+    """主辦方處理同一場次的申訴（6.2，同一場一次）。"""
+
+    match_id: uuid.UUID
+    decision: AppealDecision
+
+
 class ReportFiled(Event):
     """隊長提出檢舉（Story 6.4）；期中只發事件，不通知。"""
 
@@ -175,6 +193,76 @@ class AppealState(BaseModel):
     already_filed: bool
     deadline: datetime | None  # 場次在申訴期、申訴中時為申訴截止時間，其他為 None
     reason: AppealStateReason | None
+
+
+class AppealItem(AppealRead):
+    """S32 列表的一筆申訴：加上提出隊伍的隊名。"""
+
+    team_name: str
+
+
+class AppealGroup(BaseModel):
+    """S32 依場次分組的申訴（只給該賽事主辦方）；同一場次的申訴一次處理。"""
+
+    match_id: uuid.UUID
+    match_code: str
+    round_name: str
+    is_third_place: bool
+    scheduled_at: datetime
+    match_status: MatchStatus
+    outcome: MatchOutcome | None
+    winner_id: uuid.UUID | None
+    wins_a: int
+    wins_b: int
+    # 更正結果的輸入依比分型態與本輪 BO
+    score_type: ScoreType
+    best_of: int
+    # 目前已登錄的各局（更正時的預設值）
+    games: list[PublicGame]
+    team_a: PublicTeamRef | None
+    team_b: PublicTeamRef | None
+    # 有未結案的申訴（可以處理）
+    has_open: bool
+    # 依提出時間
+    appeals: list[AppealItem]
+
+
+class AppealResolveIn(BaseModel):
+    """處理申訴的請求：`corrected` 要給整組新的 `games`；`rematch` 要給帶時區的 `replay_at`。"""
+
+    decision: AppealDecision
+    # 去頭尾空白後 1～1000 字，由 service 驗證（422 指向 reason）
+    reason: str
+    # 最多 7 局（BO7 是最大的 BO）
+    games: list[GameScoreIn] | None = Field(default=None, max_length=7)
+    replay_at: AwareDatetime | None = None
+
+
+class PublicAppealResult(BaseModel):
+    """公開的申訴處理結果（S4）；不含申訴內容（AD-19）。未經申訴處理或重新比賽為 None。"""
+
+    decision: Literal["upheld", "corrected"] | None
+
+
+class OpenDisputeItem(BaseModel):
+    """S27 待處理清單的一筆（期中只有申訴；6.4 起加入檢舉）。"""
+
+    kind: Literal["appeal", "report"]
+    id: uuid.UUID
+    match_id: uuid.UUID | None
+    match_code: str | None
+    filed_at: datetime
+    # 處理期限：等待結果的下一場預定時間；決賽與季軍賽為提出後 1 小時
+    deadline: datetime
+
+
+class OpenDisputes(BaseModel):
+    """S27 待處理：未結案申訴數、檢舉數（6.5 接上前為 0）與每一筆，依處理期限由近到遠。"""
+
+    appeals: int
+    reports: int
+    earliest_deadline: datetime | None
+    items: list[OpenDisputeItem]
 
 
 class ReportRead(BaseModel):

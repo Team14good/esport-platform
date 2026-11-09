@@ -3,13 +3,15 @@
 賽事只透過 tournaments 的 `get_tournament`、`lock_tournament`；隊伍與報名只透過
 registration 的 `find_team_of_account`、`get_team`、`get_registration`、
 `list_teams_by_status`、`get_team_names`、`is_captain`；場次只透過 competition 的
-`get_match`、`lock_match`、`mark_appealed`（contracts/disputes.md）。
+`get_match`、`get_public_match`、`lock_match`、`mark_appealed`、`uphold_result`、
+`correct_result`、`replay_match`、`get_replay_window`（contracts/disputes.md）。
 """
 
 import unicodedata
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import PurePath
 from typing import BinaryIO
 
@@ -18,17 +20,30 @@ from sqlmodel import Session
 from app.core import audit, authz, clock, events, storage
 from app.core.errors import BusinessError, FieldError
 from app.modules.competition import service as competition_service
-from app.modules.competition.models import MatchRead, MatchStatus
+from app.modules.competition.models import (
+    GameScoreIn,
+    MatchRead,
+    MatchStatus,
+    RescheduleInfo,
+)
 from app.modules.disputes import repository
 from app.modules.disputes.models import (
     APPEAL_DESCRIPTION_MAX_LENGTH,
+    APPEAL_REASON_MAX_LENGTH,
     REPORT_DESCRIPTION_MAX_LENGTH,
     Appeal,
+    AppealDecision,
     AppealFiled,
+    AppealGroup,
+    AppealItem,
     AppealRead,
+    AppealResolved,
     AppealState,
     AppealStateReason,
     AppealStatus,
+    OpenDisputeItem,
+    OpenDisputes,
+    PublicAppealResult,
     Report,
     ReportableTeam,
     ReportFiled,
@@ -314,6 +329,9 @@ _APPEALABLE = frozenset({MatchStatus.APPEAL_WINDOW, MatchStatus.APPEALED})
 # 賽事已結束或已取消時不能申訴（與 6.4 檢舉一致）
 _ENDED_TOURNAMENT = frozenset({TournamentStatus.FINISHED, TournamentStatus.CANCELLED})
 
+# 決賽與季軍賽沒有等待結果的下一場：處理期限為申訴提出後 1 小時
+_FINAL_HANDLING_TIME = timedelta(hours=1)
+
 # 狀態查詢的原因代碼對應提出申訴 API 的錯誤碼、狀態碼與訊息（順序即檢查順序）
 _REJECTIONS: dict[AppealStateReason, tuple[str, int, str]] = {
     "not_captain": ("CAPTAIN_REQUIRED", 403, "只有這場比賽兩隊的隊長可以提出申訴。"),
@@ -581,3 +599,283 @@ def open_appeal_attachment(
     if media_type is None:
         raise _file_not_found()
     return storage.open_file(appeal.attachment_key), media_type
+
+
+# ---------------------------------------------------------------- 處理申訴（6.2）
+
+
+def _owned_tournament(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    """賽事不存在 404；不是主辦方 403 `TOURNAMENT_OWNER_REQUIRED`。"""
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=tournament_id
+    )
+    authz.ensure_tournament_owner(tournament, actor_id)
+
+
+def _clean_appeal_reason(value: str) -> str:
+    """處理理由：與申訴說明相同的清理，去頭尾空白後 1～1000 字；否則拋 422（指向 reason）。"""
+    cleaned = "".join(ch for ch in value if _keeps(ch)).strip()
+    if not cleaned:
+        raise FieldError(
+            "APPEAL_REASON_REQUIRED", "請輸入處理理由", loc=("body", "reason")
+        )
+    if len(cleaned) > APPEAL_REASON_MAX_LENGTH:
+        raise FieldError(
+            "APPEAL_REASON_TOO_LONG",
+            f"處理理由最多 {APPEAL_REASON_MAX_LENGTH} 個字",
+            loc=("body", "reason"),
+        )
+    return cleaned
+
+
+def resolve_appeals(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    decision: AppealDecision,
+    reason: str,
+    games: Sequence[GameScoreIn] | None,
+    replay_at: datetime | None,
+) -> list[AppealRead]:
+    """主辦方處理同一場次的申訴：未結案的申訴一次以相同決定與理由結案（FR-31）。
+
+    順序：理由（422）→ 決定需要的欄位（`corrected` 的 `games`、`rematch` 的 `replay_at`，
+    422）→ 場次屬於該賽事（404）→ `lock_tournament` → 主辦方（403）→ `lock_match` →
+    有未結案申訴（409 `NO_OPEN_APPEALS`）→ competition `uphold_result`／
+    `correct_result`／`replay_match`（狀態、outcome 等檢查在 competition）→ 結案（寫
+    `handled_by`、`handled_at`，不改 `filed_by`）→ 操作紀錄 `appeal.resolved`（更正時含
+    前後各局）→ 發 `AppealResolved`。另一隊的申訴期限未到也可以處理；處理後場次不再是
+    申訴期或申訴中，另一隊不能再申訴。任何拒絕都不寫資料。
+    """
+    cleaned = _clean_appeal_reason(reason)
+    if decision == AppealDecision.CORRECTED and games is None:
+        raise FieldError(
+            "APPEAL_GAMES_REQUIRED", "請輸入更正後的各局", loc=("body", "games")
+        )
+    if decision == AppealDecision.REMATCH and replay_at is None:
+        raise FieldError(
+            "APPEAL_REPLAY_AT_REQUIRED",
+            "請選擇重新比賽的時間",
+            loc=("body", "replay_at"),
+        )
+    _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=tournament_id
+    )
+    authz.ensure_tournament_owner(tournament, actor_id)
+    competition_service.lock_match(session, match_id=match_id)
+    appeals = repository.list_open_match_appeals(session, match_id)
+    if not appeals:
+        raise BusinessError(
+            "NO_OPEN_APPEALS", "這場比賽沒有待處理的申訴。", status_code=409
+        )
+    match = competition_service.get_match(session, match_id=match_id)
+    before: dict[str, object] = {
+        "match_status": match.status,
+        "outcome": match.outcome,
+        "winner_id": match.winner_id,
+    }
+    after: dict[str, object] = {}
+    if decision == AppealDecision.UPHELD:
+        competition_service.uphold_result(session, match_id=match_id, actor_id=actor_id)
+    elif decision == AppealDecision.CORRECTED:
+        assert games is not None  # 上面已檢查
+        correction = competition_service.correct_result(
+            session, match_id=match_id, games=games, actor_id=actor_id
+        )
+        before["games"] = correction.before_games
+        after["games"] = correction.after_games
+    else:
+        assert replay_at is not None  # 上面已檢查
+        before["scheduled_at"] = match.scheduled_at
+        competition_service.replay_match(
+            session, match_id=match_id, scheduled_at=replay_at, actor_id=actor_id
+        )
+    match = competition_service.get_match(session, match_id=match_id)
+    if decision == AppealDecision.REMATCH:
+        after["scheduled_at"] = match.scheduled_at
+
+    repository.close_appeals(
+        session,
+        appeals,
+        decision=decision,
+        reason=cleaned,
+        handled_by=actor_id,
+        handled_at=clock.now(),
+    )
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=tournament_id,
+        action="appeal.resolved",
+        entity_type="match",
+        entity_id=match_id,
+        before=before,
+        after={
+            "decision": decision,
+            "reason": cleaned,
+            "appeal_ids": [appeal.id for appeal in appeals],
+            "match_status": match.status,
+            "outcome": match.outcome,
+            "winner_id": match.winner_id,
+            **after,
+        },
+    )
+    events.publish(session, AppealResolved(match_id=match_id, decision=decision))
+    return [_appeal_to_read(appeal) for appeal in appeals]
+
+
+def list_tournament_appeals(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> list[AppealGroup]:
+    """S32：該賽事的申訴依場次分組；有未結案申訴的場次在前，再依最早提出時間。
+
+    只有該賽事主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）。附件只回 `has_attachment`。
+    """
+    _owned_tournament(session, tournament_id=tournament_id, actor_id=actor_id)
+    by_match: dict[uuid.UUID, list[Appeal]] = {}
+    all_appeals = repository.list_tournament_appeals(session, tournament_id)
+    for appeal in all_appeals:
+        by_match.setdefault(appeal.match_id, []).append(appeal)
+    # 隊名依申訴的 team_id 查：場次的隊伍被頂替（6.5）後，原申訴隊仍顯示隊名
+    names = registration_service.get_team_names(
+        session, team_ids=list({appeal.team_id for appeal in all_appeals})
+    )
+    groups: list[AppealGroup] = []
+    for match_id, appeals in by_match.items():
+        detail = competition_service.get_public_match(
+            session, tournament_id=tournament_id, match_id=match_id
+        )
+        groups.append(
+            AppealGroup(
+                match_id=detail.id,
+                match_code=detail.code,
+                round_name=detail.round_name,
+                is_third_place=detail.is_third_place,
+                scheduled_at=detail.scheduled_at,
+                match_status=detail.status,
+                outcome=detail.outcome,
+                winner_id=detail.winner_id,
+                wins_a=detail.wins_a,
+                wins_b=detail.wins_b,
+                score_type=detail.score_type,
+                best_of=detail.best_of,
+                games=detail.games,
+                team_a=detail.team_a,
+                team_b=detail.team_b,
+                has_open=any(a.status == AppealStatus.OPEN for a in appeals),
+                appeals=[
+                    AppealItem(
+                        **_appeal_to_read(appeal).model_dump(),
+                        team_name=names.get(appeal.team_id, "未知隊伍"),
+                    )
+                    for appeal in appeals
+                ],
+            )
+        )
+    groups.sort(key=lambda g: (not g.has_open, g.appeals[0].filed_at))
+    return groups
+
+
+def _handling_deadline(
+    session: Session,
+    *,
+    match: MatchRead,
+    filed_at: datetime,
+    cache: dict[uuid.UUID, MatchRead],
+) -> datetime:
+    """處理期限：等待這場結果的下一場（勝隊、敗隊去的場次）中最早的預定時間。
+
+    決賽與季軍賽沒有下一場，為申訴提出後 1 小時。
+    """
+    times: list[datetime] = []
+    for next_id in (match.next_match_id, match.loser_next_match_id):
+        if next_id is None:
+            continue
+        if next_id not in cache:
+            cache[next_id] = competition_service.get_match(session, match_id=next_id)
+        times.append(cache[next_id].scheduled_at)
+    return min(times) if times else filed_at + _FINAL_HANDLING_TIME
+
+
+def count_open_disputes(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> OpenDisputes:
+    """S27 待處理：未結案的申訴與每筆的處理期限，依期限由近到遠；檢舉在 6.5 接上前一律 0（檢舉的處理期限由 6.5 決定）。
+
+    只有該賽事主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）。
+    """
+    _owned_tournament(session, tournament_id=tournament_id, actor_id=actor_id)
+    cache: dict[uuid.UUID, MatchRead] = {}
+    items: list[OpenDisputeItem] = []
+    for appeal in repository.list_tournament_appeals(
+        session, tournament_id, open_only=True
+    ):
+        if appeal.match_id not in cache:
+            cache[appeal.match_id] = competition_service.get_match(
+                session, match_id=appeal.match_id
+            )
+        match = cache[appeal.match_id]
+        items.append(
+            OpenDisputeItem(
+                kind="appeal",
+                id=appeal.id,
+                match_id=match.id,
+                match_code=match.code,
+                filed_at=appeal.filed_at,
+                deadline=_handling_deadline(
+                    session, match=match, filed_at=appeal.filed_at, cache=cache
+                ),
+            )
+        )
+    items.sort(key=lambda item: (item.deadline, item.filed_at))
+    return OpenDisputes(
+        appeals=len(items),
+        reports=0,
+        earliest_deadline=items[0].deadline if items else None,
+        items=items,
+    )
+
+
+def get_public_appeal_result(
+    session: Session, *, tournament_id: uuid.UUID, match_id: uuid.UUID
+) -> PublicAppealResult:
+    """S4：已確認的場次經申訴處理的結果（`upheld`／`corrected`）；不含申訴內容（AD-19）。
+
+    沒有申訴、尚未處理、場次未確認或處理結果是重新比賽時為 None。場次不屬於該賽事 404。
+    """
+    match = _match_in_tournament(
+        session, tournament_id=tournament_id, match_id=match_id
+    )
+    if match.status != MatchStatus.CONFIRMED:
+        return PublicAppealResult(decision=None)
+    handled = [
+        (appeal.handled_at, appeal.decision)
+        for appeal in repository.list_match_appeals(session, match_id)
+        if appeal.status == AppealStatus.CLOSED and appeal.handled_at is not None
+    ]
+    if not handled:
+        return PublicAppealResult(decision=None)
+    _at, decision = max(handled, key=lambda pair: pair[0])
+    if decision == AppealDecision.UPHELD:
+        return PublicAppealResult(decision="upheld")
+    if decision == AppealDecision.CORRECTED:
+        return PublicAppealResult(decision="corrected")
+    return PublicAppealResult(decision=None)
+
+
+def get_replay_window(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    actor_id: uuid.UUID,
+) -> RescheduleInfo:
+    """S32 重新比賽的時間範圍（competition `get_replay_window`）；只有該賽事主辦方。"""
+    _owned_tournament(session, tournament_id=tournament_id, actor_id=actor_id)
+    _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    return competition_service.get_replay_window(session, match_id=match_id)

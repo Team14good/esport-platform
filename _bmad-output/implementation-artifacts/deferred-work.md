@@ -187,3 +187,21 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-deadline-fill.md`
   summary: （中）報名截止工作 `close_registrations` 每輪只取最早到期的一場；那場在 `close_registration` 一直拋錯（例如缺快照的 `RuntimeError`）時，worker 每輪都卡在它，之後到期的賽事永遠不會轉為「報名截止」。
   evidence: 2026-11-05 Story 3.6 截止 worker 審查第 1 輪（Blind Hunter、Edge Case Hunter、Verification Gap 都提出）。`find_due_registration_end_id` 依 `registration_end`、id 取第一筆，`run_once` 遇錯 rollback 後結束本輪該工作；`open_due_registration`、`allocate_due_priority_window` 是相同模式。處理時讓 worker 跳過本輪失敗過的候選（或逐筆在 savepoint 內嘗試），並補「第一場拋錯時第二場仍會關閉」的測試。
+
+## Deferred from: code review of spec-6-1-file-appeal.md (2026-11-09)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-1-file-appeal.md`
+  summary: （中，未驗證）賽事已取消時，仍在申訴期的場次可以提出申訴並轉為申訴中；`get_appeal_state` 也會回可提出。`file_appeal` 只看場次狀態與期限，沒有檢查賽事狀態。
+  evidence: 2026-11-09 Story 6.1 審查（Edge Case Hunter）。期中 2.6 取消賽事擱置，賽事只會在決賽與季軍賽都確認後轉為已結束（此時所有場次都已確認），所以目前走不到；2.6 實作時若取消賽事不作廢場次，就要在 `file_appeal` 鎖住賽事後檢查 `finished`／`cancelled` 並回 `APPEAL_NOT_ALLOWED`，`get_appeal_state` 同步，補測試。
+
+## Deferred from: spec-6-2-resolve-appeals.md (2026-11-09)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-resolve-appeals.md`
+  summary: （中）「重新比賽」後的場次再次送出結果進入申訴期時，上一輪已申訴過的隊伍不能再申訴：`appeal` 的 `(match_id, team_id)` 唯一鍵與 `file_appeal` 的「本隊已申訴」檢查都不分輪次，舊的已結案申訴（`decision=rematch`）會擋下新申訴（S4 顯示「本隊已對此場次提出申訴」）。
+  evidence: 2026-11-09 Story 6.2 實作時發現；spec 與 epic 沒有規定重賽後能否再申訴，需要問人。若要允許，`file_appeal`／`get_appeal_state` 改成只看未結案或本輪（`filed_at` 晚於最後一次 `rematch` 的 `handled_at`）的申訴，唯一鍵改成部分唯一索引（例如只限 `status='open'`）並另開一支 Alembic 遷移；`get_public_appeal_result` 已以最後一次處理為準，不受影響。
+
+## Deferred from: spec-6-2-resolve-appeals.md (2026-11-09)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-resolve-appeals.md`
+  summary: S27 待處理清單還沒有算檢舉：`count_open_disputes` 的 `reports` 一律 0、`items` 只有申訴；EXPERIENCE.md 要求未結案的申訴與檢舉列在一起、依處理期限排序。
+  evidence: 2026-11-09 使用者決定留給 6.5。6.4 已合併、`Report` 可查，但規劃文件沒有定義檢舉的處理期限，而 `OpenDisputeItem.deadline` 必填；6.5 接上 S33 時一併決定檢舉的期限（或無期限排在申訴之後）並補測試。

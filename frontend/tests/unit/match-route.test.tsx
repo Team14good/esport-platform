@@ -33,6 +33,9 @@ type ReadStatusResult = Awaited<
 type ReadAppealStateResult = Awaited<
   ReturnType<typeof DisputesService.readAppealState>
 >
+type ReadAppealResultResult = Awaited<
+  ReturnType<typeof DisputesService.readAppealResult>
+>
 
 // 單元測試的場次資料：32 隊「進行中」對戰樹推導（match-fixtures 只給測試用）
 const BRACKET = createBracketFixture({ teamCount: 32, scenario: "in_progress" })
@@ -167,6 +170,29 @@ describe("S4 場次頁路由", () => {
       path: { tournament_id: TOURNAMENT_ID, match_id: "match-M18" },
     })
   })
+
+  it.each([
+    ["upheld", "維持原結果"],
+    ["corrected", "更正結果"],
+  ] as const)(
+    "經申訴處理的已確認場次：頁首顯示處理結果（%s →「%s」）",
+    async (decision, text) => {
+      mockPublicMatch((detail) => ({ ...detail, status: "confirmed" }))
+      const readResult = vi
+        .spyOn(DisputesService, "readAppealResult")
+        .mockResolvedValue({ data: { decision } } as ReadAppealResultResult)
+      renderAt(matchUrl("match-M3"))
+
+      await screen.findByRole("heading", { level: 1, name: "32 強 · M3" })
+      const header = document.querySelector(
+        "[data-slot=match-header]",
+      ) as HTMLElement
+      expect(await within(header).findByText(text)).toBeInTheDocument()
+      expect(readResult).toHaveBeenCalledWith({
+        path: { tournament_id: TOURNAMENT_ID, match_id: "match-M3" },
+      })
+    },
+  )
 
   it("找不到場次（API 404）：顯示 404", async () => {
     mockPublicMatch()

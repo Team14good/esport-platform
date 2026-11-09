@@ -396,8 +396,9 @@ def test_window_not_appealed(
     assert _writes(session, setup) == before
 
 
+# 6.2（AC「一方或雙方」）起雙方棄權也可以重新比賽，見 test_appeal_resolution
 @pytest.mark.parametrize(
-    "outcome", [None, MatchOutcome.PLAYED, MatchOutcome.DOUBLE_FORFEIT]
+    "outcome", [None, MatchOutcome.PLAYED, MatchOutcome.WALKOVER]
 )
 def test_window_appealed_but_not_forfeit(
     session: Session, setup: HookSetup, outcome: MatchOutcome | None
