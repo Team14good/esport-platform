@@ -3,6 +3,7 @@ import type { PublicBracket } from "@/client"
 import { cn } from "@/lib/utils"
 import { BracketMatchCard } from "./BracketMatchCard"
 import { layoutBracket } from "./bracket-layout"
+import { disqualifiedLastMatches } from "./match-status"
 
 const NO_CHANGES: ReadonlySet<string> = new Set()
 
@@ -41,6 +42,11 @@ export function BracketTree({
   className,
 }: BracketTreeProps) {
   const layout = useMemo(() => layoutBracket(bracket), [bracket])
+  // 已取消資格的隊伍只在它出現的最後一張卡加標記（6.5）
+  const disqualifiedLast = useMemo(
+    () => disqualifiedLastMatches(bracket.matches),
+    [bracket],
+  )
   const generation = flashGeneration(changedMatchIds)
 
   return (
@@ -97,6 +103,7 @@ export function BracketTree({
                 flash={flash}
                 matchHref={matchHref}
                 placements={bracket}
+                disqualifiedLast={disqualifiedLast}
                 className="absolute"
                 style={{ left: x, top: y }}
               />

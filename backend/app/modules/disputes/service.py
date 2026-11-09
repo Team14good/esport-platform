@@ -2,7 +2,7 @@
 
 賽事只透過 tournaments 的 `get_tournament`、`lock_tournament`；隊伍與報名只透過
 registration 的 `find_team_of_account`、`get_team`、`get_registration`、
-`list_teams_by_status`、`get_team_names`、`is_captain`；場次只透過 competition 的
+`list_teams_by_status`、`get_team_names`、`is_captain`、`is_member`；場次只透過 competition 的
 `get_match`、`list_team_matches`、`get_public_match`、`lock_match`、`mark_appealed`、
 `uphold_result`、`correct_result`、`replay_match`、`get_replay_window`、`disqualify`（contracts/disputes.md）。
 """
@@ -51,6 +51,7 @@ from app.modules.disputes.models import (
     ReportRead,
     ReportResolved,
     ReportStatus,
+    TeamDisqualification,
 )
 from app.modules.registration import service as registration_service
 from app.modules.registration.models import RegistrationStatus, TeamRead
@@ -1160,3 +1161,31 @@ def resolve_report(
         session, team_ids=[report.reporter_team_id, report.reported_team_id]
     )
     return _to_read(report, names)
+
+
+# ---------------------------------------------------------------- 取消資格理由（S12、S17）
+
+
+def get_team_disqualification(
+    session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+) -> TeamDisqualification | None:
+    """隊伍被取消資格的處理理由與處理時間；只有該隊隊員能讀。
+
+    非隊員（含隊伍不存在）拋 403 `TEAM_MEMBER_REQUIRED`。報名狀態不是取消資格（例如賽事結束後
+    只記錄屬實）、或找不到屬實的檢舉時回 None。理由不出現在公開 API（AD-19）。
+    """
+    if not registration_service.is_member(
+        session, team_id=team_id, account_id=account_id
+    ):
+        raise BusinessError(
+            "TEAM_MEMBER_REQUIRED",
+            "只有隊員可以查看取消資格的理由。",
+            status_code=403,
+        )
+    registration = registration_service.get_registration(session, team_id=team_id)
+    if registration.status != RegistrationStatus.DISQUALIFIED:
+        return None
+    report = repository.find_latest_substantiated_report_against(session, team_id)
+    if report is None or report.reason is None or report.handled_at is None:
+        return None
+    return TeamDisqualification(reason=report.reason, handled_at=report.handled_at)

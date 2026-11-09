@@ -331,3 +331,13 @@ class ReportableTeam(BaseModel):
     id: uuid.UUID
     name: str
     has_open_report: bool
+
+
+class TeamDisqualification(BaseModel):
+    """S12、S17：隊伍被取消資格的處理理由（只給該隊隊員；不出現在公開 API，AD-19）。
+
+    理由取自對該隊判定屬實的檢舉（同時結案的檢舉理由相同，取最近處理的一筆）。
+    """
+
+    reason: str
+    handled_at: datetime

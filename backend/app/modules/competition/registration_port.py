@@ -5,8 +5,8 @@
 在呼叫當下才到 `app.modules.registration.service` 查找：C 的函式尚未合併時拋
 503 `REGISTRATION_UNAVAILABLE`，合併後不必修改 competition。
 
-這裡只回傳 competition 需要的資料：隊伍 id、公開對戰樹用的隊名，以及 S12 下一場用的
-「登入者所屬、已參賽的隊伍」。
+這裡只回傳 competition 需要的資料：隊伍 id、公開對戰樹用的隊名與「已取消資格」，
+以及 S12 下一場用的「登入者所屬、已參賽的隊伍」。
 """
 
 import uuid
@@ -83,6 +83,19 @@ def get_team_names(
     if not team_ids:
         return {}
     return dict(_lookup("get_team_names")(session, team_ids=list(team_ids)))
+
+
+def list_disqualified_team_ids(
+    session: Session, *, tournament_id: uuid.UUID
+) -> set[uuid.UUID]:
+    """某賽事報名狀態為取消資格的隊伍 id（公開對戰樹的「取消資格」標記用，一次查完）。
+
+    沿用 registration `list_teams_by_status`（只取 id）；尚未提供時拋 503。
+    """
+    teams = _lookup("list_teams_by_status", action="查詢對戰表")(
+        session, tournament_id=tournament_id, statuses=[_DISQUALIFIED]
+    )
+    return {team.id for team in teams}
 
 
 def is_captain(session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID) -> bool:

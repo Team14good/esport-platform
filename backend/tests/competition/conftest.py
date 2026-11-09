@@ -102,6 +102,14 @@ class FakeRegistration:
         self.calls.append("disqualify_registration")
         self.disqualified.append((team_id, actor_id))
 
+    def list_disqualified_team_ids(
+        self, _session: Session, *, tournament_id: uuid.UUID
+    ) -> set[uuid.UUID]:
+        # 公開對戰表每次都會查；不記入 calls，以免改變既有測試的呼叫順序斷言
+        if tournament_id != self.tournament_id:
+            return set()
+        return {team for team, _ in self.disqualified}
+
 
 @pytest.fixture
 def fake_registration(monkeypatch: pytest.MonkeyPatch) -> FakeRegistration:
@@ -113,6 +121,7 @@ def fake_registration(monkeypatch: pytest.MonkeyPatch) -> FakeRegistration:
         "get_team_names",
         "get_registration_state",
         "disqualify_registration",
+        "list_disqualified_team_ids",
     ):
         monkeypatch.setattr(registration_port, name, getattr(fake, name))
     return fake

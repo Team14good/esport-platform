@@ -100,7 +100,7 @@ development_status:
   6-2-主辦方處理申訴: done  # 負責：B（含 competition 端，D 審查）；spec-6-2-resolve-appeals.md，PR #69 已合併（例外修改 D 的 get_replay_window）；審查後續 PR #71（spec-6-2-review-fixes.md）
   6-3-申訴逾期提醒與受影響場次暫停: backlog  # 擱置（期中後）
   6-4-提出檢舉: done  # 負責：C
-  6-5-查證檢舉與取消資格: in-progress  # 負責：B（含 competition 端，D 審查）；第一階段（competition disqualify，spec-6-5-disqualify.md，PR #65）已合併；第二階段 A（resolve_report＋S33，spec-6-5-resolve-report.md，PR #73）已合併；B（S27 待處理清單加入檢舉，spec-6-5-s27-reports.md）進行中；C（對戰樹標記）見 deferred-work
+  6-5-查證檢舉與取消資格: in-progress  # 負責：B（含 competition 端，D 審查）；第一階段（competition disqualify，spec-6-5-disqualify.md，PR #65）已合併；第二階段 A（resolve_report＋S33，spec-6-5-resolve-report.md，PR #73）、B（S27 待處理清單加入檢舉，spec-6-5-s27-reports.md，PR #75）已合併；C（對戰樹標記與取消資格理由，spec-6-5-dq-marks.md）實作完成、待審查（每週額度用完，交接給組員）
   epic-6-retrospective: optional
 
   epic-7: in-progress

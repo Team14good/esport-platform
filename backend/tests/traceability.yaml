@@ -185,6 +185,10 @@ disputes/test_resolve_report.py:
   layer: integration
   stories: ["6.5"]
   frs: [FR-33, FR-22, NFR-3, NFR-5]
+disputes/test_disqualification_marks.py:
+  layer: integration
+  stories: ["6.5"]
+  frs: [FR-33, FR-35, NFR-3]
 identity/test_demo_data.py:
   layer: integration
   stories: ["7.1"]

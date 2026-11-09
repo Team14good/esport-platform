@@ -87,6 +87,9 @@ import type {
   disputesReadReplayWindowData,
   disputesReadReplayWindowErrors,
   disputesReadReplayWindowResponses,
+  disputesReadTeamDisqualificationData,
+  disputesReadTeamDisqualificationErrors,
+  disputesReadTeamDisqualificationResponses,
   disputesResolveAppealsData,
   disputesResolveAppealsErrors,
   disputesResolveAppealsResponses,
@@ -1740,6 +1743,26 @@ export class DisputesService {
     >({
       responseType: "json",
       url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/appeal-result",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Team Disqualification
+   *
+   * S12、S17：隊伍被取消資格的處理理由；只有該隊隊員（否則 403），沒有取消資格時為 null。
+   */
+  public static readTeamDisqualification<ThrowOnError extends boolean = true>(
+    options: Options<disputesReadTeamDisqualificationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      disputesReadTeamDisqualificationResponses,
+      disputesReadTeamDisqualificationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/disqualification",
       ...options,
     })
   }

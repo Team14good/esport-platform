@@ -95,7 +95,8 @@ def test_owner_draws_and_public_bracket_is_visible(
     for match in data["matches"]:
         assert set(match) == PUBLIC_MATCH_KEYS
     for team in (matches["M1"]["team_a"], matches["M1"]["team_b"]):
-        assert set(team) == {"id", "name"}
+        assert set(team) == {"id", "name", "disqualified"}
+        assert team["disqualified"] is False
         assert team["name"].startswith("隊伍")
     assert (matches["M1"]["source_a"], matches["M1"]["source_b"]) == (None, None)
     assert (matches["M5"]["team_a"], matches["M5"]["team_b"]) == (None, None)

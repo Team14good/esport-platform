@@ -183,3 +183,17 @@ def close_reports(
         report.handled_at = handled_at
         session.add(report)
     session.flush()
+
+
+def find_latest_substantiated_report_against(
+    session: Session, reported_team_id: uuid.UUID
+) -> Report | None:
+    """對某隊判定屬實的檢舉中最近處理的一筆（同時間再依 id）；沒有時為 None。"""
+    statement = (
+        select(Report)
+        .where(Report.reported_team_id == reported_team_id)
+        .where(Report.status == ReportStatus.SUBSTANTIATED)
+        .order_by(col(Report.handled_at).desc(), col(Report.id))
+        .limit(1)
+    )
+    return session.exec(statement).first()
