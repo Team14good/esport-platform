@@ -21,7 +21,10 @@ import { formatMatchDateTime } from "@/features/competition/match-time"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { notifyError } from "@/lib/feedback"
 import { DECISION_LABEL } from "./decision-label"
-import { tournamentAppealsQueryOptions } from "./organizer-queries"
+import {
+  latestDecision,
+  tournamentAppealsQueryOptions,
+} from "./organizer-queries"
 import {
   CorrectAppealDialog,
   canCorrect,
@@ -138,7 +141,8 @@ function StatusCell({ group }: { group: AppealGroup }) {
       </StatusBadge>
     )
   }
-  const decision = group.appeals.find((a) => a.decision)?.decision
+  // 重新比賽後可能再處理一輪：以最後一次處理為準（與 S4 公開結果一致）
+  const decision = latestDecision(group.appeals)
   return (
     <StatusBadge tone="confirmed">
       {decision ? DECISION_LABEL[decision] : "已結案"}
@@ -167,6 +171,16 @@ function Actions({
   )
 }
 
+/**
+ * 列表要列出的申訴：有未結案申訴時只列未結案的（重新比賽後再申訴時，上一輪已結案的
+ * 申訴不和本輪混在一起）；已結案的場次列出全部。說明對話框仍列出全部。
+ */
+export function listedAppeals(group: AppealGroup): AppealItem[] {
+  return group.has_open
+    ? group.appeals.filter((appeal) => appeal.status === "open")
+    : group.appeals
+}
+
 function buildColumns(tournamentId: string): DataTableColumn<AppealGroup>[] {
   return [
     {
@@ -193,7 +207,7 @@ function buildColumns(tournamentId: string): DataTableColumn<AppealGroup>[] {
       header: "提出隊伍",
       cell: (group) => (
         <Stack>
-          {group.appeals.map((appeal) => (
+          {listedAppeals(group).map((appeal) => (
             <span key={appeal.id} className="break-words">
               {appeal.team_name}
             </span>
@@ -206,7 +220,7 @@ function buildColumns(tournamentId: string): DataTableColumn<AppealGroup>[] {
       header: "提出時間",
       cell: (group) => (
         <Stack>
-          {group.appeals.map((appeal) => (
+          {listedAppeals(group).map((appeal) => (
             <time
               key={appeal.id}
               dateTime={appeal.filed_at}

@@ -990,7 +990,7 @@ export type NextMatch = {
 /**
  * OpenDisputeItem
  *
- * S27 待處理清單的一筆（期中只有申訴；6.4 起加入檢舉）。
+ * S27 待處理清單的一筆（目前只有申訴；檢舉由 6.5 接上）。
  */
 export type OpenDisputeItem = {
   /**

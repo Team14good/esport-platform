@@ -34,7 +34,7 @@ import { matchLabel } from "@/features/competition/match-status"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { type ApiError, getErrorMessage, parseApiError } from "@/lib/api-error"
 import { isoToTaipeiLocal, taipeiLocalToIso } from "@/lib/datetime"
-import { notifySuccess } from "@/lib/feedback"
+import { notifyError, notifySuccess } from "@/lib/feedback"
 import { DECISION_LABEL } from "./decision-label"
 import {
   replayWindowQueryOptions,
@@ -54,6 +54,7 @@ export const NO_VALID_TIME_TEXT =
 export const ADD_GAME_TEXT = "新增一局"
 export const REMOVE_GAME_TEXT = "刪除最後一局"
 const RESCHEDULE_NO_VALID_TIME = "RESCHEDULE_NO_VALID_TIME"
+const NO_OPEN_APPEALS = "NO_OPEN_APPEALS"
 
 /** 重賽時間範圍回傳這些原因時不能重新比賽：顯示說明、確認鈕停用。 */
 export const REPLAY_BLOCKED_TEXT: Partial<
@@ -123,13 +124,21 @@ function describe(group: AppealGroup, consequence: string): ReactNode {
   )
 }
 
-/** 送出處理；成功時 Toast 並重抓，失敗時重抓後拋出（對話框顯示伺服器訊息）。 */
+/**
+ * 送出處理；成功時 Toast 並重抓，失敗時重抓後拋出（對話框顯示伺服器訊息）。
+ * `NO_OPEN_APPEALS`（例如另一個分頁已處理）時重抓後這一列不再有操作、對話框跟著卸載，
+ * 所以另外以錯誤 Toast 顯示伺服器訊息，不會無聲消失。
+ */
 function useResolve(tournamentId: string, matchId: string) {
   const refetch = useRefetchAppeals(tournamentId)
   return async (body: AppealResolveIn) => {
     try {
       await resolveAppeals({ tournamentId, matchId, body })
     } catch (error) {
+      const parsed = parseApiError(error)
+      if (parsed.kind === "business" && parsed.code === NO_OPEN_APPEALS) {
+        notifyError(error)
+      }
       void refetch()
       throw error
     }
@@ -256,6 +265,15 @@ function ResolveDialog({
 
 type DialogProps = { tournamentId: string; group: AppealGroup }
 
+/** 維持原結果後的晉級：雙方棄權沒有勝隊，兩隊都不晉級。 */
+export function upholdConsequenceText(
+  group: Pick<AppealGroup, "outcome">,
+): string {
+  return group.outcome === "double_forfeit"
+    ? "場次轉為已確認，雙方都不晉級。"
+    : "場次轉為已確認，勝隊晉級。"
+}
+
 /** 「維持原結果」：沿用原結果確認並晉級。 */
 export function UpholdAppealDialog({ tournamentId, group }: DialogProps) {
   const resolve = useResolve(tournamentId, group.match_id)
@@ -264,7 +282,7 @@ export function UpholdAppealDialog({ tournamentId, group }: DialogProps) {
       title={UPHOLD_TEXT}
       description={describe(
         group,
-        `${matchLabel({ code: group.match_code, is_third_place: group.is_third_place })} 維持原本的結果，場次轉為已確認，勝隊晉級。${appealCountText(group)}`,
+        `${matchLabel({ code: group.match_code, is_third_place: group.is_third_place })} 維持原本的結果，${upholdConsequenceText(group)}${appealCountText(group)}`,
       )}
       confirmLabel={UPHOLD_TEXT}
       reason={{ label: REASON_LABEL, maxLength: REASON_MAX_LENGTH }}

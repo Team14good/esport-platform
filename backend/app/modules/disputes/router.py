@@ -253,7 +253,7 @@ def read_replay_window(
 def read_open_disputes(
     session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
 ) -> OpenDisputes:
-    """S27 待處理清單：未結案的申訴與檢舉，依處理期限由近到遠。"""
+    """S27 待處理清單：未結案的申訴，依處理期限由近到遠（檢舉由 6.5 接上，目前為 0）。"""
     return service.count_open_disputes(
         session, tournament_id=tournament_id, actor_id=organizer.id
     )

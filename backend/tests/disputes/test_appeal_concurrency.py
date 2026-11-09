@@ -1,9 +1,11 @@
-"""AD-6：真實 PostgreSQL 上提出申訴與 worker 期滿確認同時發生時，只有一方成功。
+"""AD-6：真實 PostgreSQL 上提出申訴與 worker 期滿確認（6.1）、與主辦方處理申訴（6.2）
+同時發生時，只有一方成功。
 
 兩邊都先 `lock_tournament` 再 `lock_match`，鎖住後才判斷場次狀態與期限。一方持有鎖、
 尚未提交時另一方開始執行：後到的一方必須等鎖，鎖到後看到前者的結果而放棄。把
-`file_appeal` 改成鎖之前就判斷狀態（或不加鎖）時，申訴會在場次已確認後仍然成功，
-這裡的斷言就會失敗。
+`file_appeal` 改成鎖之前就判斷狀態（或不加鎖）時，申訴會在場次已確認後仍然成功；
+`resolve_appeals` 改成鎖之前就讀未結案申訴時，同時提出的另一筆申訴會漏掉、一直留在
+未結案。這裡的斷言就會失敗。
 
 資料要真正提交，另一條連線才看得到，所以不用外層交易的 `session` fixture。被只增不改的
 操作紀錄參照的賽事、遊戲與帳號刪不掉，留在測試資料庫（比照 registration 的併發測試）；
@@ -27,7 +29,7 @@ from app.core.events import OutboxEvent
 from app.modules.competition import service as competition_service
 from app.modules.competition.models import Bracket, Match, MatchOutcome, MatchStatus
 from app.modules.disputes import service
-from app.modules.disputes.models import Appeal
+from app.modules.disputes.models import Appeal, AppealDecision, AppealStatus
 from app.modules.registration import service as registration_service
 from app.modules.tournaments.models import Tournament, TournamentStatus
 from tests.competition.conftest import (  # noqa: F401  fake_registration 是 fixture
@@ -49,6 +51,8 @@ class Committed:
     bracket_id: uuid.UUID
     match_id: uuid.UUID
     captain_id: uuid.UUID
+    captain_b_id: uuid.UUID
+    organizer_id: uuid.UUID
 
 
 @pytest.fixture
@@ -82,14 +86,22 @@ def committed(
         match.appeal_deadline = DEADLINE
         setup.add(match)
         captain = make_account(setup)
+        captain_b = make_account(setup)
         setup.commit()
-        data = Committed(tournament.id, bracket.id, match.id, captain.id)
-        team_a = match.team_a_id
+        data = Committed(
+            tournament.id,
+            bracket.id,
+            match.id,
+            captain.id,
+            captain_b.id,
+            organizer.id,
+        )
+        captains = {match.team_a_id: captain.id, match.team_b_id: captain_b.id}
 
     def is_captain(
         _session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
     ) -> bool:
-        return team_id == team_a and account_id == data.captain_id
+        return captains.get(team_id) == account_id
 
     monkeypatch.setattr(registration_service, "is_captain", is_captain)
     try:
@@ -116,12 +128,12 @@ def committed(
             cleanup.commit()
 
 
-def _file(db: Session, data: Committed) -> None:
+def _file(db: Session, data: Committed, *, captain_id: uuid.UUID | None = None) -> None:
     service.file_appeal(
         db,
         tournament_id=data.tournament_id,
         match_id=data.match_id,
-        account_id=data.captain_id,
+        account_id=captain_id or data.captain_id,
         description="比分有誤",
         attachment=None,
         content_type=None,
@@ -202,3 +214,79 @@ def test_worker_waits_for_appeal_and_skips(
     assert outcome == [("ok", True)]
     assert _status(committed.match_id) == MatchStatus.APPEALED
     assert _appeal_count(committed.match_id) == 1
+
+
+def _uphold(db: Session, data: Committed) -> None:
+    service.resolve_appeals(
+        db,
+        tournament_id=data.tournament_id,
+        match_id=data.match_id,
+        actor_id=data.organizer_id,
+        decision=AppealDecision.UPHELD,
+        reason="維持",
+        games=None,
+        replay_at=None,
+    )
+
+
+def _appeals(match_id: uuid.UUID) -> list[tuple[uuid.UUID, AppealStatus]]:
+    with Session(engine) as check:
+        rows = check.exec(
+            select(Appeal)
+            .where(Appeal.match_id == match_id)
+            .order_by(col(Appeal.filed_at))
+        ).all()
+        return [(row.team_id, AppealStatus(row.status)) for row in rows]
+
+
+def _appealed_by_a(data: Committed, frozen_clock: FrozenClock) -> None:
+    """A 隊先申訴並提交：場次為申訴中，B 隊仍在申訴期限內。"""
+    frozen_clock.set(DEADLINE - timedelta(minutes=10))
+    with Session(engine) as db:
+        _file(db, data)
+        db.commit()
+
+
+def test_appeal_waits_for_resolution_and_is_rejected(
+    committed: Committed, frozen_clock: FrozenClock
+) -> None:
+    """主辦方先鎖住並處理（維持）；同時送出的 B 隊申訴等鎖，鎖到後看到已確認而拒絕。"""
+    _appealed_by_a(committed, frozen_clock)
+    with Session(engine) as organizer:
+        _uphold(organizer, committed)
+        thread, outcome = _run_in_thread(
+            lambda db: _file(db, committed, captain_id=committed.captain_b_id)
+        )
+        thread.join(timeout=BLOCKED_SECONDS)
+        assert thread.is_alive(), f"申訴沒有等處理的鎖：{outcome}"
+        organizer.commit()
+    thread.join(timeout=30)
+    assert not thread.is_alive()
+
+    assert outcome == ["APPEAL_NOT_ALLOWED"]
+    assert _status(committed.match_id) == MatchStatus.CONFIRMED
+    assert [status for _team, status in _appeals(committed.match_id)] == [
+        AppealStatus.CLOSED
+    ]
+
+
+def test_resolution_waits_for_appeal_and_closes_both(
+    committed: Committed, frozen_clock: FrozenClock
+) -> None:
+    """B 隊申訴先鎖住；同時送出的處理等鎖，鎖到後兩隊的申訴一起結案。"""
+    _appealed_by_a(committed, frozen_clock)
+    with Session(engine) as appeal:
+        _file(appeal, committed, captain_id=committed.captain_b_id)
+        thread, outcome = _run_in_thread(lambda db: _uphold(db, committed))
+        thread.join(timeout=BLOCKED_SECONDS)
+        assert thread.is_alive(), f"處理沒有等申訴的鎖：{outcome}"
+        appeal.commit()
+    thread.join(timeout=30)
+    assert not thread.is_alive()
+
+    assert outcome == [("ok", None)]
+    assert _status(committed.match_id) == MatchStatus.CONFIRMED
+    assert [status for _team, status in _appeals(committed.match_id)] == [
+        AppealStatus.CLOSED,
+        AppealStatus.CLOSED,
+    ]

@@ -577,7 +577,7 @@ def test_unique_key_is_the_last_line_of_defence(
         attachment=None,
         content_type=None,
     )
-    monkeypatch.setattr(repository, "find_team_appeal", lambda *_args: None)
+    monkeypatch.setattr(repository, "find_open_team_appeal", lambda *_args: None)
 
     with pytest.raises(BusinessError) as caught:
         service.file_appeal(
