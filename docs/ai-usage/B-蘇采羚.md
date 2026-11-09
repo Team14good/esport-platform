@@ -472,3 +472,15 @@
 - 問題與修正：Edge Case Hunter 提的「隊長中途換人後一直 403」，主代理判斷要等期中擱置的 3.11（隊員異動）才會發生而排除；Blind Hunter 對 C 的 spec 與 AI 紀錄寫法的意見（任務勾選、計數）屬 C 自己的文件，不列入審查意見
 - 成熟度：L4（多個審查者並行，主代理逐筆核對並實際試合，人在送出前確認）
 - 證據：PR #64 的審查意見（B，APPROVED，2026-11-09）
+
+### 2026-11-09｜程式／程式生成｜Story 6.2 主辦方處理申訴（接手、審查修正與合併）
+
+- Story／範圍：6.2（分支 `story/6-2`，spec `_bmad-output/implementation-artifacts/spec-6-2-resolve-appeals.md`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（另一個工作階段做 spec、實作與第 1 輪審查；本工作階段接手後以子代理套用修正、解合併衝突）
+- 怎麼用：另一個工作階段在 `espory-6-2` 完成實作與第 1 輪審查分類後停下，修改都沒有 commit；本工作階段讀 spec 與 Review Triage Log 確認進度，請使用者決定唯一的 intent_gap，再交子代理套用 12 項修正、解合併衝突，主代理整理分支並跑完整驗證
+- AI 產出：competition `uphold_result`、`correct_result`、`replay_match`（新檔 `appeals.py`）；disputes 申訴列表、`resolve_appeals`、`count_open_disputes`、公開結果、重賽時間範圍與 5 支 API；前端 S32 申訴頁、側欄「申訴」、S27 待處理清單、S4 處理結果徽章；12 項審查修正（補授權邊界、處理期限、S4 路由層級等測試；`games` 上限 7 局；隊名改依 `appeal.team_id` 查；對話框列出目前結果；附件分頁改在點擊當下開啟等）；最終 36 個檔案、+4675／-28 行
+- 人做了什麼：決定重新比賽也支援雙方棄權，並為此例外修改 D 的 `get_replay_window`、請 D 審查；決定由本工作階段接手
+- 驗證：後端 lint（mypy 71 個檔案無問題、ruff 通過）、全套 2289 passed、覆蓋率 97%；前端 Biome、型別檢查通過，單元測試 68 個檔案 959 個全過；Alembic 單一 head
+- 問題與修正：AI 的實作直接改了 D 的既有函式與 D 的測試，和 spec 自己寫的「不改 D 的既有行為」衝突，第 1 輪審查（主持人核對 diff）發現後標為 intent_gap 交給使用者，使用者決定保留並在 Decisions 記錄例外。第 1 輪審查的 12 項 patch 在前一個工作階段只分類、沒有套用，接手時對照程式逐項確認後才補做。6.2 是從 6.1 squash 合併前的舊 commit 開始做的，直接合併 main 有 19 個衝突檔（git 認不出兩份相同的 6.1）；AI 改為先合併本機 6.1 最終分支（樹與 main 相同），衝突降到 9 個，解完後確認樹相等，再把分支整理成 main 之上只含 6.2 的一個 commit。子代理也指出 6.4 已合併但 S27 待處理仍不計檢舉，屬需求決定，交給使用者
+- 成熟度：L4（spec → 子代理實作 → 多個審查者 → 子代理修正與合併 → 主代理完整驗證，人在 intent_gap 介入）
+- 證據：spec 的 Decisions、Implementation Notes、Review Triage Log；commit `bded082`

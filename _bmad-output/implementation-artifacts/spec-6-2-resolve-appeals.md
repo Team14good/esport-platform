@@ -2,7 +2,7 @@
 title: 'Story 6.2：主辦方處理申訴'
 type: 'feature'
 created: '2026-11-09'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'a4fbdf6d6209022a441e81267b2946e5261f71db'
 route: 'dispatch'
 review_loop_iteration: 0
