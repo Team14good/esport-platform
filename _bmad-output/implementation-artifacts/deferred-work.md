@@ -227,3 +227,6 @@
 - source_spec: none
   summary: 6.5 第二階段（C）：對戰樹的「取消資格」標記（`destructive`），公開對戰表 API 帶出隊伍是否已取消資格，S3／S4 顯示；S17、S12 顯示處理理由。
   evidence: 2026-11-09 使用者決定把 6.5 第二階段拆開，先做檢舉處理（`resolve_report`＋S33）；標記需要公開對戰表 API 新增欄位與前端顯示，可獨立審查合併。
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-followup-review.md`
+  summary: （低）6.1 申訴的刪檔測試（`test_file_appeal.py`，例如 `test_commit_failure_deletes_the_attachment`）只斷言上傳目錄是空的，實作沒存檔也會通過；可比照 6.4 用 spy `storage.save_image` 斷言存過且該鍵值已被刪。
+  evidence: 2026-11-09 6.4 合併後審查後續的 Blind Hunter 指出；與 D 在 #64 指出的 6.4 刪檔測試是同一類漏洞，6.4 這邊已補，申訴是 B 的測試，不在本次範圍。
