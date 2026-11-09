@@ -355,6 +355,13 @@ def delete_game(session: Session, game: MatchGame) -> None:
     session.flush()
 
 
+def delete_games(session: Session, match_id: uuid.UUID) -> None:
+    """刪除該場全部局（6.2 更正結果整份替換各局）；flush 後才能以相同局號新增。"""
+    for game in list_games(session, match_id):
+        session.delete(game)
+    session.flush()
+
+
 def set_match_wins(
     session: Session, match: Match, wins_a: int, wins_b: int, at: datetime
 ) -> None:

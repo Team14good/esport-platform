@@ -9,10 +9,15 @@ from fastapi.responses import StreamingResponse
 
 from app.core import storage
 from app.core.db import SessionDep
+from app.modules.competition.models import RescheduleInfo
 from app.modules.disputes import service
 from app.modules.disputes.models import (
+    AppealGroup,
     AppealRead,
+    AppealResolveIn,
     AppealState,
+    OpenDisputes,
+    PublicAppealResult,
     ReportableTeam,
     ReportRead,
 )
@@ -193,4 +198,72 @@ def download_appeal_attachment(
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, no-store",
         },
+    )
+
+
+@router.get("/organizer/tournaments/{tournament_id}/appeals")
+def list_tournament_appeals(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> list[AppealGroup]:
+    """S32：該賽事的申訴，依場次分組（未結案在前）；只有該賽事主辦方。"""
+    return service.list_tournament_appeals(
+        session, tournament_id=tournament_id, actor_id=organizer.id
+    )
+
+
+@router.post(
+    "/organizer/tournaments/{tournament_id}/matches/{match_id}/appeal-resolution"
+)
+def resolve_appeals(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    body: AppealResolveIn,
+) -> list[AppealRead]:
+    """S32 處理同一場次的申訴：維持原結果、更正結果（整組各局）或重新比賽（只用於棄權）。"""
+    result = service.resolve_appeals(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        actor_id=organizer.id,
+        decision=body.decision,
+        reason=body.reason,
+        games=body.games,
+        replay_at=body.replay_at,
+    )
+    session.commit()
+    return result
+
+
+@router.get("/organizer/tournaments/{tournament_id}/matches/{match_id}/replay-window")
+def read_replay_window(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> RescheduleInfo:
+    """S32 重新比賽的時間範圍（與 4.3 改期同一個規則）；只有該賽事主辦方。"""
+    return service.get_replay_window(
+        session, tournament_id=tournament_id, match_id=match_id, actor_id=organizer.id
+    )
+
+
+@router.get("/organizer/tournaments/{tournament_id}/open-disputes")
+def read_open_disputes(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> OpenDisputes:
+    """S27 待處理清單：未結案的申訴與檢舉，依處理期限由近到遠。"""
+    return service.count_open_disputes(
+        session, tournament_id=tournament_id, actor_id=organizer.id
+    )
+
+
+@router.get("/tournaments/{tournament_id}/matches/{match_id}/appeal-result")
+def read_appeal_result(
+    session: SessionDep, tournament_id: uuid.UUID, match_id: uuid.UUID
+) -> PublicAppealResult:
+    """S4（公開，不需登入）：已確認場次的申訴處理結果；不含申訴內容（AD-19）。"""
+    return service.get_public_appeal_result(
+        session, tournament_id=tournament_id, match_id=match_id
     )
