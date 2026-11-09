@@ -27,6 +27,7 @@ import { BracketTree } from "./BracketTree"
 import { fetchPublicBracket, publicBracketQueryKey } from "./bracket-queries"
 import { connectionLostText } from "./ConnectionLostBanner"
 import { matchPath } from "./match-source"
+import { TournamentPodium } from "./TournamentPodium"
 import { useBracketPolling } from "./use-bracket-polling"
 
 /** 已取消（或狀態不該沒有對戰表）時的空狀態 */
@@ -134,11 +135,14 @@ function BracketSection({ tournament, onCountdownExpire }: TournamentProps) {
       <TournamentHeader tournament={tournament} />
       <TournamentTabs tournamentId={tournament.id} current="bracket">
         {bracket ? (
-          <BracketTree
-            bracket={bracket}
-            changedMatchIds={changedMatchIds}
-            matchHref={(matchId) => matchPath(tournament.id, matchId)}
-          />
+          <div className="flex min-w-0 flex-col gap-6">
+            <TournamentPodium bracket={bracket} />
+            <BracketTree
+              bracket={bracket}
+              changedMatchIds={changedMatchIds}
+              matchHref={(matchId) => matchPath(tournament.id, matchId)}
+            />
+          </div>
         ) : notFound ? (
           <BracketNotDrawn
             tournament={tournament}

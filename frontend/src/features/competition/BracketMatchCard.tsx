@@ -4,11 +4,12 @@ import type { PublicMatch } from "@/client"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { cn } from "@/lib/utils"
 import { BracketMarkTag } from "./BracketMarkTag"
-import type { BracketSide } from "./match-status"
+import type { BracketPlacements, BracketSide } from "./match-status"
 import {
   hasScore,
   MATCH_STATUS_BADGES,
   matchLabel,
+  placementMark,
   type SideView,
   sideView,
 } from "./match-status"
@@ -16,10 +17,25 @@ import { formatMatchDateTime } from "./match-time"
 
 type RowView = SideView & { score: string }
 
-function rowView(match: PublicMatch, side: BracketSide): RowView {
+/** sideView 再加上決賽與季軍賽卡的名次標記（只有對戰樹傳 placements） */
+function cardSideView(
+  match: PublicMatch,
+  side: BracketSide,
+  placements?: BracketPlacements,
+): SideView {
+  const view = sideView(match, side)
+  const mark = placements ? placementMark(match, side, placements) : null
+  return mark ? { ...view, marks: [...view.marks, mark] } : view
+}
+
+function rowView(
+  match: PublicMatch,
+  side: BracketSide,
+  placements?: BracketPlacements,
+): RowView {
   const wins = side === "a" ? match.wins_a : match.wins_b
   return {
-    ...sideView(match, side),
+    ...cardSideView(match, side, placements),
     score: hasScore(match) ? String(wins) : "",
   }
 }
@@ -34,12 +50,15 @@ function sideName(view: SideView) {
  * 整張卡是連結時的可及名稱：連結內的 article 若有 aria-label 會取代卡片內容，
  * 所以把畫面上的標頭、隊名、標記、比分與狀態組成一句，例如「M3，清大 Hydra 對 交大 Nova，2 比 1，已確認」。
  */
-export function matchCardAccessibleName(match: PublicMatch): string {
+export function matchCardAccessibleName(
+  match: PublicMatch,
+  placements?: BracketPlacements,
+): string {
   const scheduled = match.status === "scheduled"
   return [
     matchLabel(match),
     scheduled ? formatMatchDateTime(match.scheduled_at) : "",
-    `${sideName(sideView(match, "a"))} 對 ${sideName(sideView(match, "b"))}`,
+    `${sideName(cardSideView(match, "a", placements))} 對 ${sideName(cardSideView(match, "b", placements))}`,
     hasScore(match) ? `${match.wins_a} 比 ${match.wins_b}` : "",
     MATCH_STATUS_BADGES[match.status].label,
   ]
@@ -97,6 +116,8 @@ type BracketMatchCardProps = {
   flash?: boolean
   /** 有提供時整張卡是連到該場 S4 的連結 */
   matchHref?: (matchId: string) => string
+  /** 有提供時決賽與季軍賽卡加名次標記（賽事結束後） */
+  placements?: BracketPlacements
   className?: string
   style?: CSSProperties
 }
@@ -106,6 +127,7 @@ export function BracketMatchCard({
   match,
   flash = false,
   matchHref,
+  placements,
   className,
   style,
 }: BracketMatchCardProps) {
@@ -149,8 +171,8 @@ export function BracketMatchCard({
           </StatusBadge>
         )}
       </div>
-      <TeamRow view={rowView(match, "a")} side="a" />
-      <TeamRow view={rowView(match, "b")} side="b" />
+      <TeamRow view={rowView(match, "a", placements)} side="a" />
+      <TeamRow view={rowView(match, "b", placements)} side="b" />
     </article>
   )
 
@@ -159,7 +181,7 @@ export function BracketMatchCard({
   return (
     <Link
       to={href}
-      aria-label={matchCardAccessibleName(match)}
+      aria-label={matchCardAccessibleName(match, placements)}
       data-slot="bracket-match-link"
       className={cn(
         "group block w-bracket-column-min rounded-md focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
