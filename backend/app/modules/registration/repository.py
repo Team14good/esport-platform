@@ -236,3 +236,21 @@ def list_teams_with_members_by_status(
     ):
         members[member.team_id].append(member)
     return [(team, members[team.id]) for team in teams]
+
+
+def list_teams_by_status(
+    session: Session,
+    tournament_id: uuid.UUID,
+    statuses: Collection[RegistrationStatus],
+) -> list[Team]:
+    """某賽事報名狀態在 `statuses` 之內的隊伍（依隊伍 id 排列）；不載入隊員。"""
+    if not statuses:
+        return []
+    statement = (
+        select(Team)
+        .join(Registration, col(Registration.team_id) == col(Team.id))
+        .where(Registration.tournament_id == tournament_id)
+        .where(col(Registration.status).in_(list(statuses)))
+        .order_by(col(Team.id))
+    )
+    return list(session.exec(statement))

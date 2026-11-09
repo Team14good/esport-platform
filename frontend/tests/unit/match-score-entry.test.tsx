@@ -349,6 +349,34 @@ describe("比分登錄查詢的重抓與換場", () => {
     expect(read).toHaveBeenCalledTimes(2)
   })
 
+  it("指派裁判後 updated_at 改變：重抓 is_scorer，面板跟著顯示或隱藏", async () => {
+    signIn()
+    const read = vi
+      .spyOn(CompetitionService, "readScoreEntry")
+      .mockResolvedValueOnce({
+        data: scorerState({ is_scorer: false }),
+      } as unknown as ReadScoreEntryResult)
+      .mockResolvedValueOnce({
+        data: scorerState(),
+      } as unknown as ReadScoreEntryResult)
+      .mockResolvedValue({
+        data: scorerState({ is_scorer: false }),
+      } as unknown as ReadScoreEntryResult)
+    const before = matchDetail({ updated_at: "2026-11-04T09:00:00.000Z" })
+    const rerender = renderWithRerender(before)
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText("可開始")).not.toBeInTheDocument()
+
+    rerender({ ...before, updated_at: "2026-11-04T09:05:00.000Z" })
+    expect(await screen.findByText("可開始")).toBeInTheDocument()
+
+    rerender({ ...before, updated_at: "2026-11-04T09:10:00.000Z" })
+    await waitFor(() =>
+      expect(screen.queryByText("可開始")).not.toBeInTheDocument(),
+    )
+    expect(read).toHaveBeenCalledTimes(3)
+  })
+
   it("換到另一場：回應前不沿用上一場的面板", async () => {
     signIn()
     vi.spyOn(CompetitionService, "readScoreEntry")

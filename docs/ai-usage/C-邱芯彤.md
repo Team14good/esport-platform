@@ -405,3 +405,95 @@
 - 問題與修正：AI 用 `python` 解衝突時，這台電腦的 `python` 是 WindowsApps 佔位程式，沒有執行也沒有報錯，AI 沒檢查就 `git add`，merge commit 帶著衝突標記。之後同一個佔位程式讓前端替換也沒生效，typecheck 報「`waitlistLines` 宣告但未使用」，AI 才 grep 發現檔案沒變，回頭檢查到 merge commit 的衝突標記；改用 `py -3` 重做，並 amend 尚未推送的 merge commit。另外第 1 輪自審時駁回的公平性斷言（Triage #6，理由是要重算整套規則），審查者指出沒有優先期學校時只要排序取前 N，這次補上
 - 成熟度：L3（AI 執行修正與驗證，審查與判斷來自組員）
 - 證據：PR #59；commit 2535df5（merge）、676141c；_bmad-output/implementation-artifacts/spec-3-5-first-come-allocation.md（Review Triage Log #13–#19）
+
+### 2026-11-08｜需求／設計｜Story 6.4 spec：提出檢舉
+
+- Story／範圍：6.4（分支 story/6-4，尚未 commit）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（一個調查子代理、一個 spec 審查子代理）
+- 怎麼用：主流程先查 PR 動態與 #59、#61 對 6.4 的影響，從最新 origin/main 開分支；依專案規則用 git 確認 epic-6-context 未過期；調查子代理整理 registration 公開函式、上傳寫法、S2 掛載方式、遷移與測試慣例；主流程對照 #55 的 disputes 介面約定、epics、UX 寫 spec；人回答待決問題後要求審查 spec，由子代理對照程式碼與文件審查
+- AI 產出：spec-6-4-file-report.md（I/O 矩陣 21 列、14 項 Tasks、Decisions 7 則、給實作的 7 點提醒，約 6,600 tokens）
+- 人做了什麼：決定處理中不能重複檢舉、沒有可檢舉的隊伍時不顯示入口、保留完整 spec；要求審查 spec；核准 20 項修正與 S20 的畫面文字、欄位、錯誤訊息、主辦方列表排序；規定與 #55 約定不同的地方要先取得 B 同意；停在 ready-for-dev，實作改在新的 session
+- 驗證：spec 審查子代理提出 20 項（必改 7、建議 8、小地方 5），主流程到程式碼抽查 4 項（query 對 403 重試 3 次、`FieldError` 的 code 必填、`ResponsiveShell` 未 export、multipart 欄位需預設空字串）都屬實，20 項全部修正
+- 問題與修正：AI 寫的第一版 spec 有多處照著做會出錯，由審查子代理抓到：`file_report` 回傳不含附件鍵值，router 在 commit 失敗時刪不了檔；S2 入口依 403 判斷隊長，但專案的 query 預設對 403 重試 3 次，隊員打開頁面會連打 4 次 API；說明欄若宣告為必填表單欄位，空白時會回 FastAPI 的英文錯誤而不是中文訊息；`Report` 欄位型別與索引沒寫，與「6.5 不再改表」矛盾；S20 介面文字沒定。另外，AI 寫第一版時已發現 #55 約定的 `CAPTAIN_REQUIRED` 在程式中不存在，改沿用 `TEAM_CAPTAIN_REQUIRED`。主流程第一次用 bash 內嵌 Python 套用修改時解析失敗，檔案未被改動，改成先寫腳本檔再執行
+- 成熟度：L4（固定流程，子代理調查與審查，主流程查證，人在待決問題與核准的 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Decisions、Implementation Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-08｜程式／程式生成｜Story 6.4 提出檢舉：實作
+
+- Story／範圍：6.4（分支 story/6-4，尚未 commit）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（一個實作子代理）
+- 怎麼用：新的 session 用 bmad-build 接手 ready-for-dev 的 spec，主流程記錄 baseline 後把 spec 交給實作子代理；完成後主流程讀完整 diff，逐項對照 Tasks 與 I/O 矩陣，並自己重跑全部測試
+- AI 產出：
+  - 後端：`report` 資料表與遷移；disputes 的 4 個公開函式與 4 支 API（含第一支附件下載 API）；registration 新增 2 個公開函式
+  - 前端：S20 對話框、S2「檢舉隊伍」入口、queries 與 mutation hook；把 S18 的 `ResponsiveShell` 抽成共用的 `ResponsiveDialog`
+  - 測試：後端新增 3 個測試檔，前端新增 `report-team.test.tsx`
+- 人做了什麼：spec 階段已決定規則與畫面；這次在 checkpoint 確認實作與審查結果，並決定不由 AI commit
+- 驗證：後端 `scripts/test.sh` 2158 個通過（覆蓋率 97%），lint 通過；前端 869 個單元測試通過，typecheck 與 biome 通過；平行送出兩筆相同檢舉的併發測試在真實 PostgreSQL 上只成功一筆
+- 問題與修正：
+  - 實作子代理把既有測試 `tournament-create-team.test.tsx` 的斷言「報名截止時不查我的隊伍」改成相反的斷言。它有主動回報，主流程對照 spec 的 Design Notes 確認新入口本來就會多查一次，才接受這個修改。
+  - 子代理第一次回報時，前端修正後沒有再全部重跑測試，主流程補跑一次（869／869）。
+  - 主流程更新 sprint-status 時，又因為 `python` 是 WindowsApps 佔位程式而沒有寫入檔案；grep 結果顯示檔案沒變，才發現，改用 Edit 與 sed。
+- 成熟度：L4（固定流程，子代理實作，主流程對照 diff 並重跑驗證，人在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Tasks、baseline_commit 7e32d9f）；commit 未記錄（尚未 commit）
+
+### 2026-11-08｜測試／程式審查＋測試修正｜Story 6.4 提出檢舉：審查與修正
+
+- Story／範圍：6.4（分支 story/6-4，尚未 commit）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build 審查步驟（Blind Hunter、Edge Case Hunter、Verification Gap 三個審查子代理）
+- 怎麼用：三個審查子代理同時審查 diff，主流程逐項到程式碼核實並分類，寫入 spec 的 Review Triage Log，再把 patch 交回實作子代理
+- AI 產出：審查共提出 23 項（Blind Hunter 15、Edge Case Hunter 5、Verification Gap 3）；修正 6 項，前端單元測試從 869 個增加到 874 個，後端從 2158 個增加到 2161 個
+- 人做了什麼：在 checkpoint 確認審查分類與修正結果
+- 驗證：修正後重跑全部檢查：後端 2161 個通過（覆蓋率 97%）、lint 通過；前端 874 個通過、typecheck 與 biome 通過
+- 問題與修正：
+  - Edge Case Hunter 抓到一個實際的 bug：送出遇到 `REPORT_NOT_ALLOWED` 後重新取得資料，入口條件不再成立，對話框連同錯誤訊息一起消失，違反 spec「錯誤顯示在對話框內」。已改成對話框開著時保留。
+  - Verification Gap 指出「依隊名排序」的測試只有兩隊、id 隨機，拿掉排序約一半機率仍會通過。已改成隊名順序與 id 順序相反。
+  - 另外補了上傳進度的串接、對話框重開清空、各種報名狀態的錯誤訊息等測試，並替附件下載加上 `nosniff`、`no-store` 標頭。
+  - 駁回 17 項：outbox 會不會因為 `ReportFiled` 沒有 handler 而出錯，主流程讀 `dispatch_event` 確認會記錄後略過；其他是 spec 已規定的行為或低影響項目。
+  - 實作子代理修完沒有回報修改內容，主流程用 git 與 grep 逐項確認 6 項都已寫進程式。
+- 成熟度：L4（多個審查者加自動驗證，主流程查證，人在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Review Triage Log #1–#23）；commit 未記錄（尚未 commit）
+
+### 2026-11-08｜測試／瀏覽器實測｜Story 6.4 提出檢舉：S2 入口與 S20
+
+- Story／範圍：6.4（分支 story/6-4）
+- 工具：Claude Code（Opus 5.5）＋ e2e 容器的 Playwright
+- 怎麼用：AI 在後端容器用一次性腳本建立賽事、四支隊伍與一筆既有檢舉，再寫一次性的 Playwright 腳本，以桌機與 375 px 兩種寬度操作真實的前後端，並看截圖確認畫面
+- AI 產出：測試資料腳本 1 支、Playwright 腳本 1 支（4 個情境），截圖 11 張；兩支腳本都不進 repo
+- 人做了什麼：決定在 commit 前做瀏覽器實測
+- 驗證：4 個情境全部通過，涵蓋 S2 入口的顯示條件、S20 的停用狀態、前端檢查、字數計算、附件送出與 Toast、主辦方列表與附件下載的權限及標頭、手機版底部 Sheet
+- 問題與修正：e2e 容器把 `tests/` 掛成唯讀，腳本放不進去，改成掛到 `/app/frontend/manual` 並另寫設定檔；手機版第一次截圖時 Sheet 還在滑入，看截圖才發現，等動畫結束後重拍。沒有發現產品程式的問題
+- 成熟度：L3（AI 依 spec 設計實測並執行，人決定要實測並確認結果）
+- 證據：spec-6-4-file-report.md 的 I/O 矩陣 S2／S20 各列；截圖在 frontend/test-results/manual-6-4/（不進 repo）
+
+### 2026-11-09｜專案管理與流程／介面協調｜Story 6.4 依 B 的回覆調整約定差異
+
+- Story／範圍：6.4（PR #64）；與 6.1（PR #63）的介面協調
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 B 在 #63 的回覆，到 main 與 `story/6-1` 查證 B 說的內容，整理成兩個待決問題給使用者選，再依決定修改程式、遷移、測試、spec 與 `contracts/disputes.md`
+- AI 產出：
+  - 改 4 個程式檔：disputes 的 service、models，遷移檔，以及前後端各一個測試檔。
+  - spec 更新 Decisions、Boundaries、I/O 矩陣、Code Map、Design Notes 與 Spec Change Log。
+  - 約定檔回寫 7 處差異與 2 個新決定。
+- 人做了什麼：決定非隊長錯誤碼改用 `CAPTAIN_REQUIRED`、`report.reason` 改用 `Text`
+- 驗證：後端 2171 個測試通過（覆蓋率 97%）；前端 899 個單元測試通過，typecheck 與 biome 通過；lint 第一次發現 1 個檔案格式不符，用 ruff format 修正後通過
+- 問題與修正：
+  - AI 在 spec 寫「程式中沒有 `CAPTAIN_REQUIRED`」，因此改用 `TEAM_CAPTAIN_REQUIRED`；B 在 #63 指出 competition 5.1 報到就在用。AI 用 `git grep` 查 main，確認 `competition/service.py:1021` 確實有這個碼，原本的判斷有誤。原因是當時只查了 `core/authz.py`，沒有搜尋整個 backend。
+  - AI 一開始把 `reason` 定為 200 字，沒考慮 6.5 要寫查證經過；B 指出後改用 `Text`，與申訴一致。
+  - AI 手動改程式後沒有先格式化，lint 抓到後才修正。
+- 成熟度：L3（AI 查證並執行修改，決定來自組員協調與使用者）
+- 證據：PR #64、#63 留言；_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Decisions 2026-11-09、Spec Change Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-09｜測試／依審查建議補強｜Story 6.4 處理 B 在 #64 的審查建議
+
+- Story／範圍：6.4（PR #64）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 讀 B 在 #64 的核准審查（B 用 bmad-code-review 跑了四個審查員），把 4 點不擋合併的建議整理給使用者選；使用者決定合併前處理其中 3 點，AI 實作並重跑驗證
+- AI 產出：
+  - `report` 表加 `(reported_team_id, status)` 索引，以及 CHECK `reporter_team_id <> reported_team_id`，直接改尚未進 main 的遷移。
+  - 新增 4 個測試：資料庫擋下檢舉自己的隊伍、檔案已不在時下載回 404，以及 S2 頁面層的 2 個案例。
+  - 更新 PR 說明差異表第 7 項與 spec 的 Spec Change Log。
+- 人做了什麼：B 審查並核准；使用者決定合併前處理哪幾點，約定檔殘留的寫法交給 B 合併 #63 時修改
+- 驗證：後端 2173 個測試通過（覆蓋率 97%），lint 通過；前端 901 個單元測試通過，typecheck 與 biome 通過
+- 問題與修正：新增的 S2 頁面層測試第一次失敗，找不到「檢舉隊伍」，5 秒後逾時。AI 單獨重跑讀錯誤訊息，發現是 jsdom 沒有 `window.matchMedia`：隊長的 S2 會掛載 S20，`useIsMobile` 呼叫它而讓整頁出錯。這不是產品問題（瀏覽器實測正常），照其他測試檔的做法 mock `matchMedia` 後通過。這也說明 B 指出的缺口是真的：之前的測試都直接渲染元件，沒有走過整頁的路徑。
+- 成熟度：L4（組員以多代理審查提出建議，AI 實作並以自動測試驗證，人在 checkpoint 決策）
+- 證據：PR #64（B 的審查）；_bmad-output/implementation-artifacts/spec-6-4-file-report.md（Spec Change Log 2026-11-09）；commit 未記錄（尚未 commit）

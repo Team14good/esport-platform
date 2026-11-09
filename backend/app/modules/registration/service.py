@@ -7,7 +7,7 @@
 
 import secrets
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import PurePath
@@ -37,6 +37,7 @@ from app.modules.registration.models import (
     TeamMemberRead,
     TeamMemberRole,
     TeamRead,
+    TeamSummary,
     WaitlistFields,
 )
 from app.modules.tournaments import service as tournaments_service
@@ -1230,3 +1231,35 @@ def disqualify_registration(
         actor_id=actor_id,
     )
     return RegistrationRead.model_validate(registration, from_attributes=True)
+
+
+# ---------------------------------------------------------------- 檢舉用（disputes 6.4）
+
+
+def find_team_of_account(
+    session: Session, *, tournament_id: uuid.UUID, account_id: uuid.UUID
+) -> TeamRead | None:
+    """帳號在該賽事所屬的隊伍（不限角色）；不在任何隊伍時回 None。
+
+    同一帳號在一個賽事最多只在一支隊伍（`uq_team_member_tournament_id_account_id`）。
+    """
+    membership = repository.get_membership(session, tournament_id, account_id)
+    if membership is None:
+        return None
+    team = repository.get_team(session, membership.team_id)
+    if team is None:
+        return None
+    return _team_read(team, repository.list_members(session, team.id))
+
+
+def list_teams_by_status(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    statuses: Collection[RegistrationStatus],
+) -> list[TeamSummary]:
+    """某賽事報名狀態在 `statuses` 之內的隊伍（只有 id、隊名，依隊伍 id 排列）。"""
+    return [
+        TeamSummary(id=team.id, name=team.name)
+        for team in repository.list_teams_by_status(session, tournament_id, statuses)
+    ]
