@@ -96,11 +96,11 @@ development_status:
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-1-提出申訴: review  # 負責：B；spec-6-1-file-appeal.md 實作完成，待 code review（competition `appeals.py` 請 D 審查、S4 掛載點請 A 審查）
-  6-2-主辦方處理申訴: review  # 負責：B（含 competition 端，D 審查）；spec-6-2-resolve-appeals.md 實作完成，待 code review（例外修改 D 的 get_replay_window）
+  6-1-提出申訴: done  # 負責：B；spec-6-1-file-appeal.md，PR #63 已合併
+  6-2-主辦方處理申訴: done  # 負責：B（含 competition 端，D 審查）；spec-6-2-resolve-appeals.md，PR #69 已合併（例外修改 D 的 get_replay_window）
   6-3-申訴逾期提醒與受影響場次暫停: backlog  # 擱置（期中後）
   6-4-提出檢舉: done  # 負責：C
-  6-5-查證檢舉與取消資格: backlog  # 負責：B（含 competition 端，D 審查）
+  6-5-查證檢舉與取消資格: in-progress  # 負責：B（含 competition 端，D 審查）；第一階段（competition disqualify，spec-6-5-disqualify.md）進行中，第二階段的前置 6.4 已合併
   epic-6-retrospective: optional
 
   epic-7: in-progress

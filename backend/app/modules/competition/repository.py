@@ -223,6 +223,19 @@ def set_match_team(
     session.flush()
 
 
+def clear_match_team(
+    session: Session, match: Match, side: Literal["a", "b"], at: datetime
+) -> None:
+    """清空某一方的隊伍（6.5 取消資格：頂替的隊伍由季軍賽移到決賽）。"""
+    if side == "a":
+        match.team_a_id = None
+    else:
+        match.team_b_id = None
+    match.updated_at = at
+    session.add(match)
+    session.flush()
+
+
 def clear_match_result(session: Session, match: Match, at: datetime) -> None:
     """清除結果、勝隊與棄權期限（季軍賽取消時用）。"""
     match.outcome = None
@@ -241,6 +254,16 @@ def add_check_in(session: Session, check_in: CheckIn) -> bool:
     except IntegrityError:
         return False
     return True
+
+
+def delete_check_in(session: Session, match_id: uuid.UUID, team_id: uuid.UUID) -> None:
+    """刪除某隊在該場的報到紀錄（6.5 取消資格把隊伍移出場次時用）；沒有紀錄則不做事。"""
+    statement = select(CheckIn).where(
+        CheckIn.match_id == match_id, CheckIn.team_id == team_id
+    )
+    for check_in in session.exec(statement):
+        session.delete(check_in)
+    session.flush()
 
 
 def list_check_ins(session: Session, match_id: uuid.UUID) -> list[CheckIn]:
