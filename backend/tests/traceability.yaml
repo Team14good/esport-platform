@@ -23,8 +23,8 @@ competition/test_bracket.py:
   frs: [FR-20]
 competition/test_bracket_api.py:
   layer: integration
-  stories: ["4.1"]
-  frs: [FR-19, FR-20]
+  stories: ["4.1", "5.8"]
+  frs: [FR-19, FR-20, FR-36]
 competition/test_check_in.py:
   layer: integration
   stories: ["5.1"]

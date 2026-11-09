@@ -216,3 +216,18 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-2-resolve-appeals.md`
   summary: S27 待處理清單還沒有算檢舉：`count_open_disputes` 的 `reports` 一律 0、`items` 只有申訴；EXPERIENCE.md 要求未結案的申訴與檢舉列在一起、依處理期限排序。
   evidence: 2026-11-09 使用者決定留給 6.5。6.4 已合併、`Report` 可查，但規劃文件沒有定義檢舉的處理期限，而 `OpenDisputeItem.deadline` 必填；6.5 接上 S33 時一併決定檢舉的期限（或無期限排在申訴之後）並補測試。
+
+## Deferred from: unified code review of 5.6／5.8／7.1／7.3 (2026-11-09)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-registration-demo-step.md`
+  summary: （低）示範資料的段位截圖在資料庫寫入前就存到磁碟；單隊的 savepoint 或整個示範交易回滾時，已存的截圖留在磁碟（#67 審查提過）。
+  evidence: 2026-11-09 統一 code review。`registration.py` 的 `update_player_profile` 先 `storage.save_image` 再寫資料庫，`initial_data.py` 失敗時整批回滾；每次失敗的啟動最多留下 160 個 1×1 PNG。修法：回滾時刪掉本次存的檔案，或先寫資料庫、提交後再存檔。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
+  summary: 示範賽事沒有直播連結，與 epics.md 的 7.1 AC 不同。
+  evidence: 2026-11-04 使用者決定不做（spec 第 19、46 行），spec 要求在 PR 記錄差異；統一 code review 補登於此，期中後若 S2 要展示直播連結再補。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
+  summary: （低）同名遊戲已存在但段位名稱不同時，示範資料沿用舊遊戲，32 隊的 `update_player_profile` 全部失敗、只記警告，接著對 0 隊抽籤，啟動不會報錯。
+  evidence: 2026-11-09 統一 code review。`tournaments.py` 依名稱沿用遊戲；只有手動改過遊戲設定的保留資料庫會遇到。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-3-test-coverage-report.md`
+  summary: （低）純函式 90% 分支覆蓋率是單元＋整合合併計算（`coverage run --append`），AC 寫的是單元測試；`test-all.sh` 複製前端 JUnit 與 Playwright JSON 時丟掉錯誤，檔案不存在時報告不會明確失敗。
+  evidence: 2026-11-09 統一 code review。`scripts/test.sh`、`scripts/test-all.sh`。修法：README 註明計算方式（或只用單元測試算），`cp` 失敗時在報告標出缺漏。
