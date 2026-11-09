@@ -88,6 +88,10 @@ def ensure_first_admin(session: Session, *, email: str, password: str) -> bool:
     return True
 
 
+# 示範帳號共用同一個雜湊：7.1 的 32 隊要建約 160 個帳號，逐一雜湊會讓啟動多十幾秒
+_demo_password_hash = cache(get_password_hash)
+
+
 def ensure_demo_account(
     session: Session,
     *,
@@ -113,7 +117,7 @@ def ensure_demo_account(
         session,
         Account(
             email=email,
-            hashed_password=get_password_hash(password),
+            hashed_password=_demo_password_hash(password),
             email_verified=True,
             display_name=display_name,
             school_id=school.id,
