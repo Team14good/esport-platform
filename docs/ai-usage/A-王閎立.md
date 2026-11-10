@@ -696,3 +696,15 @@
   - 第一次變異測試找錯拋錯的位置，改在 `_ENTRY_REJECTIONS` 查表處才真正驗到
 - 成熟度：L3（組員審查指出問題，AI 修正並驗證）
 - 證據：PR #61 的 OG-Matcha 審查意見、`backend/tests/competition/test_score_concurrency.py`
+
+### 2026-11-10｜測試｜Story 7.2 第三階段：端對端演練跑完報名到頒獎
+
+- Story／範圍：7.2（A），`frontend/tests/e2e/`、`frontend/Dockerfile.e2e`、`compose.yml` 的 e2e 服務
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，沒有用子代理
+- 怎麼用：我授權「遇到問題選最推薦的，完成後開 PR」；AI 寫 spec，並把 `tournament.spec.ts` 的 fixme 換成真測試：兩款遊戲各 32 隊打到頒獎、第三款遊戲 8 隊確認一場
+- AI 產出：`support/db.ts`（改期限、查 AuditLog）、`support/bulk.ts`（API 準備大量資料）、`support/matchday.ts`（畫面步驟）、`spec-7-2-e2e-tournament-drill-3.md`
+- 人做了什麼：開工時的授權與範圍；設計取捨由 AI 依授權決定並記在 spec 的 Decisions
+- 驗證：獨立 compose 專案完整執行 17 passed、3 failed（28.6 分鐘），桌機全過；typecheck、biome 無錯誤。3 個失敗都在 mobile-375，暫時略過一個斷言後這 3 個也通過（9.7 分鐘，未提交）
+- 問題與修正：AI 第一版把優先期結束設成現在減 1 秒，第一隊送出時間晚於它而沒被結算，等 worker 逾時；查 worker log 與 `_settle_locked` 的條件後發現是測試寫錯，改成 `now()`。AI 也誤以為送出後「填寫我的資料」會消失，看失敗當下的頁面後改驗「名單已鎖定」。e2e 抓到 S4 比分表在 375 px 有內部橫向捲動；AI 沒有為了通過而放寬檢查，也沒有改 D 的元件，記進 deferred-work 交由人決定
+- 成熟度：L3（AI 依 spec 產出並以 e2e 驗證，這次沒有多代理審查，留待統一 code review）
+- 證據：`spec-7-2-e2e-tournament-drill-3.md` 的 Implementation Notes

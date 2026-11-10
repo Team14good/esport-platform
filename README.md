@@ -110,7 +110,8 @@ docker compose --profile e2e run --rm e2e bunx playwright test --grep @story-1.7
 - 每個測試以桌機（`desktop`）與 375 px 手機（`mobile-375`）各跑一次，並檢查頁面沒有橫向捲軸（只有對戰樹可以左右捲動）。
 - 每次執行都註冊新的 Email，可以對同一個資料庫重複執行；驗證信從 Mailpit 取得，worker 每 `WORKER_POLL_SECONDS` 秒寄一次，身分流程約需 30～40 秒。
 - 每個測試附上 `api-timings.json`（每個 API 請求的回應時間）；一般請求超過 1 秒就失敗，登入（密碼雜湊）只記錄不判定。
-- 測試以 tag 標註 Story 與需求編號（例如 `@story-1.7`、`@FR-2`）；上游還沒合併的步驟以 `test.fixme` 列出，報告中顯示為 skipped。
+- 測試以 tag 標註 Story 與需求編號（例如 `@story-1.7`、`@FR-2`）。
+- 完整賽事演練（`tests/e2e/tournament.spec.ts`）在關鍵步驟走畫面，32 隊的組隊報名與重複的場次走公開 API。申訴期等期限等不了真實時間，測試會直接改資料庫的期限，之後由真的 worker 處理，所以 e2e 服務需要 `E2E_DATABASE_URL`（compose 已設定）。
 - HTML 報告寫到 `frontend/playwright-report/`（用瀏覽器打開 `index.html`），失敗時的截圖與 trace 在 `frontend/test-results/`。
 - `tests/` 與 `playwright.config.ts` 是掛載進容器的，改測試不必重新 build；改了依賴或 `frontend/Dockerfile.e2e` 時加 `--build`。
 - 測試會在資料庫留下 `e2e-*` 開頭的帳號與已核准的主辦方。不想弄髒開發用資料庫時，先停掉平常的服務，改用獨立的 compose 專案（另一組 volume）跑，跑完連同 volume 一起刪掉：

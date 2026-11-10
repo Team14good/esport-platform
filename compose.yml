@@ -156,6 +156,7 @@ services:
       E2E_PROXY: 5173=frontend:5173
       E2E_API_TARGET: backend:8000
       MAILPIT_URL: http://mailpit:8025
+      E2E_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Variable not set}@db:5432/${POSTGRES_DB:-app}
       FIRST_ADMIN_EMAIL: ${FIRST_ADMIN_EMAIL:?Variable not set}
       FIRST_ADMIN_PASSWORD: ${FIRST_ADMIN_PASSWORD:?Variable not set}
     # Playwright 建議：Chromium 需要較大的共享記憶體，並由 init 轉送訊號
