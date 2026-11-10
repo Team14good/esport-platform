@@ -2,7 +2,7 @@
 title: 'Story 7.2（第三階段）：端對端演練跑完報名到頒獎'
 type: 'feature'
 created: '2026-11-10'
-status: 'in-progress'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: 'ee836afb6d124243c54c58e1b2b19acd40f627d2'
@@ -87,6 +87,8 @@ context:
 ## Review Triage Log
 
 ## Verification
+
+**結果（2026-11-10）：** D 以 #78、#79 修正 S4 比分登錄表的版面（窄螢幕縮小欄距、隊名任意字元換行、動作鈕直排），上面「未達成的 AC」已解決，`deferred-work.md` 那一條已移除。A 在 #80 以 1769c09 加上審查修正跑完整 e2e（desktop＋mobile-375）：20 passed、0 failed。D 統一 code review 逐條對照 epics 的 7.2 AC（含期中版調整）都有對應的測試步驟。
 
 **Commands:**
 - `docker compose --profile e2e run --rm e2e` -- expected: 失敗 0

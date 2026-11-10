@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-10-2026 20:44
+last_updated: 11-10-2026 21:30
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -103,8 +103,8 @@ development_status:
   6-5-查證檢舉與取消資格: done  # 負責：B（含 competition 端，D 審查）；第一階段（competition disqualify，spec-6-5-disqualify.md，PR #65）已合併；第二階段 A（resolve_report＋S33，spec-6-5-resolve-report.md，PR #73）、B（S27 待處理清單加入檢舉，spec-6-5-s27-reports.md，PR #75）已合併；C（對戰樹標記與取消資格理由，spec-6-5-dq-marks.md，PR #76）由 D 接手審查、修正與瀏覽器實走後完成
   epic-6-retrospective: optional
 
-  epic-7: in-progress
+  epic-7: done
   7-1-一鍵載入示範資料: done  # 負責：A；2026-11-09 統一 code review 對照 AC 完成，直播連結（使用者 2026-11-04 決定不做）與回滾殘留截圖登記於 deferred-work
-  7-2-端對端演練-兩款遊戲的完整賽事: review  # 負責：A；第三階段（報名到頒獎，spec-7-2-e2e-tournament-drill-3.md）桌機全部通過；375 px 卡在 S4 比分登錄表的橫向捲動（見 deferred-work），解決後改 review
+  7-2-端對端演練-兩款遊戲的完整賽事: done  # 負責：A；第三階段（報名到頒獎，spec-7-2-e2e-tournament-drill-3.md，#77）與審查修正（#80）完成，S4 比分表 375 px 由 D 修正（#78、#79）；2026-11-10 統一 code review 對照 AC 完成，完整 e2e（desktop＋mobile-375）20 passed
   7-3-測試覆蓋率與測試報告素材: done  # 負責：A；總指令、併發測試、報告與追溯完成；2026-11-09 統一 code review 對照 AC 完成，小問題登記於 deferred-work
   epic-7-retrospective: optional
