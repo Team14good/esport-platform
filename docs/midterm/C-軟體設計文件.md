@@ -6,6 +6,7 @@
 | 1.1 | 2026-10-19 | 依審閱意見修訂：統一用語，新增「尚未開放」狀態與學校清單，補充輪空、棄權期限、名額同分與取消資格規則 |
 | 1.2 | 2026-10-20 | 依一致性審查補充加鎖範圍、重新比賽與改派裁判；移除壓力測試與 Locust；新增版本紀錄與參考文獻 |
 | 1.3 | 2026-10-28 | 依 Epic 1 實作補充登入憑證機制（7 天有效、不做 refresh token、重設密碼使舊憑證失效、401 的前端處理） |
+| 1.4 | 2026-11-11 | 依期中實作（已完成的 35 個 Story）更新模組資料、worker 工作、權限檢查、事件與通知現況、循序圖與主要 API，並標示期中後才實作的項目 |
 
 # 壹、系統簡介
 
@@ -14,6 +15,8 @@
 校際與社群電競盃賽的主辦方，現在要靠 Google 表單、Excel、FB 公告、Discord 與 email 申訴書才能辦完一場比賽：報名資格要人工計算、對戰表要人工抽、結果靠裁判手記、申訴靠寄信，出了問題也很難追查。本系統把報名、名額分配、抽籤、報到、比分登錄、申訴與檢舉收進同一個網頁系統，讓規則由系統一致地執行，每一步都留下紀錄。
 
 本文件說明系統的整體架構、分層與模組劃分、關鍵機制的設計方式，以及部署與技術選型。各項設計決策以 AD 編號（AD-1～AD-21）標示，本文件在說明各機制時一併註明，完整清單與每條決策的規則摘要列在附錄，讓「需求 → 設計決策 → 實作規則」可以互相追溯。需求編號（FR、NFR）與狀態定義見《軟體需求分析文件》。
+
+本文件描述系統的完整設計。第一批 35 個 Story 已於 2026-11-10 完成，其餘 15 個 Story（通知中心、分輪 BO、修改與取消賽事、撤回與退回報名、自訂模式、隊員異動、自動抽籤、抽籤後退賽、隊伍搜尋、結算截圖、申訴逾期提醒等）在期中後完成；文中標示「期中後」的項目目前尚未實作。
 
 ## 二、系統特色
 
@@ -56,7 +59,7 @@ flowchart LR
 | --- | --- | --- |
 | frontend | 所有頁面與對戰樹視覺化；只透過自動產生的 API client 呼叫後端 | FR-34～36、NFR-7 |
 | backend | 處理所有使用者操作、權限檢查與業務規則 | FR-1～41、NFR-5 |
-| worker | 每 15～30 秒處理到期工作（報名開始、優先期結束、報名截止、賽事開始、判棄權、申訴期滿、申訴逾期提醒），並寄送通知與驗證、重設密碼信 | NFR-4、FR-37 |
+| worker | 預設每 20 秒（可設定 15～30 秒）處理到期工作（報名開始、優先期結束、報名截止、賽事開始、判棄權、申訴期滿），並寄送驗證與重設密碼信；申訴逾期提醒與報名截止自動抽籤在期中後加入 | NFR-4、FR-37 |
 | db | 唯一的資料來源；以列鎖保證併發一致，以 trigger 保護操作紀錄 | NFR-1、NFR-3 |
 | mailpit | 示範與測試用的收信伺服器，不對外寄信 | FR-37 |
 
@@ -124,8 +127,10 @@ flowchart TB
    - `APPLICATION_PENDING`：已有一筆待審核的主辦方申請。
    - `ALREADY_IN_TOURNAMENT`：同一帳號在同一賽事已加入其他隊伍。
    - `ORGANIZER_CANNOT_JOIN`：主辦方不能在自己主辦的賽事建立或加入隊伍。
-   - `TOURNAMENT_INVITE_REQUIRED`：自訂賽事未持有效的報名連結。
+   - `TOURNAMENT_INVITE_REQUIRED`：自訂賽事未持有效的報名連結（Story 3.10，期中後）。
    - `MATCH_TEAMS_PENDING`：場次的隊伍尚未確定，還不能報到。
+   - `TOURNAMENT_START_PASSED`：開賽時間已過，不能抽籤。
+   - `DISQUALIFY_OPPONENT_PENDING`：對手尚未確定，還不能取消資格。
 
 ### （三）Repository 層（資料存取層）
 
@@ -146,7 +151,7 @@ Core 提供各模組共用、與業務無關的基礎功能，且不得 import �
 | --- | --- |
 | audit | 在同一交易中寫入操作紀錄（操作者、所屬賽事、動作、對象、變更前後內容），並提供依賽事查詢紀錄 |
 | events | 把事件寫入 outbox 資料表，與業務資料同一交易 |
-| authz | 資源層級權限的共用檢查函式，例如 `ensure_assigned_referee(match, account)` |
+| authz | 資源層級權限的共用檢查函式，例如 `ensure_tournament_owner(tournament, account_id)`、`ensure_captain(team, account_id)` |
 | clock | 取得目前時間的唯一入口，測試時可替換以模擬「30 分鐘後」 |
 | storage | 上傳檔案的儲存與讀取，並驗證格式與大小 |
 | errors | 業務錯誤的統一格式 |
@@ -156,8 +161,8 @@ Core 提供各模組共用、與業務無關的基礎功能，且不得 import �
 1. **角色與定位**
    - 與 Router 地位相同的另一個進入點：負責開啟交易、呼叫 Service。
 2. **負責項目**
-   - 每 15～30 秒查詢已到期但尚未處理的工作：報名開始（尚未開放 → 開放報名）、優先期結束、報名截止（截止補位、抽籤）、賽事開始（第一個場次開放報到時轉為進行中）、判棄權、申訴期滿、申訴逾期提醒。
-   - 讀取未處理的 outbox 事件，交給通知模組產生站內通知並寄送 Email。
+   - 每 15～30 秒依序執行八個工作：報名開始（尚未開放 → 開放報名）、優先期結束、報名截止（截止補位）、賽事開始（第一個場次開放報到時轉為進行中）、判棄權、申訴期滿、分派 outbox 事件、寄送 Email。報名截止自動抽籤（Story 4.2）與申訴逾期提醒（Story 6.3）在期中後加入。
+   - 讀取未處理的 outbox 事件交給通知模組。期中只寄送驗證信與重設密碼信，其他事件類型標為已處理，站內通知與收件規則在 Story 1.6 接上。
 3. **可靠性設計**
    - 每處理一筆到期項目或一則事件就是一個獨立的交易，一筆失敗不影響其他筆。
    - 處理前先加鎖並重新檢查狀態，因此重複執行沒有副作用（冪等）。
@@ -189,17 +194,19 @@ flowchart TB
 | 模組 | 擁有的資料 | 對應功能群（見《軟體需求分析文件》貳、二） | 主要 FR |
 | --- | --- | --- | --- |
 | identity | Account、School、AccountToken、OrganizerApplication | 1.0 帳號與身分（1.5 除外）、2.1 的學校清單 | FR-1～3、FR-5、FR-6（學校清單）、FR-40 |
-| tournaments | GameTitle、RankTier、Tournament、RoundSetting、RefereeInvitation、TournamentReferee | 2.0 賽事建立與遊戲設定、1.5 的裁判邀請 | FR-4、FR-6～10、FR-39 |
-| registration | Team、TeamMember、Registration | 3.0 隊伍與報名、2.5 的提高名額 | FR-9（提高名額）、FR-11～18、FR-41 |
-| competition | Bracket、Match、MatchGame、CheckIn、ResultScreenshot | 4.0 抽籤與對戰表、5.0 場次進行、1.5 的指派裁判 | FR-4（指派）、FR-19～29 |
+| tournaments | GameTitle、RankTier、Tournament、RefereeInvitation、TournamentReferee；期中後：RoundSetting | 2.0 賽事建立與遊戲設定、1.5 的裁判邀請 | FR-4、FR-6～10、FR-39 |
+| registration | Team、TeamMember、Registration、PriorityWindowSettlement | 3.0 隊伍與報名、2.5 的提高名額 | FR-9（提高名額）、FR-11～18、FR-41 |
+| competition | Bracket、Match、MatchGame、CheckIn；期中後：ResultScreenshot | 4.0 抽籤與對戰表、5.0 場次進行、1.5 的指派裁判 | FR-4（指派）、FR-19～29 |
 | disputes | Appeal、Report | 6.0 申訴與檢舉 | FR-30～33 |
-| notifications | Notification、EmailDelivery | 7.4、7.5 通知 | FR-37、FR-38 |
+| notifications | EmailDelivery；期中後：Notification | 7.4、7.5 通知 | FR-37、FR-38 |
 | core | AuditLog、OutboxEvent | 2.7 的操作紀錄、各模組共用 | NFR-3 |
 
 - 所有模組都可使用 core；沒有任何模組直接呼叫 notifications，它只透過事件接收工作。
 - 公開觀賽頁（FR-34～36）向各擁有模組的 Service 取資料，不另外建立模組。
 - 抽籤後的退賽遞補與取消資格頂替，一律由 competition 主導：先修改對戰表，再呼叫 registration 取得下一個候補並更新報名狀態（AD-4）。
 - 提高名額會讓候補遞補，而 tournaments 不能呼叫 registration，因此由 registration 主導：先鎖賽事列，再呼叫 tournaments 修改名額，最後依遞補規則遞補。
+- identity 位於呼叫方向的最底層，但身分切換器要知道帳號有沒有裁判身分，因此 identity 開放註冊點，由應用程式啟動時把 tournaments 的查詢函式注入，呼叫方向不變。
+- competition 對 registration 的呼叫集中在 `registration_port.py`；判棄權工作以注入的 `ForfeitPorts` 取得需要的函式，單元測試可以替換。
 
 # 參、關鍵機制設計
 
@@ -218,7 +225,7 @@ sequenceDiagram
   participant S as RegistrationService
   participant T as TournamentService
   participant DB as PostgreSQL
-  Cap->>R: POST<br/>/tournaments/{id}<br/>/registrations
+  Cap->>R: POST<br/>/teams/{team_id}<br/>/submission
   R->>R: 檢查已登入<br/>與 Email 驗證
   R->>S: submit_registration()
   S->>T: lock_tournament()
@@ -228,7 +235,7 @@ sequenceDiagram
   S->>DB: 寫入 Registration<br/>（含三個快照欄位）
   S->>DB: 寫入 AuditLog、<br/>OutboxEvent
   R->>DB: COMMIT（釋放鎖）
-  R-->>Cap: 201 正取或候補
+  R-->>Cap: 200 目前的報名狀態
 ```
 
 場次也採相同做法：報到、登錄比分、送出系列結果、更正、判棄權、提出申訴、自動確認、晉級填位，都先鎖住該場次的資料列。同一個交易同時需要兩種鎖時，順序固定為「先賽事，再依 id 遞增鎖場次」，避免兩條流程以相反順序加鎖而造成死結。會連鎖到下一場或賽事狀態的流程（申訴期滿自動確認、處理申訴）不能先鎖本場、再去鎖下一場或賽事：它們一開始就先鎖賽事列，再依 id 遞增一次鎖住本場、下一場與季軍賽（`next_match_id` 不會變，可以事先讀出）。
@@ -247,22 +254,21 @@ sequenceDiagram
 sequenceDiagram
   participant W as worker
   participant DB as PostgreSQL
-  participant M as MatchService
-  participant B as BracketService
+  participant C as CompetitionService
   participant N as NotificationService
   loop 每 15～30 秒
     W->>DB: 查詢申訴期已過<br/>且未處理的場次
-    W->>M: auto_confirm_expired()<br/>（每筆獨立交易）
-    M->>DB: 先鎖賽事列，再依 id<br/>鎖本場與下一場<br/>重新檢查狀態與期限
-    M->>M: transition_match()<br/>→ 已確認
-    M->>B: advance()<br/>勝隊填入下一場
-    B->>M: 下一場兩隊確定時<br/>start_forfeit_clock()
-    M->>DB: 寫入 AuditLog<br/>（system）<br/>與 OutboxEvent
+    W->>C: auto_confirm_expired()<br/>（每筆獨立交易）
+    C->>DB: 先鎖賽事列，再依 id<br/>鎖本場與下一場<br/>重新檢查狀態與期限
+    C->>C: transition_match()<br/>→ 已確認
+    C->>C: advance()<br/>勝隊填入下一場
+    C->>C: 下一場兩隊確定時<br/>start_forfeit_clock()
+    C->>DB: 寫入 AuditLog<br/>（system）<br/>與 OutboxEvent
     W->>DB: COMMIT
   end
   W->>DB: 讀取未處理的<br/>OutboxEvent
-  W->>N: handle_event()
-  N->>DB: 建立通知與<br/>EmailDelivery<br/>（事件 id＋收件人去重）
+  W->>N: dispatch_event()
+  N->>DB: 建立 EmailDelivery<br/>（事件 id＋收件人去重）
   N->>N: 寄出 Email<br/>失敗則記錄<br/>並重試
 ```
 
@@ -292,6 +298,8 @@ flowchart LR
 
 事件名稱一律用過去式（例如 `MatchResultConfirmed` 表示場次已確認，`MatchResultSubmitted` 表示裁判已送出系列結果），內容只帶實體 id 與事件特有的資料。驗證信與重設密碼信（`VerificationEmailRequested`、`PasswordResetRequested`）同樣經 outbox 寄出，但只寄 Email，不建立站內通知。
 
+**期中現況**：各 Service 都已照上述方式發出事件（例如 `BracketDrawn`、`MatchForfeited`、`AppealFiled`、`RegistrationAllocated`），事件確實寫入 outbox。notifications 目前只處理驗證信與重設密碼信，其他事件由 worker 標為已處理；站內通知、收件規則與 Notification 資料表在 Story 1.6 完成，期中已發出的事件不補發。Email 寄送失敗時依 1、2、4、8 分鐘重試，第 5 次失敗後標為失敗。
+
 ## 四、權限控管
 
 **對應需求**：FR-4、FR-5、FR-11、NFR-5｜**設計決策**：AD-10、AD-19
@@ -303,7 +311,7 @@ flowchart LR
 | 帳號層級 | 已登入、Email 已驗證、平台管理員、主辦方 | Router，以 `Depends` 實作 |
 | 資源層級 | 是否為該賽事的主辦方、被指派的裁判、該隊的隊長或隊員 | Service 方法開頭，呼叫 `core.authz` 的共用函式 |
 
-資源層級的檢查寫在 Service 而非 Router，是因為 worker 與其他模組也會呼叫 Service，寫在 Router 會被繞過。`core.authz` 的函式只接收呼叫端已載入的實體，或從其他模組 Service 取得的 schema，自己不查資料庫。為此，場次直接以 `referee_account_id` 存放被指派裁判的帳號 id，`ensure_assigned_referee(match, account)` 只需比對兩個 id，不必再查 tournaments 的 TournamentReferee；指派時由 competition 呼叫 `TournamentService.is_referee()` 確認該帳號是此賽事的裁判，並呼叫 registration 確認他不是兩隊的隊員。場次未指派裁判時，由主辦方代登，competition 先向 tournaments 取得賽事的 schema，再交給 `ensure_tournament_owner()` 檢查。隊長身分也一樣：competition（報到、上傳結算截圖）與 disputes（申訴、檢舉）先向 registration 的 `get_team()` 取得 `TeamRead`（含隊員角色），再交給 `ensure_captain()` 比對。
+資源層級的檢查寫在 Service 而非 Router，是因為 worker 與其他模組也會呼叫 Service，寫在 Router 會被繞過。`core.authz` 的函式只接收呼叫端已載入的實體，或從其他模組 Service 取得的 schema，自己不查資料庫。場次直接以 `referee_account_id` 存放被指派裁判的帳號 id，competition 的 Service 比對這個欄位與登入帳號，不必再查 tournaments 的 TournamentReferee；指派時由 competition 呼叫 `is_referee()` 確認該帳號是此賽事的裁判，並呼叫 registration 確認該帳號不是兩隊的隊員。場次未指派裁判時，由主辦方代登，competition 先向 tournaments 取得賽事的 schema，再交給 `ensure_tournament_owner()` 檢查。隊長身分由 registration 判斷：competition（報到）與 disputes（申訴、檢舉）向 registration 取得隊伍或隊長資訊，再比對登入帳號，不合時回 403 `CAPTAIN_REQUIRED`。主辦方不能接受自己賽事的裁判邀請；場次沒有裁判時由主辦方代登。
 
 身分衝突也在資源層級檢查：registration 建立或加入隊伍時，向 tournaments 確認該帳號不是此賽事的主辦方；晉級填位後若指派的裁判成了其中一隊的隊員，competition 取消該場的指派並發出事件通知主辦方改派。
 
@@ -346,26 +354,30 @@ flowchart LR
 
 ## 二、主要 API 資源
 
-下表為初版的資源規劃，實際端點以實作後自動產生的 OpenAPI 文件為準。
+下表依 2026-11-10 的程式碼整理（路徑省略前綴 `/api/v1`），每個端點的完整參數見自動產生的 OpenAPI 文件。
 
-| 資源 | 主要操作 | 所屬模組 | 權限 |
+| 資源 | 端點 | 所屬模組 | 權限 |
 | --- | --- | --- | --- |
-| 帳號與登入 | 註冊、驗證 Email、重寄驗證信、登入、重設密碼、修改帳號資料 | identity | 公開／登入 |
-| 學校清單 | 列出、新增、修正學校 | identity | 公開／平台管理員 |
-| 主辦方申請 | 送出申請、查看狀態、核准或退回 | identity | 帳號／平台管理員 |
-| 遊戲 | 新增、修改、列出遊戲與段位對照 | tournaments | 平台管理員 |
-| 賽事 | 建立、修改、取消、列出、查看；分輪 BO；操作紀錄；重設自訂賽事的報名連結 | tournaments | 主辦方／公開 |
-| 裁判邀請 | 產生邀請連結、接受邀請 | tournaments | 主辦方／帳號 |
-| 隊伍 | 建立、加入、移除隊員、轉讓隊長、退出、解散、填寫參賽資料 | registration | 隊長／選手 |
-| 報名 | 送出、撤回、退回、提高名額並遞補、列出報名與段位截圖 | registration | 隊長／主辦方 |
-| 對戰表 | 抽籤、查看對戰樹、修改場次時間、指派／改派／收回裁判、退賽 | competition | 主辦方／隊長／公開 |
-| 場次 | 報到、登錄局結果、送出系列結果、上傳結算截圖、查看場次 | competition | 隊長／裁判／公開 |
-| 申訴與檢舉 | 提出申訴與檢舉、處理申訴（維持、更正或重新比賽）、查證檢舉、待處理清單 | disputes | 隊長／主辦方 |
-| 通知 | 列出通知、未讀數、標為已讀 | notifications | 帳號 |
+| 帳號與登入 | `POST /accounts`、`POST /email-verifications`、`POST /verification-emails`、`POST /password-reset-emails`、`POST /password-reset-checks`、`POST /password-resets`、`POST /access-tokens`、`GET`／`PATCH /accounts/me`、`GET /accounts/me/identities` | identity | 公開／登入 |
+| 學校清單 | `GET /schools`、`POST /admin/schools`、`PATCH /admin/schools/{id}` | identity | 公開／平台管理員 |
+| 主辦方申請 | `POST /organizer-applications`、`GET /accounts/me/organizer-application`、`GET /admin/organizer-applications`、`POST /admin/organizer-applications/{id}/approval`、`.../rejection` | identity | 已驗證帳號／平台管理員 |
+| 遊戲 | `GET /games`、`GET`／`POST /admin/games`、`GET`／`PUT /admin/games/{id}` | tournaments | 主辦方／平台管理員 |
+| 賽事 | `GET /tournaments`、`GET /tournaments/{id}`、`GET`／`POST /organizer/tournaments`、`GET /organizer/tournaments/{id}` | tournaments | 公開／主辦方 |
+| 裁判邀請 | `GET`／`POST /organizer/tournaments/{id}/referee-invitation`、`GET /organizer/tournaments/{id}/referees`、`GET /referee-invites/{token}`、`POST /referee-invites/{token}/accept` | tournaments | 主辦方／公開／帳號 |
+| 隊伍與報名 | `POST /tournaments/{id}/teams`、`GET /teams/{id}`、`GET /team-invites/{token}`、`POST /team-invites/{token}/members`、`PUT /teams/{id}/members/me/profile`、`POST /teams/{id}/submission`、`GET /accounts/me/teams` | registration | 隊長／選手 |
+| 抽籤與對戰表 | `POST /tournaments/{id}/draw`、`GET /organizer/tournaments/{id}/draw-status`、`GET /tournaments/{id}/bracket` | competition | 主辦方／公開 |
+| 場次管理 | `GET /tournaments/{id}/manage/matches`、`PATCH /tournaments/{id}/matches/{mid}/schedule`、`PUT`／`DELETE /tournaments/{id}/matches/{mid}/referee` | competition | 主辦方 |
+| 場次進行 | `GET /tournaments/{id}/matches/{mid}`、`GET`／`POST .../check-in`、`GET .../score-entry`、`PUT`／`DELETE .../games/{game_no}`、`POST .../submit`、`GET /me/next-matches`、`GET /me/referee/matches` | competition | 公開／隊長／裁判 |
+| 申訴 | `GET .../appeal-state`、`POST .../appeals`、`GET .../appeal-result`、`GET /organizer/tournaments/{id}/appeals`、`POST /organizer/tournaments/{id}/matches/{mid}/appeal-resolution`、`GET .../replay-window`、`GET /organizer/appeals/{id}/attachment` | disputes | 隊長／主辦方／公開 |
+| 檢舉 | `GET /tournaments/{id}/reportable-teams`、`POST /tournaments/{id}/reports`、`GET /organizer/tournaments/{id}/reports`、`POST /organizer/reports/{id}/resolution`、`GET /organizer/reports/{id}/attachment`、`GET /teams/{id}/disqualification` | disputes | 隊長／主辦方 |
+| 待處理清單 | `GET /organizer/tournaments/{id}/open-disputes` | disputes | 主辦方 |
+| 健康檢查 | `GET /utils/health-check` | api | 公開 |
+
+期中後新增的資源：修改與取消賽事、分輪 BO、操作紀錄、重設自訂賽事的報名連結；移除隊員、轉讓隊長、退出、解散；撤回、退回、提高名額；退賽；上傳結算截圖；通知列表、未讀數與標為已讀。
 
 ## 三、前端架構
 
-1. **頁面結構**：公開頁（賽事列表、賽事頁、對戰樹、場次頁）、帳號頁（註冊、登入、通知中心、身分切換）、隊伍與報名頁、裁判的比分登錄面板、主辦方後台與平台管理後台，共約 38 個畫面。
+1. **頁面結構**：公開頁（賽事列表、賽事頁、對戰樹、場次頁）、帳號頁（註冊、登入、身分切換）、隊伍與報名頁、裁判的比分登錄面板、主辦方後台與平台管理後台，規劃共約 38 個畫面。期中已完成 29 個頁面路由與 2 個後台版面路由；通知中心、操作紀錄等畫面在期中後完成。
 2. **程式結構**：`src/routes/` 放頁面，`src/features/<模組>/` 放元件與 hooks，與後端模組一一對應。
 3. **資料存取**：只透過 `@hey-api/openapi-ts` 依 OpenAPI 文件產生的 client 呼叫後端，後端介面變更時重新產生即可發現不相容之處。
 4. **即時更新**：以 TanStack Query 輪詢，只有前述三種輪詢頻率，各頁不另訂頻率。
@@ -419,8 +431,8 @@ flowchart LR
 | 編號 | 決策 | 規則摘要 | 說明位置 |
 | --- | --- | --- | --- |
 | AD-1 | 模組清單與資料擁有權 | 每個實體只屬於一個模組，只有該模組的 Repository 能讀寫它；新增實體須歸入既有模組，新增模組須先修改設計 | 貳、三 |
-| AD-2 | 跨模組只經 Service 公開介面 | 需要別的模組的資料或動作時，只呼叫該模組 Service 的公開函式，回傳 Pydantic schema 而非 ORM 物件；資料表可以有跨模組外鍵，但查詢只能由擁有模組發出 | 貳、二（二）、參、六 |
-| AD-3 | 依賴方向與事件溝通 | 模組只能依依賴圖的方向呼叫；通知只能發事件，沒有模組可以呼叫 notifications，notifications 處理事件時可查詢各模組；core 不 import 任何模組 | 貳、三 |
+| AD-2 | 跨模組只經 Service 公開介面 | 需要別的模組的資料或動作時，只呼叫該模組 Service 的公開函式，回傳 Pydantic schema 而非 ORM 物件；可以 import 別模組 `models.py` 裡的列舉、schema 與事件型別，不能 import 資料表類別；資料表可以有跨模組外鍵，但查詢只能由擁有模組發出 | 貳、二（二）、參、六 |
+| AD-3 | 依賴方向與事件溝通 | 呼叫方向固定為 disputes → competition → registration → tournaments → identity，前面的模組可以呼叫後面任一模組，反方向禁止；通知只能發事件，沒有模組可以呼叫 notifications，notifications 處理事件時可查詢各模組；core 不 import 任何模組 | 貳、三 |
 | AD-4 | 抽籤後的隊伍異動由 competition 主導 | 抽籤前退賽由 registration 處理；抽籤後的退賽與取消資格由 competition 先改對戰表，再呼叫 registration 取得候補並更新報名狀態 | 貳、三 |
 | AD-5 | 一個使用案例一個交易 | 交易由 Router 或 worker 開啟並提交；Service 與 Repository 不 commit、不 rollback；操作紀錄與事件寫在同一個交易 | 參、六 |
 | AD-6 | 鎖列並固定加鎖順序 | 會改變正取、候補或名單的操作先鎖賽事列；Match 的寫入先鎖場次列，鎖住後才檢查狀態；同時需要時先鎖賽事、再依 id 遞增鎖場次；會連鎖到下一場或賽事狀態的流程一開始就先鎖賽事列 | 參、一 |

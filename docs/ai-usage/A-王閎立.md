@@ -720,3 +720,15 @@
 - 問題與修正：無程式錯誤。開發前 AI 差點為 PR #78 的後續開重複的 PR，執行 `gh pr list` 才發現組員的 PR #79 已在處理
 - 成熟度：L3（AI 依審查意見與既有 spec 修正並以 e2e 驗證，人決定範圍）
 - 證據：`_bmad-output/implementation-artifacts/spec-7-2-pr77-review-fixes.md`、PR #77 的審查意見
+
+### 2026-11-11｜設計／文件同步｜期中文件 A～D 依實作更新
+
+- Story／範圍：`docs/midterm/` 的 A～D 與 README，對照 `main` 的 6d2c5a7（第一批 35 個 Story 完成後）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，依專案設定跳過 Story 審查步驟，沒有用子代理
+- 怎麼用：我要求依目前程式同步四份文件並全部重新產生；AI 比對各模組的 models、service、router、worker 與 spec 的 Decisions，改寫 Markdown 後用 `build.mjs` 排版
+- AI 產出：A 1.4、B 1.5、C 1.4、D 1.5；B 新增期中實作範圍與 PRIORITY_WINDOW_SETTLEMENT，C 改為實際 API，D 依程式重畫類別圖並新增期中後設計清單；`spec-midterm-docs-sync.md`
+- 人做了什麼：確認文件要依實作更新、從最新 main 開分支，並指定 Markdown、PDF、Word 都要是最新版；內容待組內確認
+- 驗證：`node docs/midterm/_build/build.mjs` 結束碼 0、沒有畫圖錯誤；用 Python AST 比對 D 類別圖的函式名稱與參數；五個 Markdown 檢查為 LF。Word 沒有開啟檢查
+- 問題與修正：AI 依行號改 D 時吃掉 3 個 mermaid 的結尾標記，排版回報 Lexical error 才發現；核對 diff 時發現 FR-2、FR-3 的規則漏補；AST 比對發現類別圖有 7 個函式的參數與程式不同，其中依記憶寫的參數名要修正；AI 原本寫「每個 PR 都經組員審查」，用 `gh pr list` 查 81 個已合併 PR，#1、#2 沒有審查，改掉這個說法；`frontend/openapi.json` 是舊檔，API 改以各 `router.py` 為準
+- 成熟度：L3（AI 依程式與 spec 產出，人決定範圍並審查）
+- 證據：`_bmad-output/implementation-artifacts/spec-midterm-docs-sync.md`
