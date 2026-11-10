@@ -117,9 +117,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill.md`
   summary: 觀眾 e2e 從 S3 對戰表點場次卡進 S4、再回到 S3 的步驟（`spectator.spec.ts` 的 `test.fixme`）還沒接上；目前場次頁直接開開發模式的假資料 `tournament-fixture`。
   evidence: 2026-11-03 合併 main 後，4.6 第二階段已刪除 `/dev/bracket`。真的 S3 需要已抽籤的賽事（7.1 示範資料或測試內建立），S4 要等 D 的 #21 與 5.8 第二階段接上單場 API；使用者決定先 fixme。接上時要檢查 375 px 只有對戰樹容器橫向捲動。
-- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill.md`
-  summary: `tournament.spec.ts`「觀眾未登入瀏覽公開賽事列表與賽事頁的正取隊伍」仍是 `test.fixme`；2.4（#29）已合併，但正取隊伍要有 3.x 的報名資料。
-  evidence: 2026-11-03 D 在 7.2 第一階段審查中提出可以接上；使用者決定留到第二階段，跟報名步驟一起做。
 
 ## Deferred from: Story 7.1 第二階段 competition 步驟（2026-11-03）
 
@@ -138,9 +135,6 @@
 
 ## Deferred from: spec-7-2-e2e-tournament-drill-2.md (2026-11-04)
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-2.md`
-  summary: 完整賽事演練目前每款遊戲只組一隊（使用者 2026-11-04 決定）；抽籤以後的步驟需要 `teamCount` 隊（特戰英豪、英雄聯盟 32 隊，星砂競技場 8 隊）各自滿編、填完參賽資料並送出報名，要等 3.3～3.6 合併後再補。
-  evidence: 每位選手都經畫面註冊並等驗證信，一隊 3～7 人就要 1～2.5 分鐘；32 隊×7 人照同樣做法太慢，補的時候要另外決定建立大量隊伍的方式（例如改用 7.1 示範資料的隊伍，或只讓少數隊伍走畫面）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-2.md`
   summary: e2e 一次只跑 1 個測試（`playwright.config.ts` 的 `workers: 1`，`tournament.spec.ts` 另有 `describe.configure({ mode: "default" })`），完整跑一次約 22 分鐘；演練同時跑會互相拖慢，一般 API 超過 1 秒（NFR-2），甚至整個卡住。
   evidence: 2026-11-04 實測：本機沒設 worker 上限時，16 核預設開 8 個 worker，6 個演練同時開瀏覽器、註冊帳號，`POST /accounts` 6～7 秒、`GET /accounts/me` 約 2.4 秒，之後停住超過 20 分鐘；2 個 worker 時 e2e 容器約吃 5 核；1 個 worker 時 10 passed、62 skipped（22.4 分鐘）。7.3 彙整回應時間時要知道這些數字是在什麼並行度下量的；之後要縮短時間，`WORKER_POLL_SECONDS` 最小只能設 15 秒（`core/config.py`），省不多，要另找方法（例如共用已驗證的選手帳號）。
@@ -218,3 +212,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-6-4-followup-review.md`
   summary: （低）6.1 申訴的刪檔測試（`test_file_appeal.py`，例如 `test_commit_failure_deletes_the_attachment`）只斷言上傳目錄是空的，實作沒存檔也會通過；可比照 6.4 用 spy `storage.save_image` 斷言存過且該鍵值已被刪。
   evidence: 2026-11-09 6.4 合併後審查後續的 Blind Hunter 指出；與 D 在 #64 指出的 6.4 刪檔測試是同一類漏洞，6.4 這邊已補，申訴是 B 的測試，不在本次範圍。
+
+## Deferred from: spec-7-2-e2e-tournament-drill-3.md (2026-11-10)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-3.md`
+  summary: 3.9「公開正取名單」做完後，完整賽事演練要補「觀眾未登入在賽事頁看到分配後的正取隊伍」；目前改為抽籤後在公開對戰表看到隊伍。
+  evidence: 3.9 期中擱置，S2 沒有正取名單分頁（`TournamentTabs.tsx` 的註解）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-3.md`
+  summary: 375 px 時 S4 比分登錄表（`features/competition/ScoreEntryPanel.tsx`，D）有內部橫向捲動，`tournament.spec.ts` 的完整賽事與第三款遊戲在 mobile-375 因此失敗（`expectNoHorizontalScroll`）；需要改版面（例如窄螢幕把動作鈕移到下一列、縮小比分欄），或由使用者決定把這張表列為例外。
+  evidence: 2026-11-10 實測 3 個 mobile-375 測試失敗於 `div[data-slot=table-container]`；暫時略過這個檢查後 3 個都通過，代表手機版只剩這個問題。元件註解寫明「讓窄螢幕時表格能橫向捲動」，是刻意設計，所以沒有在 7.2 直接改。

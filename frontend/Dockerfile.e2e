@@ -5,6 +5,9 @@ FROM mcr.microsoft.com/playwright:v1.63.0-noble
 COPY --from=oven/bun:1.4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx
 
+# 演練要改申訴期等期限、查 AuditLog（tests/e2e/support/db.ts）
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY package.json bun.lock /app/
