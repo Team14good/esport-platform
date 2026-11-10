@@ -92,9 +92,9 @@ const REASON_TEXT: Partial<Record<ScoreReason, string>> = {
   not_last_game: "這一局無法修改，請重新整理頁面",
 }
 
-// 375 px 時卡片內只剩約 290 px：縮小欄距、隊名可換行、動作鈕直排（只有對戰樹可以橫向捲動）
+// 375 px 時卡片內只剩約 290 px：縮小欄距、隊名可在任意字元換行（沒有空格的英文長隊名也算進欄寬）、動作鈕直排（只有對戰樹可以橫向捲動）
 const CELL = "px-2 sm:px-4"
-const TEAM_HEAD = "whitespace-normal break-words"
+const TEAM_HEAD = "whitespace-normal [overflow-wrap:anywhere]"
 const ACTIONS =
   "flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:justify-end"
 
@@ -429,7 +429,7 @@ function SavedRow({
             colSpan={3}
             className={cn(
               CELL,
-              "text-center font-mono font-bold whitespace-normal",
+              "text-center font-mono font-bold whitespace-normal [overflow-wrap:anywhere]",
             )}
           >
             {game.winner === "a" ? teamA : teamB} 勝
@@ -516,7 +516,7 @@ function EntryRow({
       aria-pressed={winner === side}
       disabled={pending}
       onClick={() => setWinner(side)}
-      className="h-auto min-h-8 w-full max-w-40 whitespace-normal py-1"
+      className="h-auto min-h-8 w-full max-w-40 whitespace-normal py-1 [overflow-wrap:anywhere]"
     >
       {name}
     </Button>
@@ -534,7 +534,7 @@ function EntryRow({
       onKeyDown={(event) => {
         if (event.key === "Enter") submit()
       }}
-      className="mx-auto w-12 text-center font-mono text-body-lg font-bold sm:w-20"
+      className="mx-auto w-12 px-1 text-center font-mono text-body-lg font-bold sm:w-20 sm:px-3"
     />
   )
 
