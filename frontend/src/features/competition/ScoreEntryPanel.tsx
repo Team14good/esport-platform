@@ -92,6 +92,12 @@ const REASON_TEXT: Partial<Record<ScoreReason, string>> = {
   not_last_game: "這一局無法修改，請重新整理頁面",
 }
 
+// 375 px 時卡片內只剩約 290 px：縮小欄距、隊名可換行、動作鈕直排（只有對戰樹可以橫向捲動）
+const CELL = "px-2 sm:px-4"
+const TEAM_HEAD = "whitespace-normal break-words"
+const ACTIONS =
+  "flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:justify-end"
+
 const ROW_FALLBACK_TEXT = "操作失敗，請重新整理頁面"
 const SUBMIT_FAILED_TEXT = "送出失敗，請重新整理頁面"
 const EDITING_HINT = "請先登錄或取消正在編輯的局"
@@ -249,7 +255,7 @@ export function ScoreEntryPanel({
         )}
       </CardHeader>
       <CardContent>
-        {/* 兩隊報到前整個面板停用；min-w-0 讓窄螢幕時表格能橫向捲動 */}
+        {/* 兩隊報到前整個面板停用；窄螢幕時縮小欄距、隊名換行、動作鈕直排，375 px 不必橫向捲動 */}
         <fieldset
           disabled={!bothCheckedIn && !readOnly}
           className="flex min-w-0 flex-col gap-3"
@@ -257,15 +263,27 @@ export function ScoreEntryPanel({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-overline">局</TableHead>
-                <TableHead className="text-center text-overline normal-case">
+                <TableHead className={cn(CELL, "text-overline")}>局</TableHead>
+                <TableHead
+                  className={cn(
+                    CELL,
+                    TEAM_HEAD,
+                    "text-center text-overline normal-case",
+                  )}
+                >
                   {teamA}
                 </TableHead>
-                <TableHead aria-hidden="true" />
-                <TableHead className="text-center text-overline normal-case">
+                <TableHead aria-hidden="true" className="px-0" />
+                <TableHead
+                  className={cn(
+                    CELL,
+                    TEAM_HEAD,
+                    "text-center text-overline normal-case",
+                  )}
+                >
                   {teamB}
                 </TableHead>
-                <TableHead>
+                <TableHead className={CELL}>
                   <span className="sr-only">動作</span>
                 </TableHead>
               </TableRow>
@@ -383,28 +401,44 @@ function SavedRow({
   return (
     <>
       <TableRow>
-        <TableCell>第 {gameNo} 局</TableCell>
+        <TableCell className={CELL}>第 {gameNo} 局</TableCell>
         {scoreType === "rounds" ? (
           <>
-            <TableCell className="text-center font-mono text-body-lg font-bold">
+            <TableCell
+              className={cn(
+                CELL,
+                "text-center font-mono text-body-lg font-bold",
+              )}
+            >
               {game.scoreA}
             </TableCell>
             <TableCell className="px-0 text-center font-mono text-muted-foreground">
               :
             </TableCell>
-            <TableCell className="text-center font-mono text-body-lg font-bold">
+            <TableCell
+              className={cn(
+                CELL,
+                "text-center font-mono text-body-lg font-bold",
+              )}
+            >
               {game.scoreB}
             </TableCell>
           </>
         ) : (
-          <TableCell colSpan={3} className="text-center font-mono font-bold">
+          <TableCell
+            colSpan={3}
+            className={cn(
+              CELL,
+              "text-center font-mono font-bold whitespace-normal",
+            )}
+          >
             {game.winner === "a" ? teamA : teamB} 勝
           </TableCell>
         )}
-        <TableCell>
+        <TableCell className={CELL}>
           {!readOnly && (
-            <div className="flex items-center justify-end gap-1">
-              <span className="mr-1 text-caption text-muted-foreground">
+            <div className={ACTIONS}>
+              <span className="text-caption text-muted-foreground sm:mr-1">
                 已登錄
               </span>
               <Button
@@ -482,7 +516,7 @@ function EntryRow({
       aria-pressed={winner === side}
       disabled={pending}
       onClick={() => setWinner(side)}
-      className="w-full max-w-40"
+      className="h-auto min-h-8 w-full max-w-40 whitespace-normal py-1"
     >
       {name}
     </Button>
@@ -500,35 +534,39 @@ function EntryRow({
       onKeyDown={(event) => {
         if (event.key === "Enter") submit()
       }}
-      className="mx-auto w-20 text-center font-mono text-body-lg font-bold"
+      className="mx-auto w-12 text-center font-mono text-body-lg font-bold sm:w-20"
     />
   )
 
   return (
     <>
       <TableRow>
-        <TableCell>第 {gameNo} 局</TableCell>
+        <TableCell className={CELL}>第 {gameNo} 局</TableCell>
         {scoreType === "rounds" ? (
           <>
-            <TableCell className="text-center">
+            <TableCell className={cn(CELL, "text-center")}>
               {score(scoreA, setScoreA, teamA)}
             </TableCell>
             <TableCell className="px-0 text-center font-mono text-muted-foreground">
               :
             </TableCell>
-            <TableCell className="text-center">
+            <TableCell className={cn(CELL, "text-center")}>
               {score(scoreB, setScoreB, teamB)}
             </TableCell>
           </>
         ) : (
           <>
-            <TableCell className="text-center">{pick("a", teamA)}</TableCell>
-            <TableCell />
-            <TableCell className="text-center">{pick("b", teamB)}</TableCell>
+            <TableCell className={cn(CELL, "text-center")}>
+              {pick("a", teamA)}
+            </TableCell>
+            <TableCell className="px-0" />
+            <TableCell className={cn(CELL, "text-center")}>
+              {pick("b", teamB)}
+            </TableCell>
           </>
         )}
-        <TableCell>
-          <div className="flex items-center justify-end gap-1">
+        <TableCell className={CELL}>
+          <div className={ACTIONS}>
             <LoadingButton
               variant="outline"
               size="sm"
