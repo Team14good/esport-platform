@@ -218,6 +218,3 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-3.md`
   summary: 3.9「公開正取名單」做完後，完整賽事演練要補「觀眾未登入在賽事頁看到分配後的正取隊伍」；目前改為抽籤後在公開對戰表看到隊伍。
   evidence: 3.9 期中擱置，S2 沒有正取名單分頁（`TournamentTabs.tsx` 的註解）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-3.md`
-  summary: 375 px 時 S4 比分登錄表（`features/competition/ScoreEntryPanel.tsx`，D）有內部橫向捲動，`tournament.spec.ts` 的完整賽事與第三款遊戲在 mobile-375 因此失敗（`expectNoHorizontalScroll`）；需要改版面（例如窄螢幕把動作鈕移到下一列、縮小比分欄），或由使用者決定把這張表列為例外。
-  evidence: 2026-11-10 實測 3 個 mobile-375 測試失敗於 `div[data-slot=table-container]`；暫時略過這個檢查後 3 個都通過，代表手機版只剩這個問題。元件註解寫明「讓窄螢幕時表格能橫向捲動」，是刻意設計，所以沒有在 7.2 直接改。
