@@ -1,15 +1,39 @@
 // Story 7.2 的完整賽事演練：依遊戲設定（support/games.ts）產生每一步，同一套步驟套用到每款遊戲，
-// 不依遊戲名稱寫分支。上游 Story 還沒合併的步驟先以 test.fixme 列為待辦，標題註明等待的 Story；
-// 該 Story 合併後把 fixme 換成 test 並補上內容（共用步驟放 support/）。
-// 第二階段：每款遊戲一個真的測試，從平台管理員新增遊戲走到一隊滿編、全員填完參賽資料（2.1、2.2、2.4、3.1、3.2）。
+// 不依遊戲名稱寫分支。
+// 第二階段：每款遊戲一個測試，從平台管理員新增遊戲走到一隊滿編、全員填完參賽資料（整隊走畫面）。
+// 第三階段：兩款示範遊戲各跑一場 32 隊賽事到頒獎，第三款遊戲跑 8 隊到確認一場結果。關鍵步驟走畫面，
+// 大量重複的準備與場次走公開 API（support/bulk.ts），受真實時間限制的期限改資料庫（support/db.ts）。
 // 期中版調整：不含通知、隊伍搜尋與晉級路徑；操作紀錄改由測試直接查 AuditLog。
 import {
   logIn,
   newTestAccount,
   platformAdmin,
+  registerVerifiedAccount,
   registerVerifiedAccounts,
   uniqueSuffix,
 } from "./support/accounts"
+import {
+  apiAssignReferee,
+  apiLogin,
+  type BulkTeam,
+  createRegisteredTeams,
+  fetchAccountId,
+  fetchBracket,
+  fetchRegistrationStatus,
+  fetchTournamentStatus,
+  findTeam,
+  playableMatches,
+  playMatchByApi,
+  playMatchesByApi,
+  teamsOf,
+  waitForMatchStatus,
+} from "./support/bulk"
+import {
+  auditRows,
+  endPriorityWindow,
+  expireAppealWindows,
+  openCheckIn,
+} from "./support/db"
 import {
   addGame,
   browseOpenTournament,
@@ -25,9 +49,24 @@ import {
   FICTIONAL_GAME,
   type GameConfig,
   rosterLimit,
-  winsNeeded,
 } from "./support/games"
 import { expectNoHorizontalScroll } from "./support/layout"
+import {
+  acceptRefereeInvite,
+  assignRefereeOnPage,
+  bracketCardsOf,
+  checkInOnPage,
+  correctAppealToTeamB,
+  createRefereeInvite,
+  disqualifyReportedTeam,
+  drawBracket,
+  expectPodium,
+  expectRefereeSeesMatch,
+  fileAppeal,
+  reportTeam,
+  scoreMatchOnPage,
+  submitRegistration,
+} from "./support/matchday"
 import { createOrganizer } from "./support/organizer"
 
 // 這個檔案的測試依序執行（playwright.config.ts 也只開 1 個 worker）：
@@ -35,116 +74,7 @@ import { createOrganizer } from "./support/organizer"
 // 一般 API 超過 1 秒（NFR-2）。default 模式下某個測試失敗，後面的測試仍會執行。
 test.describe.configure({ mode: "default" })
 
-type DrillStep = {
-  title: string
-  /** 等待合併的 Story 編號 */
-  waitingFor: string[]
-  /** FR／NFR 等需求編號（不含 @） */
-  requirements: string[]
-}
-
-function scoreDescription(game: GameConfig): string {
-  return game.sampleGameScore
-    ? `回合比分（例如 ${game.sampleGameScore.winner}:${game.sampleGameScore.loser}）`
-    : "只選勝隊"
-}
-
-/** 從報名到頒獎的完整流程（UJ-1～UJ-4 的高潮步驟） */
-function fullTournamentSteps(game: GameConfig): DrillStep[] {
-  return [
-    {
-      title: "主辦方產生裁判邀請連結，裁判註冊後接受邀請",
-      waitingFor: ["2.7"],
-      requirements: ["FR-4"],
-    },
-    {
-      title: `${game.teamCount} 隊的隊長送出報名（每隊 ${rosterLimit(game)} 人、全員填完參賽資料），名單鎖定`,
-      waitingFor: ["3.3"],
-      requirements: ["FR-13"],
-    },
-    {
-      title: "優先期結束分配代表隊、先搶期即時分配、報名截止補位",
-      waitingFor: ["3.4", "3.5", "3.6"],
-      requirements: ["FR-14", "FR-15", "FR-16"],
-    },
-    {
-      title: "觀眾未登入在賽事頁看到分配後的正取隊伍",
-      waitingFor: ["3.4", "3.5", "3.6"],
-      requirements: ["FR-34"],
-    },
-    {
-      title: `主辦方提前抽籤，產生 ${game.teamCount} 隊單淘汰對戰表與季軍賽`,
-      waitingFor: ["4.1"],
-      requirements: ["FR-19", "FR-20"],
-    },
-    {
-      title: "系統排定場次時間，主辦方指派裁判到場次",
-      waitingFor: ["4.3", "4.4"],
-      requirements: ["FR-23", "FR-4"],
-    },
-    {
-      title: "兩隊隊長在開始前 30 分鐘內報到，裁判看到可開始",
-      waitingFor: ["5.1"],
-      requirements: ["FR-24"],
-    },
-    {
-      title: `裁判逐局登錄比分（${scoreDescription(game)}），先拿 ${winsNeeded(game.defaultBestOf)} 局後送出系列結果`,
-      waitingFor: ["5.3", "5.4"],
-      requirements: ["FR-26", "FR-27"],
-    },
-    {
-      title:
-        "觀眾開著公開對戰樹，場次變為已確認後 10 秒內看到新結果，不需重新整理",
-      waitingFor: ["4.6 第二階段", "5.5"],
-      requirements: ["FR-35", "NFR-2"],
-    },
-    {
-      title: "敗隊隊長在申訴期內提出申訴，主辦方更正結果後重新晉級",
-      waitingFor: ["6.1", "6.2"],
-      requirements: ["FR-30", "FR-31"],
-    },
-    {
-      title: "隊長檢舉另一隊，主辦方取消資格，由最近一場輸給它的隊伍頂替",
-      waitingFor: ["6.4", "6.5"],
-      requirements: ["FR-32", "FR-33", "FR-22"],
-    },
-    {
-      title: "申訴期滿沒有申訴的場次自動確認，勝隊晉級下一輪",
-      waitingFor: ["5.5"],
-      requirements: ["FR-29", "FR-21"],
-    },
-    {
-      title:
-        "季軍賽與決賽定案，賽事轉為已結束，S3 顯示冠軍、亞軍、季軍的頒獎台",
-      waitingFor: ["5.6", "4.6 第二階段"],
-      requirements: ["FR-21", "SM-1"],
-    },
-    {
-      title:
-        "直接查詢 AuditLog：每一次結果變更（含申訴更正與取消資格）都有操作者與變更前後的內容",
-      waitingFor: ["5.3", "5.4", "6.2", "6.5"],
-      requirements: ["NFR-3", "SM-4"],
-    },
-  ]
-}
-
-/** 虛構的第三款遊戲：平台管理員在後台新增後，跑完報名到確認結果 */
-function newGameSteps(game: GameConfig): DrillStep[] {
-  return [
-    {
-      title: `${game.teamCount} 隊以 ${rosterLimit(game)} 人名單送出報名並完成分配`,
-      waitingFor: ["3.3", "3.6"],
-      requirements: ["FR-13", "FR-16"],
-    },
-    {
-      title: `抽籤後登錄一個場次（BO${game.defaultBestOf}，先拿 ${winsNeeded(game.defaultBestOf)} 局）並確認結果`,
-      waitingFor: ["4.1", "5.3", "5.4", "5.5"],
-      requirements: ["FR-19", "FR-26", "FR-27", "FR-29"],
-    },
-  ]
-}
-
-/** 已實作的前半段：新增遊戲、建立賽事、觀眾瀏覽、一隊滿編並全員填完參賽資料。 */
+/** 第二階段：新增遊戲、建立賽事、觀眾瀏覽、一隊滿編並全員填完參賽資料（整隊走畫面）。 */
 function registrationDrill(game: GameConfig) {
   test(`平台管理員新增《${game.name}》、主辦方建立賽事，一隊湊滿 ${rosterLimit(game)} 人並全員填完參賽資料`, {
     tag: [
@@ -282,41 +212,454 @@ function registrationDrill(game: GameConfig) {
   })
 }
 
-function registerSteps(
-  describeTitle: string,
-  game: GameConfig,
-  steps: DrillStep[],
+type NewRoleContext = Parameters<
+  Parameters<typeof test>[2]
+>[0]["newRoleContext"]
+
+/** 開一個新角色並登入。 */
+async function rolePage(
+  newRoleContext: NewRoleContext,
+  role: string,
+  account: Parameters<typeof logIn>[1],
 ) {
-  test.describe(describeTitle, () => {
-    registrationDrill(game)
-    for (const step of steps) {
-      test.fixme(`${step.title}（等待 Story ${step.waitingFor.join("、")}）`, {
-        tag: [
-          ...new Set([
-            "@story-7.2",
-            `@game-${game.key}`,
-            // 「4.6 第二階段」只取 Story 編號
-            ...step.waitingFor.map((story) => `@story-${story.split(" ")[0]}`),
-            ...step.requirements.map((id) => `@${id}`),
-          ]),
-        ],
-      }, async () => {
-        // 上游合併後實作；共用步驟（註冊、登錄比分等）放 support/，只讀 game 的設定
+  const page = await (await newRoleContext(role)).newPage()
+  await logIn(page, account)
+  return page
+}
+
+/** 新增遊戲到抽籤完成；裁判已接受邀請。 */
+async function setUpDrawnTournament(
+  game: GameConfig,
+  newRoleContext: NewRoleContext,
+) {
+  const suffix = uniqueSuffix()
+  const gameName = `${game.name} ${suffix}`
+  const tournamentName = `E2E ${game.name}完整賽 ${suffix}`
+  const adminPage = await (await newRoleContext("平台管理員")).newPage()
+  const organizerPage = await (await newRoleContext("主辦方")).newPage()
+  const refereePage = await (await newRoleContext("裁判")).newPage()
+  const referee = newTestAccount("referee")
+  let tournamentId = ""
+  let teams: BulkTeam[] = []
+
+  await test.step("平台管理員新增遊戲", async () => {
+    await logIn(adminPage, platformAdmin())
+    await addGame(adminPage, game, gameName)
+  })
+  const organizer = await test.step("主辦方註冊並由平台管理員核准", () =>
+    createOrganizer(organizerPage, adminPage))
+
+  await test.step("主辦方建立賽事，裁判註冊後接受邀請", async () => {
+    tournamentId = await createTournament(organizerPage, game, {
+      gameName,
+      tournamentName,
+    })
+    await registerVerifiedAccount(refereePage, referee)
+    const invite = await createRefereeInvite(organizerPage, tournamentId)
+    await acceptRefereeInvite(refereePage, invite, tournamentName)
+  })
+
+  await test.step(`${game.teamCount} 隊（每隊 ${rosterLimit(game)} 人）報名，第一隊由隊長在 S17 送出`, async () => {
+    teams = await createRegisteredTeams(tournamentId, game, suffix)
+    const captainPage = await rolePage(
+      newRoleContext,
+      "第一隊隊長",
+      teams[0].captain.account,
+    )
+    await submitRegistration(captainPage, teams[0].id)
+    await captainPage.close()
+  })
+
+  await test.step("優先期結束後 worker 分配，所有代表隊成為正取", async () => {
+    await endPriorityWindow(tournamentId)
+    await expect
+      .poll(() => fetchRegistrationStatus(teams[0]), {
+        timeout: 90_000,
+        intervals: [2_000],
       })
+      .toBe("accepted")
+    const statuses = await Promise.all(teams.map(fetchRegistrationStatus))
+    expect(new Set(statuses)).toEqual(new Set(["accepted"]))
+  })
+
+  await test.step("主辦方提前抽籤，觀眾在公開對戰表看到隊伍", async () => {
+    await drawBracket(organizerPage, tournamentId)
+    const bracket = await fetchBracket(tournamentId)
+    // 正取 4 隊以上有季軍賽，場次數等於隊數（FR-20）
+    expect(bracket.matches).toHaveLength(game.teamCount)
+    expect(bracket.matches.some((match) => match.is_third_place)).toBe(true)
+    const spectator = await (await newRoleContext("觀眾")).newPage()
+    await spectator.goto(`/tournaments/${tournamentId}/bracket`)
+    await expect(bracketCardsOf(spectator, teams[0].name).first()).toBeVisible()
+    await expectNoHorizontalScroll(spectator)
+    await spectator.close()
+  })
+
+  return {
+    tournamentId,
+    teams,
+    organizer,
+    organizerPage,
+    referee,
+    refereePage,
+  }
+}
+
+type DrawnTournament = Awaited<ReturnType<typeof setUpDrawnTournament>>
+
+/**
+ * 第一輪第一場全部走畫面：指派裁判、兩隊長報到、裁判逐局登錄；申訴期滿由 worker 確認，
+ * 觀眾開著對戰樹，確認後 10 秒內看到勝隊晉級。回傳這一場。
+ */
+async function playFirstMatchOnPages(
+  game: GameConfig,
+  drill: DrawnTournament,
+  newRoleContext: NewRoleContext,
+) {
+  const { tournamentId, teams, organizerPage, referee, refereePage } = drill
+  const bracket = await fetchBracket(tournamentId)
+  const round = playableMatches(bracket, 1)
+  const match = round[0]
+  const { teamA, teamB } = teamsOf(match)
+  await openCheckIn(round.map((candidate) => candidate.id))
+
+  await test.step("主辦方在 S30 指派裁判，裁判在 S13 看到場次", async () => {
+    await assignRefereeOnPage(
+      organizerPage,
+      tournamentId,
+      match.code,
+      referee.displayName,
+    )
+    await expectRefereeSeesMatch(refereePage, match.code)
+  })
+
+  await test.step("兩隊長在 S4 報到，裁判逐局登錄並送出系列結果", async () => {
+    for (const [role, team] of [
+      ["A 隊隊長", teamA],
+      ["B 隊隊長", teamB],
+    ] as const) {
+      const page = await rolePage(
+        newRoleContext,
+        role,
+        findTeam(teams, team.id).captain.account,
+      )
+      await checkInOnPage(page, tournamentId, match.id)
+      await page.close()
     }
+    await scoreMatchOnPage(
+      refereePage,
+      tournamentId,
+      match.id,
+      game,
+      teamA.name,
+      teamB.name,
+    )
+    await waitForMatchStatus(tournamentId, [match.id], "appeal_window", 15_000)
+  })
+
+  await test.step("申訴期滿自動確認，觀眾 10 秒內看到結果，不需重新整理", async () => {
+    const spectator = await (await newRoleContext("觀眾")).newPage()
+    await spectator.goto(`/tournaments/${tournamentId}/bracket`)
+    await expect(bracketCardsOf(spectator, teamA.name)).toHaveCount(1)
+    await expireAppealWindows([match.id])
+    await waitForMatchStatus(tournamentId, [match.id], "confirmed")
+    // 勝隊出現在下一輪：同一隊變成兩張場次卡
+    await expect(bracketCardsOf(spectator, teamA.name)).toHaveCount(2, {
+      timeout: 10_000,
+    })
+    await spectator.close()
+  })
+
+  return match
+}
+
+const FULL_DRILL_STORIES = [
+  "2.7",
+  "3.3",
+  "3.4",
+  "4.1",
+  "4.3",
+  "4.4",
+  "4.6",
+  "5.1",
+  "5.3",
+  "5.4",
+  "5.5",
+  "5.6",
+  "6.1",
+  "6.2",
+  "6.4",
+  "6.5",
+  "7.2",
+]
+
+const FULL_DRILL_REQUIREMENTS = [
+  "FR-4",
+  "FR-13",
+  "FR-14",
+  "FR-19",
+  "FR-20",
+  "FR-21",
+  "FR-22",
+  "FR-24",
+  "FR-26",
+  "FR-27",
+  "FR-29",
+  "FR-30",
+  "FR-31",
+  "FR-32",
+  "FR-33",
+  "FR-35",
+  "NFR-2",
+  "NFR-3",
+  "NFR-7",
+  "SM-1",
+  "SM-3",
+  "SM-4",
+]
+
+/** 完整賽事：從報名到頒獎。 */
+function fullTournamentDrill(game: GameConfig) {
+  test(`《${game.name}》${game.teamCount} 隊完整賽事：報名、抽籤、報到、比分、申訴更正、取消資格頂替到頒獎`, {
+    tag: [
+      ...FULL_DRILL_STORIES.map((story) => `@story-${story}`),
+      `@game-${game.key}`,
+      ...FULL_DRILL_REQUIREMENTS.map((requirement) => `@${requirement}`),
+    ],
+  }, async ({ newRoleContext }) => {
+    test.setTimeout(45 * 60_000)
+    const drill = await setUpDrawnTournament(game, newRoleContext)
+    const { tournamentId, teams, organizer, organizerPage, refereePage } = drill
+    const organizerToken = await apiLogin(organizer)
+    const refereeToken = await apiLogin(drill.referee)
+    const firstMatch = await playFirstMatchOnPages(game, drill, newRoleContext)
+    const firstRound = playableMatches(await fetchBracket(tournamentId), 1)
+
+    const appealMatch = firstRound[0]
+    const appealTeams = teamsOf(appealMatch)
+    const otherMatches = firstRound.slice(1)
+
+    await test.step("敗隊隊長提出申訴，主辦方更正結果後勝隊改變", async () => {
+      await playMatchByApi({
+        tournamentId,
+        game,
+        match: appealMatch,
+        teams,
+        scorerToken: organizerToken,
+        winner: "a",
+      })
+      const loserPage = await rolePage(
+        newRoleContext,
+        "申訴隊隊長",
+        findTeam(teams, appealTeams.teamB.id).captain.account,
+      )
+      await fileAppeal(loserPage, tournamentId, appealMatch.id)
+      await loserPage.close()
+      await correctAppealToTeamB(
+        organizerPage,
+        tournamentId,
+        game,
+        appealTeams.teamA.name,
+        appealTeams.teamB.name,
+      )
+      const after = await waitForMatchStatus(
+        tournamentId,
+        [appealMatch.id],
+        "confirmed",
+        15_000,
+      )
+      expect(
+        after.matches.find((match) => match.id === appealMatch.id)?.winner_id,
+      ).toBe(appealTeams.teamB.id)
+    })
+
+    await test.step("第一輪其餘場次：申訴期滿自動確認，勝隊晉級", async () => {
+      await playMatchesByApi({
+        tournamentId,
+        game,
+        matches: otherMatches,
+        teams,
+        scorerToken: organizerToken,
+        winner: "a",
+      })
+      await expireAppealWindows(otherMatches.map((match) => match.id))
+      await waitForMatchStatus(
+        tournamentId,
+        otherMatches.map((match) => match.id),
+        "confirmed",
+      )
+    })
+
+    await test.step("隊長檢舉一支等待第二輪的隊伍，主辦方取消資格，由最近一場輸給它的隊伍頂替", async () => {
+      const excluded = new Set([
+        firstMatch.team_a?.id,
+        appealTeams.teamA.id,
+        appealTeams.teamB.id,
+      ])
+      const target = otherMatches.find(
+        (match) => match.team_a && !excluded.has(match.team_a.id),
+      )
+      if (!target) throw new Error("找不到可取消資格的隊伍")
+      const { teamA: disqualified, teamB: replacement } = teamsOf(target)
+      const reporter = otherMatches.find((match) => match.id !== target.id)
+      if (!reporter) throw new Error("找不到提出檢舉的隊伍")
+      const reporterPage = await rolePage(
+        newRoleContext,
+        "檢舉隊隊長",
+        findTeam(teams, teamsOf(reporter).teamA.id).captain.account,
+      )
+      await reportTeam(reporterPage, tournamentId, disqualified.name)
+      await reporterPage.close()
+      await disqualifyReportedTeam(
+        organizerPage,
+        tournamentId,
+        disqualified.name,
+      )
+      const after = await fetchBracket(tournamentId)
+      const seated = after.matches
+        .filter((match) => match.round_no === 2)
+        .flatMap((match) => [match.team_a?.id, match.team_b?.id])
+      expect(seated).toContain(replacement.id)
+      expect(seated).not.toContain(disqualified.id)
+    })
+
+    await test.step("其餘各輪打到決賽與季軍賽，決賽走畫面", async () => {
+      const { rounds } = await fetchBracket(tournamentId)
+      for (let round = 2; round <= rounds; round += 1) {
+        const matches = playableMatches(await fetchBracket(tournamentId), round)
+        await openCheckIn(matches.map((match) => match.id))
+        const final =
+          round === rounds
+            ? matches.find((match) => !match.is_third_place)
+            : undefined
+        await playMatchesByApi({
+          tournamentId,
+          game,
+          matches: matches.filter((match) => match.id !== final?.id),
+          teams,
+          scorerToken: organizerToken,
+          winner: "a",
+        })
+        if (final) {
+          const { teamA, teamB } = teamsOf(final)
+          await apiAssignReferee(
+            tournamentId,
+            final.id,
+            organizerToken,
+            await fetchAccountId(refereeToken),
+          )
+          for (const [role, team] of [
+            ["決賽 A 隊隊長", teamA],
+            ["決賽 B 隊隊長", teamB],
+          ] as const) {
+            const page = await rolePage(
+              newRoleContext,
+              role,
+              findTeam(teams, team.id).captain.account,
+            )
+            await checkInOnPage(page, tournamentId, final.id)
+            await page.close()
+          }
+          await scoreMatchOnPage(
+            refereePage,
+            tournamentId,
+            final.id,
+            game,
+            teamA.name,
+            teamB.name,
+          )
+        }
+        const ids = matches.map((match) => match.id)
+        await waitForMatchStatus(tournamentId, ids, "appeal_window", 30_000)
+        await expireAppealWindows(ids)
+        await waitForMatchStatus(tournamentId, ids, "confirmed")
+      }
+    })
+
+    await test.step("賽事轉為已結束，S3 顯示冠軍、亞軍、季軍的頒獎台", async () => {
+      await expect
+        .poll(() => fetchTournamentStatus(tournamentId), { timeout: 60_000 })
+        .toBe("finished")
+      const bracket = await fetchBracket(tournamentId)
+      const final = bracket.matches.find(
+        (match) => match.round_no === bracket.rounds && !match.is_third_place,
+      )
+      const thirdPlace = bracket.matches.find((match) => match.is_third_place)
+      if (!final || !thirdPlace) throw new Error("找不到決賽或季軍賽")
+      const finalists = teamsOf(final)
+      expect(bracket.podium?.champion?.id).toBe(finalists.teamA.id)
+      expect(bracket.podium?.runner_up?.id).toBe(finalists.teamB.id)
+      expect(bracket.podium?.third_place?.id).toBe(thirdPlace.team_a?.id)
+      const spectator = await (await newRoleContext("觀眾")).newPage()
+      await expectPodium(spectator, tournamentId, {
+        champion: finalists.teamA.name,
+        runnerUp: finalists.teamB.name,
+        thirdPlace: thirdPlace.team_a?.name ?? "",
+      })
+    })
+
+    await test.step("直接查 AuditLog：結果變更都有操作者與變更前後的內容", async () => {
+      const actions = [
+        "appeal.resolved",
+        "report.resolved",
+        "match.teams_changed",
+      ]
+      const changes = await auditRows(tournamentId, actions)
+      expect(new Set(changes.map((row) => row.action))).toEqual(
+        new Set(actions),
+      )
+      for (const row of changes) {
+        expect(row.actor_id, row.action).not.toBeNull()
+        expect(row.before, row.action).not.toBeNull()
+        expect(row.after, row.action).not.toBeNull()
+      }
+      const submitted = await auditRows(tournamentId, [
+        "match.result_submitted",
+      ])
+      expect(submitted.length).toBeGreaterThanOrEqual(game.teamCount - 1)
+      for (const row of submitted) {
+        expect(row.actor_id).not.toBeNull()
+      }
+    })
+  })
+}
+
+/** 第三款遊戲：平台管理員在後台新增後，跑完報名到確認一場結果，全程不改程式。 */
+function newGameDrill(game: GameConfig) {
+  test(`後台新增的《${game.name}》：${game.teamCount} 隊報名、抽籤，登錄一場 BO${game.defaultBestOf} 並確認結果`, {
+    tag: [
+      "@story-2.1",
+      "@story-3.3",
+      "@story-4.1",
+      "@story-5.3",
+      "@story-5.4",
+      "@story-5.5",
+      "@story-7.2",
+      `@game-${game.key}`,
+      "@FR-6",
+      "@FR-13",
+      "@FR-19",
+      "@FR-26",
+      "@FR-27",
+      "@FR-29",
+      "@NFR-2",
+      "@NFR-7",
+    ],
+  }, async ({ newRoleContext }) => {
+    test.setTimeout(20 * 60_000)
+    const drill = await setUpDrawnTournament(game, newRoleContext)
+    await playFirstMatchOnPages(game, drill, newRoleContext)
   })
 }
 
 for (const game of DEMO_GAMES) {
-  registerSteps(
-    `完整賽事演練：《${game.name}》`,
-    game,
-    fullTournamentSteps(game),
-  )
+  test.describe(`完整賽事演練：《${game.name}》`, () => {
+    registrationDrill(game)
+    fullTournamentDrill(game)
+  })
 }
 
-registerSteps(
-  `新增第三款遊戲：《${FICTIONAL_GAME.name}》`,
-  FICTIONAL_GAME,
-  newGameSteps(FICTIONAL_GAME),
-)
+test.describe(`新增第三款遊戲：《${FICTIONAL_GAME.name}》`, () => {
+  registrationDrill(FICTIONAL_GAME)
+  newGameDrill(FICTIONAL_GAME)
+})
