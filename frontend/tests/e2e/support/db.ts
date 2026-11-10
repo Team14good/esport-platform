@@ -8,21 +8,39 @@ const run = promisify(execFile)
 
 const UUID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
 
-function databaseUrl(): string {
-  const url = process.env.E2E_DATABASE_URL
-  if (!url) {
+/**
+ * psql 的連線環境變數。不把連線字串放進 argv：`execFile` 失敗時錯誤訊息會帶整串 argv，
+ * 密碼會進 Playwright 報告。
+ */
+function connectionEnv(): NodeJS.ProcessEnv {
+  const raw = process.env.E2E_DATABASE_URL
+  if (!raw) {
     throw new Error(
       "缺少 E2E_DATABASE_URL；請用 docker compose --profile e2e run --rm e2e 執行",
     )
   }
-  return url
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    // URL 解析錯誤的物件會帶完整輸入，不能往外丟
+    throw new Error("E2E_DATABASE_URL 不是有效的連線字串")
+  }
+  return {
+    ...process.env,
+    PGHOST: url.hostname,
+    PGPORT: url.port,
+    PGUSER: decodeURIComponent(url.username),
+    PGPASSWORD: decodeURIComponent(url.password),
+    PGDATABASE: decodeURIComponent(url.pathname.slice(1)),
+  }
 }
 
 async function sql(statement: string): Promise<string> {
   const { stdout } = await run(
     "psql",
-    [databaseUrl(), "-AtqX", "-v", "ON_ERROR_STOP=1", "-c", statement],
-    { maxBuffer: 32 * 1024 * 1024 },
+    ["-AtqX", "-v", "ON_ERROR_STOP=1", "-c", statement],
+    { env: connectionEnv(), maxBuffer: 32 * 1024 * 1024 },
   )
   return stdout.trim()
 }
@@ -66,9 +84,16 @@ export async function openCheckIn(matchIds: string[]) {
 
 /** 讓場次的申訴期已過，由 worker 自動確認並晉級。 */
 export async function expireAppealWindows(matchIds: string[]) {
-  await sql(
-    `UPDATE "match" SET appeal_deadline = now() - interval '1 second' WHERE id = ANY(${uuidArray(matchIds)}) AND status = 'appeal_window'`,
+  const output = await sql(
+    `UPDATE "match" SET appeal_deadline = now() - interval '1 second' WHERE id = ANY(${uuidArray(matchIds)}) AND status = 'appeal_window' RETURNING id`,
   )
+  const updated = output ? output.split("\n").length : 0
+  // 不檢查的話，狀態不對時只會在之後等「已確認」逾時，看不出原因
+  if (updated !== matchIds.length) {
+    throw new Error(
+      `只改到 ${updated}／${matchIds.length} 場的申訴期，其餘場次不在申訴期`,
+    )
+  }
 }
 
 export type AuditRow = {

@@ -62,6 +62,7 @@ import {
   drawBracket,
   expectPodium,
   expectRefereeSeesMatch,
+  expectRegistrationAccepted,
   fileAppeal,
   reportTeam,
   scoreMatchOnPage,
@@ -280,10 +281,18 @@ async function setUpDrawnTournament(
       .toBe("accepted")
     const statuses = await Promise.all(teams.map(fetchRegistrationStatus))
     expect(new Set(statuses)).toEqual(new Set(["accepted"]))
+    const captainPage = await rolePage(
+      newRoleContext,
+      "第一隊隊長（分配後）",
+      teams[0].captain.account,
+    )
+    await expectRegistrationAccepted(captainPage, teams[0].id)
+    await captainPage.close()
   })
 
   await test.step("主辦方提前抽籤，觀眾在公開對戰表看到隊伍", async () => {
     await drawBracket(organizerPage, tournamentId)
+    expect(await fetchTournamentStatus(tournamentId)).toBe("published")
     const bracket = await fetchBracket(tournamentId)
     // 正取 4 隊以上有季軍賽，場次數等於隊數（FR-20）
     expect(bracket.matches).toHaveLength(game.teamCount)
@@ -343,7 +352,7 @@ async function playFirstMatchOnPages(
         role,
         findTeam(teams, team.id).captain.account,
       )
-      await checkInOnPage(page, tournamentId, match.id)
+      await checkInOnPage(page, tournamentId, match.id, team.name)
       await page.close()
     }
     await scoreMatchOnPage(
@@ -557,7 +566,7 @@ function fullTournamentDrill(game: GameConfig) {
               role,
               findTeam(teams, team.id).captain.account,
             )
-            await checkInOnPage(page, tournamentId, final.id)
+            await checkInOnPage(page, tournamentId, final.id, team.name)
             await page.close()
           }
           await scoreMatchOnPage(
@@ -587,14 +596,15 @@ function fullTournamentDrill(game: GameConfig) {
       const thirdPlace = bracket.matches.find((match) => match.is_third_place)
       if (!final || !thirdPlace) throw new Error("找不到決賽或季軍賽")
       const finalists = teamsOf(final)
+      const { teamA: thirdPlaceWinner } = teamsOf(thirdPlace)
       expect(bracket.podium?.champion?.id).toBe(finalists.teamA.id)
       expect(bracket.podium?.runner_up?.id).toBe(finalists.teamB.id)
-      expect(bracket.podium?.third_place?.id).toBe(thirdPlace.team_a?.id)
+      expect(bracket.podium?.third_place?.id).toBe(thirdPlaceWinner.id)
       const spectator = await (await newRoleContext("觀眾")).newPage()
       await expectPodium(spectator, tournamentId, {
         champion: finalists.teamA.name,
         runnerUp: finalists.teamB.name,
-        thirdPlace: thirdPlace.team_a?.name ?? "",
+        thirdPlace: thirdPlaceWinner.name,
       })
     })
 

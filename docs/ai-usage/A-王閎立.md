@@ -708,3 +708,15 @@
 - 問題與修正：AI 第一版把優先期結束設成現在減 1 秒，第一隊送出時間晚於它而沒被結算，等 worker 逾時；查 worker log 與 `_settle_locked` 的條件後發現是測試寫錯，改成 `now()`。AI 也誤以為送出後「填寫我的資料」會消失，看失敗當下的頁面後改驗「名單已鎖定」。e2e 抓到 S4 比分表在 375 px 有內部橫向捲動；AI 沒有為了通過而放寬檢查，也沒有改 D 的元件，記進 deferred-work 交由人決定
 - 成熟度：L3（AI 依 spec 產出並以 e2e 驗證，這次沒有多代理審查，留待統一 code review）
 - 證據：`spec-7-2-e2e-tournament-drill-3.md` 的 Implementation Notes
+
+### 2026-11-10｜測試／測試修正｜Story 7.2 處理 PR #77 審查的 6 點
+
+- Story／範圍：7.2（`spec-7-2-pr77-review-fixes.md`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：請 AI 依 PR #77 審查的 6 點修正 e2e 測試，跑完完整 e2e 後開 PR
+- AI 產出：修改 3 個測試檔（`support/db.ts`、`support/matchday.ts`、`tournament.spec.ts`），新增 1 個輔助函式 `expectRegistrationAccepted`、1 份 spec
+- 人做了什麼：決定處理這 6 點、要求跑完再開 PR；第 2 點由 AI 選補畫面斷言，因為另一個選項要改凍結區塊
+- 驗證：完整 e2e（desktop＋mobile-375）20 passed；暫時的測試（未提交）3 passed，確認 psql 失敗時錯誤不含密碼、改到 0 列時拋錯；biome 通過，tsc 沒有輸出錯誤；流程內的審查依偏好跳過，未記錄審查問題數
+- 問題與修正：無程式錯誤。開發前 AI 差點為 PR #78 的後續開重複的 PR，執行 `gh pr list` 才發現組員的 PR #79 已在處理
+- 成熟度：L3（AI 依審查意見與既有 spec 修正並以 e2e 驗證，人決定範圍）
+- 證據：`_bmad-output/implementation-artifacts/spec-7-2-pr77-review-fixes.md`、PR #77 的審查意見

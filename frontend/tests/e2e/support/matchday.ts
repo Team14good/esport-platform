@@ -51,6 +51,13 @@ export async function submitRegistration(page: Page, teamId: string) {
   await expectNoHorizontalScroll(page)
 }
 
+/** S17 隊長看到 worker 分配後的「正取」。 */
+export async function expectRegistrationAccepted(page: Page, teamId: string) {
+  await page.goto(`/teams/${teamId}`)
+  await expect(page.getByText("正取", { exact: true }).first()).toBeVisible()
+  await expectNoHorizontalScroll(page)
+}
+
 /** S27 主辦方抽籤；抽籤後按鈕區塊消失。 */
 export async function drawBracket(page: Page, tournamentId: string) {
   await page.goto(`/organizer/tournaments/${tournamentId}`)
@@ -93,10 +100,15 @@ export async function checkInOnPage(
   page: Page,
   tournamentId: string,
   matchId: string,
+  teamName: string,
 ) {
   await page.goto(matchPath(tournamentId, matchId))
   await page.getByRole("button", { name: "報到", exact: true }).click()
-  await expect(page.getByText(/^已報到/).first()).toBeVisible()
+  // 只看本隊那一格：對手先報到時，頁面上已經有對手的「已報到」
+  const ownTeam = page
+    .getByRole("listitem")
+    .filter({ has: page.getByText(teamName, { exact: true }) })
+  await expect(ownTeam.getByText(/^已報到/)).toBeVisible()
   await expectNoHorizontalScroll(page)
 }
 
