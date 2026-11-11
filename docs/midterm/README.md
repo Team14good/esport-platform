@@ -59,6 +59,7 @@ node docs/midterm/_build/build.mjs
 2. **B**：新增壹、五「期中實作範圍」；ERD 與資料表依程式更新（新增 PRIORITY_WINDOW_SETTLEMENT，完整設計共 25 張，目前已建立 22 張）；FR 補上各 Story 定案的規則，例如改時間的範圍、對手未定時不能取消資格、重新比賽後可再申訴。
 3. **C**：更新模組資料、worker 工作、權限檢查、事件與通知現況、循序圖，主要 API 改為實際端點。
 4. **D**：類別圖、職責、模組協作與列舉改為實際程式；Service 在程式中是模組層級函式，competition 沒有分成 BracketService 與 MatchService；期中後才有的設計集中在貳、九。
+5. **PR #82 審查修正**：FR-22 的決賽與季軍賽改為以取消資格判對手獲勝（不是輪空），補上對手未定時回 409；`priority_school_ids` 改為 UUID[]；D 的取消資格順序與時序圖改為「判斷 → 更新報名 → 寫入對戰表」；`advance()` 填位後呼叫的是私有的 `_unassign_if_member()`；改期最早時間只看會進入本場的場次；資料表補上長度與唯一索引；C 補上 AD-10 的 Router 例外；A 的 M6 寫清楚是 50 個 Story 完成後的驗收。
 
 ## 2026-10-19 依審閱意見修訂（待組內確認；已寫回 PRD、架構骨幹、C／D 打底稿、Epic 與 UX）
 

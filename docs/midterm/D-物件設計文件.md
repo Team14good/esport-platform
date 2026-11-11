@@ -642,14 +642,14 @@ classDiagram
 **設計重點**
 
 1. `bracket.py` 與資料庫無關：設 P 為不小於正取隊數的最小 2 的次方，輪數為 log₂P，第一輪輪空數為 P 減正取隊數。哪些隊伍輪空由亂數決定，輪空的位置平均分散；輪空數不超過 P ÷ 4 時，兩支輪空隊伍不會在第二輪相遇。亂數來源以參數傳入，測試時可固定，驗證「8 隊 3 輪 8 場、13 隊 4 輪 13 場」等規則。開賽時間已過時 `draw()` 拒絕抽籤（`TOURNAMENT_START_PASSED`）。
-2. `schedule.plan_round_starts()` 讓同一輪排在同一時段，下一輪晚於上一輪「每輪間隔」；若上一輪的 BO 數使「棄權時限＋BO 數 × 每局預估時間＋申訴期」超過每輪間隔，下一輪順延到這個下限。系統不自動分批，一位裁判可以被指派到多個場次。`reschedule_match()` 的新時間最早為現在進位到整分後加 30 分鐘，且不早於前一輪最晚場次加該輪最小間隔；最晚為下一場（準決賽取決賽與季軍賽中較早者）減本場最小間隔，決賽與季軍賽沒有上限；棄權期限已過的場次不能修改。
+2. `schedule.plan_round_starts()` 讓同一輪排在同一時段，下一輪晚於上一輪「每輪間隔」；若上一輪的 BO 數使「棄權時限＋BO 數 × 每局預估時間＋申訴期」超過每輪間隔，下一輪順延到這個下限。系統不自動分批，一位裁判可以被指派到多個場次。`reschedule_match()` 的新時間最早為現在進位到整分後加 30 分鐘，且不早於會進入本場的場次（`next_match_id` 或 `loser_next_match_id` 指向本場的那幾場，不是整個前一輪）中最晚的預定時間加上這些場次的最小間隔；最晚為下一場（準決賽取決賽與季軍賽中較早者）減本場最小間隔，決賽與季軍賽沒有上限；棄權期限已過的場次不能修改。
 3. 任何 Match 的寫入都先 `lock_match()`，鎖住後再檢查狀態與期限；同時需要賽事鎖時，先鎖賽事、再依 id 遞增鎖場次（AD-6）。會連鎖到下一場或賽事狀態的流程（`auto_confirm_expired()`、判棄權、處理申訴後的 `advance()`）一開始就先鎖賽事列。
 4. 場次狀態只能經 `transition_match()` 改變，依《軟體需求分析文件》場次狀態圖的轉換表檢查（AD-11）；「已取消」只用於準決賽沒有產生勝隊時的季軍賽。
 5. 棄權期限：`start_forfeit_clock()` 在場次兩隊都確定時設定 `forfeit_deadline`＝max（預定開始時間, 現在）＋棄權時限。`draw()` 為所有兩隊都已確定的場次呼叫（第一輪，以及兩支輪空隊伍在第二輪相遇的場次）；之後由 `advance()` 與頂替在填入第二支隊伍時呼叫；`reschedule_match()` 會重算。隊伍未確定時 `forfeit_deadline` 為空，worker 不會選到它，`check_in()` 也拒絕報到（`MATCH_TEAMS_PENDING`）。前一場申訴未處理時的「暫停」就是這個狀況，不需要額外的狀態。
-6. `advance()` 在場次確認後依 `progression.advance()` 的結果把勝隊填入下一場、準決賽敗隊填入季軍賽（`loser_next_match_id`）。若下一場某一方確定不會有隊伍，把該場以 `walkover` 確認並繼續推進；準決賽沒有產生勝隊時，季軍賽轉為「已取消」。填位後若指派的裁判是其中一隊的隊員，`unassign_referee_if_member()` 取消該場的指派並發出 `RefereeUnassigned`。
+6. `advance()` 在場次確認後依 `progression.advance()` 的結果把勝隊填入下一場、準決賽敗隊填入季軍賽（`loser_next_match_id`）。若下一場某一方確定不會有隊伍，把該場以 `walkover` 確認並繼續推進；準決賽沒有產生勝隊時，季軍賽轉為「已取消」。填位後由私有的 `_unassign_if_member()` 檢查新填入的那一隊：指派的裁判是它的隊員時，取消該場的指派並發出 `RefereeUnassigned`。公開的 `unassign_referee_if_member()` 檢查場次兩隊，只在取消資格頂替後由 `disqualification.py` 呼叫。
 7. `record_game()` 在兩隊都報到前拒絕登錄（FR-26），`submit_result()` 在尚無一隊達到勝局門檻時拒絕送出（FR-27）；送出前可用 `delete_game()` 刪除最後的局。`submit_result()` 寫入 `submitted_by` 與 `submitted_at`，場次進入申訴期；場次變為已確認時寫入 `confirmed_at`。申訴更正的處理者記在 Appeal，不覆寫原送出者。各種結果類型的欄位填法見《軟體需求分析文件》的 MATCH 資料表。
 8. `assign_referee()` 呼叫 `is_referee()` 確認帳號是此賽事的裁判，並經 RegistrationPort 拒絕指派到其隊伍參賽的場次；結果寫入 `referee_account_id`。送出系列結果前，主辦方可以改派（再次呼叫 `assign_referee()`）或以 `unassign_referee()` 收回指派；收回後由主辦方代登，已登錄的局保留。
-9. `disqualify()` 一開始就鎖賽事列，依該隊處境調整對戰表，再呼叫 registration 更新報名狀態（AD-4）。期中不做候補遞補：還沒比過且對手已在場時，以 `disqualified` 判對手獲勝；對手尚未確定時回 409 `DISQUALIFY_OPPONENT_PENDING`，不改任何資料；已贏過時由最近一場輸給它的隊伍頂替，該場若是取消資格勝則判對手獲勝，輪空勝場略過往前找。
+9. `disqualify()` 一開始就鎖賽事列，再依 id 遞增鎖住對戰表的場次；接著以 `_plan()` 唯讀判斷該隊處境與處理方式，然後呼叫 registration 的 `disqualify_registration()` 更新報名狀態，最後才寫入對戰表（AD-4）。任何拒絕都在 `_plan()` 發生，不改任何資料。期中不做候補遞補：還沒比過且對手已在場時，以 `disqualified` 判對手獲勝；對手尚未確定時回 409 `DISQUALIFY_OPPONENT_PENDING`，不改任何資料；已贏過時由最近一場輸給它的隊伍頂替，該場若是取消資格勝則判對手獲勝，輪空勝場略過往前找；決賽與季軍賽的處理見《軟體需求分析文件》FR-22。
 10. `start_due_tournament()`、判棄權與 `auto_confirm_expired()` 由 worker 呼叫，每筆一個交易，可重複執行。`start_due_tournament()` 在最早場次開放報到時呼叫 `transition_tournament()` 轉為進行中，並以 `Bracket.start_handled_at` 記錄已處理。這些工作都先檢查賽事狀態，已取消或已結束的賽事一律略過。
 
 ## 六、申訴與檢舉模組 disputes
@@ -802,16 +802,17 @@ sequenceDiagram
   D->>D: 確認是該賽事主辦方、<br/>賽事尚未結束或取消
   D->>C: disqualify()
   C->>DB: 先鎖賽事列，<br/>再依 id 遞增鎖場次
-  alt 該隊尚未比賽
-    C->>DB: 對手已在場時判對手獲勝<br/>對手未定時回 409、不改資料
+  C->>C: _plan() 唯讀判斷處理方式<br/>對手未定時回 409、不改資料
+  C->>RS: disqualify_registration()<br/>→ 取消資格
+  alt 尚未比賽，或沒有可頂替的隊伍
+    C->>DB: 以取消資格判對手獲勝
   else 已贏過、正在等下一場
     C->>DB: 由最近一場輸給它的<br/>隊伍頂替（決賽、季軍賽<br/>見 FR-22）
   else 有未結束的場次
     C->>DB: 該場判對手獲勝並確認<br/>回傳受影響的場次
   else 已被淘汰
-    C->>DB: 對戰表不變
+    Note over C: 對戰表不變
   end
-  C->>RS: disqualify_registration()<br/>→ 取消資格
   C->>DB: 寫入操作紀錄與事件<br/>（core.audit、core.events）
   D->>DB: 檢舉與受影響的申訴結案，<br/>寫入理由與處理者
   D-->>Org: 處理完成<br/>（由 Router 提交交易）

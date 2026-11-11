@@ -203,7 +203,7 @@ flowchart TB
 
 - 所有模組都可使用 core；沒有任何模組直接呼叫 notifications，它只透過事件接收工作。
 - 公開觀賽頁（FR-34～36）向各擁有模組的 Service 取資料，不另外建立模組。
-- 抽籤後的退賽遞補與取消資格頂替，一律由 competition 主導：先修改對戰表，再呼叫 registration 取得下一個候補並更新報名狀態（AD-4）。
+- 抽籤後的退賽遞補與取消資格頂替，一律由 competition 主導：先修改對戰表，再呼叫 registration 取得下一個候補並更新報名狀態（AD-4）。期中實作的取消資格順序是：先唯讀判斷對戰表要怎麼處理（任何拒絕都在這一步發生），接著呼叫 registration 的 `disqualify_registration()`，最後才寫入對戰表，全部在同一個交易內。
 - 提高名額會讓候補遞補，而 tournaments 不能呼叫 registration，因此由 registration 主導：先鎖賽事列，再呼叫 tournaments 修改名額，最後依遞補規則遞補。
 - identity 位於呼叫方向的最底層，但身分切換器要知道帳號有沒有裁判身分，因此 identity 開放註冊點，由應用程式啟動時把 tournaments 的查詢函式注入，呼叫方向不變。
 - competition 對 registration 的呼叫集中在 `registration_port.py`；判棄權工作以注入的 `ForfeitPorts` 取得需要的函式，單元測試可以替換。
@@ -312,6 +312,8 @@ flowchart LR
 | 資源層級 | 是否為該賽事的主辦方、被指派的裁判、該隊的隊長或隊員 | Service 方法開頭，呼叫 `core.authz` 的共用函式 |
 
 資源層級的檢查寫在 Service 而非 Router，是因為 worker 與其他模組也會呼叫 Service，寫在 Router 會被繞過。`core.authz` 的函式只接收呼叫端已載入的實體，或從其他模組 Service 取得的 schema，自己不查資料庫。場次直接以 `referee_account_id` 存放被指派裁判的帳號 id，competition 的 Service 比對這個欄位與登入帳號，不必再查 tournaments 的 TournamentReferee；指派時由 competition 呼叫 `is_referee()` 確認該帳號是此賽事的裁判，並呼叫 registration 確認該帳號不是兩隊的隊員。場次未指派裁判時，由主辦方代登，competition 先向 tournaments 取得賽事的 schema，再交給 `ensure_tournament_owner()` 檢查。隊長身分由 registration 判斷：competition（報到）與 disputes（申訴、檢舉）向 registration 取得隊伍或隊長資訊，再比對登入帳號，不合時回 403 `CAPTAIN_REQUIRED`。主辦方不能接受自己賽事的裁判邀請；場次沒有裁判時由主辦方代登。
+
+**例外**：tournaments 的三個唯讀端點 `GET /organizer/tournaments/{id}`、`GET /organizer/tournaments/{id}/referee-invitation`、`GET /organizer/tournaments/{id}/referees`，在 Router 載入賽事後直接呼叫 `ensure_tournament_owner()`，不經 Service。這三個端點只讀資料，worker 與其他模組不會走同一條路徑，因此不會被繞過；寫入操作仍一律在 Service 檢查。
 
 身分衝突也在資源層級檢查：registration 建立或加入隊伍時，向 tournaments 確認該帳號不是此賽事的主辦方；晉級填位後若指派的裁判成了其中一隊的隊員，competition 取消該場的指派並發出事件通知主辦方改派。
 
@@ -439,7 +441,7 @@ flowchart LR
 | AD-7 | 定時規則由 worker 輪詢並冪等執行 | 到期時間存在資料表；worker 每 15～30 秒處理到期項目，處理前加鎖並重新檢查狀態；API 程序不放排程器；已取消或已結束賽事的場次工作一律略過 | 參、二 |
 | AD-8 | 交易式 outbox | 事件與業務資料同交易寫入 OutboxEvent；以（事件 id、收件人）去重；Email 失敗只重試、不回滾；收件人由 notifications 依 FR-37 決定 | 參、三 |
 | AD-9 | 操作紀錄同交易寫入、只增不改 | NFR-3 列出的每種變更都在同一交易寫入 AuditLog（含所屬賽事）；worker 的操作者記為 system；trigger 拒絕 UPDATE 與 DELETE | 參、五 |
-| AD-10 | 權限分兩層、皆在伺服器端 | 帳號層級在 Router 以 Depends 檢查；資源層級在 Service 開頭呼叫 core.authz，authz 只接收已載入的實體或 schema，不查資料庫 | 參、四 |
+| AD-10 | 權限分兩層、皆在伺服器端 | 帳號層級在 Router 以 Depends 檢查；資源層級在 Service 開頭呼叫 core.authz，authz 只接收已載入的實體或 schema，不查資料庫；例外是 tournaments 的三個唯讀端點在 Router 呼叫 `ensure_tournament_owner()` | 參、四 |
 | AD-11 | 狀態只能經唯一的轉換函式修改 | 賽事、報名、場次各有一個轉換函式，依《軟體需求分析文件》的狀態圖檢查合法性；狀態以 StrEnum 定義，值為英文 | 參、五 |
 | AD-12 | 快照 | 建立賽事時複製遊戲設定；送出報名時寫入學校、平均段位積分與送出時間，名額分配與候補排序只用快照 | 參、一 |
 | AD-13 | 時間：UTC 儲存、可替換時鐘 | 資料庫以 timestamptz 存 UTC，API 回傳 ISO 8601，前端顯示台北時間；後端只經 core.clock.now() 取得時間 | 參、二、參、六 |

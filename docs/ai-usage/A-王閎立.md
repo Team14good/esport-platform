@@ -697,6 +697,30 @@
 - 成熟度：L3（組員審查指出問題，AI 修正並驗證）
 - 證據：PR #61 的 OG-Matcha 審查意見、`backend/tests/competition/test_score_concurrency.py`
 
+### 2026-11-09｜審查｜以 bmad-code-review 審 #69（Story 6.2 主辦方處理申訴）
+
+- Story／範圍：6.2（B，#69），37 個檔案、+4694／−28；動到 D 的 competition 與我負責的 S4、S27、側欄掛載點
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review，4 個子代理（Blind Hunter、Edge Case Hunter、Verification Gap、Acceptance Auditor）平行執行
+- 怎麼用：AI 取 origin/main 到 PR 的 diff（4787 行，排除產生檔），對照 spec、epic-6 context、contracts/disputes.md 與 6.1 spec 審查；我選擇整包審查不分批；AI 再到 PR 分支查證、分類
+- AI 產出：沒有高嚴重度問題，兩條 AC 與 I/O 矩陣都有對應實作。待修正 17 項（8 中、9 低）：程式與文件 8 項（最主要的是另一分頁已處理時錯誤訊息隨對話框消失、S32 與 S4 在兩輪處理時顯示不同結果）、測試缺口 9 項（雙方棄權的重賽按鈕、處理申訴與提出申訴的併發等）；駁回 11 項
+- 人做了什麼：指定審查 #69、選擇整包審查、同意以 PR 留言交給作者，不改組員的分支
+- 驗證：程式面的 findings 到 PR 分支讀程式查證；測試缺口採用 Verification Gap 附的證據（拿掉對應程式後現有測試仍會通過），未另外重做。這次沒有跑測試
+- 問題與修正：Blind Hunter 提出「更正結果會讓原始登錄者永久消失」，查證後 spec 規定整份替換，因此駁回；「404／403 順序可判斷場次歸屬」查證後對戰資料本來就公開，也駁回。Acceptance Auditor 指出 `deferred-work.md` 加回 6.1 已刪除的項目，比對 main 的程式與 6.1 spec 後確認屬實。上次審 #56、#57、#59 時因排除 `docs/ai-usage/` 造成誤報，這次 diff 改為包含它，沒有再出現這類誤報
+- 成熟度：L4（多代理審查＋逐項查證，人只在決策點決定）
+- 證據：PR #69 的審查留言（issuecomment-6731464359）、`spec-6-2-resolve-appeals.md`
+
+### 2026-11-09｜審查｜審 D 的 #70（S12 我的隊伍顯示下一場）
+
+- Story／範圍：5.1 補遺（D，#70）
+- 工具：Claude Code（Opus 5.5），沒有用子代理，直接審查
+- 怎麼用：我要求不跑 bmad-code-review、節省 token；AI 讀 spec 的 frozen 區塊與前後端實作 diff，測試只看測試清單，再查 `_public_matches` 只傳部分場次時來源文字是否正確、`checkInCountdownPhase` 的分段與倒數歸零的處理、登出時快取是否清除
+- AI 產出：沒有發現功能缺陷；2 個低嚴重度意見（`epic-5-context.md` 有 38 行新增、34 行刪除，但 spec 與 PR 說明都沒提到；手機寬度下右側箭頭會單獨掉到第三行）
+- 人做了什麼：指定審查 #70，決定用較省 token 的方式
+- 驗證：CI 的 check 通過；本機沒有跑測試，手機版面只依 CSS 判斷，沒有實際開畫面
+- 問題與修正：無（這次沒有發現 AI 判斷錯誤）
+- 成熟度：L2（AI 審查，人決定是否核准）
+- 證據：PR #70
+
 ### 2026-11-10｜測試｜Story 7.2 第三階段：端對端演練跑完報名到頒獎
 
 - Story／範圍：7.2（A），`frontend/tests/e2e/`、`frontend/Dockerfile.e2e`、`compose.yml` 的 e2e 服務
@@ -720,6 +744,29 @@
 - 問題與修正：無程式錯誤。開發前 AI 差點為 PR #78 的後續開重複的 PR，執行 `gh pr list` 才發現組員的 PR #79 已在處理
 - 成熟度：L3（AI 依審查意見與既有 spec 修正並以 e2e 驗證，人決定範圍）
 - 證據：`_bmad-output/implementation-artifacts/spec-7-2-pr77-review-fixes.md`、PR #77 的審查意見
+### 2026-11-10｜審查｜審 D 的 #78（S4 比分登錄表 375 px 不橫向捲動）
+
+- Story／範圍：5.3（D，#78），配合 7.2 的 mobile-375 演練；`ScoreEntryPanel.tsx` +61／−23
+- 工具：Claude Code（Opus 5.5）＋ bmad-code-review 的流程與審查清單，沒有用子代理，審查層由主對話依序做
+- 怎麼用：我要求直接上 GitHub 審查；AI 取 PR 的 diff，對照 5.3 spec 的 375 px 列，並在獨立 compose 專案用 PR 的 class 組出相同表格量測溢出
+- AI 產出：PR 留言審查 1 則，建議修正 2 項（1 中、1 低）與 1 項待完成的驗證，沒有核准
+- 人做了什麼：指定審查並上傳到 GitHub
+- 驗證：量測在 mobile-375 的 Chromium 執行：中文長隊名溢出 0，英文連續長隊名溢出 272 px，比分框輸入 `123` 時 scrollWidth 48、clientWidth 46。完整 e2e 跑到第 10／20 個測試時中止，桌機版當時沒有失敗，mobile-375 沒有跑到；建議的修法沒有實測；CI 的 check 通過
+- 問題與修正：#78 說明寫「3 位數放得下」，只驗證表格溢出，沒有量輸入框本身，這次量測發現不符；PR 的量測只用中文隊名，英文連續字串的情況沒有涵蓋
+- 成熟度：L3（AI 依 spec 審查並實際量測，人決定是否上傳）
+- 證據：PR #78 的審查留言（pullrequestreview-5838318984）
+
+### 2026-11-10｜測試／端對端測試｜PR #78 手機版演練重跑
+
+- Story／範圍：7.2、5.3（PR #78，S4 比分表 375 px）
+- 工具：Claude Code（Opus 5.5）＋ Playwright
+- 怎麼用：請 AI 用 PR #78 的 57ffa5f 跑完 mobile-375 演練，並把結果補進自己在 PR 上的審查留言
+- AI 產出：暫時的 worktree 與獨立 compose 專案（跑完已刪除），1 段補在審查留言的驗證結果
+- 人做了什麼：指定要補的驗證，決定直接更新 PR 留言
+- 驗證：`bunx playwright test --project mobile-375` 為 10 passed、0 failed、0 skipped，包含之前因比分表橫向捲動失敗的 3 個演練；發留言前確認 `expectNoHorizontalScroll` 仍啟用，`tests/e2e` 沒有 `test.skip`、`test.fixme`
+- 問題與修正：無。演練只用一般隊名，審查留言指出的無空格長英文隊名與 3 位數比分框沒有涵蓋，已在留言寫明；#78 未修改這兩點就合併
+- 成熟度：L3（AI 依既有 e2e 規格執行並回報證據，人決定要驗證什麼）
+- 證據：PR #78 的審查留言（pullrequestreview-5838318984）
 
 ### 2026-11-11｜設計／文件同步｜期中文件 A～D 依實作更新
 
@@ -732,3 +779,15 @@
 - 問題與修正：AI 依行號改 D 時吃掉 3 個 mermaid 的結尾標記，排版回報 Lexical error 才發現；核對 diff 時發現 FR-2、FR-3 的規則漏補；AST 比對發現類別圖有 7 個函式的參數與程式不同，其中依記憶寫的參數名要修正；AI 原本寫「每個 PR 都經組員審查」，用 `gh pr list` 查 81 個已合併 PR，#1、#2 沒有審查，改掉這個說法；`frontend/openapi.json` 是舊檔，API 改以各 `router.py` 為準
 - 成熟度：L3（AI 依程式與 spec 產出，人決定範圍並審查）
 - 證據：`_bmad-output/implementation-artifacts/spec-midterm-docs-sync.md`
+
+### 2026-11-11｜文件｜依 PR #82 審查意見修正期中文件 A～D
+
+- Story／範圍：期中文件同步（PR #82），A、B、C、D 與 README
+- 工具：Claude Code（Opus 5.5），沒有用子代理
+- 怎麼用：我把組員的審查意見（4 項必改、4 項建議、1 項待確認）貼給 AI；AI 逐項到 `competition/disqualification.py`、`competition/service.py`、`competition/schedule.py`、各模組 `models.py`、`tournaments/router.py` 查證後再改
+- AI 產出：B 的 FR-22、功能說明 4.4、場次狀態圖、MATCH outcome、FR-23 與 6 張資料表；C 的 AD-10 例外與取消資格的實際順序；D 的取消資格說明與時序圖、`advance()` 的裁判收回、改期範圍；A 的 M6 驗收條件；重新產生 4 份 PDF 與 Word
+- 人做了什麼：要求依審查意見修正；M6 的意思由組內確認，AI 先寫成「50 個 Story 完成後重跑演練」
+- 驗證：9 項意見都對照程式確認屬實；`node docs/midterm/_build/build.mjs` 正常結束、沒有畫圖錯誤（D 的 3 張類別圖縮放 0.55～0.62，審查者已表示可接受）；Markdown 檢查為 LF
+- 問題與修正：上一輪 AI 同步文件時，把取消資格依「輪空」的舊設計描述決賽與季軍賽，沒有對照 `_plan()` 實際回傳的 `_AwardOpponent`；也依架構規則 AD-4 寫成「先改對戰表、再改報名」，沒有看 `disqualify()` 實際的呼叫順序；`priority_school_ids` 照打底稿寫成 JSONB。三者都由組員對照程式審查發現。修正時 AI 另外發現功能說明 4.4 與 C 的貳、三有同樣的錯誤，一併修正
+- 成熟度：L3（組員審查指出問題，AI 查證並修正）
+- 證據：PR #82 的審查意見
