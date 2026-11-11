@@ -7,6 +7,7 @@
 | 1.2 | 2026-10-20 | 依一致性審查補充規則（重新比賽、退出與解散隊伍、改派裁判、學校選填），並修正使用案例圖、狀態圖與 ERD；移除壓力測試（刪除原 Story 7.2、7.3，原 7.4、7.5 改為 7.2、7.3），NFR-1、NFR-2 改以整合與端對端測試驗證；新增版本紀錄與參考文獻 |
 | 1.3 | 2026-10-23 | 截止補位改由所有候補依平均段位積分補位、每校最多 2 隊，與報名截止後的遞補順序相同（名詞表、Story 3.6、功能說明 3.7、使用案例例外流程 5a、附錄 4.3 與 FR-16） |
 | 1.4 | 2026-10-28 | 依 Epic 1 實作定案的規則補充 FR-1（密碼長度、重寄驗證信、登入 7 天與過期處理）、FR-40（重設後登出其他裝置、視為完成驗證）；資料表補上 ACCOUNT.credentials_version、EMAIL_DELIVERY.next_attempt_at、AUDIT_LOG.seq |
+| 1.5 | 2026-11-11 | 新增壹、五「期中實作範圍」；ERD 與資料表依程式更新（新增 PRIORITY_WINDOW_SETTLEMENT，標示期中後才建立的資料表與欄位）；FR-2、3、4、7、11、12、13、19、22、23、30、31、32、33、35 補上實作時定案的規則 |
 
 # 壹、系統整體概述
 
@@ -84,6 +85,38 @@
 | 檢舉 | 隊長對另一支隊伍參賽資格提出的質疑，由主辦方查證 |
 | 取消資格 | 主辦方查證檢舉屬實後對隊伍的處分 |
 | 退賽 | 隊伍在第一場開打前主動退出；抽籤前退賽等同撤回報名 |
+
+## 五、期中實作範圍
+
+本文件描述系統的完整需求。全部 50 個 Story 分兩批完成：第一批 35 個（Story 1.1～1.5 與 30 個主線 Story）已於 2026-11-10 完成；其餘 15 個在期中後完成，對應的需求保留在本文件，期末照原規格驗收。
+
+| 期中後的 Story | 對應需求 |
+| --- | --- |
+| 1.6 通知中心 | FR-37（站內通知與收件規則）、FR-38 |
+| 2.3 分輪設定 BO 數 | FR-8 |
+| 2.5 抽籤前修改賽事 | FR-9 |
+| 2.6 取消賽事 | FR-10 |
+| 2.8 主辦方查閱操作紀錄 | NFR-3 的查閱頁面 |
+| 3.7 抽籤前撤回報名 | FR-17 的抽籤前退賽 |
+| 3.8 檢視段位截圖與退回報名 | FR-18 |
+| 3.9 公開正取名單 | FR-34 的正取隊伍 |
+| 3.10 自訂模式 | FR-39 |
+| 3.11 隊員異動與解散隊伍 | FR-41 |
+| 4.2 報名截止時自動抽籤 | FR-19 的自動抽籤 |
+| 4.5 抽籤後退賽與候補遞補 | FR-17 的抽籤後退賽、FR-22 的候補遞補 |
+| 4.7 對戰樹隊伍搜尋與晉級路徑 | FR-35 的搜尋 |
+| 5.7 上傳結算截圖 | FR-28 |
+| 6.3 申訴逾期提醒 | FR-31 的提醒 |
+
+期中版本的做法：
+
+1. **通知**：需要通知的地方都已發出事件並寫入 outbox，但只有驗證信與重設密碼信會實際寄出；站內通知與其他 Email 在 Story 1.6 接上。
+2. **BO 數**：每一輪都使用建立賽事時設定的 BO。
+3. **賽事模式**：只開放校園賽，建立賽事的表單不顯示模式。
+4. **抽籤**：只做主辦方手動抽籤；報名截止後賽事停在「報名截止」，開放報名中按下抽籤時，先完成優先期分配與截止補位再抽籤。
+5. **取消資格**：不做候補遞補。抽籤前取消資格時不立即遞補，名額留給之後的分配；抽籤後依 FR-22 調整，其中「有候補時由候補遞補」改為判對手獲勝。
+6. **申訴期間的下一場**：申訴未處理時，下一場的兩隊尚未確定，本來就不開放報到、不起算棄權；只少了逾期提醒與「棄權計時暫停」的提示。
+7. **檢舉入口**：正取名單分頁屬於 Story 3.9，因此只在賽事頁總覽放「檢舉隊伍」。
 
 # 貳、需求規格
 
@@ -297,7 +330,7 @@
 - 4.1 抽籤：只能執行一次；提前抽籤會立即結束報名，仍在優先期內時先完成優先期分配，再執行截止補位；正取少於 2 隊時無法抽籤。
 - 4.2 產生單淘汰對戰表：設 P 為不小於正取隊數的最小 2 的次方，輪數為 log₂P，第一輪輪空數為 P 減正取隊數，輪空位置平均分散；正取少於 4 隊時不產生季軍賽。
 - 4.3 晉級推進：勝隊自動填入下一輪，準決賽的敗隊填入季軍賽。某一方位置確定不會有隊伍時（前一場雙方棄權，或退賽、取消資格後無人遞補），另一方輪空晉級；準決賽沒有產生勝隊時，另一場準決賽的勝隊直接成為冠軍、季軍賽取消，另一場準決賽的敗隊列為亞軍、季軍從缺。下一輪對位確定後通知兩隊；決賽與季軍賽都定案後賽事結束。
-- 4.4 取消資格後的頂替：尚未比賽的隊伍由候補遞補，沒有候補則對手輪空；已贏過比賽的隊伍由最近一場輸給它的隊伍頂替（被取消資格的是決賽隊伍時，由準決賽敗隊頂替進入決賽，它原本的季軍賽由對手輪空；季軍賽已開打則不頂替，決賽由對手輪空；等待季軍賽的隊伍被取消資格時，季軍賽由對手輪空）；進行中、申訴期或申訴中的場次直接判對手獲勝；已被淘汰的隊伍只標示取消資格，已確認的結果不變。
+- 4.4 取消資格後的頂替：尚未比賽的隊伍由候補遞補，沒有候補則以取消資格判對手獲勝；已贏過比賽的隊伍由最近一場輸給它的隊伍頂替（被取消資格的是決賽隊伍時，由準決賽敗隊頂替進入決賽，它原本的季軍賽由對手輪空；季軍賽已開打則不頂替，決賽以取消資格判對手獲勝；等待季軍賽的隊伍被取消資格時，季軍賽以取消資格判對手獲勝）；對手尚未確定時拒絕取消資格；進行中、申訴期或申訴中的場次直接判對手獲勝；已被淘汰的隊伍只標示取消資格，已確認的結果不變。
 - 4.5 排定場次時間：依開賽日期與每輪間隔自動排定，同一輪排在同一時段；某一輪的 BO 數較大，使「棄權時限＋該輪 BO 數 × 每局預估時間＋申訴期」超過每輪間隔時，下一輪自動順延。系統不自動分批，裁判人手不足時，主辦方可個別修改場次時間，或讓同一位裁判負責多個場次；場次已有隊伍報到後不能修改時間，新時間也不得晚於勝隊要去的下一場。
 
 ### （五）5.0 功能群：場次進行
@@ -610,7 +643,7 @@ stateDiagram-v2
   [*] --> scheduled : 抽籤後建立場次
   scheduled --> live : 裁判登錄第一局
   scheduled --> appeal_window : 逾時判棄權
-  scheduled --> confirmed : 輪空
+  scheduled --> confirmed : 輪空或一方被取消資格
   scheduled --> voided : 季軍賽取消
   live --> appeal_window : 裁判送出系列結果
   appeal_window --> confirmed : 申訴期滿且無申訴
@@ -625,11 +658,11 @@ stateDiagram-v2
   voided --> [*]
 ```
 
-「待開打 → 申訴期」是逾時判棄權，一方或雙方未報到都適用。「待開打 → 已確認」用於輪空：對手位置確定不會有隊伍時（前一場雙方棄權，或退賽、取消資格後無人遞補），系統直接確認並讓另一方晉級。「已取消」只用於準決賽沒有產生勝隊時的季軍賽。場次停在「待開打」等待隊伍確定時，不開放報到、也不起算棄權期限（見貳、三 5.2）。「申訴中 → 待開打」只用於判棄權的場次經申訴後安排重新比賽（FR-31）。各種結果的欄位填法見資料表說明的 MATCH。
+「待開打 → 申訴期」是逾時判棄權，一方或雙方未報到都適用。「待開打 → 已確認」有兩種情況：一是輪空，對手位置確定不會有隊伍時（前一場雙方棄權，或退賽、取消資格後無人遞補），系統直接確認並讓另一方晉級；二是待開打場次的一方被取消資格且沒有隊伍頂替，以取消資格（outcome 為 disqualified）判對手獲勝。「已取消」只用於準決賽沒有產生勝隊時的季軍賽。場次停在「待開打」等待隊伍確定時，不開放報到、也不起算棄權期限（見貳、三 5.2）。「申訴中 → 待開打」只用於判棄權的場次經申訴後安排重新比賽（FR-31）。各種結果的欄位填法見資料表說明的 MATCH。
 
 ## 五、實體關聯圖
 
-本系統的資料模型以「賽事、隊伍、報名、場次」為主軸：賽事複製遊戲設定、收到隊伍報名，抽籤後產生對戰表與場次；場次記錄每局比分、報到、結算截圖，並可能收到申訴；所有重要事件寫入事件與操作紀錄，再產生通知。全系統共 24 張資料表，為了閱讀清楚，依功能分成六張圖呈現，跨圖出現的實體（如 ACCOUNT、TOURNAMENT、TEAM、MATCH）是同一張資料表。
+本系統的資料模型以「賽事、隊伍、報名、場次」為主軸：賽事複製遊戲設定、收到隊伍報名，抽籤後產生對戰表與場次；場次記錄每局比分、報到、結算截圖，並可能收到申訴；所有重要事件寫入事件與操作紀錄，再產生通知。完整設計共 25 張資料表，目前已建立 22 張；ROUND_SETTING、RESULT_SCREENSHOT、NOTIFICATION 三張在期中後建立。為了閱讀清楚，依功能分成七張圖呈現，跨圖出現的實體（如 ACCOUNT、TOURNAMENT、TEAM、MATCH）是同一張資料表；為了維持圖面清楚，MATCH.tournament_id、CHECK_IN.account_id 的關聯只列在資料表說明。
 
 ### （一）帳號
 
@@ -652,6 +685,8 @@ erDiagram
   TOURNAMENT ||--o{ REFEREE_INVITATION : "產生"
   TOURNAMENT ||--o{ TOURNAMENT_REFEREE : "委任"
   ACCOUNT ||--o{ TOURNAMENT_REFEREE : "擔任"
+  REFEREE_INVITATION ||--o{ TOURNAMENT_REFEREE : "接受"
+  ACCOUNT ||--o{ REFEREE_INVITATION : "建立"
 ```
 
 ### （三）隊伍與報名
@@ -667,6 +702,11 @@ erDiagram
   SCHOOL |o--o{ REGISTRATION : "快照學校"
 ```
 
+```mermaid
+erDiagram
+  TOURNAMENT ||--o| PRIORITY_WINDOW_SETTLEMENT : "優先期結算"
+```
+
 ### （四）對戰
 
 ```mermaid
@@ -676,10 +716,11 @@ erDiagram
   TEAM |o--o{ MATCH : "出賽"
   TEAM |o--o{ MATCH : "勝隊"
   MATCH |o--o{ MATCH : "下一場"
+  MATCH |o--o{ MATCH : "敗隊下一場"
   ACCOUNT |o--o{ MATCH : "擔任裁判"
   ACCOUNT |o--o{ MATCH : "送出結果"
   MATCH ||--o{ MATCH_GAME : "包含"
-  TEAM |o--o{ MATCH_GAME : "該局勝隊"
+  ACCOUNT ||--o{ MATCH_GAME : "登錄"
   MATCH ||--o{ CHECK_IN : "記錄報到"
   TEAM ||--o{ CHECK_IN : "報到"
   MATCH ||--o| RESULT_SCREENSHOT : "佐證"
@@ -690,11 +731,14 @@ erDiagram
 ```mermaid
 erDiagram
   MATCH ||--o{ APPEAL : "收到"
+  TOURNAMENT ||--o{ APPEAL : "所屬"
+  ACCOUNT ||--o{ APPEAL : "提出"
   TEAM ||--o{ APPEAL : "提出申訴"
   ACCOUNT |o--o{ APPEAL : "處理申訴"
   TOURNAMENT ||--o{ REPORT : "收到"
   TEAM ||--o{ REPORT : "提出檢舉"
   TEAM ||--o{ REPORT : "被檢舉"
+  ACCOUNT ||--o{ REPORT : "提出"
   ACCOUNT |o--o{ REPORT : "處理檢舉"
 ```
 
@@ -712,14 +756,14 @@ erDiagram
 
 ## 六、資料表說明
 
-資料表欄位以《物件設計文件》的類別設計為基礎，補上主鍵、外鍵、建立時間與唯一鍵；所有主鍵為 UUID，時間一律以 UTC 存放（timestamptz）。除了以業務時間記錄建立時刻的 BRACKET.drawn_at、CHECK_IN.at 與 AUDIT_LOG.at 之外，每張表都有 `created_at`。由多個欄位組成的唯一鍵寫在各表下方。實作後以 Alembic 遷移檔為準。
+下列欄位已依 2026-11-10 的程式碼更新，標示「期中後」的資料表與欄位目前還沒有建立。主鍵除了特別註明之外都是 UUID，時間一律以 UTC 存放（timestamptz）。隊伍屬於 registration 模組，competition 的場次、報到與 disputes 的申訴以 UUID 欄位記錄隊伍、不建跨模組外鍵，ERD 上這些隊伍關聯是邏輯關聯。多數資料表有 `created_at`；以業務時間記錄建立時刻的資料表改用該欄位（例如 BRACKET.drawn_at、CHECK_IN.at、APPEAL.filed_at、AUDIT_LOG.at）。由多個欄位組成的唯一鍵寫在各表下方。
 
 ### （一）ACCOUNT 帳號
 
 | 欄位 | 資料型別 | PK／FK | 說明 |
 | --- | --- | --- | --- |
 | id | UUID | PK | 帳號主鍵 |
-| email | VARCHAR | UNIQUE | 登入用 Email |
+| email | VARCHAR | UNIQUE（lower(email)） | 登入用 Email；以轉小寫後的值唯一，不分大小寫 |
 | hashed_password | VARCHAR |  | 雜湊後的密碼 |
 | email_verified | BOOLEAN |  | 是否已完成 Email 驗證 |
 | display_name | VARCHAR |  | 顯示名稱 |
@@ -746,7 +790,7 @@ erDiagram
 | id | UUID | PK | 主鍵 |
 | account_id | UUID | FK → ACCOUNT.id | 所屬帳號 |
 | purpose | VARCHAR（列舉） |  | 用途：verify_email、reset_password |
-| token_hash | VARCHAR |  | token 雜湊值，不存明文 |
+| token_hash | VARCHAR(64) | UNIQUE | token 雜湊值，不存明文 |
 | expires_at | TIMESTAMPTZ |  | 到期時間（驗證 24 小時、重設 1 小時） |
 | used_at | TIMESTAMPTZ |  | 使用時間；空值代表未使用 |
 | created_at | TIMESTAMPTZ |  | 產生時間 |
@@ -763,18 +807,21 @@ erDiagram
 | reject_reason | TEXT |  | 退回原因 |
 | created_at | TIMESTAMPTZ |  | 申請時間 |
 
+部分唯一索引：（account_id），只限 status 為待審核（pending），同一帳號同時只能有一筆待審核的申請；被退回後可以再送新的一筆。
+
 ### （五）GAME_TITLE 遊戲
 
 | 欄位 | 資料型別 | PK／FK | 說明 |
 | --- | --- | --- | --- |
 | id | UUID | PK | 主鍵 |
-| name | VARCHAR | UNIQUE | 遊戲名稱 |
+| name | VARCHAR | UNIQUE（lower(btrim(name))） | 遊戲名稱；去除前後空白並轉小寫後唯一，不分大小寫 |
 | starters | INTEGER |  | 每隊先發人數 |
 | substitutes | INTEGER |  | 每隊替補人數 |
 | default_bo | INTEGER |  | 預設 BO 數，限 1、3、5、7 |
 | game_minutes | INTEGER |  | 每局預估時間（分鐘），用於檢查每輪間隔與排定賽程 |
 | score_type | VARCHAR（列舉） |  | 比分型態：win_loss（只記勝負）、rounds（回合比分） |
 | created_at | TIMESTAMPTZ |  | 建立時間 |
+| updated_at | TIMESTAMPTZ |  | 最後修改時間 |
 
 ### （六）RANK_TIER 段位對照
 
@@ -784,9 +831,8 @@ erDiagram
 | game_id | UUID | FK → GAME_TITLE.id | 所屬遊戲 |
 | name | VARCHAR |  | 段位名稱 |
 | score | INTEGER |  | 對應的段位積分 |
-| created_at | TIMESTAMPTZ |  | 建立時間 |
 
-唯一鍵：（game_id, name），同一遊戲的段位名稱不重複。
+唯一鍵：（game_id, 去除前後空白並轉小寫的 name），同一遊戲的段位名稱不重複。
 
 ### （七）TOURNAMENT 賽事
 
@@ -800,7 +846,7 @@ erDiagram
 | mode | VARCHAR（列舉） |  | 賽事模式：campus（校園賽）、custom（自訂） |
 | registration_start | TIMESTAMPTZ |  | 報名開始時間；未到時賽事為尚未開放 |
 | registration_end | TIMESTAMPTZ |  | 報名截止時間 |
-| priority_hours | INTEGER |  | 優先期長度（小時）；自訂賽事為空 |
+| priority_end | TIMESTAMPTZ |  | 優先期結束時間；由建立賽事時輸入的優先期長度（小時）換算 |
 | start_at | TIMESTAMPTZ |  | 開賽日期 |
 | round_interval_minutes | INTEGER |  | 每輪間隔（分鐘），不得小於「棄權時限＋預設 BO 數 × 每局預估時間＋申訴期」 |
 | forfeit_minutes | INTEGER |  | 棄權時限，至少 15 分鐘 |
@@ -808,10 +854,13 @@ erDiagram
 | status | VARCHAR（列舉） |  | 賽事狀態：尚未開放、開放報名、報名截止、賽程已公布、進行中、已結束、已取消 |
 | livestream_url | VARCHAR |  | 直播連結（選填） |
 | game_snapshot | JSONB |  | 建立時複製的遊戲設定（人數、BO、每局預估時間、比分型態、段位對照） |
-| invite_token | VARCHAR | UNIQUE | 自訂賽事的報名連結 token；校園賽為空；主辦方重設時更換，舊連結立即失效 |
+| invite_token | VARCHAR | UNIQUE | 期中後（Story 3.10）：自訂賽事的報名連結 token；校園賽為空；主辦方重設時更換，舊連結立即失效 |
 | created_at | TIMESTAMPTZ |  | 建立時間 |
+| updated_at | TIMESTAMPTZ |  | 最後修改時間 |
 
 ### （八）ROUND_SETTING 分輪設定
+
+本表在期中後（Story 2.3）建立，目前每一輪都使用建立賽事時的 BO。
 
 | 欄位 | 資料型別 | PK／FK | 說明 |
 | --- | --- | --- | --- |
@@ -830,6 +879,7 @@ erDiagram
 | id | UUID | PK | 主鍵 |
 | tournament_id | UUID | FK → TOURNAMENT.id | 所屬賽事 |
 | token | VARCHAR | UNIQUE | 邀請連結 token |
+| created_by | UUID | FK → ACCOUNT.id | 產生邀請的主辦方 |
 | created_at | TIMESTAMPTZ |  | 產生時間 |
 | expires_at | TIMESTAMPTZ |  | 到期時間（7 天）；重新產生時舊邀請立即到期 |
 
@@ -837,12 +887,12 @@ erDiagram
 
 | 欄位 | 資料型別 | PK／FK | 說明 |
 | --- | --- | --- | --- |
-| id | UUID | PK | 主鍵 |
-| tournament_id | UUID | FK → TOURNAMENT.id | 賽事 |
-| account_id | UUID | FK → ACCOUNT.id | 擔任裁判的帳號 |
-| created_at | TIMESTAMPTZ |  | 接受邀請的時間 |
+| tournament_id | UUID | PK，FK → TOURNAMENT.id | 賽事 |
+| account_id | UUID | PK，FK → ACCOUNT.id | 擔任裁判的帳號 |
+| invitation_id | UUID | FK → REFEREE_INVITATION.id | 接受的邀請 |
+| accepted_at | TIMESTAMPTZ |  | 接受邀請的時間 |
 
-唯一鍵：（tournament_id, account_id），同一帳號在同一賽事只會是一筆裁判身分。
+主鍵為（tournament_id, account_id），同一帳號在同一賽事只會是一筆裁判身分。
 
 ### （十一）TEAM 隊伍
 
@@ -853,6 +903,8 @@ erDiagram
 | name | VARCHAR |  | 隊名 |
 | invite_token | VARCHAR | UNIQUE | 隊伍邀請連結 token |
 | created_at | TIMESTAMPTZ |  | 建立時間 |
+
+唯一鍵：（tournament_id, 轉小寫的 name），同一賽事的隊名不分大小寫不可重複。
 
 ### （十二）TEAM_MEMBER 隊員
 
@@ -867,6 +919,7 @@ erDiagram
 | rank_tier | VARCHAR |  | 段位 |
 | rank_score | INTEGER |  | 換算後的段位積分 |
 | rank_screenshot_key | VARCHAR |  | 段位截圖的檔案鍵值 |
+| rank_screenshot_name | VARCHAR |  | 段位截圖的原始檔名 |
 | created_at | TIMESTAMPTZ |  | 加入時間 |
 
 唯一鍵：（tournament_id, account_id），同一帳號在同一賽事只能加入一支隊伍，也不會在同一隊重複出現。
@@ -880,9 +933,9 @@ erDiagram
 | tournament_id | UUID | FK → TOURNAMENT.id | 賽事 |
 | status | VARCHAR（列舉） |  | 報名狀態：組隊中、已送出・待分配、正取、候補、退回、撤回、已參賽、退賽、取消資格 |
 | school_id | UUID | FK → SCHOOL.id | 校園賽送出時的學校（快照）；自訂賽事與組隊中為空 |
-| avg_rank_score | NUMERIC(6,2) |  | 送出時名單所有成員（含替補）的平均段位積分（快照）；組隊中為空 |
+| avg_rank_score | NUMERIC(12,2) |  | 送出時名單所有成員（含替補）的平均段位積分（快照）；組隊中為空 |
 | submitted_at | TIMESTAMPTZ |  | 送出時間（快照，被退回後重送時更新）；組隊中為空 |
-| reject_reason | TEXT |  | 退回原因 |
+| reject_reason | TEXT |  | 期中後（Story 3.8）：退回原因 |
 | created_at | TIMESTAMPTZ |  | 建立時間（與隊伍同時） |
 
 ### （十四）BRACKET 對戰表
@@ -893,7 +946,9 @@ erDiagram
 | tournament_id | UUID | FK → TOURNAMENT.id，UNIQUE | 賽事 |
 | size | INTEGER |  | 對戰表大小 P（2 的次方） |
 | rounds | INTEGER |  | 輪數 |
+| team_count | INTEGER |  | 抽籤時的正取隊數 |
 | drawn_at | TIMESTAMPTZ |  | 抽籤時間（即建立時間） |
+| start_handled_at | TIMESTAMPTZ |  | worker 處理賽事開始的時間；空值代表尚未處理 |
 
 ### （十五）MATCH 場次
 
@@ -901,16 +956,20 @@ erDiagram
 | --- | --- | --- | --- |
 | id | UUID | PK | 主鍵 |
 | bracket_id | UUID | FK → BRACKET.id | 所屬對戰表 |
+| tournament_id | UUID | FK → TOURNAMENT.id | 所屬賽事 |
 | round_no | INTEGER |  | 輪次 |
-| slot_no | INTEGER |  | 該輪中的位置（季軍賽與決賽同輪，排在決賽之後） |
+| slot_no | INTEGER |  | 該輪中的位置 |
 | is_third_place | BOOLEAN |  | 是否為季軍賽 |
-| team_a_id | UUID | FK → TEAM.id | A 隊；尚未確定時為空 |
-| team_b_id | UUID | FK → TEAM.id | B 隊；尚未確定時為空 |
+| code | VARCHAR |  | 場次代號，例如 M14，用於顯示「M14 勝者」 |
+| team_a_id | UUID |  | A 隊；尚未確定時為空 |
+| team_b_id | UUID |  | B 隊；尚未確定時為空 |
+| bye_a | BOOLEAN |  | A 方是否為輪空位置 |
+| bye_b | BOOLEAN |  | B 方是否為輪空位置 |
 | referee_account_id | UUID | FK → ACCOUNT.id | 指派的裁判帳號；指派時檢查該帳號是此賽事的裁判 |
 | scheduled_at | TIMESTAMPTZ |  | 預定開始時間 |
 | status | VARCHAR（列舉） |  | 場次狀態：待開打、進行中、申訴期、申訴中、已確認、已取消 |
 | outcome | VARCHAR（列舉） |  | 結果類型（見下表）；尚無結果時為空 |
-| winner_id | UUID | FK → TEAM.id | 勝隊 |
+| winner_id | UUID |  | 勝隊 |
 | wins_a | INTEGER |  | A 隊勝局數 |
 | wins_b | INTEGER |  | B 隊勝局數 |
 | submitted_by | UUID | FK → ACCOUNT.id | 送出系列結果的帳號（裁判或代登的主辦方） |
@@ -919,9 +978,10 @@ erDiagram
 | forfeit_deadline | TIMESTAMPTZ |  | 棄權期限；兩隊都確定時才設定，空值代表尚未起算 |
 | appeal_deadline | TIMESTAMPTZ |  | 申訴期限 |
 | next_match_id | UUID | FK → MATCH.id | 勝隊晉級的下一場 |
-| created_at | TIMESTAMPTZ |  | 建立時間 |
+| loser_next_match_id | UUID | FK → MATCH.id | 敗隊進入的場次（準決賽進季軍賽） |
+| updated_at | TIMESTAMPTZ |  | 最後修改時間 |
 
-唯一鍵：（bracket_id, round_no, slot_no）。
+唯一鍵：（bracket_id, round_no, slot_no, is_third_place）。
 
 各種結果類型的欄位填法如下：
 
@@ -931,7 +991,7 @@ erDiagram
 | forfeit 一方棄權 | 逾時只有一隊報到 | 已報到的一方 | 0／0 |
 | double_forfeit 雙方棄權 | 逾時兩隊都未報到 | 空 | 0／0 |
 | walkover 輪空 | 一方位置確定不會有隊伍 | 有隊伍的一方；兩方都沒有時為空 | 0／0 |
-| disqualified 取消資格 | 一方在本場進行中、申訴期或申訴中被取消資格 | 對手 | 保留已登錄的局數 |
+| disqualified 取消資格 | 一方在本場待開打、進行中、申訴期或申訴中被取消資格，且沒有隊伍頂替 | 對手 | 保留已登錄的局數（待開打時為 0／0） |
 
 季軍賽取消時，場次狀態為「已取消」，outcome 與 winner_id 為空。申訴更正後依更正的各局結果重新填寫，outcome 改為 played；申訴後重新比賽時，outcome、winner_id 與勝局數清空，場次回到待開打。
 
@@ -942,10 +1002,11 @@ erDiagram
 | id | UUID | PK | 主鍵 |
 | match_id | UUID | FK → MATCH.id | 所屬場次 |
 | game_no | INTEGER |  | 第幾局 |
-| winner_team_id | UUID | FK → TEAM.id | 該局勝隊 |
+| winner_side | VARCHAR |  | 該局勝方：a 或 b |
 | score_a | INTEGER |  | A 隊回合數（回合比分型態） |
 | score_b | INTEGER |  | B 隊回合數（回合比分型態） |
-| created_at | TIMESTAMPTZ |  | 登錄時間 |
+| recorded_by | UUID | FK → ACCOUNT.id | 登錄的帳號（裁判或代登的主辦方） |
+| recorded_at | TIMESTAMPTZ |  | 登錄時間 |
 
 唯一鍵：（match_id, game_no）。
 
@@ -955,12 +1016,15 @@ erDiagram
 | --- | --- | --- | --- |
 | id | UUID | PK | 主鍵 |
 | match_id | UUID | FK → MATCH.id | 場次 |
-| team_id | UUID | FK → TEAM.id | 報到的隊伍 |
+| team_id | UUID |  | 報到的隊伍 |
+| account_id | UUID | FK → ACCOUNT.id | 按下報到的隊長 |
 | at | TIMESTAMPTZ |  | 報到時間 |
 
 唯一鍵：（match_id, team_id），每隊在每個場次只報到一次。
 
 ### （十八）RESULT_SCREENSHOT 結算截圖
+
+本表在期中後（Story 5.7）建立。
 
 | 欄位 | 資料型別 | PK／FK | 說明 |
 | --- | --- | --- | --- |
@@ -974,18 +1038,21 @@ erDiagram
 | 欄位 | 資料型別 | PK／FK | 說明 |
 | --- | --- | --- | --- |
 | id | UUID | PK | 主鍵 |
+| tournament_id | UUID | FK → TOURNAMENT.id | 所屬賽事 |
 | match_id | UUID | FK → MATCH.id | 被申訴的場次 |
-| team_id | UUID | FK → TEAM.id | 提出申訴的隊伍 |
-| description | TEXT |  | 申訴說明 |
+| team_id | UUID |  | 提出申訴的隊伍 |
+| filed_by | UUID | FK → ACCOUNT.id | 提出申訴的隊長 |
+| filed_at | TIMESTAMPTZ |  | 提出時間 |
+| description | VARCHAR(1000) |  | 申訴說明，最多 1000 字 |
 | attachment_key | VARCHAR |  | 附件截圖鍵值 |
 | status | VARCHAR（列舉） |  | 處理中、已結案 |
-| decision | VARCHAR（列舉） |  | 維持原結果、更正結果、重新比賽（只用於棄權判定）；同一場次的申訴一次處理，決定與理由相同 |
+| decision | VARCHAR（列舉） |  | 維持原結果（upheld）、更正結果（corrected）、重新比賽（rematch，只用於棄權判定）、取消資格（disqualified，隊伍被取消資格時一併結案）；同一場次的申訴一次處理，決定與理由相同 |
 | reason | TEXT |  | 處理理由 |
 | handled_by | UUID | FK → ACCOUNT.id | 處理的主辦方 |
-| reminded_at | TIMESTAMPTZ |  | 逾期提醒的寄出時間；空值代表尚未提醒，每筆申訴只提醒一次 |
-| created_at | TIMESTAMPTZ |  | 提出時間 |
+| handled_at | TIMESTAMPTZ |  | 處理時間 |
+| reminded_at | TIMESTAMPTZ |  | 逾期提醒的寄出時間；空值代表尚未提醒。欄位已建立，提醒功能在期中後（Story 6.3）完成 |
 
-唯一鍵：（match_id, team_id），每支隊伍對同一場次只能申訴一次。
+部分唯一索引：（match_id, team_id），只限 status 為處理中的申訴，同一隊對同一場只能有一筆未結案的申訴；重新比賽後可以對重賽結果再申訴。
 
 ### （二十）REPORT 檢舉
 
@@ -994,15 +1061,19 @@ erDiagram
 | id | UUID | PK | 主鍵 |
 | tournament_id | UUID | FK → TOURNAMENT.id | 賽事 |
 | reporter_team_id | UUID | FK → TEAM.id | 檢舉的隊伍 |
-| reported_team_id | UUID | FK → TEAM.id | 被檢舉的隊伍 |
-| description | TEXT |  | 檢舉說明 |
+| filed_by | UUID | FK → ACCOUNT.id | 提出檢舉的隊長 |
+| filed_at | TIMESTAMPTZ |  | 提出時間 |
+| reported_team_id | UUID | FK → TEAM.id | 被檢舉的隊伍；不能與檢舉隊伍相同（CHECK 約束） |
+| description | VARCHAR(1000) |  | 檢舉說明，最多 1000 字 |
 | attachment_key | VARCHAR |  | 附件截圖鍵值 |
 | status | VARCHAR（列舉） |  | 處理中、駁回、屬實 |
 | reason | TEXT |  | 處理理由 |
 | handled_by | UUID | FK → ACCOUNT.id | 處理的主辦方 |
-| created_at | TIMESTAMPTZ |  | 提出時間 |
+| handled_at | TIMESTAMPTZ |  | 處理時間 |
 
 ### （二十一）NOTIFICATION 站內通知
+
+本表在期中後（Story 1.6）建立。
 
 | 欄位 | 資料型別 | PK／FK | 說明 |
 | --- | --- | --- | --- |
@@ -1059,9 +1130,19 @@ erDiagram
 | created_at | TIMESTAMPTZ |  | 建立時間 |
 | processed_at | TIMESTAMPTZ |  | worker 處理完成時間；空值代表未處理 |
 
+### （二十五）PRIORITY_WINDOW_SETTLEMENT 優先期結算
+
+| 欄位 | 資料型別 | PK／FK | 說明 |
+| --- | --- | --- | --- |
+| tournament_id | UUID | PK，FK → TOURNAMENT.id | 賽事；每場賽事最多一筆，確保結算只做一次 |
+| settled_at | TIMESTAMPTZ |  | 結算時間 |
+| priority_school_ids | UUID[] | NOT NULL | 優先期有報名的學校 id 陣列，先搶期判定時使用；沒有時為空陣列 |
+
+完全沒有已送出報名的賽事，worker 不寫結算紀錄，判定時以空集合計算，結果相同。
+
 ## 七、類別圖
 
-本節的類別圖為分析層級的領域模型，呈現系統中的核心概念、主要屬性與彼此的關聯與多重性；Service、Repository 等設計層級的類別請見《物件設計文件》。
+本節的類別圖為分析層級的領域模型，呈現完整設計中的核心概念、主要屬性與彼此的關聯與多重性，包含期中後才實作的 RoundSetting、ResultScreenshot、Notification；Service、Repository 等設計層級的類別請見《物件設計文件》。
 
 ### （一）帳號、賽事與報名
 
@@ -1098,6 +1179,7 @@ classDiagram
     mode
     status
     registration_start
+    priority_end
     registration_end
     start_at
   }
@@ -1165,6 +1247,7 @@ classDiagram
   }
   class MatchGame {
     game_no
+    winner_side
     score_a
     score_b
   }
@@ -1280,7 +1363,7 @@ sequenceDiagram
   participant W as worker
   actor Org as 主辦方
   Cap->>API: 提出申訴<br/>（說明、截圖）
-  API->>DB: 鎖住場次列，確認<br/>未過申訴期限、<br/>該隊未申訴過
+  API->>DB: 鎖住場次列，確認<br/>未過申訴期限、<br/>該隊沒有未結案的申訴
   API->>DB: 建立申訴，申訴期<br/>轉為申訴中，寫入事件
   W-->>Org: 通知有新的申訴
   Note over Cap,Org: 申訴期限內，另一隊也可以提出申訴
@@ -1335,6 +1418,7 @@ sequenceDiagram
 **可測結果：**
 - 同一帳號同時只能有一筆待審核的申請。
 - 申請送出後狀態為「待審核」，申請人可查看。
+- 社團名稱為 1～50 字。
 
 #### FR-3　審核主辦方申請
 
@@ -1343,6 +1427,7 @@ sequenceDiagram
 **可測結果：**
 - 核准後，該帳號立即可以建立賽事。
 - 退回後，申請人看到原因，並可修改後重新申請，不限次數。
+- 退回原因為 1～200 字。
 - 結果以站內通知與 Email 通知申請人。
 
 #### FR-4　邀請與指派裁判
@@ -1357,6 +1442,8 @@ sequenceDiagram
 - 場次送出系列結果前，主辦方可以改派或收回指派；收回後由主辦方代為登錄，已登錄的局保留。
 - 裁判邀請連結產生後 7 天內有效；過期的連結無法接受。
 - 主辦方可以重新產生邀請連結；重新產生後，舊連結立即失效。
+- 主辦方不能接受自己賽事的裁判邀請；場次沒有裁判時由主辦方代為登錄（FR-26）。
+- 賽事已結束或已取消時，產生與接受裁判邀請都被拒絕。
 
 #### FR-5　依身分控管權限
 
@@ -1385,6 +1472,8 @@ sequenceDiagram
 
 **可測結果：**
 - 報名截止時間晚於開賽日期、名額少於 2 隊、棄權時限少於 15 分鐘或申訴期少於 30 分鐘時，無法建立。
+- 開賽時間與報名截止時間必須晚於現在；報名開始時間可以是過去，建立後立即為「開放報名」。
+- 名額超過 128 隊時，畫面提醒主辦方確認沒有輸入錯誤，確認後仍可建立。
 - 報名開始時間晚於報名截止時間，或（校園賽）優先期結束時間晚於報名截止時間時，無法建立。
 - 每輪間隔少於「棄權時限＋預設 BO 數 × 每局預估時間＋申訴期」時無法建立，並顯示最小間隔。例：每局預估 40 分鐘、BO1、棄權時限 15 分鐘、申訴期 30 分鐘時，每輪間隔至少 85 分鐘。
 - 報名開始時間已到時，建立後賽事狀態為「開放報名」；尚未到時為「尚未開放」，到時由系統自動改為開放報名。兩種狀態都出現在公開頁面。
@@ -1451,6 +1540,7 @@ sequenceDiagram
 - 主辦方不能在自己主辦的賽事建立或加入隊伍。
 - 未註冊或未驗證 Email 的訪客點開連結，須先完成註冊與驗證才能加入。
 - 隊伍人數達到「先發＋替補」上限後，邀請連結失效；多人同時加入時依序處理，人數不會超過上限。
+- 隊名去除前後空白後為 1～30 字；同一賽事內不分大小寫不可重複。
 - 自訂賽事中，未持有效賽事報名連結的帳號無法建立隊伍（FR-39）；隊友仍以隊伍邀請連結加入。
 
 #### FR-41　隊員異動與解散隊伍
@@ -1472,6 +1562,7 @@ sequenceDiagram
 - 段位不在該遊戲對照表內時無法送出。
 - 段位截圖限圖片格式且有大小上限（5 MB 以內的 JPG／PNG）。
 - 隊伍的平均段位積分由名單上所有成員（先發與替補）的段位積分計算，取到小數第二位，顯示在報名頁；系統不區分先發與替補，上場人員由隊伍在比賽時自行決定。
+- 送出前，畫面上的平均值只計算已填段位的成員並註明人數（例如「3／5 人已填」）；送出時要求全員填完，凍結的值包含所有成員。
 
 #### FR-13　送出報名與鎖定名單
 
@@ -1480,7 +1571,7 @@ sequenceDiagram
 **可測結果：**
 - 名單人數不足先發人數、有選手未填完參賽資料，或（校園賽）有隊員未設定學校、隊員學校不一致時，無法送出。
 - 送出後名單鎖定，任何人都不能新增、移除或替換隊員，選手的遊戲 ID、段位與段位截圖也不能修改；只有被主辦方退回（FR-18）時解鎖。
-- 報名期間以外送出，會被拒絕並顯示原因。
+- 報名期間以外送出會被拒絕並顯示原因；報名截止後，建立隊伍、加入隊伍與修改參賽資料同樣被拒絕。
 
 #### FR-14　優先期名額分配
 
@@ -1554,6 +1645,7 @@ sequenceDiagram
 - 抽籤只能執行一次；抽籤後無法重抽。
 - 抽籤完成後賽事狀態為「賽程已公布」，所有正取隊伍的隊長與選手收到站內通知與 Email。
 - 正取隊數少於 2 隊時無法抽籤，主辦方須延長報名或取消賽事；延長報名期間後，賽事回到「開放報名」。
+- 開賽時間已過時無法抽籤。
 
 #### FR-20　產生單淘汰對戰表
 
@@ -1582,12 +1674,15 @@ sequenceDiagram
 隊伍被取消資格（FR-33）時，系統依該隊當時的處境調整對戰表。
 
 **可測結果：**
-- 該隊尚未比過任何場次 → 有候補時由候補遞補；沒有候補時對手輪空晉級（比照退賽）。
-- 該隊已贏過至少一場、正在等待下一場 → 由最近一場輸給它的隊伍頂替它在對戰表上的位置；更早的場次結果不變。
-- 被取消資格的是決賽隊伍時，頂替者是準決賽輸給它、正在等待季軍賽的隊伍：季軍賽尚未開打時，由它頂替進入決賽，季軍賽由對手輪空獲得季軍；季軍賽已開打或已定案時不頂替，決賽由對手輪空獲勝，亞軍從缺。
-- 被取消資格的隊伍正在等待季軍賽時，季軍賽由對手以輪空獲得季軍，不另找隊伍頂替。
+- 該隊尚未比過任何場次且對手已確定 → 有候補時由候補遞補（Story 4.5，期中後）；沒有候補時，該場以取消資格判對手獲勝並晉級，對戰樹標示「取消資格」。
+- 該隊尚未比過任何場次且對手尚未確定 → 期中版拒絕取消資格，回 409 `DISQUALIFY_OPPONENT_PENDING`、不改任何資料，請主辦方等對手確定後再處理。
+- 該隊已贏過至少一場、正在等待下一場 → 由最近一場輸給它的隊伍頂替它在對戰表上的位置；更早的場次結果不變。最近一場勝場若是對手被取消資格而勝，判它現在的對手獲勝，不往前找；輪空的勝場則略過，繼續往前找。
+- 被取消資格的是決賽隊伍時，頂替者是準決賽輸給它、正在等待季軍賽的隊伍：季軍賽尚未開打時，由它頂替進入決賽，季軍賽由對手輪空獲得季軍；季軍賽已開打或已定案時不頂替，決賽以取消資格判對手獲勝，對戰樹標示「取消資格」，亞軍從缺。
+- 被取消資格的隊伍正在等待季軍賽時，季軍賽以取消資格判對手獲勝、獲得季軍，對戰樹標示「取消資格」，不另找隊伍頂替。
+- 上述要判對手獲勝或要讓頂替者離開季軍賽的情況，若對手尚未確定（還在等另一場的結果），一律回 409 `DISQUALIFY_OPPONENT_PENDING`、不改任何資料。
 - 該隊有進行中、申訴期或申訴中的場次 → 該場直接判對手獲勝並確認，未結案的申訴一併結案，不另找隊伍頂替。
 - 該隊已被淘汰，或所有場次都已確認且沒有下一場 → 只把報名標示為取消資格，已確認的結果與對戰表不變。
+- 決賽以取消資格確認時，亞軍從缺。
 - 頂替的隊伍與相關場次的隊長收到通知。
 
 #### FR-23　排定場次時間
@@ -1597,8 +1692,8 @@ sequenceDiagram
 **可測結果：**
 - 同一輪的場次排在同一時段；下一輪的開始時間為上一輪開始時間加上每輪間隔。上一輪的 BO 數使「棄權時限＋該輪 BO 數 × 每局預估時間＋申訴期」超過每輪間隔時，下一輪順延到這個下限，並在抽籤結果中提示主辦方。
 - 修改時間後，兩隊隊長、選手與指派的裁判收到站內通知與 Email；兩隊都已確定的場次，棄權期限隨新時間重新計算。
-- 場次已開始（已有隊伍報到）後無法修改時間。
-- 修改的新時間不得早於現在，也不得晚於勝隊要去的下一場的預定時間；決賽與季軍賽不受後者限制。
+- 場次已開始（已有隊伍報到）或棄權期限已過時，無法修改時間。
+- 新時間最早為現在進位到整分後加 30 分鐘，且不早於會進入本場的場次（勝隊或準決賽敗隊會填入本場的那幾場，不是整個前一輪）中最晚的預定時間加上這些場次的最小間隔，第一輪沒有這項限制；最晚為下一場的預定時間減本場最小間隔（準決賽的下一場取決賽與季軍賽中較早者），決賽與季軍賽沒有上限。最小間隔為「棄權時限＋該輪 BO 數 × 每局預估時間＋申訴期」。
 - 系統不自動把同一輪分批；裁判人手不足時，主辦方可個別修改場次時間來分批，或由同一位裁判負責多個場次（FR-4）。
 
 ## 五、5.0 場次進行
@@ -1671,7 +1766,7 @@ sequenceDiagram
 
 **可測結果：**
 - 申訴期限（裁判送出系列結果或判棄權時起算的申訴期）過後提出會被拒絕。
-- 每支隊伍對同一場次只能提出一次申訴。
+- 每支隊伍對同一場次同時只能有一筆未結案的申訴；重新比賽後，可以對重賽的結果再申訴。
 - 第一筆申訴提出後場次狀態變為「申訴中」，主辦方收到站內通知與 Email；另一隊在申訴期限內仍可提出申訴，主辦方同樣收到通知。
 
 #### FR-31　處理申訴
@@ -1682,8 +1777,9 @@ sequenceDiagram
 - 更正結果時，主辦方重新輸入各局結果，系統重算系列結果；更正後勝隊可能改變。
 - 重新比賽只適用於判棄權（一方或雙方）的場次：主辦方設定新的預定時間後，場次回到「待開打」，清除棄權判定與報到紀錄，棄權期限依新時間重新計算；兩隊與裁判收到新時間的通知。
 - 維持或更正後，場次狀態為「已確認」，觸發晉級（FR-21），兩隊收到處理結果與理由。
+- 另一隊的申訴期限未到時主辦方也可以處理；處理後場次已確認，另一隊不能再申訴。
 - 等待這個結果的下一場預定開始前 1 小時仍未處理時，系統提醒主辦方（決賽與季軍賽沒有下一場，為申訴提出後 1 小時）；每筆申訴只提醒一次。
-- 主辦方可在賽事後台的待處理清單看到所有未結案的申訴與檢舉，依處理期限排序。
+- 主辦方可在賽事後台的待處理清單看到所有未結案的申訴與檢舉，依處理期限排序；檢舉的處理期限為被檢舉隊伍下一場的預定開始時間，沒有下一場時排在有期限的項目之後。
 - 申訴未處理前，等待這個結果的下一場不開放報到、不起算棄權期限（FR-24、FR-25）。
 
 #### FR-32　提出檢舉
@@ -1691,9 +1787,10 @@ sequenceDiagram
 參賽隊伍的隊長可以在賽事結束前，對同賽事另一支已送出報名的隊伍提出資格檢舉，填寫文字說明並可附上截圖。
 
 **可測結果：**
-- 賽事狀態為「已結束」後無法提出檢舉。
+- 賽事狀態為「已結束」或「已取消」後無法提出檢舉。
 - 提出檢舉的隊伍須為待分配、正取、候補或已參賽；組隊中、退回、撤回、退賽或已取消資格的隊伍不能提出。
 - 不能檢舉自己的隊伍；只能檢舉報名狀態為待分配、正取、候補或已參賽的隊伍。
+- 同一隊對同一對象已有處理中的檢舉時無法重複提出；結案後可以再檢舉。
 - 提出後主辦方收到站內通知與 Email；被檢舉的隊伍在查證前不受影響。
 
 #### FR-33　查證檢舉與取消資格
@@ -1704,7 +1801,8 @@ sequenceDiagram
 - 取消資格後，對戰表依 FR-22 調整，被取消資格的隊伍標示為「取消資格」。
 - 檢舉人與被檢舉隊伍都收到處理結果與理由。
 - 駁回後，對戰表與該隊狀態不變。
-- 賽事已結束後，未結案的檢舉只能駁回或記錄屬實（附理由），不能取消資格，也不改動對戰表與名次。
+- 賽事已結束或已取消後，未結案的檢舉只能駁回或記錄屬實（附理由），不能取消資格，也不改動對戰表與名次。
+- 取消資格時，該隊未結案的申訴一併結案（決定記為「取消資格」），該隊其他未結案的檢舉結案為屬實。
 
 ## 七、7.0 觀賽與通知
 
@@ -1723,7 +1821,7 @@ sequenceDiagram
 **可測結果：**
 - 場次變為「已確認」後，開著頁面的觀眾在 10 秒內看到更新，不需手動重新整理。
 - 手機寬度（375 px）下對戰樹可閱讀、可左右捲動。
-- 輪空、棄權、取消資格以不同標示呈現。
+- 輪空、棄權、取消資格以不同標示呈現；「取消資格」只標在該隊出現的最後一張場次卡。
 
 #### FR-36　場次頁
 
