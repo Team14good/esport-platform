@@ -1,0 +1,41 @@
+system: 電競賽事管理平台（FLOW）
+width: 700
+rowheight: 44
+package g7 0.25 0.75 1 1: 7.0 觀賽與通知
+package g1 0.25 0.75 2.6 2.6: 1.0 帳號與身分
+package g2 0.25 0.75 4.2 4.2: 2.0 賽事建立與遊戲設定
+package g3 0.25 0.75 5.8 5.8: 3.0 隊伍與報名
+package g4 0.25 0.75 7.4 7.4: 4.0 抽籤與對戰表
+package g5 0.25 0.75 9 9: 5.0 場次進行
+package g6 0.25 0.75 10.6 10.6: 6.0 申訴與檢舉
+actor visitor left 1: 訪客
+actor account left 3: 帳號
+actor player left 5.8: 選手
+actor leader left 8.9: 隊長
+actor admin right 2.6: 平台管理員
+actor org right 5.8: 主辦方
+actor ref right 8.5: 裁判
+actor timer right 10.6: 時間
+visitor -- g7
+visitor -- g1
+account -- g7
+account -- g1
+player -- g3
+leader -- g3
+leader -- g4
+leader -- g5
+leader -- g6
+admin -- g1
+admin -- g2
+org -- g1
+org -- g2
+org -- g3
+org -- g4
+org -- g5
+org -- g6
+ref -- g5
+timer -- g2
+timer -- g3
+timer -- g4
+timer -- g5
+timer -- g6
