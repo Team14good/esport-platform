@@ -8,6 +8,8 @@
 | 1.3 | 2026-10-23 | 截止補位改由所有候補依平均段位積分補位、每校最多 2 隊，與報名截止後的遞補順序相同（名詞表、Story 3.6、功能說明 3.7、使用案例例外流程 5a、附錄 4.3 與 FR-16） |
 | 1.4 | 2026-10-28 | 依 Epic 1 實作定案的規則補充 FR-1（密碼長度、重寄驗證信、登入 7 天與過期處理）、FR-40（重設後登出其他裝置、視為完成驗證）；資料表補上 ACCOUNT.credentials_version、EMAIL_DELIVERY.next_attempt_at、AUDIT_LOG.seq |
 | 1.5 | 2026-11-11 | 新增壹、五「期中實作範圍」；ERD 與資料表依程式更新（新增 PRIORITY_WINDOW_SETTLEMENT，標示期中後才建立的資料表與欄位）；FR-2、3、4、7、11、12、13、19、22、23、30、31、32、33、35 補上實作時定案的規則 |
+| 1.6 | 2026-11-12 | 簡化圖面，轉換與關聯不變：三張狀態圖以外框（複合狀態）合併重複的取消、退回、撤回與取消資格轉換；類別圖由兩張拆成四張 |
+| 1.7 | 2026-11-12 | 實體關聯圖由七張拆成九張，資料表與關聯不變：對戰分成對戰表結構與場次紀錄、爭議分成申訴與檢舉；TEAM_MEMBER 與 TOURNAMENT 的關聯改列在資料表說明；調整關聯順序，消除線條交叉 |
 
 # 壹、系統整體概述
 
@@ -558,31 +560,29 @@
 
 ```mermaid
 stateDiagram-v2
-  state "尚未開放" as upcoming
-  state "開放報名" as open
-  state "報名截止" as closed
-  state "賽程已公布" as published
-  state "進行中" as ongoing
   state "已結束" as finished
   state "已取消" as cancelled
-  [*] --> upcoming : 建立賽事，報名開始時間未到
-  [*] --> open : 建立賽事，報名開始時間已到
-  upcoming --> open : 報名開始時間到
-  open --> closed : 截止時間到／提前抽籤
-  closed --> open : 正取不足 2 隊，延長報名
-  closed --> published : 抽籤完成
-  published --> ongoing : 第一個場次開放報到
+  state "未結束" as active {
+    state "尚未開放" as upcoming
+    state "開放報名" as open
+    state "報名截止" as closed
+    state "賽程已公布" as published
+    state "進行中" as ongoing
+    [*] --> upcoming : 建立賽事，報名開始時間未到
+    [*] --> open : 建立賽事，報名開始時間已到
+    upcoming --> open : 報名開始時間到
+    open --> closed : 截止時間到／提前抽籤
+    closed --> open : 正取不足 2 隊，延長報名
+    closed --> published : 抽籤完成
+    published --> ongoing : 第一個場次開放報到
+  }
   ongoing --> finished : 決賽與季軍賽皆定案
-  upcoming --> cancelled : 主辦方取消
-  open --> cancelled : 主辦方取消
-  closed --> cancelled : 主辦方取消
-  published --> cancelled : 主辦方取消
-  ongoing --> cancelled : 主辦方取消
+  active --> cancelled : 主辦方取消
   finished --> [*]
   cancelled --> [*]
 ```
 
-「尚未開放」時主辦方可以修改所有設定，開放報名後只能放寬。「報名開始時間到」與「第一個場次開放報到」（最早場次的預定開始前 30 分鐘）都是時間觸發，由 worker 執行。「定案」指場次已確認，或季軍賽已取消。
+外框「未結束」包含已結束以外的五個狀態，主辦方在其中任何一個狀態都能取消賽事。「尚未開放」時主辦方可以修改所有設定，開放報名後只能放寬。「報名開始時間到」與「第一個場次開放報到」（最早場次的預定開始前 30 分鐘）都是時間觸發，由 worker 執行。「定案」指場次已確認，或季軍賽已取消。
 
 ### （二）報名狀態
 
@@ -591,37 +591,37 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
   state "組隊中" as forming
-  state "已送出・待分配" as pending
-  state "正取" as accepted
-  state "候補" as waitlisted
   state "退回" as rejected
   state "撤回" as withdrawn
-  state "已參賽" as drawn
   state "退賽" as retired
   state "取消資格" as disqualified
+  state "已參賽" as drawn
+  state leave <<choice>>
+  state "已送出、未參賽" as notdrawn {
+    state "已送出・待分配" as pending
+    state "正取" as accepted
+    state "候補" as waitlisted
+    pending --> accepted : 優先期結束，正取
+    pending --> waitlisted : 優先期結束，候補
+    waitlisted --> accepted : 遞補／截止補位
+  }
   [*] --> forming : 建立隊伍
   forming --> pending : 優先期內送出
   forming --> accepted : 送出，判定正取
   forming --> waitlisted : 送出，判定候補
-  pending --> accepted : 優先期結束，正取
-  pending --> waitlisted : 優先期結束，候補
-  waitlisted --> accepted : 遞補／截止補位
-  waitlisted --> drawn : 抽籤後遞補
-  pending --> rejected : 退回
-  accepted --> rejected : 退回
-  waitlisted --> rejected : 退回
-  rejected --> forming : 修正重送
-  pending --> withdrawn : 撤回
-  accepted --> withdrawn : 撤回
-  waitlisted --> withdrawn : 撤回
   forming --> withdrawn : 解散隊伍
   accepted --> drawn : 抽籤
+  waitlisted --> drawn : 抽籤後遞補
+  notdrawn --> leave
+  leave --> rejected : 退回
+  leave --> withdrawn : 撤回
+  notdrawn --> disqualified : 取消資格
+  rejected --> forming : 修正重送
   drawn --> retired : 退賽
-  pending --> disqualified : 取消資格
-  accepted --> disqualified : 取消資格
-  waitlisted --> disqualified : 取消資格
   drawn --> disqualified : 取消資格
 ```
+
+外框「已送出、未參賽」包含已送出但尚未進入對戰表的三個狀態；從外框拉出的箭頭，代表框內每個狀態都有這個轉換；菱形是選擇節點，依主辦方退回或隊伍撤回分成兩條路徑。
 
 圖中各轉換的條件如下：
 
@@ -633,36 +633,37 @@ stateDiagram-v2
 ### （三）場次狀態
 
 ```mermaid
+%%{init: {"themeCSS": ".edgeLabels .edgeLabel:nth-of-type(13) foreignObject { transform: translate(14px, 14px); }"}}%%
 stateDiagram-v2
-  state "待開打" as scheduled
-  state "進行中" as live
-  state "申訴期" as appeal_window
-  state "申訴中" as appealed
+  %% 第 13 個轉換標籤（一方被取消資格）往右下移，避免與「主辦方維持或更正」重疊；增刪轉換時要重新確認序號
   state "已確認" as confirmed
   state "已取消" as voided
+  state "未確認" as unconfirmed {
+    state "待開打" as scheduled
+    state "進行中" as live
+    state "申訴期" as appeal_window
+    state "申訴中" as appealed
+    scheduled --> live : 裁判登錄第一局
+    scheduled --> appeal_window : 逾時判棄權
+    live --> appeal_window : 裁判送出系列結果
+    appeal_window --> appealed : 隊長提出申訴
+    appealed --> scheduled : 重新比賽
+  }
   [*] --> scheduled : 抽籤後建立場次
-  scheduled --> live : 裁判登錄第一局
-  scheduled --> appeal_window : 逾時判棄權
-  scheduled --> confirmed : 輪空或一方被取消資格
+  unconfirmed --> confirmed : 一方被取消資格
+  scheduled --> confirmed : 輪空
   scheduled --> voided : 季軍賽取消
-  live --> appeal_window : 裁判送出系列結果
   appeal_window --> confirmed : 申訴期滿且無申訴
-  appeal_window --> appealed : 隊長提出申訴
-  appealed --> appealed : 另一隊在申訴期限內申訴
   appealed --> confirmed : 主辦方維持或更正
-  appealed --> scheduled : 重新比賽
-  live --> confirmed : 一方被取消資格
-  appeal_window --> confirmed : 一方被取消資格
-  appealed --> confirmed : 一方被取消資格
   confirmed --> [*]
   voided --> [*]
 ```
 
-「待開打 → 申訴期」是逾時判棄權，一方或雙方未報到都適用。「待開打 → 已確認」有兩種情況：一是輪空，對手位置確定不會有隊伍時（前一場雙方棄權，或退賽、取消資格後無人遞補），系統直接確認並讓另一方晉級；二是待開打場次的一方被取消資格且沒有隊伍頂替，以取消資格（outcome 為 disqualified）判對手獲勝。「已取消」只用於準決賽沒有產生勝隊時的季軍賽。場次停在「待開打」等待隊伍確定時，不開放報到、也不起算棄權期限（見貳、三 5.2）。「申訴中 → 待開打」只用於判棄權的場次經申訴後安排重新比賽（FR-31）。各種結果的欄位填法見資料表說明的 MATCH。
+外框「未確認」包含待開打、進行中、申訴期與申訴中四個狀態，其中任何一個狀態都可能因一方被取消資格而直接確認。申訴中時，另一隊仍可在申訴期限內提出申訴，狀態維持「申訴中」。「待開打 → 申訴期」是逾時判棄權，一方或雙方未報到都適用。「待開打 → 已確認」有兩種情況：一是輪空，對手位置確定不會有隊伍時（前一場雙方棄權，或退賽、取消資格後無人遞補），系統直接確認並讓另一方晉級；二是待開打場次的一方被取消資格且沒有隊伍頂替，以取消資格（outcome 為 disqualified）判對手獲勝。「已取消」只用於準決賽沒有產生勝隊時的季軍賽。場次停在「待開打」等待隊伍確定時，不開放報到、也不起算棄權期限（見貳、三 5.2）。「申訴中 → 待開打」只用於判棄權的場次經申訴後安排重新比賽（FR-31）。各種結果的欄位填法見資料表說明的 MATCH。
 
 ## 五、實體關聯圖
 
-本系統的資料模型以「賽事、隊伍、報名、場次」為主軸：賽事複製遊戲設定、收到隊伍報名，抽籤後產生對戰表與場次；場次記錄每局比分、報到、結算截圖，並可能收到申訴；所有重要事件寫入事件與操作紀錄，再產生通知。完整設計共 25 張資料表，目前已建立 22 張；ROUND_SETTING、RESULT_SCREENSHOT、NOTIFICATION 三張在期中後建立。為了閱讀清楚，依功能分成七張圖呈現，跨圖出現的實體（如 ACCOUNT、TOURNAMENT、TEAM、MATCH）是同一張資料表；為了維持圖面清楚，MATCH.tournament_id、CHECK_IN.account_id 的關聯只列在資料表說明。
+本系統的資料模型以「賽事、隊伍、報名、場次」為主軸：賽事複製遊戲設定、收到隊伍報名，抽籤後產生對戰表與場次；場次記錄每局比分、報到、結算截圖，並可能收到申訴；所有重要事件寫入事件與操作紀錄，再產生通知。完整設計共 25 張資料表，目前已建立 22 張；ROUND_SETTING、RESULT_SCREENSHOT、NOTIFICATION 三張在期中後建立。為了閱讀清楚，依功能分成九張圖呈現，跨圖出現的實體（如 ACCOUNT、TOURNAMENT、TEAM、MATCH）是同一張資料表；為了維持圖面清楚，MATCH.tournament_id、CHECK_IN.account_id、TEAM_MEMBER.tournament_id（同一賽事每人限一隊的唯一鍵）的關聯只列在資料表說明。
 
 ### （一）帳號
 
@@ -678,25 +679,24 @@ erDiagram
 
 ```mermaid
 erDiagram
-  ACCOUNT ||--o{ TOURNAMENT : "主辦"
   GAME_TITLE ||--o{ RANK_TIER : "定義段位"
   GAME_TITLE ||--o{ TOURNAMENT : "被選用"
+  ACCOUNT ||--o{ TOURNAMENT : "主辦"
   TOURNAMENT ||--o{ ROUND_SETTING : "分輪 BO"
   TOURNAMENT ||--o{ REFEREE_INVITATION : "產生"
-  TOURNAMENT ||--o{ TOURNAMENT_REFEREE : "委任"
-  ACCOUNT ||--o{ TOURNAMENT_REFEREE : "擔任"
-  REFEREE_INVITATION ||--o{ TOURNAMENT_REFEREE : "接受"
   ACCOUNT ||--o{ REFEREE_INVITATION : "建立"
+  TOURNAMENT ||--o{ TOURNAMENT_REFEREE : "委任"
+  REFEREE_INVITATION ||--o{ TOURNAMENT_REFEREE : "接受"
+  ACCOUNT ||--o{ TOURNAMENT_REFEREE : "擔任"
 ```
 
 ### （三）隊伍與報名
 
 ```mermaid
 erDiagram
-  TOURNAMENT ||--o{ TEAM : "包含"
-  TEAM ||--|{ TEAM_MEMBER : "由組成"
   ACCOUNT ||--o{ TEAM_MEMBER : "參加"
-  TOURNAMENT ||--o{ TEAM_MEMBER : "同賽事限一隊"
+  TEAM ||--|{ TEAM_MEMBER : "由組成"
+  TOURNAMENT ||--o{ TEAM : "包含"
   TEAM ||--|| REGISTRATION : "對應"
   TOURNAMENT ||--o{ REGISTRATION : "收到"
   SCHOOL |o--o{ REGISTRATION : "快照學校"
@@ -709,6 +709,8 @@ erDiagram
 
 ### （四）對戰
 
+對戰表的結構：
+
 ```mermaid
 erDiagram
   TOURNAMENT ||--o| BRACKET : "擁有"
@@ -717,24 +719,38 @@ erDiagram
   TEAM |o--o{ MATCH : "勝隊"
   MATCH |o--o{ MATCH : "下一場"
   MATCH |o--o{ MATCH : "敗隊下一場"
+```
+
+每個場次的紀錄：
+
+```mermaid
+erDiagram
   ACCOUNT |o--o{ MATCH : "擔任裁判"
   ACCOUNT |o--o{ MATCH : "送出結果"
-  MATCH ||--o{ MATCH_GAME : "包含"
   ACCOUNT ||--o{ MATCH_GAME : "登錄"
+  MATCH ||--o{ MATCH_GAME : "包含"
+  MATCH ||--o| RESULT_SCREENSHOT : "佐證"
   MATCH ||--o{ CHECK_IN : "記錄報到"
   TEAM ||--o{ CHECK_IN : "報到"
-  MATCH ||--o| RESULT_SCREENSHOT : "佐證"
 ```
 
 ### （五）爭議
+
+申訴：
 
 ```mermaid
 erDiagram
   MATCH ||--o{ APPEAL : "收到"
   TOURNAMENT ||--o{ APPEAL : "所屬"
-  ACCOUNT ||--o{ APPEAL : "提出"
   TEAM ||--o{ APPEAL : "提出申訴"
+  ACCOUNT ||--o{ APPEAL : "提出"
   ACCOUNT |o--o{ APPEAL : "處理申訴"
+```
+
+檢舉：
+
+```mermaid
+erDiagram
   TOURNAMENT ||--o{ REPORT : "收到"
   TEAM ||--o{ REPORT : "提出檢舉"
   TEAM ||--o{ REPORT : "被檢舉"
@@ -1142,9 +1158,9 @@ erDiagram
 
 ## 七、類別圖
 
-本節的類別圖為分析層級的領域模型，呈現完整設計中的核心概念、主要屬性與彼此的關聯與多重性，包含期中後才實作的 RoundSetting、ResultScreenshot、Notification；Service、Repository 等設計層級的類別請見《物件設計文件》。
+本節的類別圖為分析層級的領域模型，呈現完整設計中的核心概念、主要屬性與彼此的關聯與多重性，包含期中後才實作的 RoundSetting、ResultScreenshot、Notification；Service、Repository 等設計層級的類別請見《物件設計文件》。為了讓關聯線清楚，依功能分成四張圖；沒有列出屬性的類別，是在其他張圖已完整列出的同一個類別。
 
-### （一）帳號、賽事與報名
+### （一）帳號與賽事
 
 ```mermaid
 classDiagram
@@ -1188,6 +1204,24 @@ classDiagram
     bo
   }
   class TournamentReferee
+  GameTitle "1" *-- "1..*" RankTier
+  GameTitle "1" --> "0..*" Tournament : 設定來源
+  Account "1" --> "0..*" Tournament : 主辦
+  Tournament "1" *-- "0..*" RoundSetting
+  Tournament "1" --> "0..*" TournamentReferee : 委任
+  Account "1" --> "0..*" TournamentReferee : 擔任
+  Account "1" --> "0..*" OrganizerApplication : 提出
+  OrganizerApplication "0..*" --> "1" School : 申請學校
+  Account "0..*" --> "0..1" School : 就讀
+```
+
+### （二）隊伍與報名
+
+```mermaid
+classDiagram
+  class Account
+  class School
+  class Tournament
   class Team {
     name
     invite_token
@@ -1202,32 +1236,20 @@ classDiagram
     avg_rank_score
     submitted_at
   }
-  Account "1" --> "0..*" OrganizerApplication : 提出
-  Account "1" --> "0..*" Tournament : 主辦
-  GameTitle "1" *-- "1..*" RankTier
-  GameTitle "1" --> "0..*" Tournament : 設定來源
-  Tournament "1" *-- "0..*" RoundSetting
-  Tournament "1" --> "0..*" TournamentReferee : 委任
-  Account "1" --> "0..*" TournamentReferee : 擔任
   Tournament "1" *-- "0..*" Team
   Team "1" *-- "1..*" TeamMember
   Account "1" --> "0..*" TeamMember : 參加
   Team "1" --> "1" Registration : 對應
-  Account "0..*" --> "0..1" School : 就讀
-  OrganizerApplication "0..*" --> "1" School : 申請學校
   Registration "0..*" --> "0..1" School : 快照學校
 ```
 
-### （二）對戰、爭議與通知
+### （三）對戰
 
 ```mermaid
 classDiagram
-  class Tournament {
-    status
-  }
-  class Team {
-    name
-  }
+  class Tournament
+  class Team
+  class Account
   class Bracket {
     size
     rounds
@@ -1257,6 +1279,24 @@ classDiagram
   class ResultScreenshot {
     file_key
   }
+  Tournament "1" *-- "0..1" Bracket
+  Bracket "1" *-- "1..*" Match
+  Match "0..*" --> "0..1" Match : 下一場
+  Match "0..*" --> "0..2" Team : 對戰隊伍
+  Match "0..*" --> "0..1" Account : 擔任裁判
+  Match "1" *-- "0..*" MatchGame
+  Match "1" *-- "0..2" CheckIn
+  Match "1" *-- "0..1" ResultScreenshot
+```
+
+### （四）爭議與通知
+
+```mermaid
+classDiagram
+  class Tournament
+  class Team
+  class Match
+  class Account
   class Appeal {
     description
     status
@@ -1274,16 +1314,7 @@ classDiagram
     link
     read_at
   }
-  class Account
-  Tournament "1" *-- "0..1" Bracket
-  Bracket "1" *-- "1..*" Match
-  Match "0..*" --> "0..1" Match : 下一場
-  Team "0..2" <-- "0..*" Match : 對戰隊伍
-  Account "0..1" <-- "0..*" Match : 擔任裁判
-  Match "1" *-- "0..*" MatchGame
-  Match "1" *-- "0..2" CheckIn
-  Match "1" *-- "0..1" ResultScreenshot
-  Appeal "0..2" <-- "1" Match : 收到
+  Match "1" --> "0..2" Appeal : 收到
   Team "1" --> "0..*" Appeal : 提出
   Tournament "1" --> "0..*" Report : 收到
   Team "1" --> "0..*" Report : 提出檢舉

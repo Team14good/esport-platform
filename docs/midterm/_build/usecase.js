@@ -102,7 +102,19 @@
         const [tx, ty] = onEllipse(b, a.cx, a.cy);
         p.push('<line x1="' + sx + '" y1="' + sy + '" x2="' + tx + '" y2="' + ty + '" stroke="#333" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#uc-open)"/>');
         const label = '«' + (l.label || 'include') + '»';
-        p.push('<text x="' + (sx + tx) / 2 + '" y="' + ((sy + ty) / 2 - 5) + '" font-size="11.5" text-anchor="middle" paint-order="stroke" stroke="#fafafa" stroke-width="4">' + esc(label) + '</text>');
+        // 標籤沿箭頭的法線方向推開，距離剛好讓文字框不碰到線（水平線放上方、垂直線放右側）
+        const dx = tx - sx;
+        const dy = ty - sy;
+        const len = Math.hypot(dx, dy) || 1;
+        let nx = -dy / len;
+        let ny = dx / len;
+        if (ny > 0.001 || (Math.abs(ny) <= 0.001 && nx < 0)) { nx = -nx; ny = -ny; }
+        const lw = measure(label) * (11.5 / FS);
+        const lh = 12;
+        const off = Math.abs(nx) * lw / 2 + Math.abs(ny) * lh / 2 + 3;
+        const lx = (sx + tx) / 2 + nx * off;
+        const ly = (sy + ty) / 2 + ny * off + 4;
+        p.push('<text x="' + lx + '" y="' + ly + '" font-size="11.5" text-anchor="middle" paint-order="stroke" stroke="#fafafa" stroke-width="4">' + esc(label) + '</text>');
       }
     }
 
