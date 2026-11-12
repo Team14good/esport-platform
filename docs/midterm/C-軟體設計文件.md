@@ -7,6 +7,7 @@
 | 1.2 | 2026-10-20 | 依一致性審查補充加鎖範圍、重新比賽與改派裁判；移除壓力測試與 Locust；新增版本紀錄與參考文獻 |
 | 1.3 | 2026-10-28 | 依 Epic 1 實作補充登入憑證機制（7 天有效、不做 refresh token、重設密碼使舊憑證失效、401 的前端處理） |
 | 1.4 | 2026-11-11 | 依期中實作（已完成的 35 個 Story）更新模組資料、worker 工作、權限檢查、事件與通知現況、循序圖與主要 API，並標示期中後才實作的項目 |
+| 1.5 | 2026-11-12 | 貳、三的模組依賴圖改為只畫相鄰層，並在文字說明上層可呼叫下方任一模組（與 AD-3 一致） |
 
 # 壹、系統簡介
 
@@ -170,7 +171,7 @@ Core 提供各模組共用、與業務無關的基礎功能，且不得 import �
 
 ## 三、模組劃分與依賴
 
-後端依功能群切成 6 個業務模組。每個實體只屬於一個模組，只有該模組能讀寫它（AD-1）。模組之間只能依下圖的實線方向直接呼叫，反方向一律禁止，因此不會形成循環依賴（AD-3）。
+後端依功能群切成 6 個業務模組。每個實體只屬於一個模組，只有該模組能讀寫它（AD-1）。五個核心模組依下圖由上而下排成固定的呼叫順序：上方的模組可以直接呼叫下方任何一個模組（例如 disputes 可以直接呼叫 registration），反方向一律禁止，因此不會形成循環依賴（AD-3）。圖中只畫相鄰兩層之間的箭頭，跨層的呼叫不另外畫線。
 
 ```mermaid
 flowchart TB
@@ -180,10 +181,6 @@ flowchart TB
     competition --> registration["registration<br/>隊伍與報名"]
     registration --> tournaments["tournaments<br/>賽事與遊戲設定"]
     tournaments --> identity["identity<br/>帳號與身分"]
-    registration --> identity
-    disputes --> registration
-    disputes --> tournaments
-    competition --> tournaments
   end
   biz -. 發出事件（寫入 outbox） .-> notifications["notifications<br/>通知"]
   notifications -- 查詢收件人 --> biz
