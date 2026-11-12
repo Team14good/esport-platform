@@ -1,115 +1,41 @@
 system: 電競賽事管理平台（FLOW）
-width: 760
-rowheight: 36
-package 0.03 0.48 1.4 9.4: 1.0 帳號與身分
-package 0.03 0.48 11.4 17.4: 7.0 觀賽與通知
-package 0.03 0.48 19.4 29.4: 3.0 隊伍與報名
-package 0.52 0.97 2.9 10.9: 2.0 賽事建立與遊戲設定
-package 0.52 0.97 12.9 16.9: 4.0 抽籤與對戰表
-package 0.52 0.97 18.9 25.9: 5.0 場次進行
-package 0.52 0.97 27.9 32.9: 6.0 申訴與檢舉
-actor visitor left 5: 訪客
-actor account left 10.6: 帳號
-actor player left 23.9: 選手
-actor leader left 31.2: 隊長
-actor admin right 1.5: 平台管理員
-actor org right 11.9: 主辦方
-actor timer right 26.5: 時間
-actor ref right 21.6: 裁判
-uc b7 at 0.255 2.4: 1.4 審核主辦方申請
-uc b1 at 0.255 3.4: 1.1 註冊並驗證 Email
-uc b2 at 0.255 4.4: 1.2 忘記與重設密碼
-uc b3 at 0.255 5.4: 1.1 登入／登出
-uc b4 at 0.255 6.4: 1.1 維護帳號資料
-uc b5 at 0.255 7.4: 1.3 申請成為主辦方
-uc b6 at 0.255 8.4: 1.5 接受裁判邀請
-uc b8 at 0.255 9.4: 1.5 邀請裁判
-uc a1 at 0.255 12.4: 7.1 瀏覽賽事列表與賽事頁
-uc a2 at 0.255 13.4: 7.2 查看視覺化對戰樹
-uc a3 at 0.255 14.4: 7.3 查看場次頁
-uc a4 at 0.255 15.4: 7.5 查看通知中心
-uc a5 at 0.255 17.4: 7.4 接收站內通知與 Email
-uc c9 at 0.255 20.4: 3.5 優先期結束分配名額
-uc c10 at 0.255 21.4: 3.7 報名截止補位
-uc c8 at 0.255 22.4: 3.9 檢視段位截圖並退回報名
-uc c1 at 0.255 23.4: 3.1 加入隊伍
-uc c2 at 0.255 24.4: 3.3 填寫參賽資料
-uc c3 at 0.255 25.4: 3.2 退出隊伍
-uc c4 at 0.255 26.4: 3.1 建立隊伍並取得邀請連結
-uc c5 at 0.255 27.4: 3.2 隊員異動與解散隊伍
-uc c6 at 0.255 28.4: 3.4 送出報名並鎖定名單
-uc c7 at 0.255 29.4: 3.8 抽籤前撤回報名
-uc d1 at 0.745 3.9: 2.1 維護遊戲設定與學校清單
-uc d2 at 0.745 4.9: 2.2 建立賽事
-uc d3 at 0.745 5.9: 2.3 重設賽事報名連結
-uc d4 at 0.745 6.9: 2.4 分輪設定 BO 數
-uc d5 at 0.745 7.9: 2.5 抽籤前修改賽事
-uc d6 at 0.745 8.9: 2.6 取消賽事
-uc d7 at 0.745 9.9: 2.7 查閱操作紀錄
-uc d8 at 0.745 10.9: 2.2 報名開始時開放報名
-uc e1 at 0.745 13.9: 4.1 抽籤
-uc e2 at 0.745 14.9: 2.5 修改場次時間
-uc e3 at 0.745 15.9: 1.5 指派、改派或收回裁判
-uc e4 at 0.745 16.9: 3.8 抽籤後退賽
-uc f5 at 0.745 19.9: 賽事開始（轉為進行中）
-uc f6 at 0.745 20.9: 5.2 逾時判棄權
-uc f3 at 0.745 21.9: 5.3 登錄每局比分
-uc f4 at 0.745 22.9: 5.4 送出系列結果
-uc f7 at 0.745 23.9: 5.6 申訴期滿自動確認
-uc f1 at 0.745 24.9: 5.1 報到
-uc f2 at 0.745 25.9: 5.5 上傳結算截圖
-uc g3 at 0.745 28.9: 6.2 處理申訴
-uc g4 at 0.745 29.9: 6.4 查證檢舉
-uc g5 at 0.745 30.9: 6.2 申訴逾期提醒
-uc g1 at 0.745 31.9: 6.1 提出申訴
-uc g2 at 0.745 32.9: 6.3 提出檢舉
-admin -- b7
-visitor -- b1
-visitor -- b2
-account -- b3
-account -- b4
-account -- b5
-account -- b6
-org -- b8
-visitor -- a1
-visitor -- a2
-visitor -- a3
-account -- a4
-account -- a5
-timer -- c9
-timer -- c10
-org -- c8
-player -- c1
-player -- c2
-player -- c3
-leader -- c4
-leader -- c5
-leader -- c6
-leader -- c7
-admin -- d1
-org -- d2
-org -- d3
-org -- d4
-org -- d5
-org -- d6
-org -- d7
-timer -- d8
-org -- e1
-timer -- e1
-org -- e2
-org -- e3
-leader -- e4
-timer -- f5
-timer -- f6
-ref -- f3
-org -- f3
-ref -- f4
-org -- f4
-timer -- f7
-leader -- f1
-leader -- f2
+width: 700
+rowheight: 44
+package g7 0.25 0.75 1 1: 7.0 觀賽與通知
+package g1 0.25 0.75 2.6 2.6: 1.0 帳號與身分
+package g2 0.25 0.75 4.2 4.2: 2.0 賽事建立與遊戲設定
+package g3 0.25 0.75 5.8 5.8: 3.0 隊伍與報名
+package g4 0.25 0.75 7.4 7.4: 4.0 抽籤與對戰表
+package g5 0.25 0.75 9 9: 5.0 場次進行
+package g6 0.25 0.75 10.6 10.6: 6.0 申訴與檢舉
+actor visitor left 1: 訪客
+actor account left 3: 帳號
+actor player left 5.8: 選手
+actor leader left 8.9: 隊長
+actor admin right 2.6: 平台管理員
+actor org right 5.8: 主辦方
+actor ref right 8.5: 裁判
+actor timer right 10.6: 時間
+visitor -- g7
+visitor -- g1
+account -- g7
+account -- g1
+player -- g3
+leader -- g3
+leader -- g4
+leader -- g5
+leader -- g6
+admin -- g1
+admin -- g2
+org -- g1
+org -- g2
 org -- g3
 org -- g4
+org -- g5
+org -- g6
+ref -- g5
+timer -- g2
+timer -- g3
+timer -- g4
 timer -- g5
-leader -- g1
-leader -- g2
+timer -- g6
