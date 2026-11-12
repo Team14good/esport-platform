@@ -11,6 +11,7 @@ uc u5 2 5: 6.4.1 查證檢舉
 uc u6 1 5.6: 6.4.2 取消資格
 uc u7 1 7.2: 4.4 對戰表頂替
 uc u8 2 7.2: 6.2.3 申訴逾期提醒
+uc u10 2 6.2: 3.8.3 候補遞補
 cap -- u1
 cap -- u2
 org -- u3
@@ -19,4 +20,5 @@ timer -- u8
 u4 ..> u3 : extend
 u9 ..> u3 : extend
 u6 ..> u5 : extend
-u6 ..> u7 : include
+u7 ..> u6 : extend
+u10 ..> u6 : extend
