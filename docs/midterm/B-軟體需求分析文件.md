@@ -9,6 +9,7 @@
 | 1.4 | 2026-10-28 | 依 Epic 1 實作定案的規則補充 FR-1（密碼長度、重寄驗證信、登入 7 天與過期處理）、FR-40（重設後登出其他裝置、視為完成驗證）；資料表補上 ACCOUNT.credentials_version、EMAIL_DELIVERY.next_attempt_at、AUDIT_LOG.seq |
 | 1.5 | 2026-11-11 | 新增壹、五「期中實作範圍」；ERD 與資料表依程式更新（新增 PRIORITY_WINDOW_SETTLEMENT，標示期中後才建立的資料表與欄位）；FR-2、3、4、7、11、12、13、19、22、23、30、31、32、33、35 補上實作時定案的規則 |
 | 1.6 | 2026-11-12 | 簡化圖面，轉換與關聯不變：三張狀態圖以外框（複合狀態）合併重複的取消、退回、撤回與取消資格轉換；類別圖由兩張拆成四張 |
+| 1.7 | 2026-11-12 | 實體關聯圖由七張拆成九張，資料表與關聯不變：對戰分成對戰表結構與場次紀錄、爭議分成申訴與檢舉；TEAM_MEMBER 與 TOURNAMENT 的關聯改列在資料表說明；調整關聯順序，消除線條交叉 |
 
 # 壹、系統整體概述
 
@@ -662,7 +663,7 @@ stateDiagram-v2
 
 ## 五、實體關聯圖
 
-本系統的資料模型以「賽事、隊伍、報名、場次」為主軸：賽事複製遊戲設定、收到隊伍報名，抽籤後產生對戰表與場次；場次記錄每局比分、報到、結算截圖，並可能收到申訴；所有重要事件寫入事件與操作紀錄，再產生通知。完整設計共 25 張資料表，目前已建立 22 張；ROUND_SETTING、RESULT_SCREENSHOT、NOTIFICATION 三張在期中後建立。為了閱讀清楚，依功能分成七張圖呈現，跨圖出現的實體（如 ACCOUNT、TOURNAMENT、TEAM、MATCH）是同一張資料表；為了維持圖面清楚，MATCH.tournament_id、CHECK_IN.account_id 的關聯只列在資料表說明。
+本系統的資料模型以「賽事、隊伍、報名、場次」為主軸：賽事複製遊戲設定、收到隊伍報名，抽籤後產生對戰表與場次；場次記錄每局比分、報到、結算截圖，並可能收到申訴；所有重要事件寫入事件與操作紀錄，再產生通知。完整設計共 25 張資料表，目前已建立 22 張；ROUND_SETTING、RESULT_SCREENSHOT、NOTIFICATION 三張在期中後建立。為了閱讀清楚，依功能分成九張圖呈現，跨圖出現的實體（如 ACCOUNT、TOURNAMENT、TEAM、MATCH）是同一張資料表；為了維持圖面清楚，MATCH.tournament_id、CHECK_IN.account_id、TEAM_MEMBER.tournament_id（同一賽事每人限一隊的唯一鍵）的關聯只列在資料表說明。
 
 ### （一）帳號
 
@@ -678,25 +679,24 @@ erDiagram
 
 ```mermaid
 erDiagram
-  ACCOUNT ||--o{ TOURNAMENT : "主辦"
   GAME_TITLE ||--o{ RANK_TIER : "定義段位"
   GAME_TITLE ||--o{ TOURNAMENT : "被選用"
+  ACCOUNT ||--o{ TOURNAMENT : "主辦"
   TOURNAMENT ||--o{ ROUND_SETTING : "分輪 BO"
   TOURNAMENT ||--o{ REFEREE_INVITATION : "產生"
-  TOURNAMENT ||--o{ TOURNAMENT_REFEREE : "委任"
-  ACCOUNT ||--o{ TOURNAMENT_REFEREE : "擔任"
-  REFEREE_INVITATION ||--o{ TOURNAMENT_REFEREE : "接受"
   ACCOUNT ||--o{ REFEREE_INVITATION : "建立"
+  TOURNAMENT ||--o{ TOURNAMENT_REFEREE : "委任"
+  REFEREE_INVITATION ||--o{ TOURNAMENT_REFEREE : "接受"
+  ACCOUNT ||--o{ TOURNAMENT_REFEREE : "擔任"
 ```
 
 ### （三）隊伍與報名
 
 ```mermaid
 erDiagram
-  TOURNAMENT ||--o{ TEAM : "包含"
-  TEAM ||--|{ TEAM_MEMBER : "由組成"
   ACCOUNT ||--o{ TEAM_MEMBER : "參加"
-  TOURNAMENT ||--o{ TEAM_MEMBER : "同賽事限一隊"
+  TEAM ||--|{ TEAM_MEMBER : "由組成"
+  TOURNAMENT ||--o{ TEAM : "包含"
   TEAM ||--|| REGISTRATION : "對應"
   TOURNAMENT ||--o{ REGISTRATION : "收到"
   SCHOOL |o--o{ REGISTRATION : "快照學校"
@@ -709,6 +709,8 @@ erDiagram
 
 ### （四）對戰
 
+對戰表的結構：
+
 ```mermaid
 erDiagram
   TOURNAMENT ||--o| BRACKET : "擁有"
@@ -717,24 +719,38 @@ erDiagram
   TEAM |o--o{ MATCH : "勝隊"
   MATCH |o--o{ MATCH : "下一場"
   MATCH |o--o{ MATCH : "敗隊下一場"
+```
+
+每個場次的紀錄：
+
+```mermaid
+erDiagram
   ACCOUNT |o--o{ MATCH : "擔任裁判"
   ACCOUNT |o--o{ MATCH : "送出結果"
-  MATCH ||--o{ MATCH_GAME : "包含"
   ACCOUNT ||--o{ MATCH_GAME : "登錄"
+  MATCH ||--o{ MATCH_GAME : "包含"
+  MATCH ||--o| RESULT_SCREENSHOT : "佐證"
   MATCH ||--o{ CHECK_IN : "記錄報到"
   TEAM ||--o{ CHECK_IN : "報到"
-  MATCH ||--o| RESULT_SCREENSHOT : "佐證"
 ```
 
 ### （五）爭議
+
+申訴：
 
 ```mermaid
 erDiagram
   MATCH ||--o{ APPEAL : "收到"
   TOURNAMENT ||--o{ APPEAL : "所屬"
-  ACCOUNT ||--o{ APPEAL : "提出"
   TEAM ||--o{ APPEAL : "提出申訴"
+  ACCOUNT ||--o{ APPEAL : "提出"
   ACCOUNT |o--o{ APPEAL : "處理申訴"
+```
+
+檢舉：
+
+```mermaid
+erDiagram
   TOURNAMENT ||--o{ REPORT : "收到"
   TEAM ||--o{ REPORT : "提出檢舉"
   TEAM ||--o{ REPORT : "被檢舉"
