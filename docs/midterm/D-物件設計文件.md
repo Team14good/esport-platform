@@ -8,6 +8,7 @@
 | 1.3 | 2026-10-23 | 配合截止補位改由所有候補依平均段位積分補位，AllocationPolicy 的 `fill_second_teams()` 改名為 `fill_from_waitlist()` |
 | 1.4 | 2026-10-28 | 依 Epic 1 實作補上 Account.credentials_version、EmailDelivery.next_attempt_at、AuditLog.seq，以及 ApplicationStatus、DeliveryStatus 的英文值 |
 | 1.5 | 2026-11-11 | 依期中實作（已完成的 35 個 Story）更新各模組類別圖、類別職責、模組協作與列舉；期中後才實作的類別與方法集中列於貳、九 |
+| 1.6 | 2026-11-13 | 對照《軟體需求分析文件》1.8、1.9 版（issue #88）：申訴次數（同一隊對同一場只能有一筆未結案申訴）、送出報名的判定、取消資格頂替與輪空規則，均與本文件及程式一致，內容未修改 |
 
 # 壹、系統簡介
 
