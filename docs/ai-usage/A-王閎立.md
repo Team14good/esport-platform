@@ -875,3 +875,15 @@
 - 問題與修正：issue 只列出 B 的輪空定義與 4.3 兩處，AI 替換時的次數檢查發現 B 的場次狀態圖說明還有第三處，一併標示；AI 第一次寫 C 的版本紀錄時把晉級填位的章節寫成參、一，查章節標題後改成參、二；沒有另外跑 se-spec-review
 - 成熟度：L3（AI 依 issue 與既有文件修改，人審查 PR）
 - 證據：issue #88；docs/midterm 的 A 1.5、B 1.10、C 1.8、D 1.6 版本紀錄
+
+### 2026-11-15｜需求／一致性修正｜依 PR #89 審查留言修正期中文件 B、C、D
+
+- Story／範圍：期中文件（PR #89，issue #88 的後續）
+- 工具：Claude Code（Opus 5.5）＋ se-course-docs skill、排版程式 `docs/midterm/_build/build.mjs`
+- 怎麼用：讀 PR #89 兩位組員的審查留言，AI 先對照程式確認 6 個中度問題，再修改 Markdown 並重新產生 PDF 與 Word
+- AI 產出：B 1.11、C 1.9、D 1.7——輪空來源補上「準決賽以取消資格或輪空定勝負時季軍賽少了敗隊」（B 名詞定義、4.3、場次狀態圖說明、FR-21，C 參、二改用審查者給的句子）；賽事狀態圖改為提前抽籤由開放報名直接轉賽程已公布；BO 數改為賽事設定的 BO（B 6 處、D 2 處）；三張循序圖的通知步驟標示期中後；C 的 AD-14 改為四種輪詢（補 S12 每 60 秒）、加鎖改為鎖整個對戰表的場次（內文與循序圖）
+- 人做了什麼：組員審查並對照程式列出問題、決定 1～6 在本 PR 改、低度問題期末處理；人關閉開著的 Word 檔讓排版程式重新產生
+- 驗證：對照 `competition/progression.py` 的 `_HAS_LOSER`、`competition/service.py` 抽籤直接轉 PUBLISHED 與 `lock_bracket_matches`、`tournaments/service.py` 的 `data.bo`、`next-match-queries.ts` 的 60 秒、`notifications/service.py` 只處理驗證與重設密碼信；排版程式產生 B 89 頁、C 28 頁、D 33 頁，無錯誤（D 三張類別圖縮放 0.55～0.62 的警告為原有）
+- 問題與修正：上一版（issue #88）AI 照組員的敘述把「取消資格不會產生輪空」寫進 B、C，沒有對照程式，漏了準決賽以取消資格定勝負時季軍賽輪空的情況，由另一位組員在 PR 審查時對照 `progression.py` 與測試發現；本次也發現 BO 的最小每輪間隔在 B 的資料表與 D 的設計重點還有兩處同樣的寫法（審查只列了 B 第 311、1528 行），一併修正；第一次產生時 B 的 Word 檔被 Word 開著（EBUSY），請人關閉後重新產生
+- 成熟度：L3（AI 依審查意見與程式修改文件，人審查 PR 並決定範圍）
+- 證據：PR #89；docs/midterm 的 B 1.11、C 1.9、D 1.7 版本紀錄
