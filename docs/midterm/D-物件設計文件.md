@@ -8,6 +8,8 @@
 | 1.3 | 2026-10-23 | 配合截止補位改由所有候補依平均段位積分補位，AllocationPolicy 的 `fill_second_teams()` 改名為 `fill_from_waitlist()` |
 | 1.4 | 2026-10-28 | 依 Epic 1 實作補上 Account.credentials_version、EmailDelivery.next_attempt_at、AuditLog.seq，以及 ApplicationStatus、DeliveryStatus 的英文值 |
 | 1.5 | 2026-11-11 | 依期中實作（已完成的 35 個 Story）更新各模組類別圖、類別職責、模組協作與列舉；期中後才實作的類別與方法集中列於貳、九 |
+| 1.6 | 2026-11-13 | 對照《軟體需求分析文件》1.8、1.9 版（issue #88）：申訴次數（同一隊對同一場只能有一筆未結案申訴）、送出報名的判定、取消資格頂替與輪空規則，均與本文件及程式一致，內容未修改 |
+| 1.7 | 2026-11-15 | 依 PR #89 審查：貳、三 `bo_for_round()` 與 `create_tournament()` 的每輪間隔改為以賽事的 BO 數說明（主辦方建立時可修改，預設為遊戲的 BO） |
 
 # 壹、系統簡介
 
@@ -365,8 +367,8 @@ classDiagram
 **設計重點**
 
 1. 建立賽事時把遊戲的人數、BO、每局預估時間、比分型態與段位對照複製到 `game_snapshot`，之後只讀這份副本；平台管理員修改遊戲預設值不影響已建立的賽事（AD-12）。
-2. `bo_for_round()` 目前回傳快照中的預設 BO 數，每一輪相同；分輪設定在 Story 2.3 加入。BO 數只接受 1、3、5、7。程式中沒有任何依遊戲名稱的分支（AD-18）。
-3. `create_tournament()` 以 `min_round_interval()` 檢查每輪間隔不小於「棄權時限＋預設 BO 數 × 每局預估時間＋申訴期」。API 接收優先期長度 `priority_hours`，資料表存換算後的 `priority_end`。報名開始時間未到時，賽事建立為「尚未開放」，由 worker 呼叫 `open_due_registration()` 轉為開放報名；報名開始時間已過時直接為「開放報名」。
+2. `bo_for_round()` 目前回傳賽事的 BO 數（快照中的 BO，主辦方建立時可修改，預設為遊戲的 BO），每一輪相同；分輪設定在 Story 2.3 加入。BO 數只接受 1、3、5、7。程式中沒有任何依遊戲名稱的分支（AD-18）。
+3. `create_tournament()` 以 `min_round_interval()` 檢查每輪間隔不小於「棄權時限＋賽事的 BO 數 × 每局預估時間＋申訴期」。API 接收優先期長度 `priority_hours`，資料表存換算後的 `priority_end`。報名開始時間未到時，賽事建立為「尚未開放」，由 worker 呼叫 `open_due_registration()` 轉為開放報名；報名開始時間已過時直接為「開放報名」。
 4. 賽事建立後目前不能修改；修改賽事的限制（FR-9）屬於 Story 2.5。
 5. `mode` 欄位已建立，但期中只開放校園賽（表單不顯示模式，一律存 `campus`）；所有與模式有關的判斷交給 registration 模組的 `allocation.py`（AD-20）。
 6. `lock_tournament()` 是全系統鎖住賽事列的唯一入口，其他模組要加鎖時都呼叫它（AD-6）。
