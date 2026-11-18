@@ -14,7 +14,7 @@
 | 1.9 | 2026-11-13 | 依模型審查結果修正前後不一致：申訴次數以 FR-30 為準；輪空不含取消資格後無人遞補；送出報名改為包含「判定報名結果」，取消資格改為延伸對戰表頂替與候補遞補，4.0 補上優先期分配；報名狀態圖、ER 圖、類別圖、時序圖與泳道圖 2（補重新比賽）同步；訪客權限、退回通知對象、改期限制、BO 數與用詞（準決賽、場次預定開始前、已送出・待分配）統一 |
 | 1.10 | 2026-11-13 | 輪空來源中的「退賽後無人遞補」標示為期中後（Story 4.5），涵蓋壹、四名詞定義、貳、三 4.3 晉級推進與場次狀態圖說明（issue #88） |
 | 1.11 | 2026-11-15 | 依 PR #89 審查對照程式修正：輪空補上「準決賽以取消資格或輪空定勝負時，季軍賽少了敗隊」（壹、四名詞定義、貳、三 4.3、場次狀態圖說明、FR-21）；賽事狀態圖的提前抽籤改為開放報名直接轉賽程已公布；BO 數改為賽事設定的 BO（壹、五、2.2、ROUND_SETTING、FR-7）；循序圖的報名結果、下一場對手、申訴通知標示期中後 |
-| 1.12 | 2026-11-18 | 圖上標註對應的程式：泳道圖各步驟標出對應的使用案例編號（〔3.4〕等，見貳、二功能清單）與負責的函式、使用案例總覽圖的功能群標出後端模組目錄、賽事與報名狀態圖的轉換標出負責的函式、ERD 與概念類別圖標出資料表所在的 models.py、送出報名循序圖標出 API 路徑與各步驟的函式；期中後才做的轉換與步驟一併標示 |
+| 1.12 | 2026-11-18 | 圖上標註對應的程式：泳道圖各步驟標出對應的使用案例編號（〔3.4〕等，見貳、二功能清單）與負責的函式、使用案例總覽圖的功能群標出後端模組目錄、賽事與報名狀態圖的轉換標出負責的函式、ERD 與概念類別圖標出資料表所在的 models.py、送出報名循序圖把後端拆成 Router 與 Service 兩層，並標出 API 路徑與各步驟的函式；期中後才做的轉換與步驟一併標示 |
 
 # 壹、系統整體概述
 
@@ -1385,22 +1385,26 @@ classDiagram
 ```mermaid
 sequenceDiagram
   actor Cap as 隊長
-  participant API as 後端 API<br/>registration/router.py・service.py
+  participant R as Router<br/>registration/router.py
+  participant S as Service<br/>registration/service.py
   participant AP as 名額分配規則<br/>registration/allocation.py
   participant DB as 資料庫
   participant W as worker<br/>worker/jobs.py
-  Cap->>API: POST /teams/{team_id}/submission<br/>submit_registration()（同意鎖定名單）
-  API->>DB: 開始交易，lock_tournament()<br/>鎖住賽事列（FOR UPDATE）
-  API->>API: authz.ensure_captain()、<br/>player_profile.submit_blockers()<br/>檢查隊長身分、名單完整、隊員同校
+  Cap->>R: POST /teams/{team_id}/submission<br/>（同意鎖定名單）
+  R->>S: submit_registration()
+  S->>DB: 開始交易，lock_tournament()<br/>鎖住賽事列（FOR UPDATE）
+  S->>S: authz.ensure_captain()、<br/>player_profile.submit_blockers()<br/>檢查隊長身分、名單完整、隊員同校
   alt 條件不符
-    API-->>Cap: 拒絕，列出缺少的條件
+    S-->>R: 409 REGISTRATION_REQUIREMENTS_UNMET
+    R-->>Cap: 拒絕，列出缺少的條件
   else 條件符合
-    API->>AP: 依目前階段判定<br/>（先搶期：decide_first_come()）
-    AP-->>API: 已送出・待分配／正取／候補
-    API->>DB: mark_status()<br/>更新報名狀態（寫入快照）
-    API->>DB: audit.record() 寫入操作紀錄<br/>events.publish() 寫入事件（當場判定時）
-    API->>DB: session.commit()，釋放鎖
-    API-->>Cap: 已送出・待分配、正取<br/>或「候補第 N 位」
+    S->>AP: 依目前階段判定<br/>（先搶期：decide_first_come()）
+    AP-->>S: 已送出・待分配／正取／候補
+    S->>DB: mark_status()<br/>更新報名狀態（寫入快照）
+    S->>DB: audit.record() 寫入操作紀錄<br/>events.publish() 寫入事件（當場判定時）
+    S-->>R: TeamDetail
+    R->>DB: session.commit()，釋放鎖
+    R-->>Cap: 已送出・待分配、正取<br/>或「候補第 N 位」
     W->>DB: dispatch_outbox()<br/>讀取未處理的事件
     W-->>Cap: 站內通知與 Email<br/>（期中後，Story 1.6）
   end
