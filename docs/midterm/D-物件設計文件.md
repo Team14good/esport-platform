@@ -10,6 +10,7 @@
 | 1.5 | 2026-11-11 | 依期中實作（已完成的 35 個 Story）更新各模組類別圖、類別職責、模組協作與列舉；期中後才實作的類別與方法集中列於貳、九 |
 | 1.6 | 2026-11-13 | 對照《軟體需求分析文件》1.8、1.9 版（issue #88）：申訴次數（同一隊對同一場只能有一筆未結案申訴）、送出報名的判定、取消資格頂替與輪空規則，均與本文件及程式一致，內容未修改 |
 | 1.7 | 2026-11-15 | 依 PR #89 審查：貳、三 `bo_for_round()` 與 `create_tournament()` 的每輪間隔改為以賽事的 BO 數說明（主辦方建立時可修改，預設為遊戲的 BO） |
+| 1.8 | 2026-11-18 | 報名模組類別圖的每個類別標出所在檔案 registration/models.py |
 
 # 壹、系統簡介
 
@@ -381,12 +382,14 @@ classDiagram
 ```mermaid
 classDiagram
   class Team {
+    <<registration/models.py>>
     +UUID id
     +UUID tournament_id
     +str name
     +str invite_token
   }
   class TeamMember {
+    <<registration/models.py>>
     +UUID team_id
     +UUID tournament_id
     +UUID account_id
@@ -398,6 +401,7 @@ classDiagram
     +str rank_screenshot_name
   }
   class Registration {
+    <<registration/models.py>>
     +UUID id
     +UUID team_id
     +UUID tournament_id
@@ -407,6 +411,7 @@ classDiagram
     +datetime submitted_at
   }
   class PriorityWindowSettlement {
+    <<registration/models.py>>
     +UUID tournament_id
     +datetime settled_at
     +list priority_school_ids

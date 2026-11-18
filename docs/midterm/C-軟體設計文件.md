@@ -12,6 +12,7 @@
 | 1.7 | 2026-11-12 | 未登入的使用者依《軟體需求分析文件》1.8 版改稱「訪客」（壹、三使用者定位與貳、一部署圖） |
 | 1.8 | 2026-11-13 | 對照《軟體需求分析文件》1.9 版同步輪空規則（issue #88）：參、二的晉級填位不再把取消資格列為輪空來源，補上準決賽敗隊頂替後的季軍賽輪空，並標示退賽後無人遞補為期中後 |
 | 1.9 | 2026-11-15 | 依 PR #89 審查對照程式修正：參、二的輪空來源補上「準決賽以取消資格或輪空定勝負時，季軍賽少了敗隊」；參、一與循序圖改為晉級時依 id 鎖住整個對戰表的場次；AD-14 與參、六、肆、三補上 S12 我的下一場每 60 秒重抓 |
+| 1.10 | 2026-11-18 | 系統架構圖標出各服務的程式位置（compose.yml、frontend/src、backend/app/main.py、worker/jobs.py、alembic、core/storage.py、notifications/email.py）；模組依賴圖標出 backend/app/modules/ 下的目錄與事件寫入的 core/events.py |
 
 # 壹、系統簡介
 
@@ -44,12 +45,12 @@
 ```mermaid
 flowchart LR
   user["使用者瀏覽器<br/>平台管理員・主辦方・裁判<br/>隊長・選手・訪客"]
-  subgraph compose["docker compose"]
-    fe["frontend<br/>React 19 + Vite"]
-    be["backend<br/>FastAPI REST /api/v1"]
-    wk["worker<br/>定時規則・通知寄送"]
-    db[("db<br/>PostgreSQL 18")]
-    up[("uploads<br/>截圖檔案")]
+  subgraph compose["docker compose（compose.yml）"]
+    fe["frontend<br/>frontend/src<br/>React 19 + Vite"]
+    be["backend<br/>backend/app/main.py<br/>FastAPI REST /api/v1"]
+    wk["worker<br/>backend/app/worker/jobs.py<br/>定時規則・通知寄送"]
+    db[("db<br/>PostgreSQL 18<br/>遷移：backend/app/alembic")]
+    up[("uploads<br/>截圖檔案<br/>core/storage.py")]
     mp["mailpit<br/>測試信箱"]
   end
   user -->|載入頁面| fe
@@ -57,7 +58,7 @@ flowchart LR
   be --> up
   be --> db
   wk --> db
-  wk -->|SMTP| mp
+  wk -->|"SMTP（notifications/email.py）"| mp
 ```
 
 | 服務 | 職責 | 對應需求 |
@@ -179,14 +180,14 @@ Core 提供各模組共用、與業務無關的基礎功能，且不得 import �
 
 ```mermaid
 flowchart TB
-  subgraph biz["五個核心業務模組"]
+  subgraph biz["backend/app/modules/"]
     direction TB
-    disputes["disputes<br/>申訴與檢舉"] --> competition["competition<br/>抽籤、對戰表與場次"]
-    competition --> registration["registration<br/>隊伍與報名"]
-    registration --> tournaments["tournaments<br/>賽事與遊戲設定"]
-    tournaments --> identity["identity<br/>帳號與身分"]
+    disputes["disputes/<br/>申訴與檢舉"] --> competition["competition/<br/>抽籤、對戰表與場次"]
+    competition --> registration["registration/<br/>隊伍與報名"]
+    registration --> tournaments["tournaments/<br/>賽事與遊戲設定"]
+    tournaments --> identity["identity/<br/>帳號與身分"]
   end
-  biz -. 發出事件（寫入 outbox） .-> notifications["notifications<br/>通知"]
+  biz -. "發出事件（core/events.py publish()）" .-> notifications["notifications/<br/>通知"]
   notifications -- 查詢收件人 --> biz
 ```
 

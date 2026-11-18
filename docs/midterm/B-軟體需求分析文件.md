@@ -14,6 +14,7 @@
 | 1.9 | 2026-11-13 | 依模型審查結果修正前後不一致：申訴次數以 FR-30 為準；輪空不含取消資格後無人遞補；送出報名改為包含「判定報名結果」，取消資格改為延伸對戰表頂替與候補遞補，4.0 補上優先期分配；報名狀態圖、ER 圖、類別圖、時序圖與泳道圖 2（補重新比賽）同步；訪客權限、退回通知對象、改期限制、BO 數與用詞（準決賽、場次預定開始前、已送出・待分配）統一 |
 | 1.10 | 2026-11-13 | 輪空來源中的「退賽後無人遞補」標示為期中後（Story 4.5），涵蓋壹、四名詞定義、貳、三 4.3 晉級推進與場次狀態圖說明（issue #88） |
 | 1.11 | 2026-11-15 | 依 PR #89 審查對照程式修正：輪空補上「準決賽以取消資格或輪空定勝負時，季軍賽少了敗隊」（壹、四名詞定義、貳、三 4.3、場次狀態圖說明、FR-21）；賽事狀態圖的提前抽籤改為開放報名直接轉賽程已公布；BO 數改為賽事設定的 BO（壹、五、2.2、ROUND_SETTING、FR-7）；循序圖的報名結果、下一場對手、申訴通知標示期中後 |
+| 1.12 | 2026-11-18 | 圖上標註對應的程式：泳道圖各步驟標出對應的使用案例編號（〔3.4〕等，見貳、二功能清單）與負責的函式、使用案例總覽圖的功能群標出後端模組目錄、賽事與報名狀態圖的轉換標出負責的函式、ERD 與概念類別圖標出資料表所在的 models.py、送出報名循序圖標出 API 路徑與各步驟的函式；期中後才做的轉換與步驟一併標示 |
 
 # 壹、系統整體概述
 
@@ -585,19 +586,23 @@ stateDiagram-v2
     state "報名截止" as closed
     state "賽程已公布" as published
     state "進行中" as ongoing
-    [*] --> upcoming : 建立賽事，報名開始時間未到
-    [*] --> open : 建立賽事，報名開始時間已到
-    upcoming --> open : 報名開始時間到
-    open --> closed : 截止時間到
-    open --> published : 提前抽籤完成
-    closed --> open : 正取不足 2 隊，延長報名
-    closed --> published : 抽籤完成
-    published --> ongoing : 第一個場次開放報到
+    [*] --> upcoming : 建立賽事，報名開始時間未到<br/>create_tournament()
+    [*] --> open : 建立賽事，報名開始時間已到<br/>create_tournament()
+    upcoming --> open : 報名開始時間到<br/>worker：open_due_registration()
+    open --> closed : 截止時間到<br/>worker：close_registration()
+    open --> published : 提前抽籤完成<br/>competition draw()
+    closed --> open : 正取不足 2 隊，延長報名（期中後）
+    closed --> published : 抽籤完成<br/>competition draw()
+    published --> ongoing : 第一個場次開放報到<br/>worker：start_due_tournament()
   }
-  ongoing --> finished : 決賽與季軍賽皆定案
-  active --> cancelled : 主辦方取消
+  ongoing --> finished : 決賽與季軍賽皆定案<br/>advance() → _finish()
+  active --> cancelled : 主辦方取消（期中後）
   finished --> [*]
   cancelled --> [*]
+  note right of finished
+    每次轉換都呼叫 tournaments/service.py
+    transition_tournament()，查 _TRANSITIONS 表
+  end note
 ```
 
 外框「未結束」包含已結束以外的五個狀態，主辦方在其中任何一個狀態都能取消賽事。「尚未開放」時主辦方可以修改所有設定，開放報名後只能放寬。「報名開始時間到」與「第一個場次開放報到」（最早場次的預定開始前 30 分鐘）都是時間觸發，由 worker 執行。「定案」指場次已確認，或季軍賽已取消。主辦方提前抽籤時，賽事由「開放報名」直接轉為「賽程已公布」，不經過「報名截止」；正取不足 2 隊時無法提前抽籤，賽事維持開放報名。
@@ -619,24 +624,28 @@ stateDiagram-v2
     state "已送出・待分配" as pending
     state "正取" as accepted
     state "候補" as waitlisted
-    pending --> accepted : 優先期結束，正取
+    pending --> accepted : 優先期結束，正取<br/>allocate_priority_window()
     pending --> waitlisted : 優先期結束，候補
-    waitlisted --> accepted : 遞補／截止補位
+    waitlisted --> accepted : 遞補／截止補位<br/>backfill_vacancies()／fill_from_waitlist()
   }
-  [*] --> forming : 建立隊伍
-  forming --> pending : 優先期內送出
-  forming --> accepted : 送出，判定正取
+  [*] --> forming : 建立隊伍<br/>create_team()
+  forming --> pending : 優先期內送出<br/>submit_registration()
+  forming --> accepted : 送出，判定正取<br/>decide_first_come()
   forming --> waitlisted : 送出，判定候補
-  forming --> withdrawn : 解散隊伍
-  accepted --> drawn : 抽籤
-  waitlisted --> drawn : 抽籤後遞補
+  forming --> withdrawn : 解散隊伍（期中後）
+  accepted --> drawn : 抽籤<br/>mark_drawn()
+  waitlisted --> drawn : 抽籤後遞補（期中後）
   notdrawn --> leave
-  leave --> rejected : 退回
-  leave --> withdrawn : 撤回
-  notdrawn --> disqualified : 取消資格
-  rejected --> forming : 名單解鎖
-  drawn --> retired : 退賽
-  drawn --> disqualified : 取消資格
+  leave --> rejected : 退回（期中後）
+  leave --> withdrawn : 撤回（期中後）
+  notdrawn --> disqualified : 取消資格<br/>disqualify_registration()
+  rejected --> forming : 名單解鎖（期中後）
+  drawn --> retired : 退賽（期中後）
+  drawn --> disqualified : 取消資格<br/>disqualify_registration()
+  note right of forming
+    狀態都由 registration/service.py
+    mark_status() 改，查 _TRANSITIONS 表
+  end note
 ```
 
 外框「已送出、未參賽」包含已送出但尚未進入對戰表的三個狀態；從外框拉出的箭頭，代表框內每個狀態都有這個轉換；菱形是選擇節點，依主辦方退回或隊伍撤回分成兩條路徑。
@@ -712,6 +721,12 @@ erDiagram
 
 ```mermaid
 erDiagram
+  ACCOUNT["ACCOUNT（identity/models.py）"]
+  SCHOOL["SCHOOL（identity/models.py）"]
+  TOURNAMENT["TOURNAMENT（tournaments/models.py）"]
+  TEAM["TEAM（registration/models.py）"]
+  TEAM_MEMBER["TEAM_MEMBER（registration/models.py）"]
+  REGISTRATION["REGISTRATION（registration/models.py）"]
   ACCOUNT ||--o{ TEAM_MEMBER : "參加"
   TEAM ||--|{ TEAM_MEMBER : "由組成"
   TOURNAMENT ||--o{ TEAM : "包含"
@@ -731,6 +746,13 @@ erDiagram
 
 ```mermaid
 erDiagram
+  TOURNAMENT["TOURNAMENT（tournaments/models.py）"]
+  BRACKET["BRACKET（competition/models.py）"]
+  MATCH["MATCH（competition/models.py）"] {
+    uuid next_match_id FK "下一場"
+    uuid loser_next_match_id FK "敗隊下一場"
+  }
+  TEAM["TEAM（registration/models.py）"]
   TOURNAMENT ||--o| BRACKET : "擁有"
   BRACKET ||--|{ MATCH : "包含"
   TEAM |o--o{ MATCH : "A 隊"
@@ -1240,19 +1262,28 @@ classDiagram
 
 ```mermaid
 classDiagram
-  class Account
-  class School
-  class Tournament
+  class Account {
+    <<identity/models.py>>
+  }
+  class School {
+    <<identity/models.py>>
+  }
+  class Tournament {
+    <<tournaments/models.py>>
+  }
   class Team {
+    <<registration/models.py>>
     name
     invite_token
   }
   class TeamMember {
+    <<registration/models.py>>
     role
     game_account_id
     rank_score
   }
   class Registration {
+    <<registration/models.py>>
     status
     avg_rank_score
     submitted_at
@@ -1354,23 +1385,23 @@ classDiagram
 ```mermaid
 sequenceDiagram
   actor Cap as 隊長
-  participant API as 後端 API
-  participant AP as 名額分配規則
+  participant API as 後端 API<br/>registration/router.py・service.py
+  participant AP as 名額分配規則<br/>registration/allocation.py
   participant DB as 資料庫
-  participant W as worker
-  Cap->>API: 送出報名<br/>（同意鎖定名單）
-  API->>DB: 開始交易<br/>鎖住賽事列（FOR UPDATE）
-  API->>API: 檢查隊長身分、<br/>名單完整、隊員同校
+  participant W as worker<br/>worker/jobs.py
+  Cap->>API: POST /teams/{team_id}/submission<br/>submit_registration()（同意鎖定名單）
+  API->>DB: 開始交易，lock_tournament()<br/>鎖住賽事列（FOR UPDATE）
+  API->>API: authz.ensure_captain()、<br/>player_profile.submit_blockers()<br/>檢查隊長身分、名單完整、隊員同校
   alt 條件不符
     API-->>Cap: 拒絕，列出缺少的條件
   else 條件符合
-    API->>AP: 依目前階段判定
+    API->>AP: 依目前階段判定<br/>（先搶期：decide_first_come()）
     AP-->>API: 已送出・待分配／正取／候補
-    API->>DB: 更新報名狀態（寫入快照）
-    API->>DB: 寫入操作紀錄與事件
-    API->>DB: 提交交易，釋放鎖
+    API->>DB: mark_status()<br/>更新報名狀態（寫入快照）
+    API->>DB: audit.record() 寫入操作紀錄<br/>events.publish() 寫入事件（當場判定時）
+    API->>DB: session.commit()，釋放鎖
     API-->>Cap: 已送出・待分配、正取<br/>或「候補第 N 位」
-    W->>DB: 讀取未處理的事件
+    W->>DB: dispatch_outbox()<br/>讀取未處理的事件
     W-->>Cap: 站內通知與 Email<br/>（期中後，Story 1.6）
   end
 ```
