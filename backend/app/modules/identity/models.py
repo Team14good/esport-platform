@@ -177,6 +177,11 @@ def _validate_email(value: str) -> str:
     email = normalize_email(value)
     if len(email) > EMAIL_MAX_LENGTH:
         raise PydanticCustomError("email_too_long", "Email 太長")
+    # 驗證信以 ASCII 的 SMTP 寄出，@ 前面含中文等字元會寄不出去
+    if not email.rpartition("@")[0].isascii():
+        raise PydanticCustomError(
+            "email_local_not_ascii", "Email 的 @ 前面只能使用英文字母、數字與符號"
+        )
     try:
         validate_email(email, check_deliverability=False)
     except EmailNotValidError:

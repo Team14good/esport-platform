@@ -1,8 +1,20 @@
+import re
+from enum import StrEnum
+from typing import Annotated
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, Field
+from pydantic.functional_validators import AfterValidator
+from pydantic_core import PydanticCustomError
 
-from app.core.errors import BusinessError, FieldError, register_error_handlers
+from app.core.errors import (
+    BusinessError,
+    FieldError,
+    _translate_validation_error,
+    register_error_handlers,
+)
 
 
 def _client_raising(error: BusinessError) -> TestClient:
@@ -65,3 +77,112 @@ def test_field_error_uses_fastapi_validation_format() -> None:
             }
         ]
     }
+
+
+# ---------------------------------------------------------------- 422 繁中訊息
+
+
+class _Color(StrEnum):
+    RED = "red"
+    BLUE = "blue"
+
+
+def _validate_even(value: int) -> int:
+    if value % 2:
+        raise PydanticCustomError("not_even", "請輸入偶數")
+    return value
+
+
+class _Payload(BaseModel):
+    name: str
+    color: _Color
+    tags: list[str] = []
+    options: dict[str, int] = {}
+    count: int = 0
+    code: str = Field(default="ab", min_length=2, max_length=3)
+    even: Annotated[int, AfterValidator(_validate_even)] = 0
+
+
+def _validation_client() -> TestClient:
+    app = FastAPI()
+    register_error_handlers(app)
+
+    @app.post("/payload")
+    def payload(body: _Payload) -> None:  # noqa: ARG001
+        return None
+
+    return TestClient(app)
+
+
+_HAS_CJK = re.compile(r"[一-鿿]")
+
+
+def _post(body: object) -> list[dict[str, object]]:
+    response = _validation_client().post("/payload", json=body)
+
+    assert response.status_code == 422
+    detail: list[dict[str, object]] = response.json()["detail"]
+    assert detail
+    for error in detail:
+        assert {"type", "loc", "msg"} <= set(error)
+        assert _HAS_CJK.search(str(error["msg"])), error
+    return detail
+
+
+def test_validation_missing_field_is_translated_and_keeps_type_and_loc() -> None:
+    detail = _post({"color": "red"})
+
+    assert [(e["type"], e["loc"]) for e in detail] == [("missing", ["body", "name"])]
+    assert detail[0]["msg"] == "此欄位必填"
+
+
+def test_validation_unknown_enum_value_is_translated() -> None:
+    detail = _post({"name": "a", "color": "green"})
+
+    assert [(e["type"], e["loc"]) for e in detail] == [("enum", ["body", "color"])]
+    assert detail[0]["msg"] == "選項不合法"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error_type"),
+    [
+        ("tags", "x", "list_type"),
+        ("options", [], "dict_type"),
+        ("count", "abc", "int_parsing"),
+        ("name", 5, "string_type"),
+        ("code", "a", "string_too_short"),
+        ("code", "abcd", "string_too_long"),
+    ],
+)
+def test_validation_type_errors_are_translated(
+    field: str, value: object, error_type: str
+) -> None:
+    body: dict[str, object] = {"name": "a", "color": "red", field: value}
+
+    detail = _post(body)
+
+    assert [e["type"] for e in detail] == [error_type]
+    assert detail[0]["loc"] == ["body", field]
+
+
+def test_validation_body_not_an_object_is_translated() -> None:
+    detail = _post([1, 2])
+
+    assert detail[0]["loc"] == ["body"]
+
+
+def test_validation_custom_error_message_is_kept() -> None:
+    detail = _post({"name": "a", "color": "red", "even": 3})
+
+    assert [(e["type"], e["loc"], e["msg"]) for e in detail] == [
+        ("not_even", ["body", "even"], "請輸入偶數")
+    ]
+
+
+def test_validation_unmapped_builtin_type_uses_generic_message() -> None:
+    translated = _translate_validation_error(
+        {"type": "bytes_type", "loc": ["body", "x"], "msg": "Input should be bytes"}
+    )
+
+    assert translated["msg"] == "欄位內容不正確"
+    assert translated["type"] == "bytes_type"

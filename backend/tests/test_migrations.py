@@ -11,7 +11,9 @@ import app.modules  # noqa: F401
 
 
 def test_migrations_match_models(db_connection: Connection) -> None:
-    context = MigrationContext.configure(db_connection, opts={"compare_type": True})
+    context = MigrationContext.configure(
+        db_connection, opts={"compare_type": True, "compare_server_default": True}
+    )
 
     diff = compare_metadata(context, SQLModel.metadata)
 

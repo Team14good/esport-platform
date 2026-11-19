@@ -223,6 +223,40 @@ def test_invalid_fields_return_422_with_chinese_message(
     assert error["msg"] == message
 
 
+NON_ASCII_EMAIL = "主辦方@example.com"
+NON_ASCII_EMAIL_MESSAGE = "Email 的 @ 前面只能使用英文字母、數字與符號"
+
+
+def _assert_non_ascii_email_rejected(response: Any) -> None:
+    assert response.status_code == 422
+    [error] = response.json()["detail"]
+    assert error["loc"] == ["body", "email"]
+    assert error["msg"] == NON_ASCII_EMAIL_MESSAGE
+
+
+def test_register_rejects_non_ascii_local_part_without_account_or_mail(
+    client: TestClient, session: Session
+) -> None:
+    events_before = len(list(session.exec(select(OutboxEvent))))
+
+    _assert_non_ascii_email_rejected(_register(client, email=NON_ASCII_EMAIL))
+
+    assert _account(session, NON_ASCII_EMAIL) is None
+    assert len(list(session.exec(select(OutboxEvent)))) == events_before
+
+
+def test_resend_verification_rejects_non_ascii_local_part(client: TestClient) -> None:
+    _assert_non_ascii_email_rejected(_resend(client, NON_ASCII_EMAIL))
+
+
+def test_forgot_password_rejects_non_ascii_local_part(client: TestClient) -> None:
+    response = client.post(
+        f"{API}/password-reset-emails", json={"email": NON_ASCII_EMAIL}
+    )
+
+    _assert_non_ascii_email_rejected(response)
+
+
 def test_display_name_of_50_characters_is_accepted(client: TestClient) -> None:
     assert _register(client, display_name="名" * 50).status_code == 201
 
