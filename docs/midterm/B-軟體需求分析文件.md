@@ -15,8 +15,9 @@
 | 1.10 | 2026-11-13 | 輪空來源中的「退賽後無人遞補」標示為期中後（Story 4.5），涵蓋壹、四名詞定義、貳、三 4.3 晉級推進與場次狀態圖說明（issue #88） |
 | 1.11 | 2026-11-15 | 依 PR #89 審查對照程式修正：輪空補上「準決賽以取消資格或輪空定勝負時，季軍賽少了敗隊」（壹、四名詞定義、貳、三 4.3、場次狀態圖說明、FR-21）；賽事狀態圖的提前抽籤改為開放報名直接轉賽程已公布；BO 數改為賽事設定的 BO（壹、五、2.2、ROUND_SETTING、FR-7）；循序圖的報名結果、下一場對手、申訴通知標示期中後 |
 | 1.12 | 2026-11-18 | 圖上標註對應的程式：泳道圖各步驟標出對應的使用案例編號（〔3.4〕等，見貳、二功能清單）與負責的函式、使用案例總覽圖的功能群標出後端模組目錄、賽事與報名狀態圖的轉換標出負責的函式、ERD 與概念類別圖標出資料表所在的 models.py、送出報名循序圖把後端拆成 Router 與 Service 兩層，並標出 API 路徑與各步驟的函式；期中後才做的轉換與步驟一併標示 |
-| 1.13 | 2026-11-18 | 其餘的圖全部對照程式標註：使用案例圖 1.0～7.0 的每個使用案例標出負責函式，期中後的標示 Story 編號；場次狀態圖的轉換標出函式與 worker，並註明由 `transition_match()` 與 `_MATCH_TRANSITIONS` 控制；ERD 的每個實體標出所在的 models.py；循序圖（二）（三）拆成 Router 與 Service 並標出 API 路徑、函式與 worker 工作 |
+| 1.13 | 2026-11-18 | 其餘的圖全部對照程式標註：使用案例圖 1.0～7.0 的每個使用案例標出負責函式，期中後的標示 Story 編號；場次狀態圖的轉換標出函式與 worker，並註明由 `transition_match()` 與 `_MATCH_TRANSITIONS` 控制；ERD 的每個實體標出所在的檔案（資料表在各模組的 models.py，AUDIT_LOG 與 OUTBOX_EVENT 在 core/）；循序圖（二）（三）拆成 Router 與 Service 並標出 API 路徑、函式與 worker 工作 |
 | 1.14 | 2026-11-19 | 依 code review 修正：申訴期滿循序圖補上 worker 的 `confirm_expired_appeals()`；逾時判棄權標 worker 工作 `judge_forfeits`；申訴處理的函式標出實作檔 `appeals.py` |
+| 1.15 | 2026-11-19 | 依 PR #92 審查：輪空標註改為 `advance() → _confirm()`（`confirm_walkover()` 只用於取消資格）；送出報名循序圖與申訴循序圖的步驟順序、`lock_match()` 的所屬模組、回應箭頭與重新比賽的寫入內容對照程式修正；commit 改標 `worker/__init__.py` 的 `_run_item()`；使用案例圖補上漏標的函式與「報名截止自動抽籤」的期中後標示；期中後的實體與類別附上 Story 編號 |
 
 # 壹、系統整體概述
 
@@ -680,7 +681,7 @@ stateDiagram-v2
   }
   [*] --> scheduled : 抽籤後建立場次<br/>draw()
   unconfirmed --> confirmed : 一方被取消資格<br/>disqualify()
-  scheduled --> confirmed : 輪空<br/>advance() → confirm_walkover()
+  scheduled --> confirmed : 輪空<br/>advance() → _confirm()（walkover）
   scheduled --> voided : 季軍賽取消<br/>advance() → _void()
   appeal_window --> confirmed : 申訴期滿且無申訴<br/>worker：auto_confirm_expired()
   appealed --> confirmed : 主辦方維持或更正<br/>appeals.py uphold_result()／correct_result()
@@ -721,7 +722,7 @@ erDiagram
   RANK_TIER["RANK_TIER<br/>tournaments/models.py"]
   TOURNAMENT["TOURNAMENT<br/>tournaments/models.py"]
   ACCOUNT["ACCOUNT<br/>identity/models.py"]
-  ROUND_SETTING["ROUND_SETTING<br/>期中後"]
+  ROUND_SETTING["ROUND_SETTING<br/>期中後（Story 2.3）"]
   REFEREE_INVITATION["REFEREE_INVITATION<br/>tournaments/models.py"]
   TOURNAMENT_REFEREE["TOURNAMENT_REFEREE<br/>tournaments/models.py"]
   GAME_TITLE ||--|{ RANK_TIER : "定義段位"
@@ -789,7 +790,7 @@ erDiagram
   ACCOUNT["ACCOUNT<br/>identity/models.py"]
   MATCH["MATCH<br/>competition/models.py"]
   MATCH_GAME["MATCH_GAME<br/>competition/models.py"]
-  RESULT_SCREENSHOT["RESULT_SCREENSHOT<br/>期中後"]
+  RESULT_SCREENSHOT["RESULT_SCREENSHOT<br/>期中後（Story 5.7）"]
   CHECK_IN["CHECK_IN<br/>competition/models.py"]
   TEAM["TEAM<br/>registration/models.py"]
   ACCOUNT |o--o{ MATCH : "擔任裁判"
@@ -839,7 +840,7 @@ erDiagram
 ```mermaid
 erDiagram
   OUTBOX_EVENT["OUTBOX_EVENT<br/>core/events.py"]
-  NOTIFICATION["NOTIFICATION<br/>期中後"]
+  NOTIFICATION["NOTIFICATION<br/>期中後（Story 1.6）"]
   EMAIL_DELIVERY["EMAIL_DELIVERY<br/>notifications/models.py"]
   ACCOUNT["ACCOUNT<br/>identity/models.py"]
   AUDIT_LOG["AUDIT_LOG<br/>core/audit.py"]
@@ -1288,7 +1289,7 @@ classDiagram
     start_at
   }
   class RoundSetting {
-    <<期中後>>
+    <<期中後（Story 2.3）>>
     round_no
     bo
   }
@@ -1388,7 +1389,7 @@ classDiagram
     at
   }
   class ResultScreenshot {
-    <<期中後>>
+    <<期中後（Story 5.7）>>
     file_key
   }
   Tournament "1" *-- "0..1" Bracket
@@ -1432,7 +1433,7 @@ classDiagram
     reason
   }
   class Notification {
-    <<期中後>>
+    <<期中後（Story 1.6）>>
     title
     link
     read_at
@@ -1469,10 +1470,13 @@ sequenceDiagram
     S-->>R: 409 REGISTRATION_REQUIREMENTS_UNMET
     R-->>Cap: 拒絕，列出缺少的條件
   else 條件符合
-    S->>AP: 依目前階段判定<br/>（先搶期：decide_first_come()）
-    AP-->>S: 已送出・待分配／正取／候補
-    S->>DB: mark_status()<br/>更新報名狀態（寫入快照）
-    S->>DB: audit.record() 寫入操作紀錄<br/>events.publish() 寫入事件（當場判定時）
+    S->>DB: mark_status()<br/>先轉為已送出・待分配（寫入快照）<br/>audit.record() 寫入操作紀錄
+    opt 校園賽且已過優先期（先搶期）
+      S->>S: settle_priority_window()<br/>先結算優先期
+      S->>AP: decide_first_come()
+      AP-->>S: 正取／候補
+      S->>DB: mark_status() 更新狀態<br/>events.publish() 寫入事件
+    end
     S-->>R: TeamDetail
     R->>DB: session.commit()，釋放鎖
     R-->>Cap: 已送出・待分配、正取<br/>或「候補第 N 位」
@@ -1514,7 +1518,7 @@ sequenceDiagram
   S->>DB: confirm_match() 轉為已確認<br/>advance() 勝隊填入下一場
   S->>DB: 兩隊都確定時<br/>start_forfeit_clock()<br/>設定下一場的棄權期限
   S->>DB: audit.record()、events.publish()
-  W->>DB: session.commit()
+  W->>DB: 提交交易<br/>（worker/__init__.py 的 _run_item()）
   W-->>Cap: 通知下一場對手與時間<br/>（期中後，Story 1.6）
 ```
 
@@ -1533,10 +1537,12 @@ sequenceDiagram
   actor Org as 主辦方
   Cap->>R: POST /tournaments/{id}<br/>/matches/{id}/appeals<br/>（說明、截圖）
   R->>S: file_appeal()
-  S->>DB: lock_tournament()、lock_match()<br/>檢查未過申訴期限<br/>該隊沒有未結案的申訴
-  S->>C: mark_appealed()<br/>申訴期轉為申訴中
+  S->>DB: tournaments lock_tournament()<br/>檢查未過申訴期限<br/>該隊沒有未結案的申訴
+  S->>C: lock_match()、mark_appealed()<br/>申訴期轉為申訴中
   S->>DB: 建立申訴、audit.record()<br/>events.publish()
+  S-->>R: 申訴狀態
   R->>DB: session.commit()
+  R-->>Cap: 申訴已送出
   W-->>Org: 通知有新的申訴<br/>（期中後，Story 1.6）
   Note over Cap,Org: 申訴期限內，另一隊也可以提出申訴
   Org->>R: GET /organizer/tournaments/{id}<br/>/appeals，檢視申訴與各局比分
@@ -1551,11 +1557,13 @@ sequenceDiagram
   else 重新比賽（判棄權的場次）
     Org->>R: 同一路徑<br/>（設定新時間，附理由）
     R->>S: resolve_appeals()
-    S->>C: replay_match()<br/>（appeals.py）回到待開打
+    S->>C: replay_match()（appeals.py）<br/>clear_for_replay() 清除報到、比分與結果<br/>回到待開打、寫入新時間<br/>start_forfeit_clock()
   end
   C->>DB: 維持或更正：confirm_match()<br/>advance() 勝隊填入下一場<br/>棄權期限重新起算
   S->>DB: 申訴全部結案、audit.record()<br/>記錄變更前後比分<br/>events.publish()
+  S-->>R: 處理結果
   R->>DB: session.commit()
+  R-->>Org: 處理完成
   W-->>Cap: 兩隊收到處理結果與理由<br/>（期中後，Story 1.6）
 ```
 

@@ -14,7 +14,7 @@ uc u7 2 6.1: 3.8.4 候補遞補對戰表位置<br>期中後（Story 4.5）
 org -- u1
 org -- u4
 org -- u5
-timer -- u1
+timer -- u1 : 期中後（Story 4.2）
 cap -- u6
 u9 ..> u1 : extend
 u8 ..> u1 : extend

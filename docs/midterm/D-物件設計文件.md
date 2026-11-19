@@ -13,6 +13,7 @@
 | 1.8 | 2026-11-18 | 報名模組類別圖的每個類別標出所在檔案 registration/models.py |
 | 1.9 | 2026-11-18 | 軟體架構圖標出各層的程式位置；各模組類別圖的每個類別標出所在檔案；取消資格循序圖標出 API 路徑、Router 與函式 |
 | 1.10 | 2026-11-19 | 取消資格循序圖註明 `disqualify()` 由 `service.py` 轉發至 `disqualification.py`（依 code review）；逐張對照後，`Registration.avg_rank_score` 與 `PriorityWindowSettlement.priority_school_ids` 的型別改為與程式一致 |
+| 1.11 | 2026-11-19 | 依 PR #92 審查：佔位類別補上所在檔案；屬性型別後的「?」標示可為空的欄位（依程式的型別註記）；加鎖說明補上 `advance()` 鎖整個對戰表 |
 
 # 壹、系統簡介
 
@@ -71,7 +72,7 @@ PostgreSQL 是唯一的資料來源，以列鎖保證併發一致、以 trigger 
 
 各模組的類別依角色分為四類：**實體**（對應資料表的 SQLModel 類別）、**控制**（Router）、**服務**（Service，承載業務規則）、**資料存取**（Repository）。另有少數**規則**模組，是不碰資料庫的純函式，方便單元測試；共用核心還有一個**例外**類別 BusinessError，用來表示業務錯誤。Router 與 Repository 的結構在各模組都相同，因此只在帳號與身分模組呈現，其他模組的類別圖中省略。類別較多的模組分成多張圖：identity、tournaments、registration 的第一張是實體與其關聯，第二張是服務與規則；competition 的第一張是實體，第二張是服務與申訴、取消資格，第三張是判棄權工作、對 registration 的轉接與規則；共用核心的第一張是兩張資料表與寫入它們的服務，第二張是其餘彼此沒有關聯的共用工具。
 
-程式中的 Service、Repository 與規則都是 Python 模組裡的函式，不是 class。類別圖以一個「類別」代表一個模組檔（例如 `CompetitionService` 代表 `competition/service.py`），並省略每個函式都有的第一個參數 `session`，以及上傳檔案的 `content_type`、`file_name` 與 `for_update` 等附帶參數；參數過多的規則函式以 `...` 表示；對照方式見各節的職責表。
+程式中的 Service、Repository 與規則都是 Python 模組裡的函式，不是 class。類別圖以一個「類別」代表一個模組檔（例如 `CompetitionService` 代表 `competition/service.py`），並省略每個函式都有的第一個參數 `session`；屬性型別後的「?」表示欄位可為空（NULL），以及上傳檔案的 `content_type`、`file_name` 與 `for_update` 等附帶參數；參數過多的規則函式以 `...` 表示；對照方式見各節的職責表。
 
 ## 一、共用核心 core
 
@@ -83,14 +84,14 @@ classDiagram
   class AuditLog {
     <<core/audit.py>>
     +UUID id
-    +int seq
-    +UUID actor_id
-    +UUID tournament_id
+    +int? seq
+    +UUID? actor_id
+    +UUID? tournament_id
     +str action
     +str entity_type
     +UUID entity_id
-    +json before
-    +json after
+    +json? before
+    +json? after
     +datetime at
   }
   class OutboxEvent {
@@ -99,7 +100,7 @@ classDiagram
     +str type
     +json payload
     +datetime created_at
-    +datetime processed_at
+    +datetime? processed_at
   }
   class Audit {
     <<core/audit.py>>
@@ -177,7 +178,7 @@ classDiagram
     +str hashed_password
     +bool email_verified
     +str display_name
-    +UUID school_id
+    +UUID? school_id
     +bool is_platform_admin
     +bool is_organizer
     +int credentials_version
@@ -194,7 +195,7 @@ classDiagram
     +TokenPurpose purpose
     +str token_hash
     +datetime expires_at
-    +datetime used_at
+    +datetime? used_at
   }
   class OrganizerApplication {
     <<identity/models.py>>
@@ -203,7 +204,7 @@ classDiagram
     +str club_name
     +UUID school_id
     +ApplicationStatus status
-    +str reject_reason
+    +str? reject_reason
   }
   School "1" --> "*" Account
   School "1" --> "*" OrganizerApplication
@@ -319,7 +320,7 @@ classDiagram
     +int round_interval_minutes
     +int forfeit_minutes
     +int appeal_minutes
-    +str livestream_url
+    +str? livestream_url
     +json game_snapshot
   }
   class RefereeInvitation {
@@ -346,8 +347,12 @@ classDiagram
 
 ```mermaid
 classDiagram
-  class Tournament
-  class GameTitle
+  class Tournament {
+    <<tournaments/models.py>>
+  }
+  class GameTitle {
+    <<tournaments/models.py>>
+  }
   class TournamentService {
     <<tournaments/service.py>>
     +list_games() list
@@ -417,11 +422,11 @@ classDiagram
     +UUID tournament_id
     +UUID account_id
     +MemberRole role
-    +str game_account_id
-    +str rank_tier
-    +int rank_score
-    +str rank_screenshot_key
-    +str rank_screenshot_name
+    +str? game_account_id
+    +str? rank_tier
+    +int? rank_score
+    +str? rank_screenshot_key
+    +str? rank_screenshot_name
   }
   class Registration {
     <<registration/models.py>>
@@ -429,9 +434,9 @@ classDiagram
     +UUID team_id
     +UUID tournament_id
     +RegistrationStatus status
-    +UUID school_id
-    +Decimal avg_rank_score
-    +datetime submitted_at
+    +UUID? school_id
+    +Decimal? avg_rank_score
+    +datetime? submitted_at
   }
   class PriorityWindowSettlement {
     <<registration/models.py>>
@@ -529,7 +534,7 @@ classDiagram
     +int rounds
     +int team_count
     +datetime drawn_at
-    +datetime start_handled_at
+    +datetime? start_handled_at
   }
   class Match {
     <<competition/models.py>>
@@ -540,24 +545,24 @@ classDiagram
     +int slot_no
     +bool is_third_place
     +str code
-    +UUID team_a_id
-    +UUID team_b_id
+    +UUID? team_a_id
+    +UUID? team_b_id
     +bool bye_a
     +bool bye_b
-    +UUID referee_account_id
+    +UUID? referee_account_id
     +datetime scheduled_at
     +MatchStatus status
-    +MatchOutcome outcome
-    +UUID winner_id
+    +MatchOutcome? outcome
+    +UUID? winner_id
     +int wins_a
     +int wins_b
-    +UUID submitted_by
-    +datetime submitted_at
-    +datetime confirmed_at
-    +datetime forfeit_deadline
-    +datetime appeal_deadline
-    +UUID next_match_id
-    +UUID loser_next_match_id
+    +UUID? submitted_by
+    +datetime? submitted_at
+    +datetime? confirmed_at
+    +datetime? forfeit_deadline
+    +datetime? appeal_deadline
+    +UUID? next_match_id
+    +UUID? loser_next_match_id
     +datetime updated_at
   }
   class MatchGame {
@@ -565,8 +570,8 @@ classDiagram
     +UUID match_id
     +int game_no
     +str winner_side
-    +int score_a
-    +int score_b
+    +int? score_a
+    +int? score_b
     +UUID recorded_by
     +datetime recorded_at
   }
@@ -586,7 +591,9 @@ classDiagram
 ```mermaid
 classDiagram
   direction LR
-  class Match
+  class Match {
+    <<competition/models.py>>
+  }
   class CompetitionService {
     <<competition/service.py>>
     +draw(tournament_id, actor_id, rng)
@@ -634,7 +641,9 @@ classDiagram
 ```mermaid
 classDiagram
   direction LR
-  class CompetitionService
+  class CompetitionService {
+    <<competition/service.py>>
+  }
   class ForfeitJob {
     <<competition/forfeit_job.py>>
     +forfeit_next_due(ports) bool
@@ -686,7 +695,7 @@ classDiagram
 
 1. `bracket.py` 與資料庫無關：設 P 為不小於正取隊數的最小 2 的次方，輪數為 log₂P，第一輪輪空數為 P 減正取隊數。哪些隊伍輪空由亂數決定，輪空的位置平均分散；輪空數不超過 P ÷ 4 時，兩支輪空隊伍不會在第二輪相遇。亂數來源以參數傳入，測試時可固定，驗證「8 隊 3 輪 8 場、13 隊 4 輪 13 場」等規則。開賽時間已過時 `draw()` 拒絕抽籤（`TOURNAMENT_START_PASSED`）。
 2. `schedule.plan_round_starts()` 讓同一輪排在同一時段，下一輪晚於上一輪「每輪間隔」；若上一輪的 BO 數使「棄權時限＋BO 數 × 每局預估時間＋申訴期」超過每輪間隔，下一輪順延到這個下限。系統不自動分批，一位裁判可以被指派到多個場次。`reschedule_match()` 的新時間最早為現在進位到整分後加 30 分鐘，且不早於會進入本場的場次（`next_match_id` 或 `loser_next_match_id` 指向本場的那幾場，不是整個前一輪）中最晚的預定時間加上這些場次的最小間隔；最晚為下一場（準決賽取決賽與季軍賽中較早者）減本場最小間隔，決賽與季軍賽沒有上限；棄權期限已過的場次不能修改。
-3. 任何 Match 的寫入都先 `lock_match()`，鎖住後再檢查狀態與期限；同時需要賽事鎖時，先鎖賽事、再依 id 遞增鎖場次（AD-6）。會連鎖到下一場或賽事狀態的流程（`auto_confirm_expired()`、判棄權、處理申訴後的 `advance()`）一開始就先鎖賽事列。
+3. 任何 Match 的寫入都先 `lock_match()`，鎖住後再檢查狀態與期限；同時需要賽事鎖時，先鎖賽事、再依 id 遞增鎖場次（AD-6）。會連鎖到下一場或賽事狀態的流程（`auto_confirm_expired()`、判棄權、處理申訴後的 `advance()`）先鎖賽事列，`advance()` 再依 id 遞增鎖住整個對戰表的場次。
 4. 場次狀態只能經 `transition_match()` 改變，依《軟體需求分析文件》場次狀態圖的轉換表檢查（AD-11）；「已取消」只用於準決賽沒有產生勝隊時的季軍賽。
 5. 棄權期限：`start_forfeit_clock()` 在場次兩隊都確定時設定 `forfeit_deadline`＝max（預定開始時間, 現在）＋棄權時限。`draw()` 為所有兩隊都已確定的場次呼叫（第一輪，以及兩支輪空隊伍在第二輪相遇的場次）；之後由 `advance()` 與頂替在填入第二支隊伍時呼叫；`reschedule_match()` 會重算。隊伍未確定時 `forfeit_deadline` 為空，worker 不會選到它，`check_in()` 也拒絕報到（`MATCH_TEAMS_PENDING`）。前一場申訴未處理時的「暫停」就是這個狀況，不需要額外的狀態。
 6. `advance()` 在場次確認後依 `progression.advance()` 的結果把勝隊填入下一場、準決賽敗隊填入季軍賽（`loser_next_match_id`）。若下一場某一方確定不會有隊伍，把該場以 `walkover` 確認並繼續推進；準決賽沒有產生勝隊時，季軍賽轉為「已取消」。填位後由私有的 `_unassign_if_member()` 檢查新填入的那一隊：指派的裁判是它的隊員時，取消該場的指派並發出 `RefereeUnassigned`。公開的 `unassign_referee_if_member()` 檢查場次兩隊，只在取消資格頂替後由 `disqualification.py` 呼叫。
@@ -710,13 +719,13 @@ classDiagram
     +UUID filed_by
     +datetime filed_at
     +str description
-    +str attachment_key
+    +str? attachment_key
     +AppealStatus status
-    +AppealDecision decision
-    +str reason
-    +UUID handled_by
-    +datetime handled_at
-    +datetime reminded_at
+    +AppealDecision? decision
+    +str? reason
+    +UUID? handled_by
+    +datetime? handled_at
+    +datetime? reminded_at
   }
   class Report {
     <<disputes/models.py>>
@@ -727,11 +736,11 @@ classDiagram
     +UUID reported_team_id
     +datetime filed_at
     +str description
-    +str attachment_key
+    +str? attachment_key
     +ReportStatus status
-    +str reason
-    +UUID handled_by
-    +datetime handled_at
+    +str? reason
+    +UUID? handled_by
+    +datetime? handled_at
   }
   class DisputeService {
     <<disputes/service.py>>
@@ -750,7 +759,9 @@ classDiagram
     +count_open_disputes(tournament_id, actor_id)
     +get_team_disqualification(team_id, account_id)
   }
-  class CompetitionService
+  class CompetitionService {
+    <<competition/service.py>>
+  }
   DisputeService --> Appeal
   DisputeService --> Report
   DisputeService ..> CompetitionService : 申訴標記、維持或更正、重新比賽、取消資格
@@ -783,7 +794,7 @@ classDiagram
     +UUID account_id
     +DeliveryStatus status
     +int attempts
-    +str last_error
+    +str? last_error
     +datetime next_attempt_at
     +datetime created_at
   }

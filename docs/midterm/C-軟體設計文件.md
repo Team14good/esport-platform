@@ -14,6 +14,7 @@
 | 1.9 | 2026-11-15 | 依 PR #89 審查對照程式修正：參、二的輪空來源補上「準決賽以取消資格或輪空定勝負時，季軍賽少了敗隊」；參、一與循序圖改為晉級時依 id 鎖住整個對戰表的場次；AD-14 與參、六、肆、三補上 S12 我的下一場每 60 秒重抓 |
 | 1.10 | 2026-11-18 | 系統架構圖標出各服務的程式位置（compose.yml、frontend/src、backend/app/main.py、worker/jobs.py、alembic、core/storage.py、notifications/email.py）；模組依賴圖標出 backend/app/modules/ 下的目錄與事件寫入的 core/events.py |
 | 1.11 | 2026-11-18 | 分層架構圖、送出報名與申訴期滿自動確認的循序圖、事件與通知流程圖標出程式檔與函式（router.py、service.py、repository.py、worker/jobs.py、core/*.py） |
+| 1.12 | 2026-11-19 | 依 PR #92 審查：申訴期滿自動確認的加鎖順序改為與程式一致（先鎖賽事、再鎖本場，確認時 `advance()` 才鎖整個對戰表）；送出報名循序圖的判定改為先轉已送出・待分配、先搶期才判定；commit 改標 `worker/__init__.py` 的 `_run_item()` |
 
 # 壹、系統簡介
 
@@ -235,15 +236,18 @@ sequenceDiagram
   S->>T: lock_tournament()
   T->>DB: SELECT …<br/>FOR UPDATE
   S->>S: authz.ensure_captain()、player_profile.submit_blockers()<br/>鎖住後才確認隊長、名單完整、同校
-  S->>AP: AllocationPolicy<br/>decide_first_come() 判定正取／候補
-  S->>DB: mark_status()<br/>寫入 Registration（含三個快照欄位）
-  S->>DB: audit.record()、events.publish()<br/>寫入 AuditLog、OutboxEvent
+  S->>DB: mark_status()<br/>先轉為已送出・待分配（含三個快照欄位）<br/>audit.record() 寫入 AuditLog
+  opt 校園賽且已過優先期（先搶期）
+    S->>S: settle_priority_window()
+    S->>AP: decide_first_come() 判定正取／候補
+    S->>DB: mark_status()、events.publish()<br/>更新狀態並寫入 OutboxEvent
+  end
   S-->>R: TeamDetail
   R->>DB: session.commit()（釋放鎖）
   R-->>Cap: 200 目前的報名狀態
 ```
 
-場次也採相同做法：報到、登錄比分、送出系列結果、更正、判棄權、提出申訴、自動確認、晉級填位，都先鎖住該場次的資料列。同一個交易同時需要兩種鎖時，順序固定為「先賽事，再依 id 遞增鎖場次」，避免兩條流程以相反順序加鎖而造成死結。會連鎖到下一場或賽事狀態的流程（申訴期滿自動確認、處理申訴）不能先鎖本場、再去鎖下一場或賽事：它們一開始就先鎖賽事列，再依 id 遞增一次鎖住整個對戰表的場次（`lock_bracket_matches`），本場、下一場與季軍賽都在其中，連鎖的輪空確認也不必另外加鎖。
+場次也採相同做法：報到、登錄比分、送出系列結果、更正、判棄權、提出申訴、自動確認、晉級填位，都先鎖住該場次的資料列。同一個交易同時需要兩種鎖時，順序固定為「先賽事，再依 id 遞增鎖場次」，避免兩條流程以相反順序加鎖而造成死結。會連鎖到下一場或賽事狀態的流程（申訴期滿自動確認、處理申訴）不能先鎖本場、再去鎖下一場或賽事：它們先鎖賽事列，再以 `lock_match()` 鎖本場並重新檢查；確認時 `advance()` 才依 id 遞增一次鎖住整個對戰表的場次（`lock_bracket_matches()`），下一場與季軍賽都在其中，連鎖的輪空確認也不必另外加鎖。
 
 ## 二、定時規則與自動晉級
 
@@ -263,12 +267,12 @@ sequenceDiagram
   participant N as notifications<br/>notifications/service.py
   loop 每 15～30 秒
     W->>C: confirm_expired_appeals()<br/>→ auto_confirm_expired()（每筆獨立交易）
-    C->>DB: 查詢申訴期已過且未處理的場次<br/>先鎖賽事列，再 lock_bracket_matches()<br/>依 id 鎖整個對戰表的場次，重新檢查狀態與期限
-    C->>C: confirm_match()<br/>transition_match() → 已確認
-    C->>C: advance()<br/>勝隊填入下一場
+    C->>DB: 查詢申訴期已過且未處理的場次<br/>lock_tournament()、lock_match()<br/>鎖住後重新檢查狀態與期限
+    C->>C: confirm_match()（savepoint 內）<br/>transition_match() → 已確認<br/>結果不自洽的場次跳過
+    C->>C: advance()<br/>lock_bracket_matches() 鎖整個對戰表<br/>勝隊填入下一場
     C->>C: 下一場兩隊確定時<br/>start_forfeit_clock()
     C->>DB: audit.record()（system）<br/>events.publish()
-    W->>DB: session.commit()
+    W->>DB: 提交交易<br/>（worker/__init__.py 的 _run_item()）
   end
   W->>DB: dispatch_outbox()<br/>讀取未處理的 OutboxEvent
   W->>N: dispatch_event()
