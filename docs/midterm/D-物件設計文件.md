@@ -11,6 +11,7 @@
 | 1.6 | 2026-11-13 | 對照《軟體需求分析文件》1.8、1.9 版（issue #88）：申訴次數（同一隊對同一場只能有一筆未結案申訴）、送出報名的判定、取消資格頂替與輪空規則，均與本文件及程式一致，內容未修改 |
 | 1.7 | 2026-11-15 | 依 PR #89 審查：貳、三 `bo_for_round()` 與 `create_tournament()` 的每輪間隔改為以賽事的 BO 數說明（主辦方建立時可修改，預設為遊戲的 BO） |
 | 1.8 | 2026-11-18 | 報名模組類別圖的每個類別標出所在檔案 registration/models.py |
+| 1.9 | 2026-11-18 | 軟體架構圖標出各層的程式位置；各模組類別圖的每個類別標出所在檔案；取消資格循序圖標出 API 路徑、Router 與函式 |
 
 # 壹、系統簡介
 
@@ -24,16 +25,16 @@
 
 ```mermaid
 flowchart TB
-  fe["前端客戶端層<br/>React 單頁應用<br/>自動產生的 API client"]
-  gw["API 與權限邊界<br/>/api/v1・登入驗證<br/>帳號層級權限"]
-  subgraph app["後端應用層"]
+  fe["前端客戶端層<br/>frontend/src・React 單頁應用<br/>自動產生的 API client（src/client）"]
+  gw["API 與權限邊界<br/>backend/app/main.py・/api/v1<br/>identity/deps.py 帳號層級權限"]
+  subgraph app["後端應用層（backend/app/modules/）"]
     direction LR
-    id["identity<br/>帳號與身分"] ~~~ tn["tournaments<br/>賽事與遊戲設定"] ~~~ rg["registration<br/>隊伍與報名"]
-    cp["competition<br/>抽籤、對戰表與場次"] ~~~ dp["disputes<br/>申訴與檢舉"] ~~~ nt["notifications<br/>通知"]
+    id["identity/<br/>帳號與身分"] ~~~ tn["tournaments/<br/>賽事與遊戲設定"] ~~~ rg["registration/<br/>隊伍與報名"]
+    cp["competition/<br/>抽籤、對戰表與場次"] ~~~ dp["disputes/<br/>申訴與檢舉"] ~~~ nt["notifications/<br/>通知"]
   end
-  wk["背景工作程序 worker<br/>定時規則・outbox 事件"]
-  core["Core 共用核心<br/>audit・events・authz<br/>clock・storage・errors"]
-  db[("資料儲存層<br/>PostgreSQL 18<br/>uploads volume")]
+  wk["背景工作程序 worker<br/>backend/app/worker/jobs.py<br/>定時規則・outbox 事件"]
+  core["Core 共用核心<br/>backend/app/core/<br/>audit・events・authz・clock・storage・errors"]
+  db[("資料儲存層<br/>PostgreSQL 18<br/>alembic 遷移・uploads volume")]
   fe --> gw --> app
   wk --> app
   app --> core
@@ -79,6 +80,7 @@ PostgreSQL 是唯一的資料來源，以列鎖保證併發一致、以 trigger 
 classDiagram
   direction LR
   class AuditLog {
+    <<core/audit.py>>
     +UUID id
     +int seq
     +UUID actor_id
@@ -91,6 +93,7 @@ classDiagram
     +datetime at
   }
   class OutboxEvent {
+    <<core/events.py>>
     +UUID id
     +str type
     +json payload
@@ -98,10 +101,12 @@ classDiagram
     +datetime processed_at
   }
   class Audit {
+    <<core/audit.py>>
     +record(actor_id, tournament_id, action, entity_type, entity_id, before, after)
     +list_for_tournament(tournament_id) list
   }
   class Events {
+    <<core/events.py>>
     +publish(event) OutboxEvent
     +get(event_id) OutboxEvent
     +next_unprocessed() OutboxEvent
@@ -116,23 +121,27 @@ classDiagram
 classDiagram
   direction LR
   class Clock {
+    <<core/clock.py>>
     +now() datetime
     +freeze(at)
     +advance(delta)
     +reset()
   }
   class Authz {
+    <<core/authz.py>>
     +ensure_tournament_owner(tournament, account_id)
     +ensure_captain(team, account_id, message)
     +is_tournament_referee(referee_tournament_ids, tournament_id) bool
     +ensure_tournament_referee(referee_tournament_ids, tournament_id)
   }
   class Storage {
+    <<core/storage.py>>
     +save_image(stream, content_type) str
     +open_file(key) stream
     +delete_file(key)
   }
   class BusinessError {
+    <<core/errors.py>>
     +str code
     +str message
   }
@@ -161,6 +170,7 @@ classDiagram
 ```mermaid
 classDiagram
   class Account {
+    <<identity/models.py>>
     +UUID id
     +str email
     +str hashed_password
@@ -172,10 +182,12 @@ classDiagram
     +int credentials_version
   }
   class School {
+    <<identity/models.py>>
     +UUID id
     +str name
   }
   class AccountToken {
+    <<identity/models.py>>
     +UUID id
     +UUID account_id
     +TokenPurpose purpose
@@ -184,6 +196,7 @@ classDiagram
     +datetime used_at
   }
   class OrganizerApplication {
+    <<identity/models.py>>
     +UUID id
     +UUID account_id
     +str club_name
@@ -200,6 +213,7 @@ classDiagram
 ```mermaid
 classDiagram
   class IdentityRouter {
+    <<identity/router.py>>
     +register()
     +login()
     +verify_email()
@@ -210,6 +224,7 @@ classDiagram
     +list_schools()
   }
   class IdentityService {
+    <<identity/service.py>>
     +register(email, password, display_name, school_id, redirect)
     +verify_email(token)
     +resend_verification(email, redirect)
@@ -234,6 +249,7 @@ classDiagram
     +get_display_names(account_ids) dict
   }
   class IdentityRepository {
+    <<identity/repository.py>>
     +get_account_by_email(email)
     +get_pending_application(account_id)
     +add_account(account)
@@ -271,6 +287,7 @@ classDiagram
 classDiagram
   direction LR
   class GameTitle {
+    <<tournaments/models.py>>
     +UUID id
     +str name
     +int starters
@@ -280,11 +297,13 @@ classDiagram
     +ScoreType score_type
   }
   class RankTier {
+    <<tournaments/models.py>>
     +UUID game_id
     +str name
     +int score
   }
   class Tournament {
+    <<tournaments/models.py>>
     +UUID id
     +UUID organizer_id
     +UUID game_id
@@ -303,6 +322,7 @@ classDiagram
     +json game_snapshot
   }
   class RefereeInvitation {
+    <<tournaments/models.py>>
     +UUID id
     +UUID tournament_id
     +str token
@@ -311,6 +331,7 @@ classDiagram
     +datetime expires_at
   }
   class TournamentReferee {
+    <<tournaments/models.py>>
     +UUID tournament_id
     +UUID account_id
     +UUID invitation_id
@@ -327,6 +348,7 @@ classDiagram
   class Tournament
   class GameTitle
   class TournamentService {
+    <<tournaments/service.py>>
     +list_games() list
     +get_game(game_id) GameRead
     +create_game(actor_id, data)
@@ -424,6 +446,7 @@ classDiagram
 ```mermaid
 classDiagram
   class RegistrationService {
+    <<registration/service.py>>
     +create_team(tournament_id, account_id, name)
     +preview_invite(token)
     +join_team(token, account_id)
@@ -449,6 +472,7 @@ classDiagram
     +is_captain(team_id, account_id) bool
   }
   class AllocationPolicy {
+    <<registration/allocation.py>>
     +allocate_priority_window(candidates, capacity)
     +decide_first_come(...)
     +waitlist_order(...)
@@ -457,6 +481,7 @@ classDiagram
     +sort_key(candidate)
   }
   class PlayerProfile {
+    <<registration/player_profile.py>>
     +rank_score_for(rank_tiers, rank_tier) int
     +validate_game_account_id(value) str
     +average_rank_score(scores) float
@@ -496,6 +521,7 @@ classDiagram
 classDiagram
   direction LR
   class Bracket {
+    <<competition/models.py>>
     +UUID id
     +UUID tournament_id
     +int size
@@ -505,6 +531,7 @@ classDiagram
     +datetime start_handled_at
   }
   class Match {
+    <<competition/models.py>>
     +UUID id
     +UUID bracket_id
     +UUID tournament_id
@@ -533,6 +560,7 @@ classDiagram
     +datetime updated_at
   }
   class MatchGame {
+    <<competition/models.py>>
     +UUID match_id
     +int game_no
     +str winner_side
@@ -542,6 +570,7 @@ classDiagram
     +datetime recorded_at
   }
   class CheckIn {
+    <<competition/models.py>>
     +UUID match_id
     +UUID team_id
     +UUID account_id
@@ -558,6 +587,7 @@ classDiagram
   direction LR
   class Match
   class CompetitionService {
+    <<competition/service.py>>
     +draw(tournament_id, actor_id, rng)
     +get_draw_status(tournament_id, actor_id)
     +get_public_bracket(tournament_id)
@@ -585,12 +615,14 @@ classDiagram
     +get_replay_window(match_id)
   }
   class Appeals {
+    <<competition/appeals.py>>
     +mark_appealed(match_id)
     +uphold_result(match_id, actor_id)
     +correct_result(match_id, games, actor_id)
     +replay_match(match_id, scheduled_at, actor_id)
   }
   class Disqualification {
+    <<competition/disqualification.py>>
     +disqualify(tournament_id, team_id, actor_id)
   }
   CompetitionService --> Match
@@ -603,10 +635,12 @@ classDiagram
   direction LR
   class CompetitionService
   class ForfeitJob {
+    <<competition/forfeit_job.py>>
     +forfeit_next_due(ports) bool
     +make_forfeit_job(ports)
   }
   class RegistrationPort {
+    <<competition/registration_port.py>>
     +finalize_for_draw(tournament_id, actor_id)
     +list_accepted_teams(tournament_id)
     +mark_drawn(tournament_id, team_ids, actor_id)
@@ -617,6 +651,7 @@ classDiagram
     +disqualify_registration(team_id, actor_id)
   }
   class Rules {
+    <<competition/bracket.py、schedule.py、scoring.py、checkin.py、forfeit.py、progression.py>>
     bracket.plan(team_count)
     bracket.assign(team_ids, bracket_plan, rng)
     schedule.plan_round_starts(...)
@@ -666,6 +701,7 @@ classDiagram
 ```mermaid
 classDiagram
   class Appeal {
+    <<disputes/models.py>>
     +UUID id
     +UUID tournament_id
     +UUID match_id
@@ -682,6 +718,7 @@ classDiagram
     +datetime reminded_at
   }
   class Report {
+    <<disputes/models.py>>
     +UUID id
     +UUID tournament_id
     +UUID reporter_team_id
@@ -696,6 +733,7 @@ classDiagram
     +datetime handled_at
   }
   class DisputeService {
+    <<disputes/service.py>>
     +file_appeal(tournament_id, match_id, account_id, description, attachment)
     +get_appeal_state(tournament_id, match_id, account_id)
     +resolve_appeals(tournament_id, match_id, actor_id, decision, reason, games, replay_at)
@@ -738,6 +776,7 @@ classDiagram
 ```mermaid
 classDiagram
   class EmailDelivery {
+    <<notifications/models.py>>
     +UUID id
     +UUID event_id
     +UUID account_id
@@ -748,15 +787,18 @@ classDiagram
     +datetime created_at
   }
   class NotificationService {
+    <<notifications/service.py>>
     +dispatch_event(event)
     +send_next_email(sender) bool
     +verification_link(token, redirect) str
     +reset_password_link(token) str
   }
   class EmailSender {
+    <<notifications/email.py>>
     +send(message)
   }
   class SmtpEmailSender {
+    <<notifications/email.py>>
     +send(message)
   }
   NotificationService --> EmailDelivery
@@ -801,28 +843,32 @@ classDiagram
 ```mermaid
 sequenceDiagram
   actor Org as 主辦方
-  participant D as DisputeService
-  participant C as CompetitionService
-  participant RS as RegistrationService
+  participant R as Router<br/>disputes/router.py
+  participant D as DisputeService<br/>disputes/service.py
+  participant C as CompetitionService<br/>competition/service.py
+  participant RS as RegistrationService<br/>registration/service.py
   participant DB as PostgreSQL
-  Org->>D: resolve_report()<br/>屬實（附理由）
+  Org->>R: POST /organizer/reports/{report_id}/resolution<br/>屬實（附理由）
+  R->>D: resolve_report()
   D->>D: 確認是該賽事主辦方、<br/>賽事尚未結束或取消
   D->>C: disqualify()
   C->>DB: 先鎖賽事列，<br/>再依 id 遞增鎖場次
-  C->>C: _plan() 唯讀判斷處理方式<br/>對手未定時回 409、不改資料
-  C->>RS: disqualify_registration()<br/>→ 取消資格
+  C->>C: disqualification._plan() 唯讀判斷處理方式<br/>對手未定時回 409、不改資料
+  C->>RS: registration_port.disqualify_registration()<br/>→ disqualify_registration() 取消資格
   alt 尚未比賽，或沒有可頂替的隊伍
-    C->>DB: 以取消資格判對手獲勝
+    C->>DB: _award() 以取消資格判對手獲勝
   else 已贏過、正在等下一場
-    C->>DB: 由最近一場輸給它的<br/>隊伍頂替（決賽、季軍賽<br/>見 FR-22）
+    C->>DB: _replace() 由最近一場輸給它的<br/>隊伍頂替（決賽、季軍賽<br/>見 FR-22）
   else 有未結束的場次
     C->>DB: 該場判對手獲勝並確認<br/>回傳受影響的場次
   else 已被淘汰
     Note over C: 對戰表不變
   end
-  C->>DB: 寫入操作紀錄與事件<br/>（core.audit、core.events）
+  C->>DB: audit.record()、events.publish()<br/>（core/audit.py、core/events.py）
   D->>DB: 檢舉與受影響的申訴結案，<br/>寫入理由與處理者
-  D-->>Org: 處理完成<br/>（由 Router 提交交易）
+  D-->>R: 處理完成
+  R->>DB: session.commit()
+  R-->>Org: 回應處理結果
 ```
 
 ## 九、期中後預計新增的類別與方法

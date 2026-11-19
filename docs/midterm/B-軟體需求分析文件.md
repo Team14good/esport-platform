@@ -15,6 +15,7 @@
 | 1.10 | 2026-11-13 | 輪空來源中的「退賽後無人遞補」標示為期中後（Story 4.5），涵蓋壹、四名詞定義、貳、三 4.3 晉級推進與場次狀態圖說明（issue #88） |
 | 1.11 | 2026-11-15 | 依 PR #89 審查對照程式修正：輪空補上「準決賽以取消資格或輪空定勝負時，季軍賽少了敗隊」（壹、四名詞定義、貳、三 4.3、場次狀態圖說明、FR-21）；賽事狀態圖的提前抽籤改為開放報名直接轉賽程已公布；BO 數改為賽事設定的 BO（壹、五、2.2、ROUND_SETTING、FR-7）；循序圖的報名結果、下一場對手、申訴通知標示期中後 |
 | 1.12 | 2026-11-18 | 圖上標註對應的程式：泳道圖各步驟標出對應的使用案例編號（〔3.4〕等，見貳、二功能清單）與負責的函式、使用案例總覽圖的功能群標出後端模組目錄、賽事與報名狀態圖的轉換標出負責的函式、ERD 與概念類別圖標出資料表所在的 models.py、送出報名循序圖把後端拆成 Router 與 Service 兩層，並標出 API 路徑與各步驟的函式；期中後才做的轉換與步驟一併標示 |
+| 1.13 | 2026-11-18 | 其餘的圖全部對照程式標註：使用案例圖 1.0～7.0 的每個使用案例標出負責函式，期中後的標示 Story 編號；場次狀態圖的轉換標出函式與 worker，並註明由 `transition_match()` 與 `_MATCH_TRANSITIONS` 控制；ERD 的每個實體標出所在的 models.py；循序圖（二）（三）拆成 Router 與 Service 並標出 API 路徑、函式與 worker 工作 |
 
 # 壹、系統整體概述
 
@@ -670,20 +671,24 @@ stateDiagram-v2
     state "進行中" as live
     state "申訴期" as appeal_window
     state "申訴中" as appealed
-    scheduled --> live : 裁判登錄第一局
-    scheduled --> appeal_window : 逾時判棄權
-    live --> appeal_window : 裁判送出系列結果
-    appeal_window --> appealed : 隊長提出申訴
-    appealed --> scheduled : 重新比賽
+    scheduled --> live : 裁判登錄第一局<br/>record_game()
+    scheduled --> appeal_window : 逾時判棄權<br/>worker：forfeit_next_due()
+    live --> appeal_window : 裁判送出系列結果<br/>submit_result()
+    appeal_window --> appealed : 隊長提出申訴<br/>disputes file_appeal() → mark_appealed()
+    appealed --> scheduled : 重新比賽<br/>replay_match()
   }
-  [*] --> scheduled : 抽籤後建立場次
-  unconfirmed --> confirmed : 一方被取消資格
-  scheduled --> confirmed : 輪空
-  scheduled --> voided : 季軍賽取消
-  appeal_window --> confirmed : 申訴期滿且無申訴
-  appealed --> confirmed : 主辦方維持或更正
+  [*] --> scheduled : 抽籤後建立場次<br/>draw()
+  unconfirmed --> confirmed : 一方被取消資格<br/>disqualify()
+  scheduled --> confirmed : 輪空<br/>advance() → confirm_walkover()
+  scheduled --> voided : 季軍賽取消<br/>advance() → _void()
+  appeal_window --> confirmed : 申訴期滿且無申訴<br/>worker：auto_confirm_expired()
+  appealed --> confirmed : 主辦方維持或更正<br/>uphold_result()／correct_result()
   confirmed --> [*]
   voided --> [*]
+  note right of voided
+    狀態都由 competition/service.py
+    transition_match() 改，查 _MATCH_TRANSITIONS 表
+  end note
 ```
 
 外框「未確認」包含待開打、進行中、申訴期與申訴中四個狀態，其中任何一個狀態都可能因一方被取消資格而直接確認。申訴中時，另一隊仍可在申訴期限內提出申訴，狀態維持「申訴中」。「待開打 → 申訴期」是逾時判棄權，一方或雙方未報到都適用。「待開打 → 已確認」有兩種情況：一是輪空，對手位置確定不會有隊伍時，系統直接確認並讓另一方晉級，包括前一場雙方棄權、退賽後無人遞補（期中後，Story 4.5），以及季軍賽少了準決賽敗隊（準決賽以取消資格或輪空定勝負，或敗隊頂替進決賽）；二是待開打場次的一方被取消資格且沒有隊伍頂替，以取消資格（outcome 為 disqualified）判對手獲勝。「已取消」只用於準決賽沒有產生勝隊時的季軍賽。場次停在「待開打」等待隊伍確定時，不開放報到、也不起算棄權期限（見貳、三 5.2）。「申訴中 → 待開打」只用於判棄權的場次經申訴後安排重新比賽（FR-31）。各種結果的欄位填法見資料表說明的 MATCH。
@@ -696,6 +701,10 @@ stateDiagram-v2
 
 ```mermaid
 erDiagram
+  SCHOOL["SCHOOL<br/>identity/models.py"]
+  ACCOUNT["ACCOUNT<br/>identity/models.py"]
+  ORGANIZER_APPLICATION["ORGANIZER_APPLICATION<br/>identity/models.py"]
+  ACCOUNT_TOKEN["ACCOUNT_TOKEN<br/>identity/models.py"]
   SCHOOL |o--o{ ACCOUNT : "就讀"
   SCHOOL ||--o{ ORGANIZER_APPLICATION : "申請學校"
   ACCOUNT ||--o{ ACCOUNT_TOKEN : "擁有"
@@ -706,6 +715,13 @@ erDiagram
 
 ```mermaid
 erDiagram
+  GAME_TITLE["GAME_TITLE<br/>tournaments/models.py"]
+  RANK_TIER["RANK_TIER<br/>tournaments/models.py"]
+  TOURNAMENT["TOURNAMENT<br/>tournaments/models.py"]
+  ACCOUNT["ACCOUNT<br/>identity/models.py"]
+  ROUND_SETTING["ROUND_SETTING<br/>期中後"]
+  REFEREE_INVITATION["REFEREE_INVITATION<br/>tournaments/models.py"]
+  TOURNAMENT_REFEREE["TOURNAMENT_REFEREE<br/>tournaments/models.py"]
   GAME_TITLE ||--|{ RANK_TIER : "定義段位"
   GAME_TITLE ||--o{ TOURNAMENT : "被選用"
   ACCOUNT ||--o{ TOURNAMENT : "主辦"
@@ -721,12 +737,12 @@ erDiagram
 
 ```mermaid
 erDiagram
-  ACCOUNT["ACCOUNT（identity/models.py）"]
-  SCHOOL["SCHOOL（identity/models.py）"]
-  TOURNAMENT["TOURNAMENT（tournaments/models.py）"]
-  TEAM["TEAM（registration/models.py）"]
-  TEAM_MEMBER["TEAM_MEMBER（registration/models.py）"]
-  REGISTRATION["REGISTRATION（registration/models.py）"]
+  ACCOUNT["ACCOUNT<br/>identity/models.py"]
+  SCHOOL["SCHOOL<br/>identity/models.py"]
+  TOURNAMENT["TOURNAMENT<br/>tournaments/models.py"]
+  TEAM["TEAM<br/>registration/models.py"]
+  TEAM_MEMBER["TEAM_MEMBER<br/>registration/models.py"]
+  REGISTRATION["REGISTRATION<br/>registration/models.py"]
   ACCOUNT ||--o{ TEAM_MEMBER : "參加"
   TEAM ||--|{ TEAM_MEMBER : "由組成"
   TOURNAMENT ||--o{ TEAM : "包含"
@@ -737,6 +753,8 @@ erDiagram
 
 ```mermaid
 erDiagram
+  TOURNAMENT["TOURNAMENT<br/>tournaments/models.py"]
+  PRIORITY_WINDOW_SETTLEMENT["PRIORITY_WINDOW_SETTLEMENT<br/>registration/models.py"]
   TOURNAMENT ||--o| PRIORITY_WINDOW_SETTLEMENT : "優先期結算"
 ```
 
@@ -746,13 +764,13 @@ erDiagram
 
 ```mermaid
 erDiagram
-  TOURNAMENT["TOURNAMENT（tournaments/models.py）"]
-  BRACKET["BRACKET（competition/models.py）"]
-  MATCH["MATCH（competition/models.py）"] {
+  TOURNAMENT["TOURNAMENT<br/>tournaments/models.py"]
+  BRACKET["BRACKET<br/>competition/models.py"]
+  MATCH["MATCH<br/>competition/models.py"] {
     uuid next_match_id FK "下一場"
     uuid loser_next_match_id FK "敗隊下一場"
   }
-  TEAM["TEAM（registration/models.py）"]
+  TEAM["TEAM<br/>registration/models.py"]
   TOURNAMENT ||--o| BRACKET : "擁有"
   BRACKET ||--|{ MATCH : "包含"
   TEAM |o--o{ MATCH : "A 隊"
@@ -766,6 +784,12 @@ erDiagram
 
 ```mermaid
 erDiagram
+  ACCOUNT["ACCOUNT<br/>identity/models.py"]
+  MATCH["MATCH<br/>competition/models.py"]
+  MATCH_GAME["MATCH_GAME<br/>competition/models.py"]
+  RESULT_SCREENSHOT["RESULT_SCREENSHOT<br/>期中後"]
+  CHECK_IN["CHECK_IN<br/>competition/models.py"]
+  TEAM["TEAM<br/>registration/models.py"]
   ACCOUNT |o--o{ MATCH : "擔任裁判"
   ACCOUNT |o--o{ MATCH : "送出結果"
   ACCOUNT ||--o{ MATCH_GAME : "登錄"
@@ -781,6 +805,11 @@ erDiagram
 
 ```mermaid
 erDiagram
+  MATCH["MATCH<br/>competition/models.py"]
+  APPEAL["APPEAL<br/>disputes/models.py"]
+  TOURNAMENT["TOURNAMENT<br/>tournaments/models.py"]
+  TEAM["TEAM<br/>registration/models.py"]
+  ACCOUNT["ACCOUNT<br/>identity/models.py"]
   MATCH ||--o{ APPEAL : "收到"
   TOURNAMENT ||--o{ APPEAL : "所屬"
   TEAM ||--o{ APPEAL : "提出申訴"
@@ -792,6 +821,10 @@ erDiagram
 
 ```mermaid
 erDiagram
+  TOURNAMENT["TOURNAMENT<br/>tournaments/models.py"]
+  REPORT["REPORT<br/>disputes/models.py"]
+  TEAM["TEAM<br/>registration/models.py"]
+  ACCOUNT["ACCOUNT<br/>identity/models.py"]
   TOURNAMENT ||--o{ REPORT : "收到"
   TEAM ||--o{ REPORT : "提出檢舉"
   TEAM ||--o{ REPORT : "被檢舉"
@@ -803,6 +836,12 @@ erDiagram
 
 ```mermaid
 erDiagram
+  OUTBOX_EVENT["OUTBOX_EVENT<br/>core/events.py"]
+  NOTIFICATION["NOTIFICATION<br/>期中後"]
+  EMAIL_DELIVERY["EMAIL_DELIVERY<br/>notifications/models.py"]
+  ACCOUNT["ACCOUNT<br/>identity/models.py"]
+  AUDIT_LOG["AUDIT_LOG<br/>core/audit.py"]
+  TOURNAMENT["TOURNAMENT<br/>tournaments/models.py"]
   OUTBOX_EVENT ||--o{ NOTIFICATION : "產生"
   OUTBOX_EVENT ||--o{ EMAIL_DELIVERY : "產生"
   ACCOUNT ||--o{ NOTIFICATION : "收到"
@@ -1206,19 +1245,23 @@ erDiagram
 ```mermaid
 classDiagram
   class School {
+    <<identity/models.py>>
     name
   }
   class Account {
+    <<identity/models.py>>
     email
     display_name
     is_platform_admin
     is_organizer
   }
   class OrganizerApplication {
+    <<identity/models.py>>
     club_name
     status
   }
   class GameTitle {
+    <<tournaments/models.py>>
     name
     starters
     substitutes
@@ -1227,10 +1270,12 @@ classDiagram
     score_type
   }
   class RankTier {
+    <<tournaments/models.py>>
     name
     score
   }
   class Tournament {
+    <<tournaments/models.py>>
     name
     capacity
     mode
@@ -1241,10 +1286,12 @@ classDiagram
     start_at
   }
   class RoundSetting {
+    <<期中後>>
     round_no
     bo
   }
   class TournamentReferee {
+    <<tournaments/models.py>>
     accepted_at
   }
   GameTitle "1" *-- "1..*" RankTier
@@ -1299,15 +1346,23 @@ classDiagram
 
 ```mermaid
 classDiagram
-  class Tournament
-  class Team
-  class Account
+  class Tournament {
+    <<tournaments/models.py>>
+  }
+  class Team {
+    <<registration/models.py>>
+  }
+  class Account {
+    <<identity/models.py>>
+  }
   class Bracket {
+    <<competition/models.py>>
     size
     rounds
     drawn_at
   }
   class Match {
+    <<competition/models.py>>
     round_no
     slot_no
     is_third_place
@@ -1320,15 +1375,18 @@ classDiagram
     appeal_deadline
   }
   class MatchGame {
+    <<competition/models.py>>
     game_no
     winner_side
     score_a
     score_b
   }
   class CheckIn {
+    <<competition/models.py>>
     at
   }
   class ResultScreenshot {
+    <<期中後>>
     file_key
   }
   Tournament "1" *-- "0..1" Bracket
@@ -1345,11 +1403,20 @@ classDiagram
 
 ```mermaid
 classDiagram
-  class Tournament
-  class Team
-  class Match
-  class Account
+  class Tournament {
+    <<tournaments/models.py>>
+  }
+  class Team {
+    <<registration/models.py>>
+  }
+  class Match {
+    <<competition/models.py>>
+  }
+  class Account {
+    <<identity/models.py>>
+  }
   class Appeal {
+    <<disputes/models.py>>
     description
     status
     decision
@@ -1357,11 +1424,13 @@ classDiagram
     reminded_at
   }
   class Report {
+    <<disputes/models.py>>
     description
     status
     reason
   }
   class Notification {
+    <<期中後>>
     title
     link
     read_at
@@ -1417,25 +1486,34 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Ref as 裁判
-  participant API as 後端 API
+  participant R as Router<br/>competition/router.py
+  participant S as Service<br/>competition/service.py
   participant DB as 資料庫
-  participant W as worker
+  participant W as worker<br/>worker/jobs.py
   actor Cap as 兩隊隊長
   loop 每打完一局
-    Ref->>API: 登錄該局結果
-    API->>DB: 鎖住場次列<br/>檢查裁判身分<br/>與勝局門檻
-    API->>DB: 寫入局結果與操作紀錄<br/>（第一局時轉為進行中）
-    API-->>Ref: 目前系列比分
+    Ref->>R: PUT /tournaments/{id}<br/>/matches/{id}/games/{n}
+    R->>S: record_game()
+    S->>DB: lock_match() 鎖住場次列<br/>檢查裁判身分與勝局門檻
+    S->>DB: 寫入局結果與 audit.record()<br/>第一局時 transition_match()<br/>轉為進行中
+    S-->>R: ScoreEntryState
+    R->>DB: session.commit()
+    R-->>Ref: 目前系列比分
   end
-  Ref->>API: 送出系列結果
-  API->>DB: 鎖住場次列<br/>轉為申訴期，記錄<br/>送出者與申訴期限
-  API-->>Ref: 申訴期開始倒數
+  Ref->>R: POST /tournaments/{id}<br/>/matches/{id}/submit
+  R->>S: submit_result()
+  S->>DB: lock_match() 鎖住場次列<br/>transition_match() 轉為申訴期<br/>記錄送出者與申訴期限
+  S-->>R: MatchRead
+  R->>DB: session.commit()
+  R-->>Ref: 申訴期開始倒數
   Note over DB,W: 申訴期滿（預設 30 分鐘）
-  W->>DB: 查詢已到期<br/>且無申訴的場次
-  W->>DB: 鎖住場次、重新檢查<br/>狀態，轉為已確認
-  W->>DB: 勝隊填入下一場<br/>兩隊都確定時設定<br/>下一場的棄權期限
-  W->>DB: 寫入操作紀錄與事件
-  W-->>Cap: 通知下一場<br/>對手與時間<br/>（期中後，Story 1.6）
+  W->>S: auto_confirm_expired()
+  S->>DB: 查詢已到期且無申訴的場次<br/>鎖住場次、重新檢查狀態
+  S->>DB: confirm_match() 轉為已確認<br/>advance() 勝隊填入下一場
+  S->>DB: 兩隊都確定時<br/>start_forfeit_clock()<br/>設定下一場的棄權期限
+  S->>DB: audit.record()、events.publish()
+  W->>DB: session.commit()
+  W-->>Cap: 通知下一場對手與時間<br/>（期中後，Story 1.6）
 ```
 
 ### （三）隊長提出申訴與主辦方處理
@@ -1445,24 +1523,37 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Cap as 隊長
-  participant API as 後端 API
+  participant R as Router<br/>disputes/router.py
+  participant S as Service<br/>disputes/service.py
+  participant C as competition<br/>competition/service.py
   participant DB as 資料庫
-  participant W as worker
+  participant W as worker<br/>worker/jobs.py
   actor Org as 主辦方
-  Cap->>API: 提出申訴<br/>（說明、截圖）
-  API->>DB: 鎖住場次列，檢查<br/>未過申訴期限、<br/>該隊沒有未結案的申訴
-  API->>DB: 建立申訴，申訴期<br/>轉為申訴中，寫入事件
+  Cap->>R: POST /tournaments/{id}<br/>/matches/{id}/appeals<br/>（說明、截圖）
+  R->>S: file_appeal()
+  S->>DB: lock_tournament()、lock_match()<br/>檢查未過申訴期限<br/>該隊沒有未結案的申訴
+  S->>C: mark_appealed()<br/>申訴期轉為申訴中
+  S->>DB: 建立申訴、audit.record()<br/>events.publish()
+  R->>DB: session.commit()
   W-->>Org: 通知有新的申訴<br/>（期中後，Story 1.6）
   Note over Cap,Org: 申訴期限內，另一隊也可以提出申訴
-  Org->>API: 檢視該場次的申訴與各局比分
+  Org->>R: GET /organizer/tournaments/{id}<br/>/appeals，檢視申訴與各局比分
   alt 維持原結果
-    Org->>API: 維持原結果（附理由）
+    Org->>R: POST /organizer/tournaments/{id}<br/>/matches/{id}/appeal-resolution<br/>（維持原結果，附理由）
+    R->>S: resolve_appeals()
+    S->>C: uphold_result()
   else 更正結果
-    Org->>API: 重新輸入各局結果（附理由）
-    API->>API: 重算系列結果
+    Org->>R: 同一路徑<br/>（重新輸入各局結果，附理由）
+    R->>S: resolve_appeals()
+    S->>C: correct_result()<br/>重算系列結果
+  else 重新比賽（判棄權的場次）
+    Org->>R: 同一路徑<br/>（設定新時間，附理由）
+    R->>S: resolve_appeals()
+    S->>C: replay_match()<br/>回到待開打
   end
-  API->>DB: 鎖住場次列<br/>申訴全部結案，轉為<br/>已確認，記錄變更前後比分
-  API->>DB: 勝隊填入下一場<br/>棄權期限從處理完成時<br/>重新起算；寫入事件
+  C->>DB: 維持或更正：confirm_match()<br/>advance() 勝隊填入下一場<br/>棄權期限重新起算
+  S->>DB: 申訴全部結案、audit.record()<br/>記錄變更前後比分<br/>events.publish()
+  R->>DB: session.commit()
   W-->>Cap: 兩隊收到處理結果與理由<br/>（期中後，Story 1.6）
 ```
 

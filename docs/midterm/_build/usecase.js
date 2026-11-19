@@ -77,12 +77,12 @@
     const H = rowY(lastRow) + ROW / 2 + 14;
     const byId = {};
     for (const u of d.ucs) {
-      u.lines = wrap(u.name, maxText);
+      u.lines = u.name.split('<br>').flatMap((seg) => wrap(seg, maxText));
       const tw = Math.max(...u.lines.map(measure));
       u.cx = u.fx !== undefined ? bx1 + (bx2 - bx1) * u.fx : colX[u.col];
       u.cy = rowY(u.row);
       u.rx = Math.max(62, tw / 2 + 22);
-      u.ry = u.lines.length > 1 ? 25 : Math.min(19, ROW / 2 - 3);
+      u.ry = u.lines.length > 1 ? 8 * u.lines.length + 9 : Math.min(19, ROW / 2 - 3);
       byId[u.id] = u;
     }
     for (const a of d.actors) {

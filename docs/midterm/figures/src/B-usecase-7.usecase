@@ -1,13 +1,13 @@
 system: 7.0 觀賽與通知
 actor visitor left 2: 訪客
 actor account left 5.5: 帳號
-uc u1 1 1: 7.1 瀏覽賽事列表與賽事頁
-uc u2 1 2: 7.2.1 查看視覺化對戰樹
-uc u3 2 2.9: 7.2.2 搜尋隊伍晉級路徑
-uc u4 1 3: 7.3 查看場次頁
-uc u5 1 5: 7.5.1 查看通知中心
-uc u6 2 5: 7.5.2 標為已讀
-uc u7 2 6.3: 7.4 接收站內通知與 Email
+uc u1 1 1: 7.1 瀏覽賽事列表與賽事頁<br>list_public_tournaments()
+uc u2 1 2: 7.2.1 查看視覺化對戰樹<br>get_public_bracket()
+uc u3 2 2.9: 7.2.2 搜尋隊伍晉級路徑<br>期中後（Story 4.7）
+uc u4 1 3: 7.3 查看場次頁<br>get_public_match()
+uc u5 1 5: 7.5.1 查看通知中心<br>期中後（Story 1.6）
+uc u6 2 5: 7.5.2 標為已讀<br>期中後（Story 1.6）
+uc u7 2 6.3: 7.4 接收站內通知與 Email<br>send_next_email()（站內通知期中後）
 visitor -- u1
 visitor -- u2
 visitor -- u4
