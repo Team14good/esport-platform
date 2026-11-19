@@ -22,6 +22,9 @@
   summary: `POST /api/v1/password-reset-emails` 沒有頻率限制：可以對同一個 Email 大量寄信灌爆收件匣，而且每次申請都會作廢對方手上的重設連結，讓本人無法完成重設。
   evidence: 2026-10-28 Story 1.5 Code Review（Edge Case Hunter）。Story 1.5 的 Never 明定不做頻率限制（與登入相同）。處理時與登入的頻率限制一起由 PM／架構決定規則（例如同一 Email 每小時上限、同一 IP 上限），並決定超過時是否仍回相同的 202 以免透露帳號是否存在。
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-5-forgot-reset-password.md`
+  summary: `tests/test_migrations.py` 的測試資料庫每次從空表升級，測不到「既有帳號升級後拿到 0」（低；若遷移檔被改錯，為 medium：有資料的資料庫升級失敗，或舊登入全部失效）。`compare_server_default` 已在 PR #94 開啟，這筆只剩資料升級的部分。
+  evidence: 2026-10-28 Story 1.5 第二輪 Code Review（Verification Gap）；PR #94 審查要求保留本半句。處理時另寫一支「升到上一版、插入帳號、再升到 head」的測試。
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-forgot-reset-password.md`
   summary: 「重設信只寄 Email、不建立站內通知」目前沒有任何斷言（1.5 第一輪審查移除了 `"notification" not in metadata.tables`）；Story 1.6 加入站內通知後，若 `dispatch_event` 誤替 `PasswordResetRequested`（或 `VerificationEmailRequested`）建立站內通知，現有測試照樣通過。
   evidence: 2026-10-28 Story 1.5 第二輪 Code Review（Blind Hunter、Acceptance Auditor）。目前還沒有 notification 表，無從斷言。Story 1.6 建立站內通知時，在 `tests/notifications/test_email_delivery.py` 的重設信與驗證信測試補上「站內通知筆數不變」的斷言。
 ## Deferred from: spec-3-2-player-registration-info.md 第一段 (2026-10-30)

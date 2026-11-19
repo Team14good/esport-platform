@@ -223,8 +223,9 @@ def test_invalid_fields_return_422_with_chinese_message(
     assert error["msg"] == message
 
 
-NON_ASCII_EMAIL = "主辦方@example.com"
-NON_ASCII_EMAIL_MESSAGE = "Email 的 @ 前面只能使用英文字母、數字與符號"
+# @ 前面與網域各一個案例
+NON_ASCII_EMAILS = ["主辦方@example.com", "a@例子.com"]
+NON_ASCII_EMAIL_MESSAGE = "Email 只能使用英文字母、數字與符號"
 
 
 def _assert_non_ascii_email_rejected(response: Any) -> None:
@@ -234,25 +235,30 @@ def _assert_non_ascii_email_rejected(response: Any) -> None:
     assert error["msg"] == NON_ASCII_EMAIL_MESSAGE
 
 
-def test_register_rejects_non_ascii_local_part_without_account_or_mail(
-    client: TestClient, session: Session
+@pytest.mark.parametrize("email", NON_ASCII_EMAILS)
+def test_register_rejects_non_ascii_email_without_account_or_mail(
+    client: TestClient, session: Session, email: str
 ) -> None:
     events_before = len(list(session.exec(select(OutboxEvent))))
 
-    _assert_non_ascii_email_rejected(_register(client, email=NON_ASCII_EMAIL))
+    _assert_non_ascii_email_rejected(_register(client, email=email))
 
-    assert _account(session, NON_ASCII_EMAIL) is None
+    assert _account(session, email) is None
     assert len(list(session.exec(select(OutboxEvent)))) == events_before
 
 
-def test_resend_verification_rejects_non_ascii_local_part(client: TestClient) -> None:
-    _assert_non_ascii_email_rejected(_resend(client, NON_ASCII_EMAIL))
+@pytest.mark.parametrize("email", NON_ASCII_EMAILS)
+def test_resend_verification_rejects_non_ascii_email(
+    client: TestClient, email: str
+) -> None:
+    _assert_non_ascii_email_rejected(_resend(client, email))
 
 
-def test_forgot_password_rejects_non_ascii_local_part(client: TestClient) -> None:
-    response = client.post(
-        f"{API}/password-reset-emails", json={"email": NON_ASCII_EMAIL}
-    )
+@pytest.mark.parametrize("email", NON_ASCII_EMAILS)
+def test_forgot_password_rejects_non_ascii_email(
+    client: TestClient, email: str
+) -> None:
+    response = client.post(f"{API}/password-reset-emails", json={"email": email})
 
     _assert_non_ascii_email_rejected(response)
 

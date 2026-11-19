@@ -66,7 +66,7 @@ context: []
 - `frontend/tests/e2e/spectator.spec.ts`、`support/match-api.ts`（假資料版）；`tournament.spec.ts:232` 的 `setUpDrawnTournament`、`support/matchday.ts:62` 的 `drawBracket`。
 - `compose.yml:80-102` -- worker 服務；`backend/app/worker/__init__.py:34-49` 已有 cleanup 保護，不動。
 - `frontend/src/features/tournaments/GameForm.tsx:446`、`frontend/src/features/identity/AdminSchoolsPage.tsx:70`；測試 `frontend/tests/unit/admin-games.test.tsx`、`admin-schools.test.tsx`。
-- `_bmad-output/implementation-artifacts/deferred-work.md` -- 只刪除已處理的 9 筆（含 home、worker）；其餘不動。
+- `_bmad-output/implementation-artifacts/deferred-work.md` -- 刪除已處理的 9 筆（含 home、worker、觀眾 e2e 兩筆），並把 migration 那筆縮減為只剩資料升級測試；其餘不動。
 
 ## Tasks & Acceptance
 
@@ -92,7 +92,8 @@ context: []
 
 - 後端 pytest 通過（總覆蓋率 97%；未抓到通過總數），lint 全過；前端單元 1025 項、typecheck、biome 通過。
 - `tournament.spec.ts`（搬移 helper 到 `support/drawn.ts`）12 項通過（desktop、mobile-375 各 6，32.2 分鐘）；`spectator.spec.ts` 6 項僅有實作子任務自報，未獨立重跑；完整 e2e 因系統記憶體不足被停止，未跑完。
-- deferred-work.md：刪除 10 筆（422、migration default、並行、main.tsx、home、worker、email、連點，加上觀眾 e2e 兩筆：spec-5-8-real-match-data 與 spec-7-2-e2e-tournament-drill）。
+- deferred-work.md：刪除 9 筆（422、並行、main.tsx、home、worker、email、連點，加上觀眾 e2e 兩筆：spec-5-8-real-match-data 與 spec-7-2-e2e-tournament-drill），migration 那筆縮減為只剩「升到上一版、插入帳號、再升到 head」的資料升級測試（PR #94 審查後修正，原本整筆刪除）。
+- PR #94 審查修正：自訂 type `url_too_long` 與 Pydantic 內建代碼同名，改名為 `livestream_url_too_long` 並加撞名測試；email 改檢查整個地址 `isascii()`（網域含中文也擋），測試涵蓋 @ 前與網域；登入的 `AccessTokenCreate` 沒用 `EmailField`，所以不受影響（PR 說明原寫會受影響，已更正）。
 
 ## Spec Change Log
 

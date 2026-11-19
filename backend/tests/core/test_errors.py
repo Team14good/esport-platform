@@ -1,5 +1,7 @@
 import re
+import typing
 from enum import StrEnum
+from pathlib import Path
 from typing import Annotated
 
 import pytest
@@ -8,6 +10,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 from pydantic.functional_validators import AfterValidator
 from pydantic_core import PydanticCustomError
+from pydantic_core.core_schema import ErrorType
 
 from app.core.errors import (
     BusinessError,
@@ -186,3 +189,20 @@ def test_validation_unmapped_builtin_type_uses_generic_message() -> None:
 
     assert translated["msg"] == "欄位內容不正確"
     assert translated["type"] == "bytes_type"
+
+
+def test_custom_error_types_do_not_collide_with_pydantic_builtin_types() -> None:
+    """自訂的 `PydanticCustomError` type 不能和 Pydantic 內建代碼同名，
+    否則 handler 會把它的繁中訊息換成通用訊息（例如曾有的 `url_too_long`）。"""
+    app_root = Path(__file__).resolve().parents[2] / "app"
+    pattern = re.compile(r'PydanticCustomError\(\s*"([a-z0-9_]+)"')
+    builtin = set(typing.get_args(ErrorType))
+
+    used = {
+        match.group(1)
+        for path in app_root.rglob("*.py")
+        for match in pattern.finditer(path.read_text(encoding="utf-8"))
+    }
+
+    assert used, "找不到任何自訂 type，檢查的正規表示式可能壞了"
+    assert used & builtin == set()
