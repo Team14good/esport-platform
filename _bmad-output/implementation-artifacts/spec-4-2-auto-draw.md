@@ -28,6 +28,7 @@ context:
 - 主辦方仍可手動抽籤：不足 2 隊的賽事按「抽籤」照 4.1 回 `NOT_ENOUGH_TEAMS`；S27 不改。
 - 開賽時間已過的「報名截止」賽事不是候選（`_draw_blocked` 的 `start_passed`），不發事件。
 - 部署時已停在「報名截止」、還沒抽籤的既有賽事，也會在第一個週期被自動抽籤（與驗收條件一致；示範資料與 e2e 都是開放報名中提前抽籤，不受影響）。
+- 2026-11-20 黃鉅燊核准以上 Decisions（含新增 `auto_draw_skip` 資料表與 `AutoDrawSkipped(tournament_id, accepted_teams)` 事件，以及部署時既有「報名截止」賽事會被自動抽籤）。
 
 ## Boundaries & Constraints
 
