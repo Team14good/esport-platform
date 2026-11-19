@@ -242,6 +242,7 @@ class PublicBracket(BaseModel):
 | `uphold_result(session, *, match_id, actor_id) -> MatchRead` | B（6.2 disputes `resolve_appeals`） | 呼叫端先 `lock_tournament`，函式內 `lock_match`（AD-6）；只接受 `appealed`（其他狀態 `MATCH_INVALID_TRANSITION` 409、不改資料）；沿用已寫入的 outcome、勝隊呼叫 `confirm_match`（內含晉級）。實作在 `competition/appeals.py` | 6.2 |
 | `correct_result(session, *, match_id, games: Sequence[GameScoreIn], actor_id) -> CorrectionResult` | B（6.2 disputes `resolve_appeals`） | 只接受 `appealed`、`outcome=played`（否則 409 `CORRECTION_ONLY_FOR_PLAYED`）；整組新的各局以 5.3 規則驗證，另加 `SERIES_NOT_DECIDED`、`REDUNDANT_GAMES`；通過後整份替換 `match_game`、重算勝局數與勝隊再 `confirm_match`。回傳 `CorrectionResult {before_games, after_games, winner_id}`。**不另寫操作紀錄：前後各局由呼叫端寫進操作紀錄**（disputes 的 `appeal.resolved`），competition 端只有 `confirm_match` 的 `match.confirmed`。實作在 `competition/appeals.py` | 6.2 |
 | `replay_match(session, *, match_id, scheduled_at, actor_id) -> ReplayCleared` | B（6.2 disputes `resolve_appeals`） | 只接受 `appealed`、`outcome` 為 `forfeit`／`double_forfeit`（與 `get_replay_window` 共用 `REPLAYABLE_OUTCOMES`；其他 409 `REPLAY_ONLY_FOR_FORFEIT`）；賽事不是 `published`／`ongoing` 409 `TOURNAMENT_NOT_RESCHEDULABLE`；`check_replay_time` → `clear_for_replay` → 轉回 `scheduled` → 寫入新時間 → `start_forfeit_clock` → 操作紀錄 `match.replay_scheduled` → 發 `MatchRescheduled`；裁判保留。實作在 `competition/appeals.py` | 6.2 |
+| `auto_draw(session, *, tournament_id) -> Literal["drawn", "not_enough_teams", "not_due"]`、`auto_draw_due(session) -> bool` | worker（`auto_draw_closed`） | 4.2 報名截止後由系統抽籤（操作者 `None`），與 `draw` 共用產生對戰表的部分；鎖賽事後重新檢查（`closed`、沒有對戰表、開賽未到、這次報名截止沒有略過紀錄），不成立回 `not_due`。正取不足 2 隊時賽事維持 `closed`、寫 `auto_draw_skip`（賽事＋報名截止時間唯一）、操作紀錄 `bracket.auto_draw_skipped` 與 `AutoDrawSkipped`，同一次報名截止只發一次。`auto_draw_due` 每個候選在 savepoint 裡處理，拋錯的略過、改看下一個 | 4.2 |
 | `auto_confirm_expired(session) -> bool` | worker（`confirm_expired_appeals`） | 確認一場申訴期、`appeal_deadline <= now` 的場次（沿用已寫入的 outcome、勝隊，操作者為系統）並推進；略過已取消或已結束賽事的場次；回傳是否找到候選 | 5.5 |
 | `record_game(session, *, tournament_id, match_id, account_id, game_no, data: GameScoreIn) -> ScoreEntryState`、`delete_game(..., game_no)`、`submit_result(...)`、`get_score_entry(...)` | router | 比分登錄、刪除最後一局、送出系列結果與 S4 讀取；規則一律交給 `scoring.py` | 5.3、5.4 |
 | `get_podium(session, *, tournament_id) -> PublicPodium \| None` | A（5.8、7.1） | 名次；尚未抽籤或賽事不是 `finished` 回 None | 5.5 |
@@ -252,7 +253,8 @@ class PublicBracket(BaseModel):
 
 | 事件 | payload | 時機 |
 | --- | --- | --- |
-| `BracketDrawn` | `tournament_id`, `bracket_id` | 4.1 抽籤完成 |
+| `BracketDrawn` | `tournament_id`, `bracket_id` | 4.1 抽籤完成（4.2 自動抽籤也發） |
+| `AutoDrawSkipped` | `tournament_id`, `accepted_teams` | 4.2 報名截止後正取不足 2 隊、沒有自動抽籤（通知主辦方）；同一次報名截止只發一次 |
 | `MatchRescheduled` | `match_id`, `scheduled_at` | 4.3 修改時間 |
 | `RefereeAssigned` | `match_id`, `referee_account_id` | 4.4 指派或改派 |
 | `RefereeUnassigned` | `match_id`, `referee_account_id` | 4.4 收回、5.5 填位後衝突 |
@@ -286,7 +288,7 @@ class PublicBracket(BaseModel):
 | --- | --- | --- |
 | ★ `list_accepted_teams(session, *, tournament_id) -> list[TeamRead]` | 4.1 | 正取隊伍 |
 | ★ `finalize_for_draw(session, *, tournament_id, actor_id) -> None` | 4.1 | 開放報名中提前抽籤時呼叫：仍在優先期就先做優先期分配，再做截止補位（`fill_at_deadline`）。分配規則留在 C，competition 只呼叫這一個 |
-| ★ `mark_drawn(session, *, tournament_id, team_ids, actor_id) -> None` | 4.1 | 正取 → 已參賽 |
+| ★ `mark_drawn(session, *, tournament_id, team_ids, actor_id) -> None` | 4.1 | 正取 → 已參賽；4.2 自動抽籤傳 `actor_id=None`（系統，`mark_status` 已接受 `None`；registration 的型別註記仍是 `uuid.UUID`，請 C 之後放寬） |
 | `is_member(session, *, team_id, account_id) -> bool` | 4.4（裁判不能是參賽隊員） | |
 | ★ `is_captain(session, *, team_id, account_id) -> bool` | 5.1 報到 | 經 `registration_port.is_captain`，缺函式回 503 `REGISTRATION_UNAVAILABLE` |
 | ★ `get_team_names(session, *, team_ids) -> dict[UUID, str]` | 4.1 公開對戰樹 | 一次查多隊，避免 N+1 |

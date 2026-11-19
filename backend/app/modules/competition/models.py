@@ -63,6 +63,30 @@ class Bracket(SQLModel, table=True):
     )
 
 
+class AutoDrawSkip(SQLModel, table=True):
+    """自動抽籤（4.2）判定正取不足、沒有抽籤的紀錄；同一次報名截止只記一筆。
+
+    以（賽事, 報名截止時間）為唯一鍵：worker 看到紀錄就不再選這場賽事，主辦方只收到
+    一次 `AutoDrawSkipped`；之後延長報名（2.5）改了報名截止時間，再次截止時會重新嘗試。
+    """
+
+    __tablename__ = "auto_draw_skip"
+    __table_args__ = (
+        UniqueConstraint(
+            "tournament_id",
+            "registration_end",
+            name="uq_auto_draw_skip_tournament_registration_end",
+        ),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id")
+    registration_end: datetime = Field(sa_type=DateTime(timezone=True))
+    # 判定當下的正取隊數（0 或 1）
+    accepted_teams: int
+    skipped_at: datetime = Field(sa_type=DateTime(timezone=True))
+
+
 class Match(SQLModel, table=True):
     """場次。結構、編號與輪空取自 `bracket.py`；狀態只能經 `service.transition_match` 修改。"""
 
@@ -167,6 +191,13 @@ class BracketDrawn(Event):
 
     tournament_id: uuid.UUID
     bracket_id: uuid.UUID
+
+
+class AutoDrawSkipped(Event):
+    """報名截止後正取不足 2 隊，worker 沒有自動抽籤（4.2；通知主辦方）。"""
+
+    tournament_id: uuid.UUID
+    accepted_teams: int
 
 
 class MatchResultConfirmed(Event):
