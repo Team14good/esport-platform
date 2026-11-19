@@ -12,7 +12,7 @@
 | 1.7 | 2026-11-15 | 依 PR #89 審查：貳、三 `bo_for_round()` 與 `create_tournament()` 的每輪間隔改為以賽事的 BO 數說明（主辦方建立時可修改，預設為遊戲的 BO） |
 | 1.8 | 2026-11-18 | 報名模組類別圖的每個類別標出所在檔案 registration/models.py |
 | 1.9 | 2026-11-18 | 軟體架構圖標出各層的程式位置；各模組類別圖的每個類別標出所在檔案；取消資格循序圖標出 API 路徑、Router 與函式 |
-| 1.10 | 2026-11-19 | 取消資格循序圖註明 `disqualify()` 由 `service.py` 轉發至 `disqualification.py`（依 code review） |
+| 1.10 | 2026-11-19 | 取消資格循序圖註明 `disqualify()` 由 `service.py` 轉發至 `disqualification.py`（依 code review）；逐張對照後，`Registration.avg_rank_score` 與 `PriorityWindowSettlement.priority_school_ids` 的型別改為與程式一致 |
 
 # 壹、系統簡介
 
@@ -430,14 +430,14 @@ classDiagram
     +UUID tournament_id
     +RegistrationStatus status
     +UUID school_id
-    +decimal avg_rank_score
+    +Decimal avg_rank_score
     +datetime submitted_at
   }
   class PriorityWindowSettlement {
     <<registration/models.py>>
     +UUID tournament_id
     +datetime settled_at
-    +list priority_school_ids
+    +list[UUID] priority_school_ids
   }
   TeamMember "*" <-- "1" Team
   Team "1" --> "1" Registration
