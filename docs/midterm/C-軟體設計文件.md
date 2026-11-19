@@ -13,6 +13,8 @@
 | 1.8 | 2026-11-13 | 對照《軟體需求分析文件》1.9 版同步輪空規則（issue #88）：參、二的晉級填位不再把取消資格列為輪空來源，補上準決賽敗隊頂替後的季軍賽輪空，並標示退賽後無人遞補為期中後 |
 | 1.9 | 2026-11-15 | 依 PR #89 審查對照程式修正：參、二的輪空來源補上「準決賽以取消資格或輪空定勝負時，季軍賽少了敗隊」；參、一與循序圖改為晉級時依 id 鎖住整個對戰表的場次；AD-14 與參、六、肆、三補上 S12 我的下一場每 60 秒重抓 |
 | 1.10 | 2026-11-18 | 系統架構圖標出各服務的程式位置（compose.yml、frontend/src、backend/app/main.py、worker/jobs.py、alembic、core/storage.py、notifications/email.py）；模組依賴圖標出 backend/app/modules/ 下的目錄與事件寫入的 core/events.py |
+| 1.11 | 2026-11-18 | 分層架構圖、送出報名與申訴期滿自動確認的循序圖、事件與通知流程圖標出程式檔與函式（router.py、service.py、repository.py、worker/jobs.py、core/*.py） |
+| 1.12 | 2026-11-19 | 依 PR #92 審查：申訴期滿自動確認的加鎖順序改為與程式一致（先鎖賽事、再鎖本場，確認時 `advance()` 才鎖整個對戰表）；送出報名循序圖的判定改為先轉已送出・待分配、先搶期才判定；commit 改標 `worker/__init__.py` 的 `_run_item()` |
 
 # 壹、系統簡介
 
@@ -85,12 +87,12 @@ flowchart LR
 ```mermaid
 flowchart TB
   subgraph entry["進入點"]
-    r["Router 層<br/>HTTP 輸入輸出・帳號層級權限・開啟／提交交易"]
-    w["Worker 工作<br/>到期項目・outbox 事件"]
+    r["Router 層<br/>modules/&lt;模組&gt;/router.py<br/>HTTP 輸入輸出・帳號層級權限・開啟／提交交易"]
+    w["Worker 工作<br/>worker/jobs.py<br/>到期項目・outbox 事件"]
   end
-  s["Service 層<br/>業務規則・資源層級權限・狀態轉換<br/>寫操作紀錄・發事件"]
-  p["Repository 層<br/>本模組資料表查詢・加鎖"]
-  c["Core 共用核心<br/>audit・events・authz・clock・storage・errors"]
+  s["Service 層<br/>modules/&lt;模組&gt;/service.py<br/>業務規則・資源層級權限・狀態轉換<br/>寫操作紀錄・發事件"]
+  p["Repository 層<br/>modules/&lt;模組&gt;/repository.py<br/>本模組資料表查詢・加鎖"]
+  c["Core 共用核心<br/>core/audit.py・events.py・authz.py<br/>clock.py・storage.py・errors.py"]
   d[("PostgreSQL")]
   r --> s
   w --> s
@@ -223,24 +225,29 @@ flowchart TB
 ```mermaid
 sequenceDiagram
   actor Cap as 隊長
-  participant R as registration.router
-  participant S as RegistrationService
-  participant T as TournamentService
+  participant R as Router<br/>registration/router.py
+  participant S as Service<br/>registration/service.py
+  participant T as tournaments<br/>tournaments/service.py
+  participant AP as 名額分配規則<br/>registration/allocation.py
   participant DB as PostgreSQL
-  Cap->>R: POST<br/>/teams/{team_id}<br/>/submission
-  R->>R: 檢查已登入<br/>與 Email 驗證
+  Cap->>R: POST /teams/{team_id}/submission
+  R->>R: VerifiedAccount<br/>檢查已登入與 Email 驗證
   R->>S: submit_registration()
   S->>T: lock_tournament()
   T->>DB: SELECT …<br/>FOR UPDATE
-  S->>S: 鎖住後才確認<br/>隊長、名單完整、<br/>同校
-  S->>S: AllocationPolicy<br/>判定正取／候補
-  S->>DB: 寫入 Registration<br/>（含三個快照欄位）
-  S->>DB: 寫入 AuditLog、<br/>OutboxEvent
-  R->>DB: COMMIT（釋放鎖）
+  S->>S: authz.ensure_captain()、player_profile.submit_blockers()<br/>鎖住後才確認隊長、名單完整、同校
+  S->>DB: mark_status()<br/>先轉為已送出・待分配（含三個快照欄位）<br/>audit.record() 寫入 AuditLog
+  opt 校園賽且已過優先期（先搶期）
+    S->>S: settle_priority_window()
+    S->>AP: decide_first_come() 判定正取／候補
+    S->>DB: mark_status()、events.publish()<br/>更新狀態並寫入 OutboxEvent
+  end
+  S-->>R: TeamDetail
+  R->>DB: session.commit()（釋放鎖）
   R-->>Cap: 200 目前的報名狀態
 ```
 
-場次也採相同做法：報到、登錄比分、送出系列結果、更正、判棄權、提出申訴、自動確認、晉級填位，都先鎖住該場次的資料列。同一個交易同時需要兩種鎖時，順序固定為「先賽事，再依 id 遞增鎖場次」，避免兩條流程以相反順序加鎖而造成死結。會連鎖到下一場或賽事狀態的流程（申訴期滿自動確認、處理申訴）不能先鎖本場、再去鎖下一場或賽事：它們一開始就先鎖賽事列，再依 id 遞增一次鎖住整個對戰表的場次（`lock_bracket_matches`），本場、下一場與季軍賽都在其中，連鎖的輪空確認也不必另外加鎖。
+場次也採相同做法：報到、登錄比分、送出系列結果、更正、判棄權、提出申訴、自動確認、晉級填位，都先鎖住該場次的資料列。同一個交易同時需要兩種鎖時，順序固定為「先賽事，再依 id 遞增鎖場次」，避免兩條流程以相反順序加鎖而造成死結。會連鎖到下一場或賽事狀態的流程（申訴期滿自動確認、處理申訴）不能先鎖本場、再去鎖下一場或賽事：它們先鎖賽事列，再以 `lock_match()` 鎖本場並重新檢查；確認時 `advance()` 才依 id 遞增一次鎖住整個對戰表的場次（`lock_bracket_matches()`），下一場與季軍賽都在其中，連鎖的輪空確認也不必另外加鎖。
 
 ## 二、定時規則與自動晉級
 
@@ -254,24 +261,24 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant W as worker
+  participant W as worker<br/>worker/jobs.py
   participant DB as PostgreSQL
-  participant C as CompetitionService
-  participant N as NotificationService
+  participant C as competition<br/>competition/service.py
+  participant N as notifications<br/>notifications/service.py
   loop 每 15～30 秒
-    W->>DB: 查詢申訴期已過<br/>且未處理的場次
-    W->>C: auto_confirm_expired()<br/>（每筆獨立交易）
-    C->>DB: 先鎖賽事列，再依 id<br/>鎖整個對戰表的場次<br/>重新檢查狀態與期限
-    C->>C: transition_match()<br/>→ 已確認
-    C->>C: advance()<br/>勝隊填入下一場
+    W->>C: confirm_expired_appeals()<br/>→ auto_confirm_expired()（每筆獨立交易）
+    C->>DB: 查詢申訴期已過且未處理的場次<br/>lock_tournament()、lock_match()<br/>鎖住後重新檢查狀態與期限
+    C->>C: confirm_match()（savepoint 內）<br/>transition_match() → 已確認<br/>結果不自洽的場次跳過
+    C->>C: advance()<br/>lock_bracket_matches() 鎖整個對戰表<br/>勝隊填入下一場
     C->>C: 下一場兩隊確定時<br/>start_forfeit_clock()
-    C->>DB: 寫入 AuditLog<br/>（system）<br/>與 OutboxEvent
-    W->>DB: COMMIT
+    C->>DB: audit.record()（system）<br/>events.publish()
+    W->>DB: 提交交易<br/>（worker/__init__.py 的 _run_item()）
   end
-  W->>DB: 讀取未處理的<br/>OutboxEvent
+  W->>DB: dispatch_outbox()<br/>讀取未處理的 OutboxEvent
   W->>N: dispatch_event()
   N->>DB: 建立 EmailDelivery<br/>（事件 id＋收件人去重）
-  N->>N: 寄出 Email<br/>失敗則記錄<br/>並重試
+  W->>N: send_pending_email() → send_next_email()
+  N->>N: 寄出 Email（notifications/email.py）<br/>失敗則記錄並重試
 ```
 
 ## 三、事件與通知
@@ -282,12 +289,12 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  svc["各模組 Service"] -->|"同一交易寫入"| ob[("OutboxEvent")]
-  wk["worker"] -->|讀取未處理事件| ob
-  wk --> ns["NotificationService<br/>決定收件人"]
-  ns --> nt[("Notification<br/>站內通知")]
-  ns --> ed[("EmailDelivery<br/>寄送紀錄")]
-  ed -->|SMTP| mp["mailpit"]
+  svc["各模組 Service<br/>core/events.py publish()"] -->|"同一交易寫入"| ob[("OutboxEvent<br/>core/events.py")]
+  wk["worker<br/>worker/jobs.py dispatch_outbox()"] -->|讀取未處理事件| ob
+  wk --> ns["notifications/service.py<br/>dispatch_event() 決定收件人"]
+  ns --> nt[("Notification 站內通知<br/>期中後，Story 1.6")]
+  ns --> ed[("EmailDelivery 寄送紀錄<br/>notifications/models.py")]
+  ed -->|"SMTP<br/>send_next_email()"| mp["mailpit"]
 ```
 
 這個設計解決了三個問題：

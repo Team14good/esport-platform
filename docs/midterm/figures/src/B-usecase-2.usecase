@@ -2,15 +2,15 @@ system: 2.0 賽事建立與遊戲設定
 actor admin left 1: 平台管理員
 actor org left 4.5: 主辦方
 actor timer right 7: 時間
-uc u1 1 1: 2.1 維護遊戲設定與學校清單
-uc u2 1 2: 2.2.1 建立賽事
-uc u3 1 3: 2.3 重設賽事報名連結
-uc u4 1 4: 2.4 分輪設定 BO 數
-uc u5 1 5: 2.5.1 抽籤前修改賽事
-uc u6 2 5: 3.8.3 候補遞補
-uc u7 1 6: 2.6 取消賽事
-uc u8 1 7: 2.7 查閱操作紀錄
-uc u9 2 7: 2.2.2 報名開始時開放報名
+uc u1 1 1: 2.1 維護遊戲設定與學校清單<br>create_game()<br>create_school()
+uc u2 1 2: 2.2.1 建立賽事<br>create_tournament()
+uc u3 1 3: 2.3 重設賽事報名連結<br>期中後（Story 3.10）
+uc u4 1 4: 2.4 分輪設定 BO 數<br>期中後（Story 2.3）
+uc u5 1 5: 2.5.1 抽籤前修改賽事<br>期中後（Story 2.5）
+uc u6 2 5: 3.8.3 候補遞補<br>期中後（Story 4.5）
+uc u7 1 6: 2.6 取消賽事<br>期中後（Story 2.6）
+uc u8 1 7: 2.7 查閱操作紀錄<br>期中後（Story 2.8）
+uc u9 2 7: 2.2.2 報名開始時開放報名<br>open_due_registration()
 admin -- u1
 org -- u2
 org -- u3

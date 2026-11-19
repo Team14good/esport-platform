@@ -2,19 +2,19 @@ system: 4.0 抽籤與對戰表
 actor timer left 1.6: 時間
 actor org left 3.9: 主辦方
 actor cap left 6.1: 隊長
-uc u1 1 2.5: 4.1 抽籤
-uc u9 2 1: 3.5 優先期結束分配名額
-uc u8 2 2: 3.7 截止補位
-uc u2 2 3: 4.2 產生單淘汰對戰表
-uc u3 2 4: 4.5 排定場次時間
-uc u4 1 3.9: 2.5.2 修改場次時間
-uc u5 1 4.9: 1.5.3 指派、改派或收回裁判
-uc u6 1 6.1: 3.8.2 抽籤後退賽
-uc u7 2 6.1: 3.8.4 候補遞補對戰表位置
+uc u1 1 2.5: 4.1 抽籤<br>draw()
+uc u9 2 1: 3.5 優先期結束分配名額<br>settle_priority_window()
+uc u8 2 2: 3.7 截止補位<br>close_registration()
+uc u2 2 3: 4.2 產生單淘汰對戰表<br>draw() → bracket.py
+uc u3 2 4: 4.5 排定場次時間<br>draw() → schedule.py
+uc u4 1 3.9: 2.5.2 修改場次時間<br>reschedule_match()
+uc u5 1 4.9: 1.5.3 指派、改派或收回裁判<br>assign_referee()
+uc u6 1 6.1: 3.8.2 抽籤後退賽<br>期中後（Story 4.5）
+uc u7 2 6.1: 3.8.4 候補遞補對戰表位置<br>期中後（Story 4.5）
 org -- u1
 org -- u4
 org -- u5
-timer -- u1
+timer -- u1 : 期中後（Story 4.2）
 cap -- u6
 u9 ..> u1 : extend
 u8 ..> u1 : extend

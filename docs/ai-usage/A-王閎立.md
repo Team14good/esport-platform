@@ -911,3 +911,26 @@
 - 問題與修正：上一輪 AI 把非 ASCII 檢查只做在 @ 前面，沒有想到中文網域一樣寄不出去；handler 依 type 翻譯時沒有檢查自訂 type 是否與內建代碼重名，兩點都由審查者實測發現，AI 與測試都沒有擋下；AI 在 PR 說明寫「登入會變 422」，審查者對照程式指出登入沒有用 `EmailField`；deferred 的 migration 那筆被整筆刪掉，漏了資料升級測試的後半句；spec、PR 標題與 commit 的筆數（8、9、10）不一致
 - 成熟度：L3（AI 依審查意見修正，人審查並決定要修的範圍）
 - 證據：PR #94；`_bmad-output/implementation-artifacts/spec-deferred-cleanup.md`
+### 2026-11-18｜設計／圖對照程式標註｜B、C、D 其餘的圖全部標出對應的程式
+
+- Story／範圍：期中文件 B、C、D（分支 docs/figures-code-annotate；承接 PR #91 只標了部分圖的缺口）
+- 工具：Claude Code（Sonnet 5.5）＋ se-course-docs skill、排版程式 `docs/midterm/_build/build.mjs`
+- 怎麼用：給 AI 一張已標好函式的報名狀態圖當範例，要求 A～D 所有圖都照這個樣子對照程式；AI 先逐張盤點哪些圖沒標，再讀 `models.py`、各模組 `service.py`、`router.py`、`worker/jobs.py` 找出對應的檔案與函式，用腳本與手改補上
+- AI 產出：B 1.13——場次狀態圖 11 個轉換標函式並加註解框、ERD 9 張圖的實體標 models.py、使用案例圖 7 張共 64 個使用案例標函式（期中後的標 Story 編號）、類別圖 4 張標檔案、循序圖 2 張拆成 Router 與 Service 並標 API 路徑；C 1.11——4 張圖；D 1.9——架構圖、13 張類別圖的類別標檔案、取消資格循序圖；`usecase.js` 新增 `<br>` 換行；重新產生 PDF 與 Word
+- 人做了什麼：指定範例與範圍、要求對照程式碼
+- 驗證：函式名稱以 grep 對照程式（例如 `file_appeal`、`resolve_appeals`、`replay_match`、`confirm_walkover`、`auto_confirm_expired`）；排版程式無錯誤，使用案例圖逐張檢視；B 重新產生後 86 頁
+- 問題與修正：AI 用腳本取代 B 的兩張循序圖時，標題「裁判登錄比分與送出系列結果」在文件裡出現兩次（使用案例規格也有），腳本取到第一個位置，一次刪掉約 900 行；以 `git diff --stat` 看到 952 行刪除、排版程式回報 B 只剩 53 頁（原本 89 頁）才發現，從 `main` 還原 B 後重做所有修改並限定在「八、循序圖」之後尋找；另外 ERD 實體標籤加上檔名後，多張圖縮放低於 0.62，改成兩行標籤仍未全部解決，B 與 C、D 仍有縮放警告（原有的警告另計）
+- 成熟度：L3（AI 依範例與程式碼修改文件，人指定範圍並審查）
+- 證據：docs/midterm 的 B 1.13、C 1.11、D 1.9 版本紀錄
+
+### 2026-11-19｜設計／依審查留言修正圖與程式標註｜PR #92 審查 11 點
+
+- Story／範圍：期中文件 B、C、D 與 `_build/usecase.js`（PR #92 的審查留言）
+- 工具：Claude Code（Sonnet 5.5）＋ se-course-docs skill、排版程式 `docs/midterm/_build/build.mjs`
+- 怎麼用：讀組員貼在 PR #92 的審查留言（11 點），AI 先對照程式確認每一點（`advance()`、`auto_confirm_expired()`、`submit_registration()`、`worker/__init__.py`、`appeals.py`），再修改文件與排版程式並重新產生
+- AI 產出：B 1.15、C 1.12、D 1.11——輪空標註、兩張循序圖與申訴循序圖的順序與歸屬、commit 位置、使用案例圖漏標的函式與期中後標示、期中後實體附 Story 編號；D 以程式的型別註記為 44 個欄位標上可為空的「?」；`usecase.js` 函式名稱不再逐字斷行、行數多時自動加大列高、關聯標籤改在橢圓之上繪製
+- 人做了什麼：轉達審查留言、決定全部在本 PR 修正
+- 驗證：逐點對照程式；重新產生後逐張檢視使用案例圖 1、3、4、6、7 確認沒有斷字、重疊或被遮住的標籤；排版程式無錯誤
+- 問題與修正：上一輪 AI 把輪空標成 `confirm_walkover()`、把申訴期滿的加鎖順序寫成先鎖整個對戰表，都沒有逐行讀 `advance()` 與 `auto_confirm_expired()`，由審查者對照程式發現；AI 修標籤位置時第一版把標籤移到橢圓上方遠離箭頭，檢視圖片才發現更難讀，改成維持在箭頭旁、最後繪製並加白邊；`auto_confirm_expired()` 實際是先鎖賽事與本場、確認時 `advance()` 才鎖整個對戰表，與 AD-6「連鎖流程不能先鎖本場」的敘述不同，文件已改成程式的實際做法，是否要改程式留給組內決定
+- 成熟度：L3（AI 依審查意見與程式修改文件，人決定範圍）
+- 證據：PR #92 審查留言；docs/midterm 的 B 1.15、C 1.12、D 1.11 版本紀錄
