@@ -887,3 +887,50 @@
 - 問題與修正：上一版（issue #88）AI 照組員的敘述把「取消資格不會產生輪空」寫進 B、C，沒有對照程式，漏了準決賽以取消資格定勝負時季軍賽輪空的情況，由另一位組員在 PR 審查時對照 `progression.py` 與測試發現；本次也發現 BO 的最小每輪間隔在 B 的資料表與 D 的設計重點還有兩處同樣的寫法（審查只列了 B 第 311、1528 行），一併修正；第一次產生時 B 的 Word 檔被 Word 開著（EBUSY），請人關閉後重新產生
 - 成熟度：L3（AI 依審查意見與程式修改文件，人審查 PR 並決定範圍）
 - 證據：PR #89；docs/midterm 的 B 1.11、C 1.9、D 1.7 版本紀錄
+
+### 2026-11-19｜程式／程式生成與 refactor｜清理 deferred-work 的 8 項
+
+- Story／範圍：deferred-work 中不需他人決定的項目（spec-deferred-cleanup，PR 尚未建立）
+- 工具：Claude Code（Sonnet 5.5）＋ bmad-build、Explore 子代理（調查）、general-purpose 子代理（實作）
+- 怎麼用：先請 AI 盤點 deferred-work.md 的 220 行並分類，我選「只做能獨立完成的」並決定 email 非 ASCII 回 422；bmad-build 先調查寫 spec，我核准後由子代理實作
+- AI 產出：`core/errors.py` 新增 `RequestValidationError` handler（約 40 個內建錯誤代碼對應繁中）、`_validate_email` 擋非 ASCII、`compose.yml` worker 加 `restart`、`test_reset_verify_concurrency.py`、`main-wiring.test.tsx`、兩個連點測試、`support/drawn.ts` 與走真 API 的觀眾 e2e、`test_migrations.py` 開 `compare_server_default`；deferred-work.md 刪除 10 筆
+- 人做了什麼：決定範圍（9 項放同一個 PR、分支 `story/deferred-cleanup`）、決定 worker 只補 restart、home e2e 不做、觀眾 e2e 要補、核准 spec；要求跑完整測試
+- 驗證：後端 pytest 通過（覆蓋率 97%，通過總數未抓到）、lint 通過；前端單元 1025 項、typecheck、biome 通過；`tournament.spec.ts` 12 項通過（32.2 分鐘）；子代理自述臨時破壞程式碼確認新測試會失敗（未獨立重跑）；完整 e2e 因系統記憶體不足被停止，`spectator.spec.ts` 只有子代理自報 6 項通過
+- 問題與修正：deferred-work 有三筆內容已過時，AI 靠調查才發現——首頁已沒有「後端狀態：正常」元件、worker 的 rollback 保護 `_run_item` 早已存在、觀眾 e2e 的 `test.fixme` 已被假資料版取代；因此縮小範圍並先問我。子代理少刪一筆殘留的 `test.fixme` 條目、刪除時吃掉一個空行，由我讀 diff 發現後補修；我在 spec 寫刪除筆數時多算一筆（11），核對 diff 後改為 10
+- 成熟度：L4（調查、spec、實作、diff 核對與多層測試的固定流程，人在範圍與 spec 兩個 checkpoint 決策；完整 e2e 未跑完，所以不算完整驗證）
+- 證據：`_bmad-output/implementation-artifacts/spec-deferred-cleanup.md`、分支 `story/deferred-cleanup`
+
+### 2026-11-20｜程式／程式審查修正｜PR #94 審查後修正兩個問題
+
+- Story／範圍：清理 deferred-work（PR #94 的審查留言）
+- 工具：Claude Code（Sonnet 5.5）
+- 怎麼用：讀組員的審查留言，先逐點實測驗證，成立的才修；改完重跑後端完整測試
+- AI 產出：自訂 type `url_too_long` 改名為 `livestream_url_too_long`，並新增「自訂 type 不得和 Pydantic 內建代碼同名」的測試；email 改檢查整個地址 `isascii()`，三個端點各補中文網域案例；還原 deferred-work 的 migration 那筆後半段；統一 spec 與 PR 的筆數
+- 人做了什麼：組員 D 做審查並指出兩個必修與兩個 nit
+- 驗證：先實測確認 `url_too_long` 撞名（全專案唯一一個）、`a@例子.com` 會通過；把改名還原後，新測試確實失敗並指出 `url_too_long`；後端完整測試 2430 項通過、mypy／ty／ruff 通過
+- 問題與修正：上一輪 AI 把非 ASCII 檢查只做在 @ 前面，沒有想到中文網域一樣寄不出去；handler 依 type 翻譯時沒有檢查自訂 type 是否與內建代碼重名，兩點都由審查者實測發現，AI 與測試都沒有擋下；AI 在 PR 說明寫「登入會變 422」，審查者對照程式指出登入沒有用 `EmailField`；deferred 的 migration 那筆被整筆刪掉，漏了資料升級測試的後半句；spec、PR 標題與 commit 的筆數（8、9、10）不一致
+- 成熟度：L3（AI 依審查意見修正，人審查並決定要修的範圍）
+- 證據：PR #94；`_bmad-output/implementation-artifacts/spec-deferred-cleanup.md`
+### 2026-11-18｜設計／圖對照程式標註｜B、C、D 其餘的圖全部標出對應的程式
+
+- Story／範圍：期中文件 B、C、D（分支 docs/figures-code-annotate；承接 PR #91 只標了部分圖的缺口）
+- 工具：Claude Code（Sonnet 5.5）＋ se-course-docs skill、排版程式 `docs/midterm/_build/build.mjs`
+- 怎麼用：給 AI 一張已標好函式的報名狀態圖當範例，要求 A～D 所有圖都照這個樣子對照程式；AI 先逐張盤點哪些圖沒標，再讀 `models.py`、各模組 `service.py`、`router.py`、`worker/jobs.py` 找出對應的檔案與函式，用腳本與手改補上
+- AI 產出：B 1.13——場次狀態圖 11 個轉換標函式並加註解框、ERD 9 張圖的實體標 models.py、使用案例圖 7 張共 64 個使用案例標函式（期中後的標 Story 編號）、類別圖 4 張標檔案、循序圖 2 張拆成 Router 與 Service 並標 API 路徑；C 1.11——4 張圖；D 1.9——架構圖、13 張類別圖的類別標檔案、取消資格循序圖；`usecase.js` 新增 `<br>` 換行；重新產生 PDF 與 Word
+- 人做了什麼：指定範例與範圍、要求對照程式碼
+- 驗證：函式名稱以 grep 對照程式（例如 `file_appeal`、`resolve_appeals`、`replay_match`、`confirm_walkover`、`auto_confirm_expired`）；排版程式無錯誤，使用案例圖逐張檢視；B 重新產生後 86 頁
+- 問題與修正：AI 用腳本取代 B 的兩張循序圖時，標題「裁判登錄比分與送出系列結果」在文件裡出現兩次（使用案例規格也有），腳本取到第一個位置，一次刪掉約 900 行；以 `git diff --stat` 看到 952 行刪除、排版程式回報 B 只剩 53 頁（原本 89 頁）才發現，從 `main` 還原 B 後重做所有修改並限定在「八、循序圖」之後尋找；另外 ERD 實體標籤加上檔名後，多張圖縮放低於 0.62，改成兩行標籤仍未全部解決，B 與 C、D 仍有縮放警告（原有的警告另計）
+- 成熟度：L3（AI 依範例與程式碼修改文件，人指定範圍並審查）
+- 證據：docs/midterm 的 B 1.13、C 1.11、D 1.9 版本紀錄
+
+### 2026-11-19｜設計／依審查留言修正圖與程式標註｜PR #92 審查 11 點
+
+- Story／範圍：期中文件 B、C、D 與 `_build/usecase.js`（PR #92 的審查留言）
+- 工具：Claude Code（Sonnet 5.5）＋ se-course-docs skill、排版程式 `docs/midterm/_build/build.mjs`
+- 怎麼用：讀組員貼在 PR #92 的審查留言（11 點），AI 先對照程式確認每一點（`advance()`、`auto_confirm_expired()`、`submit_registration()`、`worker/__init__.py`、`appeals.py`），再修改文件與排版程式並重新產生
+- AI 產出：B 1.15、C 1.12、D 1.11——輪空標註、兩張循序圖與申訴循序圖的順序與歸屬、commit 位置、使用案例圖漏標的函式與期中後標示、期中後實體附 Story 編號；D 以程式的型別註記為 44 個欄位標上可為空的「?」；`usecase.js` 函式名稱不再逐字斷行、行數多時自動加大列高、關聯標籤改在橢圓之上繪製
+- 人做了什麼：轉達審查留言、決定全部在本 PR 修正
+- 驗證：逐點對照程式；重新產生後逐張檢視使用案例圖 1、3、4、6、7 確認沒有斷字、重疊或被遮住的標籤；排版程式無錯誤
+- 問題與修正：上一輪 AI 把輪空標成 `confirm_walkover()`、把申訴期滿的加鎖順序寫成先鎖整個對戰表，都沒有逐行讀 `advance()` 與 `auto_confirm_expired()`，由審查者對照程式發現；AI 修標籤位置時第一版把標籤移到橢圓上方遠離箭頭，檢視圖片才發現更難讀，改成維持在箭頭旁、最後繪製並加白邊；`auto_confirm_expired()` 實際是先鎖賽事與本場、確認時 `advance()` 才鎖整個對戰表，與 AD-6「連鎖流程不能先鎖本場」的敘述不同，文件已改成程式的實際做法，是否要改程式留給組內決定
+- 成熟度：L3（AI 依審查意見與程式修改文件，人決定範圍）
+- 證據：PR #92 審查留言；docs/midterm 的 B 1.15、C 1.12、D 1.11 版本紀錄

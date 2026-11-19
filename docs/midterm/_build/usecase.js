@@ -65,24 +65,30 @@
   function render(src, pageW) {
     const d = parse(src);
     const W = d.width || pageW;
-    const ROW = d.row;
+    let ROW = d.row;
     const hasRight = d.actors.some((a) => a.side === 'right');
     const bx1 = ACTOR_W;
     const bx2 = hasRight ? W - ACTOR_W : W - 8;
     const colX = { 1: bx1 + (bx2 - bx1) * 0.27, 2: bx1 + (bx2 - bx1) * 0.73 };
     const maxText = d.packages.length ? Math.min(...d.packages.map((k) => (k.x1 - k.x0) * (bx2 - bx1))) - 40 : (bx2 - bx1) / 2 - 40;
+    // 先算好每個使用案例的行數：只有含中文的段落才會逐字換行，函式名稱（純 ASCII）不拆；
+    // 行數多時加大列高，避免橢圓互相重疊
+    for (const u of d.ucs) {
+      u.lines = u.name.split('<br>').flatMap((seg) => (/[　-鿿＀-￯]/.test(seg) ? wrap(seg, maxText) : [seg]));
+    }
+    const maxLines = Math.max(1, ...d.ucs.map((u) => u.lines.length));
+    if (maxLines > 1) ROW = Math.max(ROW, 2 * (8 * maxLines + 9) + 8);
     const rows = d.ucs.map((u) => u.row).concat(d.actors.map((a) => a.row), d.packages.map((k) => k.r1));
     const lastRow = Math.max(...rows);
     const rowY = (r) => TOP + (r - 0.5) * ROW;
     const H = rowY(lastRow) + ROW / 2 + 14;
     const byId = {};
     for (const u of d.ucs) {
-      u.lines = wrap(u.name, maxText);
       const tw = Math.max(...u.lines.map(measure));
       u.cx = u.fx !== undefined ? bx1 + (bx2 - bx1) * u.fx : colX[u.col];
       u.cy = rowY(u.row);
       u.rx = Math.max(62, tw / 2 + 22);
-      u.ry = u.lines.length > 1 ? 25 : Math.min(19, ROW / 2 - 3);
+      u.ry = u.lines.length > 1 ? 8 * u.lines.length + 9 : Math.min(19, ROW / 2 - 3);
       byId[u.id] = u;
     }
     for (const a of d.actors) {
@@ -111,6 +117,7 @@
       p.push('<text x="' + (x + w / 2) + '" y="' + (y + ROW / 2 + 5) + '" text-anchor="middle" font-weight="bold">' + esc(k.name) + '</text>');
     }
 
+    const lateLabels = [];
     for (const l of d.links) {
       const a = byId[l.from];
       const b = byId[l.to];
@@ -149,9 +156,10 @@
         const lw = measure(label) * (11.5 / FS);
         const lh = 12;
         const off = Math.abs(nx) * lw / 2 + Math.abs(ny) * lh / 2 + 3;
+        // 標籤最後才畫（蓋在橢圓上、帶白邊），兩個橢圓靠得近時也不會被遮住
         const lx = (sx + tx) / 2 + nx * off;
         const ly = (sy + ty) / 2 + ny * off + 4;
-        p.push('<text x="' + lx + '" y="' + ly + '" font-size="11.5" text-anchor="middle" paint-order="stroke" stroke="#fafafa" stroke-width="4">' + esc(label) + '</text>');
+        lateLabels.push('<text x="' + lx + '" y="' + ly + '" font-size="11.5" text-anchor="middle" paint-order="stroke" stroke="#fafafa" stroke-width="4">' + esc(label) + '</text>');
       }
     }
 
@@ -160,6 +168,8 @@
       const y0 = u.cy - (u.lines.length - 1) * 8.5 + 4.5;
       u.lines.forEach((t, i) => p.push('<text x="' + u.cx + '" y="' + (y0 + i * 17) + '" text-anchor="middle">' + esc(t) + '</text>'));
     }
+
+    lateLabels.forEach((t) => p.push(t));
 
     for (const a of d.actors) {
       const { x, y } = a;

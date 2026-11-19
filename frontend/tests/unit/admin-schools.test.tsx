@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import {
   act,
+  fireEvent,
   renderHook,
   screen,
   waitFor,
@@ -357,5 +358,37 @@ describe("S36 學校清單：錯誤與快取", () => {
       queryClient.invalidateQueries({ queryKey: SCHOOLS_QUERY_KEY }),
     )
     expect(list).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("S36 學校清單：連點送出", () => {
+  it("送出中再按一次：createSchool 只呼叫一次，送出鈕停用", async () => {
+    const user = userEvent.setup()
+    mockList()
+    // 永遠不結束的請求：模擬送出中
+    const create = vi
+      .spyOn(IdentityService, "createSchool")
+      .mockReturnValue(
+        new Promise(() => {}) as ReturnType<
+          typeof IdentityService.createSchool
+        >,
+      )
+    signInAs({ account: ADMIN })
+    renderApp("/admin/schools")
+
+    await screen.findByRole("table", { name: "學校" })
+    await user.click(screen.getByRole("button", { name: "新增學校" }))
+    const dialog = await screen.findByRole("dialog", { name: "新增學校" })
+    await user.type(within(dialog).getByLabelText("學校名稱"), "國立政治大學")
+    const submit = within(dialog).getByRole("button", { name: "新增學校" })
+    // 兩次點擊之間沒有任何等待：第二次發生在第一次的驗證完成之前，
+    // 只靠 `isSubmitting` 擋得住（mutation 還沒開始，isPending 仍是 false）
+    fireEvent.click(submit)
+    fireEvent.click(submit)
+
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(submit).toBeDisabled()
   })
 })

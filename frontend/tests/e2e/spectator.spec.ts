@@ -1,8 +1,12 @@
 // UJ-4（期中版）：觀眾不登入瀏覽對戰樹與場次頁。
-// 示範資料（7.1）還沒有已抽籤的賽事，公開的賽事、對戰樹、單場 API 先以 page.route 回傳假對戰樹
-// （support/match-api.ts，32 隊「進行中」）；7.1 有資料後補一份走真 API 的版本（見 deferred-work.md）。
+// 前兩個測試以 page.route 回傳假對戰樹（support/match-api.ts，32 隊「進行中」），只驗證前端流程與版面，
+// 跑得快；最後一個測試走真 API：測試內建立並抽籤一場 8 隊賽事（support/drawn.ts），觀眾從 S2「對戰表」
+// 分頁進 S3、S4 再返回。假資料版與真 API 版並存。
 import { identitySwitcher } from "./support/accounts"
+import { fetchBracket, playableMatches } from "./support/bulk"
+import { setUpDrawnTournament } from "./support/drawn"
 import { expect, test } from "./support/fixtures"
+import { FICTIONAL_GAME } from "./support/games"
 import {
   BRACKET_TREE_SELECTOR,
   expectNoHorizontalScroll,
@@ -18,6 +22,7 @@ import {
 const MATCH_CODE = "M17"
 const BRACKET_PATH = `/tournaments/${FIXTURE_TOURNAMENT_ID}/bracket`
 
+// 只替預設的 page 掛假資料；真 API 的測試用 newRoleContext 另開的頁面，不受影響
 test.beforeEach(async ({ page }) => {
   await mockFixtureTournament(page)
 })
@@ -92,5 +97,48 @@ test("未登入的觀眾在 S3 對戰表點場次卡進入場次頁，再回到�
     await page.locator("[data-slot=match-back-link]").click()
     await expect(page).toHaveURL(new RegExp(`${BRACKET_PATH}$`))
     await expect(tree).toBeVisible()
+  })
+})
+
+test("真 API：未登入的觀眾從 S2 對戰表分頁進入 S3，點場次卡進 S4，再回到 S3", {
+  tag: ["@story-4.6", "@story-5.8", "@story-7.2", "@FR-35", "@FR-36", "@NFR-7"],
+}, async ({ newRoleContext }) => {
+  // 建立賽事、8 隊報名並等 worker 分配（優先期結束後的輪詢最久約 90 秒）
+  test.setTimeout(15 * 60_000)
+  const { tournamentId } = await setUpDrawnTournament(
+    FICTIONAL_GAME,
+    newRoleContext,
+  )
+  const match = playableMatches(await fetchBracket(tournamentId), 1)[0]
+  const bracketPath = `/tournaments/${tournamentId}/bracket`
+  const spectator = await (await newRoleContext("觀眾（真 API）")).newPage()
+  const tree = spectator.locator(BRACKET_TREE_SELECTOR)
+
+  await test.step("開啟 S2，切到「對戰表」分頁看到 S3", async () => {
+    await spectator.goto(`/tournaments/${tournamentId}`)
+    await spectator.getByRole("tab", { name: "對戰表" }).click()
+    await expect(spectator).toHaveURL(new RegExp(`${bracketPath}$`))
+    await expect(tree).toBeVisible()
+    // 375 px：只有對戰樹容器可以左右捲動，頁面與其他區塊不可以
+    await expectNoHorizontalScroll(spectator)
+  })
+
+  await test.step("點場次卡進入 S4", async () => {
+    const card = tree.locator(
+      `a[href="/tournaments/${tournamentId}/matches/${match.id}"]`,
+    )
+    await card.scrollIntoViewIfNeeded()
+    await card.click()
+    await expect(spectator.getByRole("heading", { level: 1 })).toContainText(
+      match.code,
+    )
+    await expectNoHorizontalScroll(spectator)
+  })
+
+  await test.step("返回連結回到 S3", async () => {
+    await spectator.locator("[data-slot=match-back-link]").click()
+    await expect(spectator).toHaveURL(new RegExp(`${bracketPath}$`))
+    await expect(tree).toBeVisible()
+    await expectNoHorizontalScroll(spectator)
   })
 })

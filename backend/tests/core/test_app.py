@@ -1,3 +1,4 @@
+from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
@@ -14,6 +15,10 @@ def test_health_check_without_trailing_slash_returns_true(client: TestClient) ->
 
 def test_business_error_handler_is_registered() -> None:
     assert BusinessError in app.exception_handlers
+
+
+def test_request_validation_error_handler_is_registered() -> None:
+    assert RequestValidationError in app.exception_handlers
 
 
 def test_cors_allows_only_frontend_host(client: TestClient) -> None:

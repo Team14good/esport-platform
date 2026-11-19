@@ -88,6 +88,8 @@ services:
         condition: service_healthy
     environment: *backend-env
     command: ["python", "-m", "app.worker"]
+    # 程序意外結束（例如資料庫重啟時連線錯誤）後自動重啟
+    restart: unless-stopped
     develop:
       watch:
         - path: ./backend
