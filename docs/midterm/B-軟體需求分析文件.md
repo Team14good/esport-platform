@@ -16,6 +16,7 @@
 | 1.11 | 2026-11-15 | 依 PR #89 審查對照程式修正：輪空補上「準決賽以取消資格或輪空定勝負時，季軍賽少了敗隊」（壹、四名詞定義、貳、三 4.3、場次狀態圖說明、FR-21）；賽事狀態圖的提前抽籤改為開放報名直接轉賽程已公布；BO 數改為賽事設定的 BO（壹、五、2.2、ROUND_SETTING、FR-7）；循序圖的報名結果、下一場對手、申訴通知標示期中後 |
 | 1.12 | 2026-11-18 | 圖上標註對應的程式：泳道圖各步驟標出對應的使用案例編號（〔3.4〕等，見貳、二功能清單）與負責的函式、使用案例總覽圖的功能群標出後端模組目錄、賽事與報名狀態圖的轉換標出負責的函式、ERD 與概念類別圖標出資料表所在的 models.py、送出報名循序圖把後端拆成 Router 與 Service 兩層，並標出 API 路徑與各步驟的函式；期中後才做的轉換與步驟一併標示 |
 | 1.13 | 2026-11-18 | 其餘的圖全部對照程式標註：使用案例圖 1.0～7.0 的每個使用案例標出負責函式，期中後的標示 Story 編號；場次狀態圖的轉換標出函式與 worker，並註明由 `transition_match()` 與 `_MATCH_TRANSITIONS` 控制；ERD 的每個實體標出所在的 models.py；循序圖（二）（三）拆成 Router 與 Service 並標出 API 路徑、函式與 worker 工作 |
+| 1.14 | 2026-11-19 | 依 code review 修正：申訴期滿循序圖補上 worker 的 `confirm_expired_appeals()`；逾時判棄權標 worker 工作 `judge_forfeits`；申訴處理的函式標出實作檔 `appeals.py` |
 
 # 壹、系統整體概述
 
@@ -672,22 +673,23 @@ stateDiagram-v2
     state "申訴期" as appeal_window
     state "申訴中" as appealed
     scheduled --> live : 裁判登錄第一局<br/>record_game()
-    scheduled --> appeal_window : 逾時判棄權<br/>worker：forfeit_next_due()
+    scheduled --> appeal_window : 逾時判棄權<br/>worker：judge_forfeits → forfeit_next_due()
     live --> appeal_window : 裁判送出系列結果<br/>submit_result()
     appeal_window --> appealed : 隊長提出申訴<br/>disputes file_appeal() → mark_appealed()
-    appealed --> scheduled : 重新比賽<br/>replay_match()
+    appealed --> scheduled : 重新比賽<br/>appeals.py replay_match()
   }
   [*] --> scheduled : 抽籤後建立場次<br/>draw()
   unconfirmed --> confirmed : 一方被取消資格<br/>disqualify()
   scheduled --> confirmed : 輪空<br/>advance() → confirm_walkover()
   scheduled --> voided : 季軍賽取消<br/>advance() → _void()
   appeal_window --> confirmed : 申訴期滿且無申訴<br/>worker：auto_confirm_expired()
-  appealed --> confirmed : 主辦方維持或更正<br/>uphold_result()／correct_result()
+  appealed --> confirmed : 主辦方維持或更正<br/>appeals.py uphold_result()／correct_result()
   confirmed --> [*]
   voided --> [*]
   note right of voided
     狀態都由 competition/service.py
     transition_match() 改，查 _MATCH_TRANSITIONS 表
+    申訴相關轉換的實作在 appeals.py，service.py 轉發
   end note
 ```
 
@@ -1507,7 +1509,7 @@ sequenceDiagram
   R->>DB: session.commit()
   R-->>Ref: 申訴期開始倒數
   Note over DB,W: 申訴期滿（預設 30 分鐘）
-  W->>S: auto_confirm_expired()
+  W->>S: confirm_expired_appeals()<br/>→ auto_confirm_expired()
   S->>DB: 查詢已到期且無申訴的場次<br/>鎖住場次、重新檢查狀態
   S->>DB: confirm_match() 轉為已確認<br/>advance() 勝隊填入下一場
   S->>DB: 兩隊都確定時<br/>start_forfeit_clock()<br/>設定下一場的棄權期限
@@ -1541,15 +1543,15 @@ sequenceDiagram
   alt 維持原結果
     Org->>R: POST /organizer/tournaments/{id}<br/>/matches/{id}/appeal-resolution<br/>（維持原結果，附理由）
     R->>S: resolve_appeals()
-    S->>C: uphold_result()
+    S->>C: uphold_result()<br/>（appeals.py）
   else 更正結果
     Org->>R: 同一路徑<br/>（重新輸入各局結果，附理由）
     R->>S: resolve_appeals()
-    S->>C: correct_result()<br/>重算系列結果
+    S->>C: correct_result()<br/>（appeals.py）重算系列結果
   else 重新比賽（判棄權的場次）
     Org->>R: 同一路徑<br/>（設定新時間，附理由）
     R->>S: resolve_appeals()
-    S->>C: replay_match()<br/>回到待開打
+    S->>C: replay_match()<br/>（appeals.py）回到待開打
   end
   C->>DB: 維持或更正：confirm_match()<br/>advance() 勝隊填入下一場<br/>棄權期限重新起算
   S->>DB: 申訴全部結案、audit.record()<br/>記錄變更前後比分<br/>events.publish()

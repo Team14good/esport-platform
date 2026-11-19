@@ -12,6 +12,7 @@
 | 1.7 | 2026-11-15 | 依 PR #89 審查：貳、三 `bo_for_round()` 與 `create_tournament()` 的每輪間隔改為以賽事的 BO 數說明（主辦方建立時可修改，預設為遊戲的 BO） |
 | 1.8 | 2026-11-18 | 報名模組類別圖的每個類別標出所在檔案 registration/models.py |
 | 1.9 | 2026-11-18 | 軟體架構圖標出各層的程式位置；各模組類別圖的每個類別標出所在檔案；取消資格循序圖標出 API 路徑、Router 與函式 |
+| 1.10 | 2026-11-19 | 取消資格循序圖註明 `disqualify()` 由 `service.py` 轉發至 `disqualification.py`（依 code review） |
 
 # 壹、系統簡介
 
@@ -851,7 +852,7 @@ sequenceDiagram
   Org->>R: POST /organizer/reports/{report_id}/resolution<br/>屬實（附理由）
   R->>D: resolve_report()
   D->>D: 確認是該賽事主辦方、<br/>賽事尚未結束或取消
-  D->>C: disqualify()
+  D->>C: disqualify()<br/>（service.py 轉發至 disqualification.py）
   C->>DB: 先鎖賽事列，<br/>再依 id 遞增鎖場次
   C->>C: disqualification._plan() 唯讀判斷處理方式<br/>對手未定時回 409、不改資料
   C->>RS: registration_port.disqualify_registration()<br/>→ disqualify_registration() 取消資格
