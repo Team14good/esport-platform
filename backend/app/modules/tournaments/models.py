@@ -335,7 +335,7 @@ def _validate_livestream_url(value: str | None) -> str | None:
         return None
     if len(url) > LIVESTREAM_URL_MAX_LENGTH:
         raise PydanticCustomError(
-            "url_too_long",
+            "livestream_url_too_long",
             "直播連結最多 {max_length} 個字",
             {"max_length": LIVESTREAM_URL_MAX_LENGTH},
         )

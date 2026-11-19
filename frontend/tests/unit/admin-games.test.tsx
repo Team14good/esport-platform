@@ -1,5 +1,5 @@
 import { focusManager } from "@tanstack/react-query"
-import { act, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
 import { describe, expect, it, vi } from "vitest"
@@ -643,5 +643,36 @@ describe("S36 遊戲設定：錯誤處理與輸入", () => {
     )
     expect(screen.getByLabelText("遊戲名稱")).toHaveValue("  虛構競技 ")
     expect(router.state.location.pathname).toBe("/admin/games/new")
+  })
+})
+
+describe("S36 遊戲設定：連點送出", () => {
+  it("送出中再按一次：createGame 只呼叫一次，送出鈕停用", async () => {
+    const user = userEvent.setup()
+    // 永遠不結束的請求：模擬送出中
+    const create = vi
+      .spyOn(TournamentsService, "createGame")
+      .mockReturnValue(
+        new Promise(() => {}) as ReturnType<
+          typeof TournamentsService.createGame
+        >,
+      )
+    signInAs({ account: ADMIN })
+    renderApp("/admin/games/new")
+
+    await fillBasics(user)
+    await chooseOption(user, "預設 BO 數", "BO1")
+    await user.type(screen.getByLabelText("第 1 筆段位名稱"), "黃金")
+    await user.type(screen.getByLabelText("第 1 筆積分"), "30")
+    const submit = screen.getByRole("button", { name: "新增遊戲" })
+    // 兩次點擊之間沒有任何等待：第二次發生在第一次的驗證完成之前，
+    // 只靠 `isSubmitting` 擋得住（mutation 還沒開始，isPending 仍是 false）
+    fireEvent.click(submit)
+    fireEvent.click(submit)
+
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(submit).toBeDisabled()
   })
 })
