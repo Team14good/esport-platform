@@ -934,3 +934,15 @@
 - 問題與修正：上一輪 AI 把輪空標成 `confirm_walkover()`、把申訴期滿的加鎖順序寫成先鎖整個對戰表，都沒有逐行讀 `advance()` 與 `auto_confirm_expired()`，由審查者對照程式發現；AI 修標籤位置時第一版把標籤移到橢圓上方遠離箭頭，檢視圖片才發現更難讀，改成維持在箭頭旁、最後繪製並加白邊；`auto_confirm_expired()` 實際是先鎖賽事與本場、確認時 `advance()` 才鎖整個對戰表，與 AD-6「連鎖流程不能先鎖本場」的敘述不同，文件已改成程式的實際做法，是否要改程式留給組內決定
 - 成熟度：L3（AI 依審查意見與程式修改文件，人決定範圍）
 - 證據：PR #92 審查留言；docs/midterm 的 B 1.15、C 1.12、D 1.11 版本紀錄
+
+### 2026-11-20｜專案管理與流程／改善 AI 工作流程｜讓 bmad-build 讀得到期末規則（epics.md 與 epic context）
+
+- Story／範圍：epics.md〈期中範圍〉與 epic-1～7-context.md
+- 工具：Claude Code（Sonnet 5.5）
+- 怎麼用：讀 PR #96 的審查留言，核對 `bmad-build` 讀的是 epics.md 與 epic context、而不是 CONTRIBUTING，確認審查者說的缺口成立後修正
+- AI 產出：epics.md〈期中範圍〉開頭加一段「期中已結束，期末以原版驗收條件為準」；7 份 epic context 各加一行同義說明，15 個「期中擱置」Story 標成「期中擱置，期末要做」
+- 人做了什麼：組員 D 在審查中指出缺口；我決定另開 PR 處理
+- 驗證：改後以 workflow 的規則（`git log` 比對 context 與 planning artifacts 的最後 commit）確認 context 不會被判成過期；沒有 CRLF；`git diff --check` 無輸出
+- 問題與修正：AI 上一輪把「期末改依完整驗收條件」只寫進 CONTRIBUTING 第 7.3 節，沒有想到 `bmad-build` 讀的是 epics.md 與 epic context，AI 照做會把期末的 Story 做小，由審查者指出；這次是就地修改 context，不是用編譯指示整份重產，讀不到的新規則因此靠人工維持一致
+- 成熟度：L5（修正的是 AI 工作流程讀不到規則的問題，審查者發現缺口後補上，並用 context 過期判斷規則驗證）
+- 證據：分支 `docs/epic-context-final`；PR #96 的審查留言
