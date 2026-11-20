@@ -1,9 +1,13 @@
 """competition 的 HTTP 端點：帳號層級權限、開啟並提交交易（router 才能 commit）。"""
 
 import uuid
+from collections.abc import Iterator
+from typing import Annotated, BinaryIO
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, File, UploadFile, status
+from fastapi.responses import StreamingResponse
 
+from app.core import storage
 from app.core.db import SessionDep
 from app.core.errors import BusinessError
 from app.modules.competition import service
@@ -21,9 +25,10 @@ from app.modules.competition.models import (
     RefereeAssignIn,
     RefereeTournamentMatches,
     RescheduleIn,
+    ResultScreenshotState,
     ScoreEntryState,
 )
-from app.modules.identity.deps import CurrentAccount, Organizer
+from app.modules.identity.deps import CurrentAccount, Organizer, VerifiedAccount
 
 router = APIRouter(tags=["competition"])
 
@@ -168,6 +173,82 @@ def submit_result(
     )
     session.commit()
     return result
+
+
+def _stream(file: BinaryIO) -> Iterator[bytes]:
+    """分塊送出檔案內容，送完（或中斷）後關閉。"""
+    try:
+        while chunk := file.read(64 * 1024):
+            yield chunk
+    finally:
+        file.close()
+
+
+@router.put("/tournaments/{tournament_id}/matches/{match_id}/result-screenshot")
+def upload_result_screenshot(
+    session: SessionDep,
+    account: VerifiedAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    screenshot: Annotated[UploadFile, File()],
+) -> ResultScreenshotState:
+    """S22 勝隊隊長上傳或更換結算截圖（multipart；JPG／PNG，5 MB 內）。
+
+    系列結果送出後才能上傳；不影響結果確認與晉級。更換時，交易提交後才刪除舊檔。
+    """
+    result = service.upload_result_screenshot(
+        session,
+        tournament_id=tournament_id,
+        match_id=match_id,
+        account_id=account.id,
+        screenshot=screenshot.file,
+        content_type=screenshot.content_type,
+    )
+    try:
+        session.commit()
+    except BaseException:
+        storage.delete_file(result.new_key)
+        raise
+    if result.old_key is not None:
+        storage.delete_file(result.old_key)
+    return result.state
+
+
+@router.get(
+    "/tournaments/{tournament_id}/matches/{match_id}/result-screenshot",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"image/png": {}, "image/jpeg": {}}}},
+)
+def download_result_screenshot(
+    session: SessionDep, tournament_id: uuid.UUID, match_id: uuid.UUID
+) -> StreamingResponse:
+    """結算截圖（公開，不需登入；AD-15）；沒有可公開的截圖回 404 `RESULT_SCREENSHOT_NOT_FOUND`。"""
+    file, media_type = service.open_result_screenshot(
+        session, tournament_id=tournament_id, match_id=match_id
+    )
+    return StreamingResponse(
+        _stream(file),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+            # 同一個網址的圖會被更換：每次都向伺服器確認
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@router.get("/tournaments/{tournament_id}/matches/{match_id}/result-screenshot-state")
+def read_result_screenshot_state(
+    session: SessionDep,
+    account: CurrentAccount,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+) -> ResultScreenshotState:
+    """S4：登入者能不能上傳這場的結算截圖（勝隊隊長且系列結果已送出）。"""
+    return service.get_result_screenshot_state(
+        session, tournament_id=tournament_id, match_id=match_id, account_id=account.id
+    )
 
 
 @router.get("/me/referee/matches")

@@ -7,6 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ConnectionLostBanner } from "@/features/competition/ConnectionLostBanner"
 import { MatchCheckIn, showsCheckIn } from "@/features/competition/MatchCheckIn"
 import { matchTitle } from "@/features/competition/MatchHeader"
+import {
+  MatchResultScreenshot,
+  showsResultScreenshot,
+} from "@/features/competition/MatchResultScreenshot"
 import { useMatchScoreEntry } from "@/features/competition/MatchScoreEntry"
 import { MatchSpectatorView } from "@/features/competition/MatchSpectatorView"
 import {
@@ -120,6 +124,11 @@ function MatchContent({
         ) : undefined
       }
       scoreEntry={scoreEntry}
+      resultScreenshot={
+        showsResultScreenshot(detail) ? (
+          <MatchResultScreenshot detail={detail} refresh={refresh} />
+        ) : undefined
+      }
       disqualifiedTeamIds={disqualifiedTeamIds}
     />
   )

@@ -5,7 +5,7 @@ import secrets
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import BinaryIO, Literal
 from zoneinfo import ZoneInfo
 
 from sqlmodel import Session
@@ -19,6 +19,7 @@ from app.modules.competition import (
     progression,
     registration_port,
     repository,
+    result_screenshot,
     scoring,
 )
 from app.modules.competition import schedule as schedule_rules
@@ -60,6 +61,7 @@ from app.modules.competition.models import (
     ReplayCleared,
     RescheduleBlockReason,
     RescheduleInfo,
+    ResultScreenshotState,
     ScoreEntryReason,
     ScoreEntryState,
     SeriesRead,
@@ -599,6 +601,10 @@ def get_public_match(
             and match.team_a_id is not None
             and match.team_b_id is not None
             else None
+        ),
+        result_screenshot_enabled=result_screenshot.is_result_submitted(match),
+        result_screenshot_at=result_screenshot.visible_at(
+            match, repository.get_result_screenshot(session, match.id)
         ),
     )
 
@@ -1663,6 +1669,65 @@ def get_score_entry(
     if not _is_scorer(match, tournament, account_id):
         return ScoreEntryState(is_scorer=False)
     return _score_entry(session, match=match, tournament=tournament)
+
+
+# ---------------------------------------------------------------- 結算截圖（Story 5.7）
+
+
+def upload_result_screenshot(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    account_id: uuid.UUID,
+    screenshot: BinaryIO,
+    content_type: str | None,
+) -> result_screenshot.UploadedScreenshot:
+    """勝隊隊長上傳或更換結算截圖（FR-28）；不影響結果確認與晉級。
+
+    順序：404 `MATCH_NOT_FOUND` → `lock_match`（AD-6）→ 系列結果已送出（409
+    `RESULT_NOT_SUBMITTED`）→ 勝隊隊長（403 `WINNING_CAPTAIN_REQUIRED`）→ 存圖片
+    （415／413）。任何拒絕都不寫資料、不留檔案。新舊檔的清理由 router 依回傳值處理。
+    """
+    _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    match = lock_match(session, match_id=match_id)
+    return result_screenshot.upload(
+        session,
+        match=match,
+        account_id=account_id,
+        screenshot=screenshot,
+        content_type=content_type,
+    )
+
+
+def open_result_screenshot(
+    session: Session, *, tournament_id: uuid.UUID, match_id: uuid.UUID
+) -> tuple[BinaryIO, str]:
+    """公開的結算截圖（串流、Content-Type；AD-15 結算截圖公開）；呼叫端負責關閉串流。
+
+    場次不存在拋 404 `MATCH_NOT_FOUND`；沒有可公開的截圖拋 404 `RESULT_SCREENSHOT_NOT_FOUND`。
+    """
+    match = _match_in_tournament(
+        session, tournament_id=tournament_id, match_id=match_id
+    )
+    return result_screenshot.open_public(session, match=match)
+
+
+def get_result_screenshot_state(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    match_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> ResultScreenshotState:
+    """登入者能不能上傳這場的結算截圖；與上傳 API 同一套狀態與勝隊隊長檢查。
+
+    不含帳號層級的 Email 驗證（上傳端點另由 `VerifiedAccount` 檢查；隊長建隊時都已驗證）。
+    """
+    match = _match_in_tournament(
+        session, tournament_id=tournament_id, match_id=match_id
+    )
+    return result_screenshot.get_state(session, match=match, account_id=account_id)
 
 
 # ---------------------------------------------------------------- 修改場次時間（4.3）

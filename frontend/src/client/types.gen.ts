@@ -395,6 +395,16 @@ export type AppealStatus = "open" | "closed"
 export type ApplicationStatus = "pending" | "approved" | "rejected"
 
 /**
+ * Body_competition-upload_result_screenshot
+ */
+export type Body_competition_upload_result_screenshot = {
+  /**
+   * Screenshot
+   */
+  screenshot: Blob | File
+}
+
+/**
  * Body_disputes-file_appeal
  */
 export type Body_disputes_file_appeal = {
@@ -1432,6 +1442,14 @@ export type PublicMatchDetail = {
    * Forfeit Deadline
    */
   forfeit_deadline?: string | null
+  /**
+   * Result Screenshot Enabled
+   */
+  result_screenshot_enabled?: boolean
+  /**
+   * Result Screenshot At
+   */
+  result_screenshot_at?: string | null
 }
 
 /**
@@ -1927,6 +1945,22 @@ export type RescheduleInfo = {
    * Latest
    */
   latest: string | null
+}
+
+/**
+ * ResultScreenshotState
+ *
+ * 登入者能不能上傳這場的結算截圖（S4 用，和上傳 API 同一套檢查）。
+ */
+export type ResultScreenshotState = {
+  /**
+   * Can Upload
+   */
+  can_upload: boolean
+  /**
+   * Reason
+   */
+  reason: "result_not_submitted" | "not_winning_captain" | null
 }
 
 /**
@@ -3950,6 +3984,111 @@ export type competitionSubmitResultResponses = {
 
 export type competitionSubmitResultResponse =
   competitionSubmitResultResponses[keyof competitionSubmitResultResponses]
+
+export type competitionDownloadResultScreenshotData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/result-screenshot"
+}
+
+export type competitionDownloadResultScreenshotErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionDownloadResultScreenshotError =
+  competitionDownloadResultScreenshotErrors[keyof competitionDownloadResultScreenshotErrors]
+
+export type competitionDownloadResultScreenshotResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown
+}
+
+export type competitionUploadResultScreenshotData = {
+  body: Body_competition_upload_result_screenshot
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/result-screenshot"
+}
+
+export type competitionUploadResultScreenshotErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionUploadResultScreenshotError =
+  competitionUploadResultScreenshotErrors[keyof competitionUploadResultScreenshotErrors]
+
+export type competitionUploadResultScreenshotResponses = {
+  /**
+   * Successful Response
+   */
+  200: ResultScreenshotState
+}
+
+export type competitionUploadResultScreenshotResponse =
+  competitionUploadResultScreenshotResponses[keyof competitionUploadResultScreenshotResponses]
+
+export type competitionReadResultScreenshotStateData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Match Id
+     */
+    match_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/result-screenshot-state"
+}
+
+export type competitionReadResultScreenshotStateErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadResultScreenshotStateError =
+  competitionReadResultScreenshotStateErrors[keyof competitionReadResultScreenshotStateErrors]
+
+export type competitionReadResultScreenshotStateResponses = {
+  /**
+   * Successful Response
+   */
+  200: ResultScreenshotState
+}
+
+export type competitionReadResultScreenshotStateResponse =
+  competitionReadResultScreenshotStateResponses[keyof competitionReadResultScreenshotStateResponses]
 
 export type competitionListMyRefereeMatchesData = {
   body?: never

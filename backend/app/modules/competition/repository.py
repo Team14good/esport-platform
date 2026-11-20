@@ -15,6 +15,7 @@ from app.modules.competition.models import (
     MatchGame,
     MatchOutcome,
     MatchStatus,
+    ResultScreenshot,
 )
 
 
@@ -457,3 +458,45 @@ def clear_for_replay(session: Session, match: Match, at: datetime) -> None:
     match.updated_at = at
     session.add(match)
     session.flush()
+
+
+def get_result_screenshot(
+    session: Session, match_id: uuid.UUID
+) -> ResultScreenshot | None:
+    """該場的結算截圖列（5.7）；沒有為 None。"""
+    statement = select(ResultScreenshot).where(ResultScreenshot.match_id == match_id)
+    return session.exec(statement).first()
+
+
+def save_result_screenshot(
+    session: Session,
+    *,
+    match_id: uuid.UUID,
+    team_id: uuid.UUID,
+    file_key: str,
+    uploaded_by: uuid.UUID,
+    at: datetime,
+) -> str | None:
+    """新增或覆寫該場的結算截圖列，回傳被換掉的舊檔案鍵值（第一次上傳為 None）。
+
+    呼叫端已鎖住場次，所以同一場不會同時新增兩列。
+    """
+    row = get_result_screenshot(session, match_id)
+    old_key: str | None = None
+    if row is None:
+        row = ResultScreenshot(
+            match_id=match_id,
+            team_id=team_id,
+            file_key=file_key,
+            uploaded_by=uploaded_by,
+            created_at=at,
+        )
+    else:
+        old_key = row.file_key
+        row.team_id = team_id
+        row.file_key = file_key
+        row.uploaded_by = uploaded_by
+        row.created_at = at
+    session.add(row)
+    session.flush()
+    return old_key
