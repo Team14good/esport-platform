@@ -2,8 +2,8 @@
 title: 'Story 2.8：主辦方查閱操作紀錄'
 type: 'feature'
 created: '2026-11-21'
-status: 'ready-for-dev'
-baseline_commit: 'da3d619b73f6202b627e52f1a6978c95d809fa9d'
+status: 'in-progress'
+baseline_commit: '5caac654fb4980e120fe153396a0b53c8ca033b7'
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -87,14 +87,14 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend/app/modules/tournaments/{models,service,router}.py` -- `AuditLogEntry`（`id`、`at`、`actor_id`、`actor_display_name`、`action`、`entity_type`、`entity_id`、`before`、`after`）、`AuditLogPage`；`list_audit_log(session, *, tournament_id, page)`；`GET /organizer/tournaments/{tournament_id}/audit-log` -- I/O 矩陣的後端列
-- [ ] `backend/tests/tournaments/test_audit_log.py` -- 排序（含同一時間依寫入順序）、分頁與超出頁碼、system 與帳號操作者、403（別人的賽事、非主辦方）、401、404、不含其他賽事與帳號類紀錄
-- [ ] `_bmad-output/implementation-artifacts/contracts/tournaments.md` -- 新端點；`bash scripts/generate-client.sh` 重新產生 client
-- [ ] `frontend/src/features/tournaments/audit-log.ts` -- 查詢、動作對照表、時間格式（到秒）、變更內容差異計算
-- [ ] `frontend/src/features/tournaments/AuditLogPage.tsx`、`routes/organizer/tournaments/$tournamentId/audit-log.tsx`、`organizer-nav.ts` -- S34
-- [ ] `frontend/tests/unit/audit-log.test.tsx` -- I/O 矩陣的畫面列與差異計算；補 `organizer-tournaments.test.tsx` 側欄斷言
-- [ ] `frontend/tests/e2e/audit-log.spec.ts` -- 主辦方建立賽事後開 S34 看到「建立賽事」那一筆（desktop、mobile-375 截圖）
-- [ ] `_bmad-output/implementation-artifacts/deferred-work.md` -- 新增：資料庫層分頁；欄位名稱與 id 的翻譯
+- [x] `backend/app/modules/tournaments/{models,service,router}.py` -- `AuditLogEntry`（`id`、`at`、`actor_id`、`actor_display_name`、`action`、`entity_type`、`entity_id`、`before`、`after`）、`AuditLogPage`；`list_audit_log(session, *, tournament_id, page)`；`GET /organizer/tournaments/{tournament_id}/audit-log` -- I/O 矩陣的後端列
+- [x] `backend/tests/tournaments/test_audit_log.py` -- 排序（含同一時間依寫入順序）、分頁與超出頁碼、system 與帳號操作者、403（別人的賽事、非主辦方）、401、404、不含其他賽事與帳號類紀錄
+- [x] `_bmad-output/implementation-artifacts/contracts/tournaments.md` -- 新端點；`bash scripts/generate-client.sh` 重新產生 client
+- [x] `frontend/src/features/tournaments/audit-log.ts` -- 查詢、動作對照表、時間格式（到秒）、變更內容差異計算
+- [x] `frontend/src/features/tournaments/AuditLogPage.tsx`、`routes/organizer/tournaments/$tournamentId/audit-log.tsx`、`organizer-nav.ts` -- S34
+- [x] `frontend/tests/unit/audit-log.test.tsx` -- I/O 矩陣的畫面列與差異計算；補 `organizer-tournaments.test.tsx` 側欄斷言
+- [x] `frontend/tests/e2e/audit-log.spec.ts` -- 主辦方建立賽事後開 S34 看到「建立賽事」那一筆（desktop、mobile-375 截圖）
+- [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- 新增：資料庫層分頁；欄位名稱與 id 的翻譯
 
 **Acceptance Criteria:**
 - Given 主辦方建立賽事並讓 worker 轉為開放報名，when 在側欄點「操作紀錄」，then S34 依新到舊列出「賽事狀態變更」（操作者「系統自動」）與「建立賽事」（操作者為主辦方顯示名稱），且沒有任何編輯操作

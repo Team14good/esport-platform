@@ -3,14 +3,16 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Path, status
+from fastapi import APIRouter, Path, Query, status
 
 from app.core import authz
 from app.core.db import SessionDep
 from app.modules.identity.deps import Organizer, PlatformAdmin, VerifiedAccount
 from app.modules.tournaments import service
 from app.modules.tournaments.models import (
+    MAX_PAGE,
     REFEREE_INVITATION_TOKEN_MAX_LENGTH,
+    AuditLogPage,
     GameIn,
     GameRead,
     PublicRefereeInvitation,
@@ -159,6 +161,25 @@ def list_tournament_referees(
     tournament = service.get_tournament(session, tournament_id=tournament_id)
     authz.ensure_tournament_owner(tournament, organizer.id)
     return service.list_referees(session, tournament_id=tournament_id)
+
+
+# ---------------------------------------------------------------- 操作紀錄
+
+
+@router.get("/organizer/tournaments/{tournament_id}/audit-log")
+def list_tournament_audit_log(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
+) -> AuditLogPage:
+    """S34 操作紀錄（唯讀）：由新到舊、每頁 20 筆；`actor_id` 為 null 代表系統自動。
+
+    不存在 404 `TOURNAMENT_NOT_FOUND`；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`。
+    """
+    tournament = service.get_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, organizer.id)
+    return service.list_audit_log(session, tournament_id=tournament_id, page=page)
 
 
 @router.get("/referee-invites/{token}")
