@@ -249,9 +249,21 @@ identity/test_signup.py:
   layer: integration
   stories: ["1.3"]
   frs: [FR-1]
+notifications/test_dispatch.py:
+  layer: integration
+  stories: ["1.6"]
+  frs: [FR-37]
 notifications/test_email_delivery.py:
   layer: integration
   stories: ["1.3", "1.5"]
+  frs: [FR-37]
+notifications/test_notification_api.py:
+  layer: integration
+  stories: ["1.6"]
+  frs: [FR-38, NFR-5]
+notifications/test_rules.py:
+  layer: integration
+  stories: ["1.6"]
   frs: [FR-37]
 registration/test_allocation.py:
   layer: unit

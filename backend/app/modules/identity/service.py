@@ -229,6 +229,21 @@ def get_display_names(
     return {account.id: account.display_name for account in accounts}
 
 
+def list_platform_admin_ids(session: Session) -> list[uuid.UUID]:
+    """給 notifications（Story 1.6）：所有平台管理員的帳號 id。"""
+    return repository.list_platform_admin_ids(session)
+
+
+def get_organizer_applicant_id(
+    session: Session, application_id: uuid.UUID
+) -> uuid.UUID:
+    """給 notifications（Story 1.6）：主辦方申請的申請人；不存在拋 404 `APPLICATION_NOT_FOUND`。"""
+    application = repository.get_application(session, application_id)
+    if application is None:
+        raise _application_not_found()
+    return application.account_id
+
+
 def _school_not_found() -> FieldError:
     return FieldError("SCHOOL_NOT_FOUND", "找不到這間學校", loc=("body", "school_id"))
 

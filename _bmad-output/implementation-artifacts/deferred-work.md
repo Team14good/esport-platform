@@ -194,3 +194,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`
   summary: （低）做 2.5 延長報名時，賽事必須由 `closed` 轉回 `open`；自動抽籤只看狀態是 `closed`，若 2.5 只改報名截止時間而維持 `closed`，worker 會在新截止時間前就抽籤。
   evidence: 2026-11-19 Story 4.2 審查第 6 點；`auto_draw_skip` 以（賽事, 報名截止時間）為鍵，轉回 `open` 再截止時會重新嘗試（`test_new_registration_end_is_tried_again`）。
+
+## Deferred from: spec-1-6-notification-center.md (2026-11-21)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
+  summary: （低）FR-37「裁判指派因晉級衝突被取消時另通知主辦方」沒有做：`RefereeUnassigned` 沒有區分「晉級衝突自動收回」與「主辦方收回、改派」，notifications 無從判斷，目前只通知被取消的裁判。
+  evidence: Story 1.6 Decisions。修法：competition 在 `RefereeUnassigned` 加一個原因欄位（例如 `reason: "conflict" | "organizer"`，5.5 `unassign_referee_if_member` 發 `conflict`），notifications 的 `_referee_unassigned` 在 `conflict` 時另加主辦方一份草稿（link `/organizer/tournaments/{tid}/matches`）。

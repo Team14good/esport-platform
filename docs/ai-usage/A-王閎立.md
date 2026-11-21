@@ -957,3 +957,39 @@
 - 問題與修正：AI 上一輪把「期末改依完整驗收條件」只寫進 CONTRIBUTING 第 7.3 節，沒有想到 `bmad-build` 讀的是 epics.md 與 epic context，AI 照做會把期末的 Story 做小，由審查者指出；這次是就地修改 context，不是用編譯指示整份重產，讀不到的新規則因此靠人工維持一致
 - 成熟度：L5（修正的是 AI 工作流程讀不到規則的問題，審查者發現缺口後補上，並用 context 過期判斷規則驗證）
 - 證據：分支 `docs/epic-context-final`；PR #96 的審查留言
+
+### 2026-11-21｜需求／Story spec｜Story 1.6 通知中心
+
+- Story／範圍：1.6（分支 `story/1-6-notification-center`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 以 bmad-build-auto 讀 epic-1-context、epics.md Story 1.6 原版驗收條件、PRD FR-37 通知對象表與架構 D-6，盤點 18 種已發出的事件與各模組可用的公開查詢函式後寫 spec
+- AI 產出：`spec-1-6-notification-center.md`：I/O 矩陣 13 列、6 條 AC、14 列收件規則表（事件 → 收件人 → link）、9 條 Decisions（範圍包含登錄期中事件、Notification 加 `body`、別人的通知回 404、未讀數增加時刷新身分清單等）
+- 人做了什麼：無人值守執行；Decisions 由 AI 依推薦做法選定，列在 PR「給審查者」等組員提出異議
+- 驗證：spec 通過 READY FOR DEVELOPMENT 自檢；epic context 依 git 規則判斷未過期，沒有重新產生
+- 問題與修正：spec 的 Verification 寫前端單元測試用 `bun run test`，實際上那是 Playwright，單元測試是 `test:unit`；實作代理照 CI 設定跑時發現
+- 成熟度：L4（AI 依固定流程讀需求來源、產出 spec，再交給實作代理與自動驗證）
+- 證據：commit f1aefb9、d35c507；`_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
+
+### 2026-11-21｜程式／程式生成｜Story 1.6 通知登錄機制、收件規則與通知中心
+
+- Story／範圍：1.6（分支 `story/1-6-notification-center`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：bmad-build-auto step-03 交給一個沒有對話脈絡的實作代理，只依 spec 實作；完成後由主流程讀 diff、重跑 CI 檢查並對照 I/O 矩陣
+- AI 產出：後端 `notification` 表與遷移 `d1f3a5c7e9b2`、`registry.py`（登錄機制）、`rules.py`（15 種事件的收件規則）、`dispatch_event` 分派與去重、3 支通知 API；identity 新增 2 個公開函式、disputes 新增 `get_report_parties`；前端頂欄鈴鐺（30 秒輪詢、99+、Popover 8 則）、S14 `/notifications`、相對時間與 `10/18（六）19:00` 格式
+- 人做了什麼：無人值守執行；主流程審 diff 時決定保留 deferred-work 既有項目、把實作中的決定補進 spec Decisions
+- 驗證：後端 `scripts/test.sh` 2531 個測試 exit 0、`scripts/lint.sh` 全過；前端 build、typecheck、biome 全過；`generate-client.sh` 後 client 無差異；Alembic 單一 head
+- 問題與修正：實作代理刪掉了 deferred-work.md 裡 1.5 的既有項目（理由是本 Story 已補上斷言），違反「既有項目維持原樣」的規則；主流程讀 diff 時發現並還原，在 Decisions 註明已處理、留給人刪除。另外代理為了不跨模組 import `competition/forfeit_job.py`，在 notifications 另定義同名 `MatchForfeited` 事件類別，這是 spec 沒寫的做法，已補進 Decisions 讓 D 審查
+- 成熟度：L4（spec → 實作代理 → 主流程審 diff 與自動驗證，人只在 PR 決策）
+- 證據：commit 3808723、d35c507
+
+### 2026-11-21｜測試／測試個案產生｜Story 1.6 分派、收件規則、通知 API 與端對端測試
+
+- Story／範圍：1.6（分支 `story/1-6-notification-center`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：實作代理依 I/O 矩陣寫後端與前端測試；主流程逐列對照矩陣確認每列都有通過的測試，再在既有 UJ-1 端對端測試加上「核准後在鈴鐺收到通知、點擊導向主辦方後台、S14 列表」一步
+- AI 產出：`test_dispatch.py`（12 個，用測試專用事件類型）、`test_rules.py`（15 個，以真實流程建資料驗證收件人與 link）、`test_notification_api.py`（11 個測試函式，含參數化）；前端 `notifications.test.tsx` 16 個；改寫 1.8 的 worker 測試為「申請人各收到一封、重跑不重寄」；e2e `identity.spec.ts` 新增一步並截圖
+- 人做了什麼：無人值守執行
+- 驗證：notifications 與 1.8 審核測試 105 個通過；前端單元測試 74 個檔、1060 個通過；Playwright `identity.spec.ts` desktop 與 mobile-375 共 2 個通過，375 px 沒有橫向捲軸
+- 問題與修正：1.8 的 `test_worker_marks_review_events_processed_without_sending_email` 斷言期中「審核事件不寄信」，與本 Story 衝突而失敗（全套 2530 個中 1 個失敗）；實作代理判斷是預期中的行為改變，改寫成檢查新行為，而不是刪測試
+- 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
+- 證據：commit 3808723、346478f；`backend/tests/notifications/`、`frontend/tests/unit/notifications.test.tsx`、`frontend/tests/e2e/identity.spec.ts`

@@ -5,6 +5,7 @@ import {
   type AccountRead,
   type Identity,
   IdentityService,
+  NotificationsService,
   TournamentsService,
 } from "@/client"
 import { RouteErrorPage } from "@/components/layout/ErrorPage"
@@ -19,6 +20,9 @@ type ListIdentitiesResult = Awaited<
   ReturnType<typeof IdentityService.listCurrentIdentities>
 >
 type LoginResult = Awaited<ReturnType<typeof IdentityService.login>>
+type UnreadCountResult = Awaited<
+  ReturnType<typeof NotificationsService.getUnreadCount>
+>
 type ListTournamentsResult = Awaited<
   ReturnType<typeof TournamentsService.listPublicTournaments>
 >
@@ -58,6 +62,12 @@ export function mockAccountApis({
   const listIdentities = vi
     .spyOn(IdentityService, "listCurrentIdentities")
     .mockResolvedValue({ data: identities } as ListIdentitiesResult)
+  // 頂欄鈴鐺的未讀數（Story 1.6）：測試已自行 mock 時不覆蓋
+  if (!vi.isMockFunction(NotificationsService.getUnreadCount)) {
+    vi.spyOn(NotificationsService, "getUnreadCount").mockResolvedValue({
+      data: { count: 0 },
+    } as UnreadCountResult)
+  }
   return { readAccount, listIdentities }
 }
 
