@@ -935,6 +935,17 @@
 - 成熟度：L3（AI 依審查意見與程式修改文件，人決定範圍）
 - 證據：PR #92 審查留言；docs/midterm 的 B 1.15、C 1.12、D 1.11 版本紀錄
 
+### 2026-11-20｜專案管理與流程／期末分工｜把 15 個期中擱置 Story 分給四人
+
+- Story／範圍：期中擱置的 15 個 Story（1.6、2.3、2.5、2.6、2.8、3.7～3.11、4.2、4.5、4.7、5.7、6.3）
+- 工具：Claude Code（Sonnet 5.5）
+- 怎麼用：請 AI 讀 CONTRIBUTING 6.1 的模組歸屬、sprint-status 與 epics.md 各 Story 的行數、驗收條件數與相依，提出分工草案；我確認後請它寫進 CONTRIBUTING 與 sprint-status
+- AI 產出：CONTRIBUTING 第 7 節（分工表、四批做的順序、4 組相依、做的時候的規則）；sprint-status 15 個 Story 的標記由「擱置（期中後）」改為「負責：X（期末）」
+- 人做了什麼：確認依模組歸屬分、核准草案、決定開 PR；組員尚未看過，需在 PR 審查時確認
+- 驗證：sprint-status 以程式比對 15 個 Story 的負責人與草案一致、擱置標記清空；`git diff --check` 無輸出；沒有 CRLF；未驗證 YAML 解析（環境沒有 pyyaml），只改註解
+- 問題與修正：AI 第一次用鍵名前 3 個字元比對，漏掉 3-10 與 3-11 兩個 Story（更新數 13 而不是 15），在核對更新數時發現並補上；分工是依模組與行數的推論，2.8、3.9 給 A、D 負擔較輕等是 AI 的判斷，未與組員討論
+- 成熟度：L3（AI 依既有分工與文件產出草案，人決定並審查）
+- 證據：分支 `docs/final-assignment`；CONTRIBUTING 第 7 節
 ### 2026-11-20｜專案管理與流程／改善 AI 工作流程｜讓 bmad-build 讀得到期末規則（epics.md 與 epic context）
 
 - Story／範圍：epics.md〈期中範圍〉與 epic-1～7-context.md
