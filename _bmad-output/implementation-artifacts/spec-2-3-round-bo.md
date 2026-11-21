@@ -61,7 +61,7 @@ context:
 - `backend/app/modules/tournaments/repository.py` -- 新增讀寫 `round_setting`
 - `backend/app/modules/competition/service.py:142,699,1520,1925` -- 四個呼叫點（`_bo` 被 1563、1584、1667、1700、1746 使用）；取總輪數用 `repository.get_bracket_by_tournament`；`_round_starts` 的 `best_of` 清單對季軍賽不需另算（同輪共用開始時間，決賽是最後一輪）
 - `backend/app/modules/competition/bracket.py:92` `round_name` -- 輪次名稱（決賽、4 強、8 強）與前端標籤一致
-- `backend/app/alembic/versions/` -- 新遷移，`down_revision = "c4f8a2e6d1b7"`（目前唯一 head）
+- `backend/app/alembic/versions/` -- 新遷移，`down_revision = "c4f8a2e6d1b7"`（目前唯一 head；合併 1.6 後改接 `d1f3a5c7e9b2`）
 - `frontend/src/features/tournaments/CreateTournamentForm.tsx:53,90,190,266,550-575` -- `ALLOWED_BO`、zod schema、`superRefine`、`toTournamentCreate`、BO 欄位；BO 說明「每一輪都用這個 BO 數。」要改
 - `frontend/src/features/tournaments/OrganizerTournamentOverview.tsx` -- S27 總覽顯示分輪 BO
 - `contracts/tournaments.md:108`、`contracts/competition.md:281` -- 更新 `bo_for_round` 說明
