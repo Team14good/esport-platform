@@ -87,7 +87,6 @@ def dispatch_event(session: Session, event: OutboxEvent) -> None:
         # 實體已不存在：重試也不會成功，記錄後略過，免得卡住後面的事件。
         # 不接 LookupError：KeyError、IndexError 這類程式錯誤要往外拋、回滾重試，
         # 不能當成「查不到」把事件標為已處理
-
         logger.exception(
             "Recipients of %s event %s not found; skipped", event.type, event.id
         )
