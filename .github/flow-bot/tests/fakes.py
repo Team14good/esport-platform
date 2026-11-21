@@ -10,16 +10,19 @@ REAL_FIXTURES = {
 }
 
 
-def my_pr(n=10, labels=(), head="story/1-6-x", mergeStateStatus="CLEAN", mergeable="MERGEABLE", author="max930000"):
+def my_pr(n=10, labels=(), head="story/1-6-x", mergeStateStatus="CLEAN", mergeable="MERGEABLE", author="max930000",
+          reviewDecision="REVIEW_REQUIRED", isDraft=False, autoMergeRequest=None, state="OPEN"):
     return {
         "number": n,
         "author": {"login": author},
         "headRefName": head,
-        "isDraft": False,
+        "isDraft": isDraft,
+        "reviewDecision": reviewDecision,
+        "autoMergeRequest": autoMergeRequest,
         "labels": [{"name": name} for name in labels],
         "mergeable": mergeable,
         "mergeStateStatus": mergeStateStatus,
-        "state": "OPEN",
+        "state": state,
         "title": f"PR {n}",
     }
 
@@ -35,7 +38,13 @@ class FakeGH:
         self.calls = []
 
     def pr(self, n):
+        for p in self._my_open_prs:
+            if p["number"] == n:
+                return p
         return dict(self._pr, number=n)
+
+    def pr_for_branch(self, branch):
+        return self._pr["number"] if self._pr["headRefName"] == branch else None
 
     def my_open_prs(self, owner):
         return self._my_open_prs

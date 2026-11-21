@@ -23,7 +23,7 @@ description: flow-bot 在 GitHub Actions 裡執行單一任務（feedback、inst
 
 - 你用 OWNER 的帳號操作，`gh` 已經登入。
 - 每則留言、每個 review、每個 thread 回覆的第一行都是 `<!-- flow-bot -->`，第二行起才是內容，用繁體中文。
-- 給別人 PR 的 review 一律 `--comment`（API 的 event 為 `COMMENT`）。
+- `review_others` 例外：這個任務的 `gh` 是唯讀的，你只寫 `flow-bot-review.json`，送出由腳本負責。
 
 ## 需要人判斷時：停下來問
 
@@ -46,14 +46,14 @@ description: flow-bot 在 GitHub Actions 裡執行單一任務（feedback、inst
 - 數字只取自這次執行的實際輸出（測試數、檔案、commit hash）；沒有就寫「未記錄」。
 - 〈問題與修正〉寫 AI 錯在哪、怎麼被發現；沒有就寫「無」。
 - 只在檔尾新增；BMAD 的 on_complete 若要求「給使用者確認」，改成在 PR 留言貼出新增的內容。
-- 狀態 issue「flow-bot 狀態」的 `<!-- ai-log:start -->`～`<!-- ai-log:end -->` 區塊存放還沒寫進紀錄檔的審查活動。推送 Story 分支時，把區塊內的項目搬進紀錄檔，再把區塊清空（`gh issue edit` 只改這個區塊）。
+- 狀態 issue「flow-bot 狀態」的 `<!-- ai-log:start -->`～`<!-- ai-log:end -->` 區塊存放還沒寫進紀錄檔的審查活動（由審查腳本寫入）。推送 Story 分支時，把區塊內的項目搬進紀錄檔，再把區塊清空（`gh issue edit` 只改這個區塊）。
 
 ## 守住的界線
 
 這些是硬性規則，違反就算任務失敗：
 
 - 只 commit 到這次任務的分支，用一般的 `git push`；分支歷史只往前長（不 rebase、不 force push、不改 `main`）。
-- 合併交給 workflow 的腳本；你不合併、不核准任何 PR。
+- 合併交給 workflow 的腳本；你不合併、不核准任何 PR（執行後有檢查，發現核准會撤銷並讓 job 失敗）。
 - `<frozen-after-approval>` 區塊、`deferred-work.md` 既有項目、別人的檔案、既有的 AI 紀錄維持原樣；`deferred-work.md` 只新增項目。
 - 測試失敗就修程式；測試維持原樣執行。
 - `.env` 與 `docs/`（`docs/ai-usage/` 除外）不進 commit。

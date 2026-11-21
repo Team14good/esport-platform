@@ -1,0 +1,17 @@
+# flow-bot 的中繼：pull_request_review 會跑在 PR 分支上的 workflow，不能碰 secret。
+# 這支只負責「被觸發」，完成後由 flow-bot.yml 的 workflow_run（固定跑 main 的版本）接手，
+# 再依 PR 目前的狀態決定要做什麼。這裡不需要任何權限，也不讀任何 secret。
+name: flow-bot-relay
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions: {}
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: echo "PR 有新的審查，交給 flow-bot 依目前狀態處理"

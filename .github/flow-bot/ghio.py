@@ -7,7 +7,7 @@ import os
 import subprocess
 from pathlib import Path
 
-PR_FIELDS = "number,author,headRefName,isDraft,labels,mergeable,mergeStateStatus,state,title"
+PR_FIELDS = "number,author,headRefName,isDraft,labels,mergeable,mergeStateStatus,state,title,reviewDecision,autoMergeRequest"
 
 THREADS_QUERY = """
 query($owner: String!, $name: String!, $number: Int!) {
@@ -45,6 +45,10 @@ class RealGH:
 
     def my_open_prs(self, owner: str) -> list[dict]:
         return self._json("pr", "list", "-R", self.repo, "--author", owner, "--state", "open", "--json", PR_FIELDS)
+
+    def pr_for_branch(self, branch: str) -> int | None:
+        found = self._json("pr", "list", "-R", self.repo, "--head", branch, "--state", "open", "--json", "number")
+        return found[0]["number"] if found else None
 
     def branches(self) -> list[str]:
         names = self._gh("api", f"repos/{self.repo}/branches", "--paginate", "--jq", ".[].name").split()
