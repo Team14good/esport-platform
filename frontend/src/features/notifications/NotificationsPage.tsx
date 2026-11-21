@@ -1,3 +1,5 @@
+import { useEffect } from "react"
+
 import { DataTablePagination } from "@/components/common/DataTable"
 import { EmptyState } from "@/components/common/EmptyState"
 import { Button } from "@/components/ui/button"
@@ -14,7 +16,8 @@ import {
 type NotificationsPageProps = {
   /** 目前頁碼（從 1 開始，寫在網址上） */
   page: number
-  onPageChange: (page: number) => void
+  /** `replace` 為 true 時取代目前的歷史紀錄（頁碼超出範圍時導回最後一頁用） */
+  onPageChange: (page: number, options?: { replace?: boolean }) => void
 }
 
 /** S14 通知中心：依建立時間由新到舊、每頁 20 則；點擊一則標為已讀並導向它的 `link`。 */
@@ -28,6 +31,11 @@ export function NotificationsPage({
   const totalPages = data
     ? Math.max(1, Math.ceil(data.total / data.page_size))
     : 1
+  // 手動輸入超出範圍的頁碼（例如 25 則時開第 9 頁）：導回最後一頁，不顯示空卡片
+  const outOfRange = data !== undefined && data.total > 0 && page > totalPages
+  useEffect(() => {
+    if (outOfRange) onPageChange(totalPages, { replace: true })
+  }, [outOfRange, totalPages, onPageChange])
 
   return (
     <section className="mx-auto flex w-full max-w-2xl flex-col gap-6 py-8 sm:py-12">
@@ -49,7 +57,7 @@ export function NotificationsPage({
         </div>
       ) : data && data.total === 0 ? (
         <EmptyState title={NO_NOTIFICATIONS_TEXT} />
-      ) : data ? (
+      ) : data && !outOfRange ? (
         <>
           <Card className="gap-0 p-1">
             <NotificationList

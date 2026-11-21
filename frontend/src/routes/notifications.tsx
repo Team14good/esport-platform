@@ -22,7 +22,11 @@ function NotificationsRoute() {
   const { page } = Route.useSearch()
   const navigate = Route.useNavigate()
   const onPageChange = useCallback(
-    (next: number) => navigate({ search: { page: parsePage(next) } }),
+    (next: number, options?: { replace?: boolean }) =>
+      navigate({
+        search: { page: parsePage(next) },
+        replace: options?.replace,
+      }),
     [navigate],
   )
   return <NotificationsPage page={page ?? 1} onPageChange={onPageChange} />

@@ -993,3 +993,27 @@
 - 問題與修正：1.8 的 `test_worker_marks_review_events_processed_without_sending_email` 斷言期中「審核事件不寄信」，與本 Story 衝突而失敗（全套 2530 個中 1 個失敗）；實作代理判斷是預期中的行為改變，改寫成檢查新行為，而不是刪測試
 - 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
 - 證據：commit 3808723、346478f；`backend/tests/notifications/`、`frontend/tests/unit/notifications.test.tsx`、`frontend/tests/e2e/identity.spec.ts`
+
+### 2026-11-21｜測試／程式審查｜Story 1.6 合併後審查建議的後續修正
+
+- Story／範圍：1.6（原 PR #100，後續分支 `story/1-6-followup`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot followup 任務讀 D（OG-Matcha）在 #100 核准時留的 4 項建議與 2 則逐行意見，逐條在 main 的程式碼驗證是否成立，再修正、補測試
+- AI 產出：審查者抓到 4 個問題，4 個都成立：(1) 一則分派失敗的事件會卡住整條 outbox，驗證信也寄不出去 → `dispatch_outbox` 先取驗證信與重設信事件，core 新增 `events.next_unprocessed_matching`；一般事件之間的重試上限記進 deferred-work；(2) `except LookupError` 會把 `KeyError`／`IndexError` 程式錯誤當成查不到而吞掉 → 改用自訂 `registry.RecipientsNotFound`；(3) `MatchForfeited` 的對應測試用的是 notifications 自己的類別 → 改發 competition 的事件類別，並斷言事件名稱相同；(4) S14 手動輸入超出範圍的頁碼顯示空卡片 → 以 replace 導回最後一頁。新增後端測試 4 個（含參數化）、前端 1 個
+- 人做了什麼：D 審查並提出 4 項建議；修法由 AI 依推薦做法選定，寫進 spec Decisions，等組員在新 PR 提出異議
+- 驗證：後端 `scripts/test.sh` exit 0（覆蓋率 97%）、`scripts/lint.sh` 全過；notifications、worker、identity 測試 354 個通過；前端 typecheck、biome 全過，單元測試 74 個檔、1061 個通過
+- 問題與修正：原 Story 的實作代理用 `LookupError` 代表「查不到實體」、讓分派只略過這兩種例外，兩個自動審查都沒抓到它會吞掉 `KeyError`，是 D 人工審查才發現。這次 followup 中，AI 對整個 `tests/` 跑 `ruff format`，連帶改了 5 個不相關的測試檔；看 `git status` 發現後還原，只保留本次修改的檔案
+- 成熟度：L4（人審查提出問題，AI 依固定流程驗證、修正並自動驗證）
+- 證據：commit a88d62a、febee63、855d749、4f16057；PR #100 的審查
+
+### 2026-11-21｜測試／程式審查｜PR #102 核准留言的格式小意見
+
+- Story／範圍：1.6 後續（PR #102，分支 `story/1-6-followup`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot feedback 任務讀 D（OG-Matcha）在 #102 的核准留言，對照 diff 確認 4 項修正已被逐條認可，再驗證附帶的格式意見
+- AI 產出：審查者指出 `notifications/service.py` 的 `except` 區塊註解後多一行空白，查證成立，刪除該空行
+- 人做了什麼：D 審查並核准，提出格式小意見（標明不用改）
+- 驗證：`ruff check`、`ruff format --check` 對該檔通過；只刪空行，未重跑測試
+- 問題與修正：前一輪 followup 的 AI 在改寫 except 註解時留下多餘空行，`ruff format` 不會移除註解後的空行所以沒被自動檢查抓到，是 D 人工審查發現
+- 成熟度：L4（人審查提出問題，AI 驗證並修正）
+- 證據：commit 606ecf5；PR #102 的審查留言
