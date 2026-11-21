@@ -550,6 +550,15 @@ def find_due_registration_end_id(session: Session) -> uuid.UUID | None:
     return repository.find_due_registration_end_id(session, clock.now())
 
 
+def list_closed_tournament_ids(session: Session) -> list[uuid.UUID]:
+    """報名截止（`closed`）、開賽時間還沒到的賽事 id；不加鎖。
+
+    給 competition 的自動抽籤工作（Story 4.2）找候選，報名截止較早的優先、再依 id。
+    呼叫端鎖住賽事後要重新檢查狀態與時間。
+    """
+    return repository.list_closed_before_start_ids(session, clock.now())
+
+
 # ---------------------------------------------------------------- 裁判
 # 邀請 7 天有效，`expires_at <= clock.now()` 即過期。重新產生時，同賽事尚未過期的
 # 舊邀請 `expires_at` 設為當下。產生與接受都先 `lock_tournament` 再碰邀請列（鎖的順序

@@ -111,6 +111,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `has_referee_role(session, *, account_id) -> bool` | 組裝層（`app/api/main.py`）註冊給 identity 的 `register_referee_lookup`（4.4 S13） | 帳號是不是任一賽事的裁判（有 `TournamentReferee` 列即是，不看賽事狀態）；身分切換器的「裁判」用 | 4.4 |
 | `ensure_accepting_referees(tournament: TournamentRead) -> None` | tournaments 的裁判邀請（2.7）；其他模組需要時可呼叫 | 狀態為 `finished`、`cancelled` 時拋 `TOURNAMENT_NOT_ACCEPTING_REFEREES` 409；不碰資料庫 | 2.7 |
 | `find_due_registration_end_id(session) -> UUID \| None` | C（3.6 報名截止 worker 工作） | 一筆狀態為 `open`、`registration_end <= clock.now()` 的賽事 id，依報名截止時間、再依 id，最早到期的優先；不加鎖，呼叫端鎖住後要重新檢查。沒有任何報名的賽事也找得到（C 在 3.6 新增） | 3.6 |
+| `list_closed_tournament_ids(session) -> list[UUID]` | D（4.2 自動抽籤 worker 工作） | 狀態為 `closed`、`start_at > clock.now()` 的賽事 id，依報名截止時間、再依 id；不加鎖，呼叫端鎖住後要重新檢查（D 在 4.2 新增） | 4.2 |
 
 三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
 

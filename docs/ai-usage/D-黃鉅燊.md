@@ -753,3 +753,15 @@
 - 問題與修正：程式裡沒有呼叫端的轉換（截止後延長報名、主辦方取消、退賽、退回、撤回）原本畫得像已實作，標註時一併標成期中後
 - 成熟度：L3（AI 對照程式產出，人決定範圍）
 - 證據：本 PR 的 diff
+
+### 2026-11-20｜程式／程式生成＋測試｜Story 4.2 報名截止時自動抽籤
+
+- Story／範圍：4.2（期中後的擱置 Story；分支 `story/4-2-auto-draw`，Draft PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build；1 個只讀的審查子代理
+- 怎麼用：派工寫明期望結果（截止補位後同一週期由系統抽籤、正取不足只發一次事件、手動抽籤不變、不做延長報名與取消）與驗證方式（frozen_clock、併發、lint、架構測試、變異測試）；AI 寫 spec（spec-4-2-auto-draw.md）、實作、跑測試，再交給審查子代理挑毛病
+- AI 產出：worker 工作 `auto_draw_closed`；competition `auto_draw`／`auto_draw_due`，把 `draw()` 後半抽成手動與自動共用的 `_create_bracket`；新資料表 `auto_draw_skip`（賽事＋報名截止時間唯一，讓事件只發一次）與遷移；事件 `AutoDrawSkipped`；tournaments 新增 `list_closed_tournament_ids`；3 個新測試檔（服務層、worker 一輪接真的 registration、兩條連線的手動／自動併發）
+- 人做了什麼：派工時定下行為與界線（操作者為系統、只發事件、不做 2.5／2.6）；spec 的 Checkpoint 1 沒有經過本人核准，PR 維持 Draft 等本人核准
+- 驗證：全部後端測試 2434 passed、1 failed（mailpit 沒啟動，SMTP 測試連不上，與本 Story 無關）；審查修正後相關模組加架構、遷移測試 1876 passed；`scripts/lint.sh` 通過；變異測試把自動抽籤改成不呼叫，worker 測試 3 項中 2 項失敗，還原後通過
+- 問題與修正：AI 第一版測試以為 `BracketRead` 有 `team_count`，第一次執行 4 項失敗，改用場次中的隊伍比對；第一版 `service.py` 沒照 ruff format，被 lint 擋下；審查子代理指出已判定不足的賽事每一輪都會被 `lock_tournament`，改為先以不加鎖的讀取排除；另外 5 點（期中事件不補發、持續拋錯只寫 log、registration `mark_drawn` 型別、併發測試是機率性、2.5 必須轉回 `open`）寫進 spec 與 deferred-work
+- 成熟度：L4（依 spec 實作，多層測試、變異測試與獨立審查子代理驗證；人只在派工與核准 spec 時決策）
+- 證據：`_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`、本 PR 的 diff

@@ -179,3 +179,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-3.md`
   summary: 3.9「公開正取名單」做完後，完整賽事演練要補「觀眾未登入在賽事頁看到分配後的正取隊伍」；目前改為抽籤後在公開對戰表看到隊伍。
   evidence: 3.9 期中擱置，S2 沒有正取名單分頁（`TournamentTabs.tsx` 的註解）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`
+  summary: （中）4.2 正取不足時的 `AutoDrawSkipped` 期中只寫進 outbox，notifications 沒有處理程式就標為已處理；同一次報名截止只發一次，做 1.6 時這段期間的事件不會補發，主辦方收不到。
+  evidence: 2026-11-19 Story 4.2 審查第 1 點。符合〈期中範圍〉規則 2（只發事件、不補發）；做 1.6 時登錄 `AutoDrawSkipped` 的收件人（主辦方），並決定是否要在送達後才寫 `auto_draw_skip`。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`
+  summary: （低）自動抽籤某場每輪都拋錯時（例如資料不一致讓 `mark_drawn` 拒絕），`auto_draw_due` 只寫 exception log、每輪重試，主辦方看不到；開賽時間過後就不再嘗試，也沒有通知。
+  evidence: 2026-11-19 Story 4.2 審查第 2 點；與 `start_due_tournament` 相同模式。可考慮連續失敗後寫略過紀錄並發事件。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`
+  summary: （低）做 2.5 延長報名時，賽事必須由 `closed` 轉回 `open`；自動抽籤只看狀態是 `closed`，若 2.5 只改報名截止時間而維持 `closed`，worker 會在新截止時間前就抽籤。
+  evidence: 2026-11-19 Story 4.2 審查第 6 點；`auto_draw_skip` 以（賽事, 報名截止時間）為鍵，轉回 `open` 再截止時會重新嘗試（`test_new_registration_end_is_tried_again`）。

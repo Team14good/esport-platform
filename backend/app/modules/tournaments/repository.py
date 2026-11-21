@@ -197,6 +197,17 @@ def find_due_registration_end_id(session: Session, now: datetime) -> uuid.UUID |
     return session.exec(statement).first()
 
 
+def list_closed_before_start_ids(session: Session, now: datetime) -> list[uuid.UUID]:
+    """報名截止、開賽時間未到的賽事 id（報名截止較早的優先，再依 id）；不加鎖。"""
+    statement = (
+        select(Tournament.id)
+        .where(Tournament.status == TournamentStatus.CLOSED)
+        .where(col(Tournament.start_at) > now)
+        .order_by(col(Tournament.registration_end), col(Tournament.id))
+    )
+    return list(session.exec(statement).all())
+
+
 def set_tournament_status(
     session: Session, tournament: Tournament, status: TournamentStatus, at: datetime
 ) -> Tournament:

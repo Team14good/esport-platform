@@ -17,6 +17,14 @@ competition/test_assign_referee.py:
   layer: integration
   stories: ["4.4"]
   frs: [FR-4]
+competition/test_auto_draw.py:
+  layer: integration
+  stories: ["4.2"]
+  frs: [FR-19, NFR-4]
+competition/test_auto_draw_concurrency.py:
+  layer: integration
+  stories: ["4.2"]
+  frs: [FR-19, NFR-1]
 competition/test_bracket.py:
   layer: unit
   stories: ["4.1"]
@@ -341,6 +349,10 @@ tournaments/test_transitions.py:
   layer: integration
   stories: ["2.2"]
   frs: [FR-7]
+worker/test_auto_draw.py:
+  layer: integration
+  stories: ["4.2", "3.6"]
+  frs: [FR-16, FR-19, NFR-4]
 worker/test_confirm_expired_appeals.py:
   layer: integration
   stories: ["5.5"]

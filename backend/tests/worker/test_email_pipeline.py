@@ -31,6 +31,7 @@ def test_jobs_are_registered_in_order() -> None:
         "open_registrations",
         "allocate_priority_windows",
         "close_registrations",
+        "auto_draw_closed",
         "start_due_tournaments",
         "judge_forfeits",
         "confirm_expired_appeals",

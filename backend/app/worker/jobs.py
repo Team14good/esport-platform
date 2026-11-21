@@ -55,6 +55,14 @@ def close_registrations(session: Session) -> bool:
     return registration_service.close_due_registration(session)
 
 
+def auto_draw_closed(session: Session) -> bool:
+    """替一場報名截止、還沒抽籤的賽事自動抽籤；正取不足 2 隊時通知主辦方（Story 4.2，操作者為系統）。
+
+    排在 `close_registrations` 之後：同一輪剛轉為報名截止的賽事，這一輪就會抽籤。
+    """
+    return competition_service.auto_draw_due(session)
+
+
 # 判一場逾時未報到的棄權（Story 5.2；函式名稱為 `judge_forfeits`）
 judge_forfeits = make_forfeit_job(SERVICE_FORFEIT_PORTS)
 
@@ -68,6 +76,7 @@ JOBS: list[Job] = [
     open_registrations,
     allocate_priority_windows,
     close_registrations,
+    auto_draw_closed,
     start_due_tournaments,
     judge_forfeits,
     confirm_expired_appeals,
