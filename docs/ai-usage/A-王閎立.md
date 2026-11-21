@@ -993,3 +993,39 @@
 - 問題與修正：1.8 的 `test_worker_marks_review_events_processed_without_sending_email` 斷言期中「審核事件不寄信」，與本 Story 衝突而失敗（全套 2530 個中 1 個失敗）；實作代理判斷是預期中的行為改變，改寫成檢查新行為，而不是刪測試
 - 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
 - 證據：commit 3808723、346478f；`backend/tests/notifications/`、`frontend/tests/unit/notifications.test.tsx`、`frontend/tests/e2e/identity.spec.ts`
+
+### 2026-11-21｜需求／Story spec｜Story 2.8 主辦方查閱操作紀錄
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 以 bmad-build-auto 讀 epic-2-context、epics.md Story 2.8 原版驗收條件、UX 的 S34 與 Data table 規格，盤點 `core/audit.py`、目前所有寫進操作紀錄的動作代碼與既有分頁 API 格式後寫 spec
+- AI 產出：`spec-2-8-organizer-audit-log.md`：I/O 矩陣 13 列、8 個任務、8 條 Decisions（由新到舊、伺服器端分頁沿用 `OrganizerApplicationPage` 格式、system 操作者由前端顯示「系統自動」、時間到秒、變更內容只列差異欄位、欄位名稱與 id 不翻譯等）
+- 人做了什麼：無人值守執行；Decisions 由 AI 依推薦做法選定，列在 PR「給審查者」等組員提出異議
+- 驗證：spec 通過 READY FOR DEVELOPMENT 自檢；epic context 依 git 規則判斷未過期（`7fc4a57` 之後沒有 commit 動到 planning artifacts），沒有重新產生
+- 問題與修正：spec 的 Code Map 寫 e2e 建立賽事的函式在 `tournament.spec.ts`，實際上在 `support/drill.ts`；實作代理寫 e2e 時發現，已記在 spec Implementation Notes
+- 成熟度：L4（AI 依固定流程讀需求來源、產出 spec，再交給實作代理與自動驗證）
+- 證據：commit 5caac65；`_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`
+
+### 2026-11-21｜程式／程式生成｜Story 2.8 操作紀錄 API 與 S34 頁面
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：bmad-build-auto step-03 交給一個沒有對話脈絡的實作代理，只依 spec 實作；完成後由主流程讀 diff、重跑 CI 檢查並對照 I/O 矩陣
+- AI 產出：tournaments 新增 `AuditLogEntry`、`AuditLogPage`、公開函式 `list_audit_log` 與 `GET /organizer/tournaments/{id}/audit-log`；前端 `audit-log.ts`（30 個動作的繁中對照、台北時間到秒、變更差異計算）、`AuditLogPage.tsx`、路由 `audit-log.tsx`、側欄「操作紀錄」；重新產生 API client；contracts 與 deferred-work 各補項目
+- 人做了什麼：無人值守執行；主流程審 diff 時把實作中的決定（各模組自定 `PAGE_SIZE`、查不到名稱顯示「未知帳號」、動作用詞待組員確認）補進 spec Decisions
+- 驗證：後端 `scripts/lint.sh` 全過；前端 build、typecheck、`biome check`（314 個檔）全過；`generate-client.sh` 後 client 無差異；Alembic 單一 head；沒有新增遷移
+- 問題與修正：主流程看 e2e 截圖時發現側欄「總覽」與「操作紀錄」同時顯示為目前頁面；查到是共用 `BackofficeLayout` 以前綴比對 active 的既有問題，不在本 Story 範圍，記在 spec Implementation Notes 與 PR 說明
+- 成熟度：L4（spec → 實作代理 → 主流程審 diff 與自動驗證，人只在 PR 決策）
+- 證據：commit 05debf2
+
+### 2026-11-21｜測試／測試個案產生｜Story 2.8 操作紀錄 API、S34 畫面與端對端測試
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：實作代理依 I/O 矩陣寫後端整合測試、前端單元測試與 e2e；主流程逐列對照矩陣，確認每列都有執行且通過的測試
+- AI 產出：`test_audit_log.py`（9 個測試函式、參數化後 10 個案例：排序含同一時間、分頁、超出頁碼、422、system 與帳號操作者、不含其他賽事、403 兩種、401、404）；`audit-log.test.tsx` 15 個；`organizer-tournaments.test.tsx` 補側欄斷言；e2e `audit-log.spec.ts`
+- 人做了什麼：無人值守執行
+- 驗證：`test_audit_log.py` 10 passed；後端全套 2540 passed、1 failed（見下）；前端單元測試 75 個檔、1075 個通過；Playwright `audit-log.spec.ts` desktop 與 mobile-375 共 2 個通過，375 px 沒有橫向捲軸
+- 問題與修正：主流程第二次跑全套後端測試時，同時另開 pytest 跑單一檔案，測試資料庫初始化中斷了全套那邊的連線（`AdminShutdown`），`test_teams.py::test_create_team_requires_verified_email` 失敗；判斷是測試方式錯誤而不是程式問題，單獨重跑 `test_teams.py` 125 個全過。之前另一次全套測試的輸出也被截斷，因為 `docker compose --profile e2e run` 重啟了 backend 容器。教訓：全套測試期間不要並行跑其他會碰資料庫或容器的指令
+- 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
+- 證據：commit 05debf2；`backend/tests/tournaments/test_audit_log.py`、`frontend/tests/unit/audit-log.test.tsx`、`frontend/tests/e2e/audit-log.spec.ts`

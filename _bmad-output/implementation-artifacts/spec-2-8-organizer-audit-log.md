@@ -2,7 +2,7 @@
 title: 'Story 2.8：主辦方查閱操作紀錄'
 type: 'feature'
 created: '2026-11-21'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '5caac654fb4980e120fe153396a0b53c8ca033b7'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -65,6 +65,9 @@ deferred: []
 - **變更內容顯示欄位差異**：新增類（`before` null）列出 `after` 全部欄位；刪除類（`after` null）列出 `before` 全部欄位；兩邊都有時只列值不同的欄位。欄位名稱與 id 照原始資料顯示（等寬字），物件與陣列以 JSON 呈現；翻譯欄位名稱與把 id 換成名稱需要各模組提供對照，列入延後項目。
 - **不顯示「對象」欄**：AC 只列操作者、時間、動作、變更前後；`entity_id` 是 UUID，對主辦方沒有意義。
 - **側欄位置**：照 UX-DR7 順序放在「檢舉」之後，圖示用 lucide `ScrollTextIcon`。
+- **tournaments 自己定義 `PAGE_SIZE`、`MAX_PAGE`**（實作時決定）：數值與 identity、notifications 相同（20、100000），照 notifications 的做法各模組自己定義，不 import identity 的 models。
+- **查不到顯示名稱時顯示「未知帳號」**（實作時決定）：`audit_log.actor_id` 有外鍵，目前不會發生；只是防呆，避免把帳號操作誤顯示成「系統自動」。
+- **動作的繁中名稱**（實作時決定，請組員確認用詞）：例如 `tournament.podium`「產生最終名次」、`match.voided`「取消場次」、`match.teams_changed`「場次隊伍變更」、`bracket.auto_draw_skipped`「略過自動抽籤」；完整對照見 `audit-log.ts` 的 `AUDIT_ACTION_LABELS`。
 
 ## Code Map
 
@@ -99,6 +102,14 @@ deferred: []
 **Acceptance Criteria:**
 - Given 主辦方建立賽事並讓 worker 轉為開放報名，when 在側欄點「操作紀錄」，then S34 依新到舊列出「賽事狀態變更」（操作者「系統自動」）與「建立賽事」（操作者為主辦方顯示名稱），且沒有任何編輯操作
 - Given 本 spec，when 執行 Verification 的所有指令，then 全部通過
+
+## Implementation Notes
+
+- epic-2 context 最後一次 commit（`7fc4a5794e0415c1920aa37db2eccde740fd8c5c`）之後沒有 commit 動到 planning artifacts，沿用現有 context。
+- e2e 建立賽事用的是 `frontend/tests/e2e/support/drill.ts` 的 `addGame`、`createTournament`（Code Map 原本寫在 `tournament.spec.ts`，實際上在 support）。e2e 先以平台管理員新增一款名稱帶後綴的遊戲，不依賴示範資料。
+- AC 的「worker 轉開放報名後顯示『系統自動』」：後端以 `open_due_registration` 實際轉狀態驗證排序與 null 操作者（`test_system_and_account_actors`），畫面的「系統自動」以單元測試的假資料驗證；e2e 不等 worker 輪詢，只驗證「建立賽事」那一筆。
+- 既有問題（沒有修）：在賽事後台的任何子頁，側欄「總覽」也顯示為目前頁面（`BackofficeLayout` 以前綴比對 active），截圖看得到；屬於共用元件，不在本 Story 範圍。
+- 照專案偏好，build-auto 在 step-03 實作完成後結束，沒有跑 step-04 審查；審查交給 PR。
 
 ## Spec Change Log
 
