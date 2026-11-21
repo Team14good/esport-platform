@@ -1029,3 +1029,15 @@
 - 問題與修正：主流程第二次跑全套後端測試時，同時另開 pytest 跑單一檔案，測試資料庫初始化中斷了全套那邊的連線（`AdminShutdown`），`test_teams.py::test_create_team_requires_verified_email` 失敗；判斷是測試方式錯誤而不是程式問題，單獨重跑 `test_teams.py` 125 個全過。之前另一次全套測試的輸出也被截斷，因為 `docker compose --profile e2e run` 重啟了 backend 容器。教訓：全套測試期間不要並行跑其他會碰資料庫或容器的指令
 - 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
 - 證據：commit 05debf2；`backend/tests/tournaments/test_audit_log.py`、`frontend/tests/unit/audit-log.test.tsx`、`frontend/tests/e2e/audit-log.spec.ts`
+
+### 2026-11-21｜測試／程式審查｜Story 2.8 PR #104 審查建議：對照表漏項檢查
+
+- Story／範圍：2.8（PR #104，分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 讀 @OG-Matcha 的核准留言（附「不擋」建議），先確認建議成立再決定做法
+- AI 產出：`backend/tests/tournaments/test_audit_action_labels.py`（3 個測試）：以 AST 掃描 `app/` 下 42 處 `audit.record(...)`，取 `tournament_id` 不是 None 的動作（可解析字串、條件運算式、模組常數），與前端 `AUDIT_ACTION_LABELS` 鍵值的副本雙向比對；`traceability.yaml` 補一列；`audit-log.ts` 註解指向這個測試；spec Decisions 補一條
+- 人做了什麼：審查者 D 對照全部 audit 動作與對照表後，指出「新增動作卻忘了加對照，畫面會直接顯示英文代碼」且目前沒有任何測試會擋；AI 只負責實作防護
+- 驗證：新測試與 `test_traceability.py` 6 passed；故意刪掉 `match.voided` 後測試失敗並指出 `app/modules/competition/service.py:1048`；後端全套 `scripts/test.sh` exit 0（通過數未記錄）；`scripts/lint.sh` 全過；`biome check` 314 個檔無修正
+- 問題與修正：原本實作沒有任何機制保證對照表與後端動作同步，由人工審查發現。AI 評估過讓前端測試直接讀後端原始碼，但兩個容器 build 時只複製各自目錄，不可行，改用後端快照測試；另外驗證時用掛載目錄跑 `sed` 製造失敗案例，修改寫回了本機檔案，AI 發現後還原並重跑格式檢查
+- 成熟度：L4（人工審查提出缺口，AI 實作並以故意製造的失敗驗證測試有效）
+- 證據：commit 4647d4e；`backend/tests/tournaments/test_audit_action_labels.py`
