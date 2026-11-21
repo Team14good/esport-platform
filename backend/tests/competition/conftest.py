@@ -21,7 +21,7 @@ from app.modules.tournaments.models import (
     TournamentRead,
     TournamentStatus,
 )
-from tests.helpers import make_account, make_tournament
+from tests.helpers import make_account, make_game, make_tournament
 
 
 class FrozenClockLike(Protocol):
@@ -180,6 +180,48 @@ def draw_with(
         tournament_id=tournament.id,
         actor_id=organizer.id,
         rng=random.Random(seed),
+    )
+    return tournament, bracket
+
+
+# 2.3 分輪 BO 測試用：預設 BO1、4 強 BO3、決賽 BO5
+SEMI_BO3_FINAL_BO5 = [
+    {"rounds_from_final": 1, "bo": 3},
+    {"rounds_from_final": 0, "bo": 5},
+]
+
+
+def draw_with_round_bo(
+    session: Session,
+    fake: FakeRegistration,
+    team_count: int,
+    *,
+    round_bo: list[dict[str, int]] = SEMI_BO3_FINAL_BO5,
+    round_interval_minutes: int = 180,
+) -> tuple[TournamentRead, BracketRead]:
+    """經建立賽事 API 的同一個 service 帶入分輪 BO（預設 BO1、每局 40 分鐘），
+    報名截止後抽籤。開賽 2026-10-26 11:00 UTC（frozen_clock 下）。"""
+    organizer = make_account(session, organizer=True)
+    game = make_game(session, default_bo=1)
+    tournament = make_tournament(
+        session,
+        organizer=organizer,
+        game=game,
+        bo=1,
+        round_bo=round_bo,
+        round_interval_minutes=round_interval_minutes,
+    )
+    row = session.get(Tournament, tournament.id)
+    assert row is not None
+    row.status = TournamentStatus.CLOSED
+    session.add(row)
+    session.flush()
+    fake.set_team_count(team_count)
+    bracket = service.draw(
+        session,
+        tournament_id=tournament.id,
+        actor_id=organizer.id,
+        rng=random.Random(7),
     )
     return tournament, bracket
 

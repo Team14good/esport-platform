@@ -69,6 +69,7 @@ const TOURNAMENT = {
   forfeit_minutes: 15,
   appeal_minutes: 30,
   livestream_url: null,
+  round_bo: [],
 } as unknown as TournamentRead
 
 function report(overrides: Partial<ReportRead> = {}): ReportRead {

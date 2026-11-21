@@ -58,6 +58,7 @@ const OPEN = {
   game_minutes: 40,
   score_type: "rounds",
   rank_tiers: [],
+  round_bo: [],
 } as TournamentRead
 const CLOSED: TournamentRead = { ...OPEN, status: "closed" }
 const PUBLISHED: TournamentRead = { ...OPEN, status: "published" }

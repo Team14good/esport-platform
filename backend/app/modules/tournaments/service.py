@@ -24,6 +24,8 @@ from app.modules.tournaments.models import (
     RefereeInvitation,
     RefereeInvitationRead,
     RefereeRead,
+    RoundBo,
+    RoundSetting,
     Tournament,
     TournamentCreate,
     TournamentMode,
@@ -242,7 +244,16 @@ def _field_error(field: str, code: str, message: str) -> FieldError:
     return FieldError(code, message, loc=("body", field))
 
 
-def _tournament_to_read(tournament: Tournament) -> TournamentRead:
+def _read(session: Session, tournament: Tournament) -> TournamentRead:
+    """讀出單一賽事（含分輪 BO）。"""
+    return _tournament_to_read(
+        tournament, repository.list_round_settings(session, [tournament.id])
+    )
+
+
+def _tournament_to_read(
+    tournament: Tournament, round_settings: list[RoundSetting]
+) -> TournamentRead:
     snapshot = tournament.game_snapshot
     return TournamentRead(
         id=tournament.id,
@@ -267,7 +278,47 @@ def _tournament_to_read(tournament: Tournament) -> TournamentRead:
         game_minutes=snapshot["game_minutes"],
         score_type=snapshot["score_type"],
         rank_tiers=[RankTierRead.model_validate(t) for t in snapshot["rank_tiers"]],
+        round_bo=[
+            RoundBo(rounds_from_final=setting.rounds_from_final, bo=setting.bo)
+            for setting in sorted(
+                round_settings, key=lambda setting: setting.rounds_from_final
+            )
+        ],
     )
+
+
+def total_rounds(capacity: int) -> int:
+    """名額 N 的單淘汰總輪數＝⌈log₂N⌉（N ≥ 2）。"""
+    if capacity < 2:
+        raise ValueError(f"capacity must be at least 2: {capacity}")
+    return (capacity - 1).bit_length()
+
+
+def rounds_from_final(*, round_no: int, rounds: int, is_third_place: bool) -> int:
+    """第 `round_no` 輪（從 1 起算，共 `rounds` 輪）距決賽的輪數；季軍賽算 4 強（1）。
+
+    `round_no` 不在 1～`rounds` 拋 `ValueError`（程式錯誤）。
+    """
+    if rounds < 1 or not 1 <= round_no <= rounds:
+        raise ValueError(f"round_no {round_no} out of range 1..{rounds}")
+    distance = rounds - round_no
+    return distance + 1 if is_third_place else distance
+
+
+def resolve_round_bo(
+    round_bo: list[RoundBo],
+    *,
+    default_bo: int,
+    round_no: int,
+    rounds: int,
+    is_third_place: bool,
+) -> int:
+    """依分輪設定換算某一輪的 BO；沒有設定的輪次回 `default_bo`。純函式。"""
+    distance = rounds_from_final(
+        round_no=round_no, rounds=rounds, is_third_place=is_third_place
+    )
+    by_distance = {item.rounds_from_final: item.bo for item in round_bo}
+    return by_distance.get(distance, default_bo)
 
 
 def min_round_interval(
@@ -322,6 +373,21 @@ def _validate_schedule(
         )
 
 
+def _validate_round_bo(data: TournamentCreate) -> None:
+    """分輪 BO 的輪次不能超出名額可能的輪數（距決賽 0～總輪數−1）；違反時 422 指向 `round_bo`。
+
+    BO 值與重複輪次已由 schema 檢查（同樣指向 `round_bo`）。
+    """
+    rounds = total_rounds(data.capacity)
+    for item in data.round_bo:
+        if item.rounds_from_final >= rounds:
+            raise _field_error(
+                "round_bo",
+                "ROUND_BO_OUT_OF_RANGE",
+                f"名額 {data.capacity} 隊最多 {rounds} 輪，不能設定這一輪的 BO",
+            )
+
+
 def create_tournament(
     session: Session, *, organizer_id: uuid.UUID, data: TournamentCreate
 ) -> TournamentRead:
@@ -342,6 +408,7 @@ def create_tournament(
     bo = data.bo if data.bo is not None else game.default_bo
     now = clock.now()
     _validate_schedule(data, bo=bo, game_minutes=game.game_minutes, now=now)
+    _validate_round_bo(data)
 
     registration_start = data.registration_start.astimezone(UTC)
     tournament = Tournament(
@@ -376,8 +443,17 @@ def create_tournament(
         updated_at=now,
     )
     repository.add_tournament(session, tournament)
+    round_settings = [
+        RoundSetting(
+            tournament_id=tournament.id,
+            rounds_from_final=item.rounds_from_final,
+            bo=item.bo,
+        )
+        for item in data.round_bo
+    ]
+    repository.add_round_settings(session, round_settings)
 
-    created = _tournament_to_read(tournament)
+    created = _tournament_to_read(tournament, round_settings)
     audit.record(
         session,
         actor_id=organizer_id,
@@ -396,7 +472,7 @@ def get_tournament(session: Session, *, tournament_id: uuid.UUID) -> TournamentR
     tournament = repository.get_tournament(session, tournament_id)
     if tournament is None:
         raise _tournament_not_found()
-    return _tournament_to_read(tournament)
+    return _read(session, tournament)
 
 
 def lock_tournament(session: Session, *, tournament_id: uuid.UUID) -> TournamentRead:
@@ -407,7 +483,7 @@ def lock_tournament(session: Session, *, tournament_id: uuid.UUID) -> Tournament
     tournament = repository.get_tournament(session, tournament_id, for_update=True)
     if tournament is None:
         raise _tournament_not_found()
-    return _tournament_to_read(tournament)
+    return _read(session, tournament)
 
 
 def _tournament_to_public(tournament: Tournament) -> PublicTournament:
@@ -448,11 +524,17 @@ def list_organizer_tournaments(
     session: Session, *, organizer_id: uuid.UUID
 ) -> list[TournamentRead]:
     """某主辦方建立的賽事，新建立的在前。"""
+    tournaments = repository.list_tournaments_by_organizer(session, organizer_id)
+    settings_by_tournament: dict[uuid.UUID, list[RoundSetting]] = {
+        tournament.id: [] for tournament in tournaments
+    }
+    for setting in repository.list_round_settings(
+        session, list(settings_by_tournament)
+    ):
+        settings_by_tournament[setting.tournament_id].append(setting)
     return [
-        _tournament_to_read(tournament)
-        for tournament in repository.list_tournaments_by_organizer(
-            session, organizer_id
-        )
+        _tournament_to_read(tournament, settings_by_tournament[tournament.id])
+        for tournament in tournaments
     ]
 
 
@@ -489,7 +571,7 @@ def transition_tournament(
         before={"status": current.value},
         after={"status": to.value},
     )
-    return _tournament_to_read(tournament)
+    return _read(session, tournament)
 
 
 def ensure_accepting_registrations(tournament: TournamentRead) -> None:
@@ -510,11 +592,28 @@ def ensure_accepting_scores(tournament: TournamentRead) -> None:
         )
 
 
-def bo_for_round(session: Session, *, tournament_id: uuid.UUID, round_no: int) -> int:
-    """某一輪（從 1 起算）的 BO；期中不做分輪 BO（2.3），一律回傳賽事的 BO。"""
-    if round_no < 1:
-        raise ValueError(f"round_no must start from 1: {round_no}")
-    return get_tournament(session, tournament_id=tournament_id).bo
+def bo_for_round(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    round_no: int,
+    rounds: int,
+    is_third_place: bool,
+) -> int:
+    """實際對戰表共 `rounds` 輪時，第 `round_no` 輪（從 1 起算）的 BO（2.3）。
+
+    以距決賽的輪數查分輪設定，沒有設定的輪次回快照中的 BO；季軍賽沿用 4 強的設定。
+    `round_no` 不在 1～`rounds` 拋 `ValueError`（程式錯誤）；賽事不存在拋 404。
+    """
+    rounds_from_final(round_no=round_no, rounds=rounds, is_third_place=is_third_place)
+    tournament = get_tournament(session, tournament_id=tournament_id)
+    return resolve_round_bo(
+        tournament.round_bo,
+        default_bo=tournament.bo,
+        round_no=round_no,
+        rounds=rounds,
+        is_third_place=is_third_place,
+    )
 
 
 def open_due_registration(session: Session) -> bool:
