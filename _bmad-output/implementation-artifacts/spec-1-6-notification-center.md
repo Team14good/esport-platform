@@ -2,7 +2,7 @@
 title: 'Story 1.6：通知中心'
 type: 'feature'
 created: '2026-11-21'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'f1aefb98dc44ea57c7cdb573523d2962dbe89f71'
 review_loop_iteration: 0
 followup_review_recommended: false
