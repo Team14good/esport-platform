@@ -68,6 +68,7 @@ deferred: []
 - **tournaments 自己定義 `PAGE_SIZE`、`MAX_PAGE`**（實作時決定）：數值與 identity、notifications 相同（20、100000），照 notifications 的做法各模組自己定義，不 import identity 的 models。
 - **查不到顯示名稱時顯示「未知帳號」**（實作時決定）：`audit_log.actor_id` 有外鍵，目前不會發生；只是防呆，避免把帳號操作誤顯示成「系統自動」。
 - **動作的繁中名稱**（實作時決定，請組員確認用詞）：例如 `tournament.podium`「產生最終名次」、`match.voided`「取消場次」、`match.teams_changed`「場次隊伍變更」、`bracket.auto_draw_skipped`「略過自動抽籤」；完整對照見 `audit-log.ts` 的 `AUDIT_ACTION_LABELS`。
+- **對照表漏項由後端靜態測試擋下**（PR #104 審查建議）：前後端容器看不到彼此的原始碼，不能直接比對 TS 檔；`backend/tests/tournaments/test_audit_action_labels.py` 以 AST 掃描 `app/` 所有 `audit.record(...)`（`tournament_id` 不是 None 者，`action` 可為字串、條件運算式或模組常數），與測試內的 `LABELED_ACTIONS`（前端對照表鍵值的副本）雙向比對；新增或移除動作時測試失敗，訊息指出要同步改 `audit-log.ts`。無法靜態解析的 `action` 寫法也會失敗，避免測試默默漏掃。
 
 ## Code Map
 

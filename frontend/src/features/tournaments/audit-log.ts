@@ -14,6 +14,8 @@ export const UNKNOWN_ACTOR_TEXT = "未知帳號"
  * 動作代碼的繁中名稱：涵蓋目前所有帶 `tournament_id` 的動作。
  * 帳號類動作（`account.*`、`school.*`、`game.*`、`organizer_application.*`）不屬於
  * 任何賽事，不會出現在 S34，所以不列入；未知代碼顯示原文。
+ * 後端 `tests/tournaments/test_audit_action_labels.py` 掃描所有 `audit.record` 並與這份清單的
+ * 副本比對；新增或移除動作時兩邊要一起改。
  */
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "tournament.created": "建立賽事",

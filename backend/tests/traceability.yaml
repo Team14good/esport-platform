@@ -353,6 +353,10 @@ tournaments/test_public_tournaments.py:
   layer: integration
   stories: ["2.4"]
   frs: [FR-34]
+tournaments/test_audit_action_labels.py:
+  layer: unit
+  stories: ["2.8"]
+  frs: [NFR-3]
 tournaments/test_audit_log.py:
   layer: integration
   stories: ["2.8"]
