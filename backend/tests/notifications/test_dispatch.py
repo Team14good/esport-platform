@@ -20,7 +20,8 @@ from app.modules.notifications.models import (
     EmailDelivery,
     Notification,
 )
-from app.modules.notifications.registry import NotificationDraft
+from app.modules.identity.models import VerificationEmailRequested
+from app.modules.notifications.registry import NotificationDraft, RecipientsNotFound
 from app.worker import run_once
 from app.worker.jobs import dispatch_outbox, make_send_email_job
 from tests.conftest import FakeEmailSender, FrozenClock
@@ -39,7 +40,10 @@ def _resolve(_session: Session, event: WidgetPolished) -> Sequence[NotificationD
     if event.fail == "business":
         raise BusinessError("WIDGET_NOT_FOUND", "找不到這個零件。", status_code=404)
     if event.fail == "lookup":
-        raise LookupError("widget gone")
+        raise RecipientsNotFound("widget gone")
+    if event.fail == "keyerror":
+        # 程式錯誤（例如字典取值寫錯）：不能被當成查不到而略過
+        raise KeyError("captain")
     if event.fail == "boom":
         raise RuntimeError("database exploded")
     return [
@@ -166,6 +170,51 @@ def test_unexpected_errors_propagate(session: Session) -> None:
 
     with pytest.raises(RuntimeError, match="database exploded"):
         service.dispatch_event(session, event)
+
+
+@pytest.mark.parametrize("fail", ["boom", "keyerror"])
+def test_unexpected_error_leaves_event_unprocessed(
+    session: Session, session_factory: Callable[[], Session], fail: str
+) -> None:
+    # KeyError 是 LookupError 的子類別，也要回滾重試，不能標為已處理
+    alice = make_account(session)
+    event = _publish(session, alice, fail=fail)
+    session.commit()
+
+    run_once([dispatch_outbox], session_factory=session_factory)
+
+    session.expire_all()
+    assert _notifications(session, event.id) == []
+    stored = session.get(OutboxEvent, event.id)
+    assert stored is not None and stored.processed_at is None
+
+
+def test_failing_event_does_not_block_account_emails(
+    session: Session,
+    session_factory: Callable[[], Session],
+    fake_email_sender: FakeEmailSender,
+) -> None:
+    # 較早的一般事件每輪都分派失敗；較晚的驗證信事件仍在下一輪寄出
+    alice, bob = make_account(session), make_account(session)
+    stuck = _publish(session, alice, fail="boom")
+    session.commit()
+    verification = events.publish(
+        session, VerificationEmailRequested(account_id=bob.id, token="t" * 43)
+    )
+    session.commit()
+    jobs = [dispatch_outbox, make_send_email_job(fake_email_sender)]
+
+    for _ in range(2):
+        run_once(jobs, session_factory=session_factory)
+
+    session.expire_all()
+    stored_stuck = session.get(OutboxEvent, stuck.id)
+    assert stored_stuck is not None and stored_stuck.processed_at is None
+    stored_verification = session.get(OutboxEvent, verification.id)
+    assert stored_verification is not None
+    assert stored_verification.processed_at is not None
+    [delivery] = _deliveries(session, verification.id)
+    assert delivery.account_id == bob.id
 
 
 def test_unregistered_event_creates_nothing(session: Session) -> None:

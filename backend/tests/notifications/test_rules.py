@@ -31,7 +31,8 @@ from app.modules.identity import service as identity_service
 from app.modules.identity.models import Account
 from app.modules.notifications import service
 from app.modules.notifications.models import Notification
-from app.modules.notifications.rules import MatchForfeited
+from app.modules.competition.forfeit_job import MatchForfeited
+from app.modules.notifications import rules
 from app.modules.registration.models import RegistrationAllocated, RegistrationStatus
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
 from tests.disputes.test_reports import _set_registration
@@ -313,26 +314,29 @@ def test_forfeited_match_notifies_both_teams_and_referee(
     match.referee_account_id = referee.id
     session.add(match)
     session.flush()
-    # payload 與 competition 的 MatchForfeited 相同（多出的欄位在驗證時略過）
+    # 用 competition 判棄權時發的事件類別本身：改名或改欄位時這個測試會失敗
     event = events.publish(
         session,
-        MatchForfeited(match_id=match.id),
+        MatchForfeited(
+            match_id=match.id,
+            tournament_id=w.tid,
+            outcome=MatchOutcome.FORFEIT,
+            winner_id=match.team_a_id,
+            forfeited_team_ids=(match.team_b_id,),
+            appeal_deadline=clock.now(),
+        ),
     )
-    event.payload = {
-        "match_id": str(match.id),
-        "tournament_id": str(w.tid),
-        "outcome": MatchOutcome.FORFEIT,
-        "winner_id": str(match.team_a_id),
-        "forfeited_team_ids": [str(match.team_b_id)],
-        "appeal_deadline": clock.now().isoformat(),
-    }
-    session.add(event)
-    session.flush()
 
     notifications = _dispatch(session, event)
 
     a, b = _team(w, match.team_a_id), _team(w, match.team_b_id)
     assert set(notifications) == a.members | b.members | {referee.id}
+
+
+def test_forfeit_rule_is_registered_under_competitions_event_name() -> None:
+    # notifications 依 AD-2 另定義同名類別讀 payload；兩邊名稱不同時判棄權通知會默默停掉
+    assert rules.MatchForfeited.event_type == MatchForfeited.event_type
+    assert set(rules.MatchForfeited.model_fields) <= set(MatchForfeited.model_fields)
 
 
 def test_opponents_decided_notifies_only_both_captains(
