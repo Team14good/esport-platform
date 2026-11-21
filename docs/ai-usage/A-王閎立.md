@@ -1029,3 +1029,15 @@
 - 問題與修正：無
 - 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
 - 證據：`frontend/tests/unit/bracket-search.test.ts`、`frontend/tests/unit/bracket-team-search.test.tsx`、`frontend/tests/e2e/bracket-search.spec.ts`
+
+### 2026-11-21｜測試／程式審查｜Story 4.7 對戰樹隊伍搜尋：處理審查意見
+
+- Story／範圍：4.7（PR #101）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 讀 D 黃鉅燊在 PR 的 2 個 thread 與核准留言（4 條不擋合併的建議），逐條到程式碼驗證後修正、補測試、回覆
+- AI 產出：改 3 個檔（`BracketTree.tsx` 固定列底色用 box-shadow＋clip-path 延伸滿版、`bracket-search.ts` 比對改 NFKC＋去空白、`BracketTeamSearch.tsx` 報讀目前隊伍）；新增單元測試 5 個（全形／空白比對、空白字元 U+3000、forfeit、double_forfeit、disqualified）、擴充 2 個既有測試的斷言，e2e 加頂端兩側像素比對；spec Decisions 新增 3 條
+- 人做了什麼：D 審查並指出問題；這輪無人值守執行
+- 驗證：前端單元測試 76 個檔、1098 個通過；typecheck、biome、build 通過；Playwright `@story-4.7` desktop 與 mobile-375 共 2 個通過。另外把底色修正暫時拿掉重跑 e2e，兩個專案都在「左側不應露出頂欄」失敗，確認新斷言抓得到原本的問題
+- 問題與修正：審查者抓到 AI 上一輪的 3 個問題：(1) sticky 搜尋列只有 `main` 內容區寬，375 px 往下捲時左右各露出 16 px 頂欄，原 e2e 只用 `elementFromPoint` 檢查畫面正中間一點所以沒抓到；而且 box-shadow 不參與 hit test，新的檢查改成比對截圖像素。審查者建議用負邊距，但負邊距補不了寬螢幕超出 `max-w-content-max` 的部分，改用 box-shadow 延伸。(2) 比對只去前後空白，全形「ｔｉｔａｎ」與「清大Hydra」都找不到。(3) 切換上一隊／下一隊時 `role=status` 不變，報讀軟體不知道跳到哪一隊。另外 AI 補 disqualified 測試時第一次沒指定 `scenario: "finished"`（假資料預設是待開打），測試失敗後修正
+- 成熟度：L4（組員審查找出問題，AI 驗證後修正並以單元測試與 e2e 驗證，並反向確認 e2e 抓得到原問題）
+- 證據：PR #101、commit eca0317、`_bmad-output/implementation-artifacts/spec-4-7-bracket-team-search.md`
