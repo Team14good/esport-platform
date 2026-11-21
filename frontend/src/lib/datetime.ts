@@ -89,3 +89,35 @@ export function isoToTaipeiLocal(value: string): string {
   const shifted = new Date(ms + taipeiOffsetMs(ms))
   return shifted.toISOString().slice(0, 16)
 }
+
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"]
+
+/** 以台北時間顯示月日、星期與時分，例如 `10/18（六）19:00`；無法解析時回傳空字串。 */
+export function formatShortDateTime(value: string | Date): string {
+  const ms = new Date(value).getTime()
+  if (Number.isNaN(ms)) return ""
+  const local = new Date(ms + taipeiOffsetMs(ms))
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${pad(local.getUTCMonth() + 1)}/${pad(local.getUTCDate())}（${WEEKDAYS[local.getUTCDay()]}）${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`
+}
+
+const MINUTE_MS = 60_000
+const HOUR_MS = 60 * MINUTE_MS
+const DAY_MS = 24 * HOUR_MS
+
+/**
+ * 相對於 `now` 的時間，例如「剛剛」「3 分鐘前」「2 小時前」「5 天前」；
+ * 未來的時間（時鐘誤差）也顯示「剛剛」，無法解析時回傳空字串。
+ */
+export function formatRelativeTime(
+  value: string | Date,
+  now: Date = new Date(),
+): string {
+  const ms = new Date(value).getTime()
+  if (Number.isNaN(ms)) return ""
+  const diff = now.getTime() - ms
+  if (diff < MINUTE_MS) return "剛剛"
+  if (diff < HOUR_MS) return `${Math.floor(diff / MINUTE_MS)} 分鐘前`
+  if (diff < DAY_MS) return `${Math.floor(diff / HOUR_MS)} 小時前`
+  return `${Math.floor(diff / DAY_MS)} 天前`
+}

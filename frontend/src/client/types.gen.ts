@@ -1000,6 +1000,64 @@ export type NextMatch = {
 }
 
 /**
+ * NotificationPage
+ *
+ * 通知的分頁結果，依 `created_at` 由新到舊；`page` 超過總頁數時 `items` 為空。
+ */
+export type NotificationPage = {
+  /**
+   * Items
+   */
+  items: Array<NotificationRead>
+  /**
+   * Total
+   */
+  total: number
+  /**
+   * Page
+   */
+  page: number
+  /**
+   * Page Size
+   */
+  page_size: number
+}
+
+/**
+ * NotificationRead
+ */
+export type NotificationRead = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Type
+   */
+  type: string
+  /**
+   * Title
+   */
+  title: string
+  /**
+   * Body
+   */
+  body: string
+  /**
+   * Link
+   */
+  link: string
+  /**
+   * Created At
+   */
+  created_at: string
+  /**
+   * Read At
+   */
+  read_at: string | null
+}
+
+/**
  * OpenDisputeItem
  *
  * S27 待處理清單的一筆：申訴（`match_id`、`match_code`）或檢舉（`team_name`）。
@@ -2465,6 +2523,16 @@ export type TournamentStatus =
   | "ongoing"
   | "finished"
   | "cancelled"
+
+/**
+ * UnreadCount
+ */
+export type UnreadCount = {
+  /**
+   * Count
+   */
+  count: number
+}
 
 /**
  * ValidationError
@@ -4741,3 +4809,84 @@ export type disputesReadTeamDisqualificationResponses = {
 
 export type disputesReadTeamDisqualificationResponse =
   disputesReadTeamDisqualificationResponses[keyof disputesReadTeamDisqualificationResponses]
+
+export type notificationsListNotificationsData = {
+  body?: never
+  path?: never
+  query?: {
+    /**
+     * Page
+     */
+    page?: number
+  }
+  url: "/api/v1/notifications"
+}
+
+export type notificationsListNotificationsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type notificationsListNotificationsError =
+  notificationsListNotificationsErrors[keyof notificationsListNotificationsErrors]
+
+export type notificationsListNotificationsResponses = {
+  /**
+   * Successful Response
+   */
+  200: NotificationPage
+}
+
+export type notificationsListNotificationsResponse =
+  notificationsListNotificationsResponses[keyof notificationsListNotificationsResponses]
+
+export type notificationsGetUnreadCountData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/api/v1/notifications/unread-count"
+}
+
+export type notificationsGetUnreadCountResponses = {
+  /**
+   * Successful Response
+   */
+  200: UnreadCount
+}
+
+export type notificationsGetUnreadCountResponse =
+  notificationsGetUnreadCountResponses[keyof notificationsGetUnreadCountResponses]
+
+export type notificationsMarkNotificationReadData = {
+  body?: never
+  path: {
+    /**
+     * Notification Id
+     */
+    notification_id: string
+  }
+  query?: never
+  url: "/api/v1/notifications/{notification_id}/read"
+}
+
+export type notificationsMarkNotificationReadErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type notificationsMarkNotificationReadError =
+  notificationsMarkNotificationReadErrors[keyof notificationsMarkNotificationReadErrors]
+
+export type notificationsMarkNotificationReadResponses = {
+  /**
+   * Successful Response
+   */
+  200: NotificationRead
+}
+
+export type notificationsMarkNotificationReadResponse =
+  notificationsMarkNotificationReadResponses[keyof notificationsMarkNotificationReadResponses]

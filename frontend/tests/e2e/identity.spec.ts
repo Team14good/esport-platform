@@ -16,10 +16,11 @@ import {
   ORGANIZER_SCHOOL as SCHOOL,
 } from "./support/organizer"
 
-test("訪客註冊並驗證 Email、申請主辦方，平台管理員核准後可進入主辦方後台", {
+test("訪客註冊並驗證 Email、申請主辦方，平台管理員核准後可進入主辦方後台並收到通知", {
   tag: [
     "@story-1.3",
     "@story-1.4",
+    "@story-1.6",
     "@story-1.7",
     "@story-1.8",
     "@story-7.2",
@@ -27,6 +28,8 @@ test("訪客註冊並驗證 Email、申請主辦方，平台管理員核准後�
     "@FR-2",
     "@FR-3",
     "@FR-5",
+    "@FR-37",
+    "@FR-38",
     "@NFR-2",
     "@NFR-7",
   ],
@@ -93,5 +96,41 @@ test("訪客註冊並驗證 Email、申請主辦方，平台管理員核准後�
       "切換身分（目前：主辦方後台）",
     )
     await expectNoHorizontalScroll(applicantPage)
+  })
+
+  await test.step("申請人在鈴鐺收到核准通知，點擊後導向主辦方後台", async () => {
+    // 核准事件由 worker 輪詢分派（預設每 20 秒）；重新整理直到鈴鐺出現未讀徽章
+    const bell = applicantPage.getByRole("button", {
+      name: /^通知（\d+ 則未讀）$/,
+    })
+    await expect(async () => {
+      await applicantPage.reload()
+      await expect(bell).toBeVisible({ timeout: 5_000 })
+    }).toPass({ timeout: 90_000, intervals: [5_000] })
+    await bell.click()
+    const popover = applicantPage.getByRole("dialog", { name: "通知" })
+    const item = popover.getByRole("button", { name: /主辦方申請已核准/ })
+    await expect(item).toBeVisible()
+    await expectNoHorizontalScroll(applicantPage)
+    await applicantPage.screenshot({
+      path: test.info().outputPath("notification-popover.png"),
+    })
+    await item.click()
+    await expect(applicantPage).toHaveURL(/\/organizer$/)
+    // 標為已讀後徽章消失
+    await expect(
+      applicantPage.getByRole("button", { name: "通知", exact: true }),
+    ).toBeVisible()
+
+    await applicantPage.goto("/notifications")
+    await expect(
+      applicantPage.getByRole("heading", { name: "通知", level: 1 }),
+    ).toBeVisible()
+    await expect(applicantPage.getByText("主辦方申請已核准")).toBeVisible()
+    await expectNoHorizontalScroll(applicantPage)
+    await applicantPage.screenshot({
+      path: test.info().outputPath("notifications-page.png"),
+      fullPage: true,
+    })
   })
 })

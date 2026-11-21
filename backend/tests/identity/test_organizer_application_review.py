@@ -620,15 +620,19 @@ def test_identities_order_is_browse_organizer_platform_admin(
 # ---------------------------------------------------------------- worker
 
 
-def test_worker_marks_review_events_processed_without_sending_email(
+def test_worker_notifies_applicants_of_review_once(
     client: TestClient,
     session: Session,
     session_factory: Callable[[], Session],
     fake_email_sender: FakeEmailSender,
 ) -> None:
+    # Story 1.6 起審核事件有收件規則：申請人各收到一則站內通知與一封信，
+    # 重跑 worker 不會重複（取代 1.8 期中「只標為已處理、不寄信」）
     admin = _make_account(session, admin=True)
-    approved = _make_application(session, _make_account(session))
-    rejected = _make_application(session, _make_account(session))
+    approved_applicant = _make_account(session)
+    rejected_applicant = _make_account(session)
+    approved = _make_application(session, approved_applicant)
+    rejected = _make_application(session, rejected_applicant)
     assert _approve(client, admin, approved.id).status_code == 200
     assert _reject(client, admin, rejected.id, "不符資格").status_code == 200
 
@@ -646,8 +650,19 @@ def test_worker_marks_review_events_processed_without_sending_email(
     for event in events:
         session.refresh(event)
         assert event.processed_at is not None
-    assert fake_email_sender.sent == []
-    assert list(session.exec(select(EmailDelivery))) == []
+    sent = sorted((m.to, m.subject) for m in fake_email_sender.sent)
+    assert sent == sorted(
+        [
+            (approved_applicant.email, "主辦方申請已核准"),
+            (rejected_applicant.email, "主辦方申請已退回"),
+        ]
+    )
+    deliveries = session.exec(
+        select(EmailDelivery).where(
+            col(EmailDelivery.event_id).in_([e.id for e in events])
+        )
+    ).all()
+    assert len(deliveries) == 2
 
 
 # ---------------------------------------------------------------- 同時審核

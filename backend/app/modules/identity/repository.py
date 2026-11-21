@@ -46,6 +46,16 @@ def list_accounts(session: Session, account_ids: Sequence[uuid.UUID]) -> list[Ac
     return list(session.exec(select(Account).where(col(Account.id).in_(account_ids))))
 
 
+def list_platform_admin_ids(session: Session) -> list[uuid.UUID]:
+    """所有平台管理員的帳號 id（依 id 排序，結果穩定）。"""
+    statement = (
+        select(Account.id)
+        .where(col(Account.is_platform_admin).is_(True))
+        .order_by(col(Account.id))
+    )
+    return list(session.exec(statement))
+
+
 def get_account_by_email(
     session: Session, email: str, *, for_update: bool = False
 ) -> Account | None:

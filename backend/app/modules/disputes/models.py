@@ -298,6 +298,14 @@ class OpenDisputes(BaseModel):
     items: list[OpenDisputeItem]
 
 
+class ReportParties(BaseModel):
+    """給 notifications（Story 1.6）：檢舉所屬賽事與檢舉方、被檢舉方隊伍。"""
+
+    tournament_id: uuid.UUID
+    reporter_team_id: uuid.UUID
+    reported_team_id: uuid.UUID
+
+
 class ReportRead(BaseModel):
     """檢舉內容；不含附件鍵值，只以 `has_attachment` 表示有沒有附件。"""
 

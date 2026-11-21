@@ -48,6 +48,7 @@ from app.modules.disputes.models import (
     Report,
     ReportableTeam,
     ReportFiled,
+    ReportParties,
     ReportRead,
     ReportResolved,
     ReportStatus,
@@ -974,6 +975,14 @@ def get_report_tournament_id(session: Session, *, report_id: uuid.UUID) -> uuid.
     if report is None:
         raise _report_not_found()
     return report.tournament_id
+
+
+def get_report_parties(session: Session, *, report_id: uuid.UUID) -> ReportParties:
+    """給 notifications（Story 1.6）：檢舉所屬賽事與雙方隊伍；不存在 404 `REPORT_NOT_FOUND`。"""
+    report = repository.get_report(session, report_id)
+    if report is None:
+        raise _report_not_found()
+    return ReportParties.model_validate(report, from_attributes=True)
 
 
 def _clean_report_reason(value: str) -> str:
