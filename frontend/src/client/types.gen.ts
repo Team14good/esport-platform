@@ -1964,6 +1964,22 @@ export type ResultScreenshotState = {
 }
 
 /**
+ * RoundBo
+ *
+ * 一輪的 BO：`rounds_from_final` 是距決賽的輪數（決賽＝0、4 強＝1、8 強＝2…）。
+ */
+export type RoundBo = {
+  /**
+   * Rounds From Final
+   */
+  rounds_from_final: number
+  /**
+   * Bo
+   */
+  bo: number
+}
+
+/**
  * SchoolIn
  *
  * 平台管理員新增學校或修正學校名稱（名稱去除前後空白後儲存）。
@@ -2356,6 +2372,10 @@ export type TournamentCreate = {
    * Livestream Url
    */
   livestream_url?: string | null
+  /**
+   * Round Bo
+   */
+  round_bo?: Array<RoundBo>
 }
 
 /**
@@ -2450,6 +2470,10 @@ export type TournamentRead = {
    * Rank Tiers
    */
   rank_tiers: Array<RankTierRead>
+  /**
+   * Round Bo
+   */
+  round_bo: Array<RoundBo>
 }
 
 /**

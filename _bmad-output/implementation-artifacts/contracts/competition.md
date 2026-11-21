@@ -278,7 +278,7 @@ class PublicBracket(BaseModel):
 | `transition_tournament(session, *, tournament_id, to, actor_id) -> TournamentRead` | 4.1（→ published）、5.x（→ ongoing、finished） | 非法轉換拋錯 |
 | `is_referee(session, *, tournament_id, account_id) -> bool` | 4.4 | 已接受邀請 |
 | ★ `list_referees(session, *, tournament_id) -> list[RefereeRead]` | 4.4 的 S30 選單 | `RefereeRead {account_id, display_name}` |
-| `bo_for_round(session, *, tournament_id, round_no) -> int` | 4.3、5.3、5.4 | 期中一律回賽事的 BO |
+| `bo_for_round(session, *, tournament_id, round_no, rounds, is_third_place) -> int` | 4.3、5.3、5.4、5.8 | 2.3 分輪 BO：`rounds` 是實際對戰表的總輪數（`Bracket.rounds`），依距決賽的輪數查設定，沒設定回 `bo`，季軍賽沿用 4 強；`round_no` 不在 1～`rounds` 拋 `ValueError` |
 
 `TournamentRead` 需要的欄位（完整定義與其他函式見 [tournaments.md](tournaments.md)）：
 

@@ -15,6 +15,7 @@ from app.modules.tournaments.models import (
     GameTitle,
     RankTier,
     RefereeInvitation,
+    RoundSetting,
     Tournament,
     TournamentReferee,
     TournamentStatus,
@@ -139,6 +140,28 @@ def add_tournament(session: Session, tournament: Tournament) -> Tournament:
     session.add(tournament)
     session.flush()
     return tournament
+
+
+def add_round_settings(session: Session, settings: list[RoundSetting]) -> None:
+    """新增分輪 BO（建立賽事時，賽事列已 flush）。"""
+    if not settings:
+        return
+    session.add_all(settings)
+    session.flush()
+
+
+def list_round_settings(
+    session: Session, tournament_ids: list[uuid.UUID]
+) -> list[RoundSetting]:
+    """多場賽事的分輪 BO，依賽事、再依距決賽的輪數排列。"""
+    if not tournament_ids:
+        return []
+    statement = (
+        select(RoundSetting)
+        .where(col(RoundSetting.tournament_id).in_(tournament_ids))
+        .order_by(col(RoundSetting.tournament_id), col(RoundSetting.rounds_from_final))
+    )
+    return list(session.exec(statement))
 
 
 def get_tournament(

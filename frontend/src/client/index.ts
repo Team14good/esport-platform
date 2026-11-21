@@ -354,6 +354,7 @@ export type {
   RescheduleIn,
   RescheduleInfo,
   ResultScreenshotState,
+  RoundBo,
   SchoolIn,
   ScoreEntryState,
   ScoreType,

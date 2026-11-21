@@ -21,6 +21,7 @@ from tests.competition.conftest import (
     FakeRegistration,
     FrozenClockLike,
     draw_with,
+    draw_with_round_bo,
     tournament_in,
 )
 from tests.helpers import API, bearer, make_account, token_for
@@ -607,3 +608,36 @@ def test_list_window_matches_reschedule_api(
         earliest = datetime.fromisoformat(str(info["earliest"]))
     assert _patch(client, setup, code, earliest).status_code == 200
     assert setup.row(code).scheduled_at == earliest
+
+
+# ---------------------------------------------------------------- 分輪 BO（2.3）
+
+
+def test_window_uses_round_bo_of_each_round(
+    client: TestClient, session: Session, fake_registration: FakeRegistration
+) -> None:
+    # 預設 BO1（85 分鐘）、4 強 BO3（165 分鐘）、決賽 BO5；8 隊、每輪間隔 180 分鐘
+    tournament, bracket = draw_with_round_bo(session, fake_registration, 8)
+    session.commit()
+    codes = {m.code: m for m in bracket.matches}
+    assert [codes[c].round_no for c in ("M1", "M5", "M7")] == [1, 2, 3]
+    assert codes["M8"].is_third_place
+    organizer = session.get(Account, tournament.organizer_id)
+    assert organizer is not None
+    rows = client.get(
+        f"{API}/tournaments/{tournament.id}/manage/matches",
+        headers=_headers(client, organizer),
+    ).json()
+    window = {r["code"]: r["reschedule"] for r in rows}
+
+    # 4 強的前一輪是 8 強（BO1）：11:00＋85 分鐘；
+    # 4 強本身 BO3：最晚＝決賽與季軍賽（17:00）－165 分鐘
+    assert datetime.fromisoformat(window["M5"]["earliest"]) == R1 + timedelta(
+        minutes=85
+    )
+    assert datetime.fromisoformat(window["M5"]["latest"]) == R3 - timedelta(minutes=165)
+    # 決賽與季軍賽的前一輪是 4 強（BO3）：14:00＋165 分鐘
+    for code in ("M7", "M8"):
+        assert datetime.fromisoformat(window[code]["earliest"]) == R2 + timedelta(
+            minutes=165
+        )
