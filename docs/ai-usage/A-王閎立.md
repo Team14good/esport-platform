@@ -946,3 +946,14 @@
 - 問題與修正：AI 第一次用鍵名前 3 個字元比對，漏掉 3-10 與 3-11 兩個 Story（更新數 13 而不是 15），在核對更新數時發現並補上；分工是依模組與行數的推論，2.8、3.9 給 A、D 負擔較輕等是 AI 的判斷，未與組員討論
 - 成熟度：L3（AI 依既有分工與文件產出草案，人決定並審查）
 - 證據：分支 `docs/final-assignment`；CONTRIBUTING 第 7 節
+### 2026-11-20｜專案管理與流程／改善 AI 工作流程｜讓 bmad-build 讀得到期末規則（epics.md 與 epic context）
+
+- Story／範圍：epics.md〈期中範圍〉與 epic-1～7-context.md
+- 工具：Claude Code（Sonnet 5.5）
+- 怎麼用：讀 PR #96 的審查留言，核對 `bmad-build` 讀的是 epics.md 與 epic context、而不是 CONTRIBUTING，確認審查者說的缺口成立後修正
+- AI 產出：epics.md〈期中範圍〉開頭加一段「期中已結束，期末以原版驗收條件為準」；7 份 epic context 各加一行同義說明，15 個「期中擱置」Story 標成「期中擱置，期末要做」
+- 人做了什麼：組員 D 在審查中指出缺口；我決定另開 PR 處理
+- 驗證：改後以 workflow 的規則（`git log` 比對 context 與 planning artifacts 的最後 commit）確認 context 不會被判成過期；沒有 CRLF；`git diff --check` 無輸出
+- 問題與修正：AI 上一輪把「期末改依完整驗收條件」只寫進 CONTRIBUTING 第 7.3 節，沒有想到 `bmad-build` 讀的是 epics.md 與 epic context，AI 照做會把期末的 Story 做小，由審查者指出；這次是就地修改 context，不是用編譯指示整份重產，讀不到的新規則因此靠人工維持一致
+- 成熟度：L5（修正的是 AI 工作流程讀不到規則的問題，審查者發現缺口後補上，並用 context 過期判斷規則驗證）
+- 證據：分支 `docs/epic-context-final`；PR #96 的審查留言
