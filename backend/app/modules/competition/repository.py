@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, func, or_, select
 
 from app.modules.competition.models import (
+    AutoDrawSkip,
     Bracket,
     CheckIn,
     Match,
@@ -37,6 +38,21 @@ def get_bracket_by_tournament(
 ) -> Bracket | None:
     statement = select(Bracket).where(Bracket.tournament_id == tournament_id)
     return session.exec(statement).first()
+
+
+def get_auto_draw_skip(
+    session: Session, tournament_id: uuid.UUID, registration_end: datetime
+) -> AutoDrawSkip | None:
+    statement = select(AutoDrawSkip).where(
+        AutoDrawSkip.tournament_id == tournament_id,
+        AutoDrawSkip.registration_end == registration_end,
+    )
+    return session.exec(statement).first()
+
+
+def add_auto_draw_skip(session: Session, skip: AutoDrawSkip) -> None:
+    session.add(skip)
+    session.flush()
 
 
 def get_bracket(session: Session, bracket_id: uuid.UUID) -> Bracket | None:

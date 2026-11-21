@@ -777,3 +777,14 @@
 - 問題與修正：(1) 公開單場的新欄位原本叫 `result_submitted`，既有測試 `test_public_match_hides_submitter` 以「回應不含 submitted」檢查而失敗，AI 改欄位名稱而不是改那個測試；(2) 審查子代理發現圖片查詢的 key 放在場次前綴下，頁面每次重抓都重新下載圖片，已移出前綴並補測試；(3) 審查指出 3 個測試「實作壞掉也會過」（提交失敗的清檔、看不到上傳區的斷言太早、送出後被取消資格），已補強；(4) AI 自己寫的提交失敗測試用 `monkeypatch.undo()` 連 fixture 的替身一起還原，跑測試時失敗才發現，改用獨立的 MonkeyPatch；(5) 前端單元測試整套跑時有 1～4 個與本次無關的案例偶發逾時（每次不同），改兩個 worker 後全過，判斷是機器負載，未修
 - 成熟度：L4（規劃 → 實作 → 獨立審查 → 測試與突變檢查，人只在 checkpoint 決策）
 - 證據：本 PR 的 diff、spec 的 Review Triage Log
+### 2026-11-20｜程式／程式生成＋測試｜Story 4.2 報名截止時自動抽籤
+
+- Story／範圍：4.2（期中後的擱置 Story；分支 `story/4-2-auto-draw`，Draft PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build；1 個只讀的審查子代理
+- 怎麼用：派工寫明期望結果（截止補位後同一週期由系統抽籤、正取不足只發一次事件、手動抽籤不變、不做延長報名與取消）與驗證方式（frozen_clock、併發、lint、架構測試、變異測試）；AI 寫 spec（spec-4-2-auto-draw.md）、實作、跑測試，再交給審查子代理挑毛病
+- AI 產出：worker 工作 `auto_draw_closed`；competition `auto_draw`／`auto_draw_due`，把 `draw()` 後半抽成手動與自動共用的 `_create_bracket`；新資料表 `auto_draw_skip`（賽事＋報名截止時間唯一，讓事件只發一次）與遷移；事件 `AutoDrawSkipped`；tournaments 新增 `list_closed_tournament_ids`；3 個新測試檔（服務層、worker 一輪接真的 registration、兩條連線的手動／自動併發）
+- 人做了什麼：派工時定下行為與界線（操作者為系統、只發事件、不做 2.5／2.6）；spec 的 Checkpoint 1 沒有經過本人核准，PR 維持 Draft 等本人核准
+- 驗證：全部後端測試 2434 passed、1 failed（mailpit 沒啟動，SMTP 測試連不上，與本 Story 無關）；審查修正後相關模組加架構、遷移測試 1876 passed；`scripts/lint.sh` 通過；變異測試把自動抽籤改成不呼叫，worker 測試 3 項中 2 項失敗，還原後通過
+- 問題與修正：AI 第一版測試以為 `BracketRead` 有 `team_count`，第一次執行 4 項失敗，改用場次中的隊伍比對；第一版 `service.py` 沒照 ruff format，被 lint 擋下；審查子代理指出已判定不足的賽事每一輪都會被 `lock_tournament`，改為先以不加鎖的讀取排除；另外 5 點（期中事件不補發、持續拋錯只寫 log、registration `mark_drawn` 型別、併發測試是機率性、2.5 必須轉回 `open`）寫進 spec 與 deferred-work
+- 成熟度：L4（依 spec 實作，多層測試、變異測試與獨立審查子代理驗證；人只在派工與核准 spec 時決策）
+- 證據：`_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`、本 PR 的 diff

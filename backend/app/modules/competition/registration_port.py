@@ -68,9 +68,9 @@ def mark_drawn(
     *,
     tournament_id: uuid.UUID,
     team_ids: Sequence[uuid.UUID],
-    actor_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
 ) -> None:
-    """把抽籤的隊伍由正取標為已參賽。"""
+    """把抽籤的隊伍由正取標為已參賽；`actor_id=None` 表示系統（自動抽籤，4.2）。"""
     _lookup("mark_drawn")(
         session, tournament_id=tournament_id, team_ids=list(team_ids), actor_id=actor_id
     )

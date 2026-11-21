@@ -24,6 +24,8 @@ from app.modules.competition import (
 )
 from app.modules.competition import schedule as schedule_rules
 from app.modules.competition.models import (
+    AutoDrawSkip,
+    AutoDrawSkipped,
     Bracket,
     BracketDrawn,
     BracketRead,
@@ -348,6 +350,24 @@ def draw(
     )
     if len(team_ids) < _MIN_DRAW_TEAMS:
         raise _draw_error("not_enough_teams")
+    return _create_bracket(
+        session, tournament, team_ids=team_ids, actor_id=actor_id, rng=rng
+    )
+
+
+def _create_bracket(
+    session: Session,
+    tournament: TournamentRead,
+    *,
+    team_ids: list[uuid.UUID],
+    actor_id: uuid.UUID | None,
+    rng: bracket_rules.Shuffler | None,
+) -> BracketRead:
+    """手動（4.1）與自動（4.2）抽籤共用：產生對戰表與場次、排時間、轉為已公布。
+
+    呼叫端已鎖住賽事、完成檢查並確認正取至少 2 隊；`actor_id=None` 表示系統。
+    """
+    tournament_id = tournament.id
 
     # 洗牌前先依隊名（相同再比 id）排序：結果只取決於亂數，不受 registration
     # 回傳順序影響，示範資料用固定種子時每次都得到同一張對戰表
@@ -430,6 +450,102 @@ def draw(
     )
     matches = repository.list_matches(session, bracket.id)
     return _bracket_to_read(bracket, matches, delayed)
+
+
+# ---------------------------------------------------------------- 自動抽籤（Story 4.2）
+
+AutoDrawOutcome = Literal["drawn", "not_enough_teams", "not_due"]
+
+
+def auto_draw(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    rng: bracket_rules.Shuffler | None = None,
+) -> AutoDrawOutcome:
+    """報名截止的賽事由系統抽籤（操作者 `None`），與手動抽籤共用 `_create_bracket`。
+
+    先鎖賽事（AD-6），鎖內重新檢查：不是報名截止、已有對戰表（手動抽籤先拿到鎖）、
+    開賽已過，或這次報名截止已判定過正取不足時，不做任何事回 `not_due`，所以重複
+    呼叫或與手動抽籤同時進行都只抽一次。正取不足 2 隊時不抽籤，寫一筆略過紀錄、
+    操作紀錄與 `AutoDrawSkipped` 事件（主辦方只會收到一次），賽事維持報名截止。
+    """
+    tournament = tournaments_service.lock_tournament(
+        session, tournament_id=tournament_id
+    )
+    if tournament.status != TournamentStatus.CLOSED:
+        return "not_due"
+    if _draw_blocked(session, tournament) is not None:
+        return "not_due"
+    if (
+        repository.get_auto_draw_skip(
+            session, tournament_id, tournament.registration_end
+        )
+        is not None
+    ):
+        return "not_due"
+    team_ids = registration_port.list_accepted_teams(
+        session, tournament_id=tournament_id
+    )
+    if len(team_ids) < _MIN_DRAW_TEAMS:
+        skip = AutoDrawSkip(
+            tournament_id=tournament_id,
+            registration_end=tournament.registration_end,
+            accepted_teams=len(team_ids),
+            skipped_at=clock.now(),
+        )
+        repository.add_auto_draw_skip(session, skip)
+        audit.record(
+            session,
+            actor_id=None,
+            tournament_id=tournament_id,
+            action="bracket.auto_draw_skipped",
+            entity_type="auto_draw_skip",
+            entity_id=skip.id,
+            before=None,
+            after={"reason": "not_enough_teams", "accepted_teams": len(team_ids)},
+        )
+        events.publish(
+            session,
+            AutoDrawSkipped(tournament_id=tournament_id, accepted_teams=len(team_ids)),
+        )
+        return "not_enough_teams"
+    _create_bracket(session, tournament, team_ids=team_ids, actor_id=None, rng=rng)
+    return "drawn"
+
+
+def auto_draw_due(session: Session) -> bool:
+    """worker 用：替一場報名截止、還沒抽籤的賽事自動抽籤（或判定正取不足）。
+
+    候選由 tournaments `list_closed_tournament_ids` 找（報名截止、開賽未到），每個候選
+    在 savepoint 裡交給 `auto_draw`。回傳 True 代表處理了一場（抽籤或判定不足），worker
+    會再呼叫一次；沒有要處理的候選回傳 False。某一場拋錯時回滾那一場並記錄錯誤，改看
+    下一個候選，不讓它卡住之後的賽事。
+
+    已判定正取不足的賽事先以不加鎖的讀取排除，不必每一輪都鎖住它們（鎖內仍會再查一次）。
+    """
+    for tournament_id in tournaments_service.list_closed_tournament_ids(session):
+        current = tournaments_service.get_tournament(
+            session, tournament_id=tournament_id
+        )
+        if (
+            repository.get_auto_draw_skip(
+                session, tournament_id, current.registration_end
+            )
+            is not None
+        ):
+            continue
+        try:
+            with session.begin_nested():
+                outcome = auto_draw(session, tournament_id=tournament_id)
+        except Exception:
+            logger.exception(
+                "Tournament %s failed to auto draw; skipped", tournament_id
+            )
+            continue
+        if outcome != "not_due":
+            return True
+    return False
 
 
 # ---------------------------------------------------------------- 查詢
