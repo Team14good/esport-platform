@@ -57,7 +57,7 @@ development_status:
   2-5-抽籤前修改賽事: backlog  # 負責：B（期末）
   2-6-取消賽事: backlog  # 負責：B（期末）
   2-7-邀請裁判: done  # 負責：B；第一階段（後端，PR #40）、第二階段（S31、S23 畫面，PR #54）完成
-  2-8-主辦方查閱操作紀錄: backlog  # 負責：A（期末）
+  2-8-主辦方查閱操作紀錄: in-progress  # 負責：A（期末）
   epic-2-retrospective: optional
 
   epic-3: in-progress
