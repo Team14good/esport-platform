@@ -31,10 +31,12 @@ from app.modules.registration.models import (
     Registration,
     RegistrationStatus,
     Team,
+    TeamMember,
 )
 from app.modules.tournaments.models import Tournament, TournamentStatus
 from tests.conftest import FrozenClock
-from tests.helpers import make_game, make_tournament
+from tests.helpers import make_account, make_game, make_tournament
+from tests.registration.test_submit_registration import _fill
 from tests.registration.test_team_concurrency import _demote_game_creator
 
 Settle = Callable[[Session, uuid.UUID, uuid.UUID], object]
@@ -209,3 +211,150 @@ def _allocated_events(session: Session, tournament_id: uuid.UUID) -> list[Outbox
         select(OutboxEvent).where(OutboxEvent.type == "RegistrationAllocated")
     ).all()
     return [row for row in rows if row.payload["tournament_id"] == str(tournament_id)]
+
+
+def test_parallel_withdraw_and_submit_never_exceed_capacity(
+    frozen_clock: FrozenClock,
+) -> None:
+    """Story 3.7：名額 2 已滿（A 與另一隊正取），先搶期中 A 撤回與 B 送出同時發生。
+
+    先撤回：沒有候補可遞補，名額保留，B 送出時正取。先送出：B 依已滿的名額候補，
+    A 撤回後 B 遞補（`RegistrationBackfilled`）。兩種順序最後都是 A 撤回、B 正取、正取
+    2 隊；把撤回或送出的鎖拿掉時，兩邊都看到舊的名額，B 會候補而空位留下（或超收）。
+    """
+    with Session(engine) as setup:
+        game = make_game(setup)
+        _demote_game_creator(setup, game.id)
+        tournament = make_tournament(
+            setup,
+            game=game,
+            capacity=2,
+            starters=1,
+            substitutes=0,
+            registration_start=(frozen_clock.now() - timedelta(hours=1)).isoformat(),
+            priority_hours=1,
+        )
+        schools = list(setup.exec(select(School).order_by(col(School.id)).limit(3)))
+        setup.add(
+            PriorityWindowSettlement(
+                tournament_id=tournament.id,
+                settled_at=tournament.priority_end,
+                priority_school_ids=[],
+            )
+        )
+        captains: list[uuid.UUID] = []
+        team_ids: list[uuid.UUID] = []
+        for i, school in enumerate(schools):
+            captain = make_account(setup, school_id=school.id, hashed_password="x")
+            created = service.create_team(
+                setup,
+                tournament_id=tournament.id,
+                account_id=captain.id,
+                name=f"撤回併發-{i}-{uuid.uuid4().hex[:6]}",
+            )
+            _fill(setup, created.id, captain)
+            captains.append(captain.id)
+            team_ids.append(created.id)
+        for i in (0, 1):
+            registration = setup.exec(
+                select(Registration).where(Registration.team_id == team_ids[i])
+            ).one()
+            registration.status = RegistrationStatus.ACCEPTED
+            registration.school_id = schools[i].id
+            registration.avg_rank_score = Decimal(30)
+            registration.submitted_at = tournament.priority_end + timedelta(
+                minutes=i + 1
+            )
+            setup.add(registration)
+        setup.commit()
+        tournament_id = tournament.id
+    frozen_clock.set(tournament.priority_end + timedelta(minutes=10))
+
+    start = threading.Barrier(2)
+    outcomes: list[str] = []
+    outcomes_lock = threading.Lock()
+
+    def _run(action: Callable[[Session], object]) -> None:
+        with Session(engine) as db:
+            try:
+                start.wait(timeout=10)
+                action(db)
+                db.commit()
+                result = "ok"
+            except Exception as exc:  # 讓非預期錯誤出現在斷言訊息裡
+                result = repr(exc)
+        with outcomes_lock:
+            outcomes.append(result)
+
+    def _withdraw(db: Session) -> object:
+        return service.withdraw_registration(
+            db, team_id=team_ids[0], account_id=captains[0]
+        )
+
+    def _submit(db: Session) -> object:
+        return service.submit_registration(
+            db, team_id=team_ids[2], account_id=captains[2]
+        )
+
+    threads: list[threading.Thread] = []
+    try:
+        threads = [
+            threading.Thread(target=_run, args=(a,)) for a in (_withdraw, _submit)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        assert not any(thread.is_alive() for thread in threads)
+
+        assert outcomes == ["ok", "ok"], outcomes
+        with Session(engine) as check:
+            statuses = {
+                r.team_id: r.status
+                for r in check.exec(
+                    select(Registration).where(
+                        Registration.tournament_id == tournament_id
+                    )
+                ).all()
+            }
+            assert statuses == {
+                team_ids[0]: RegistrationStatus.WITHDRAWN,
+                team_ids[1]: RegistrationStatus.ACCEPTED,
+                team_ids[2]: RegistrationStatus.ACCEPTED,
+            }
+            events = [
+                e
+                for e in check.exec(select(OutboxEvent)).all()
+                if e.payload.get("tournament_id") == str(tournament_id)
+            ]
+            # 先撤回：B 送出時正取（1 則 Allocated）；先送出：候補（Allocated）後遞補
+            # （Backfilled）。兩種順序都不會重複遞補
+            assert [e.type for e in events].count("RegistrationBackfilled") <= 1
+            assert [e.type for e in events].count("RegistrationAllocated") == 1
+    finally:
+        for thread in threads:
+            thread.join(timeout=10)
+        with Session(engine) as cleanup:
+            event_ids = [
+                e.id
+                for e in cleanup.exec(select(OutboxEvent)).all()
+                if e.payload.get("tournament_id") == str(tournament_id)
+            ]
+            cleanup.execute(
+                delete(OutboxEvent).where(col(OutboxEvent.id).in_(event_ids))
+            )
+            cleanup.execute(
+                delete(PriorityWindowSettlement).where(
+                    col(PriorityWindowSettlement.tournament_id) == tournament_id
+                )
+            )
+            cleanup.execute(
+                delete(Registration).where(
+                    col(Registration.tournament_id) == tournament_id
+                )
+            )
+            cleanup.execute(
+                delete(TeamMember).where(col(TeamMember.team_id).in_(team_ids))
+            )
+            cleanup.execute(delete(Team).where(col(Team.id).in_(team_ids)))
+            cleanup.commit()

@@ -518,3 +518,77 @@
   - 開分支時，AI 用的 main 是舊的，查 git log 才發現，重新 fetch 後把分支重建在最新的 main 上。
 - 成熟度：L4（組員審查，AI 依流程實作並用「拿掉鎖」驗證測試有效，加上審查與自動測試）
 - 證據：PR #64（D 的審查與留言）；_bmad-output/implementation-artifacts/spec-6-4-followup-review.md；spec-6-4-file-report.md（Review Triage Log #24～#26）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜需求／spec 撰寫與審查｜Story 3.7 抽籤前撤回報名與提高名額遞補
+
+- Story／範圍：3.7（分支 story/3-7，尚未開 PR）；含 FR-9 `raise_capacity`
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（規劃階段）＋ 子代理
+- 怎麼用：
+  - AI 讀期末分工與 epics，派 3 個子代理平行調查後端分配、前端 S17／S12 與介面字串、通知中心與契約，整理成 spec。
+  - 使用者選「審查 spec」後，AI 另派 1 個沒參與規劃的子代理，對照 epics、PRD、UX 與程式獨立審查。
+- AI 產出：spec `spec-3-7-withdraw-registration.md`，包含：
+  - I/O 矩陣 14 列、Tasks 10 項。
+  - 規劃與審查後共 9 條 Decisions。
+  - 審查的 Review Triage Log 11 列。
+- 人做了什麼：
+  - 決定撤回與 `raise_capacity` 同一份 spec。
+  - 決定退賽對話框文案、「已遞補為正取」的涵蓋範圍、新增專屬遞補通知、保留超過 1,600 tokens 的完整 spec。
+  - 決定把同校遞補也接到 6.5 取消資格後的先搶期分配。
+  - 同意依審查修改凍結區的 5 點，最後核准 spec 並停在實作前。
+- 驗證：
+  - 獨立審查提出 11 項：high 2、medium 4、low 4，另 1 項確認架構與併發沒有問題。
+  - AI 修 spec 前讀原始碼抽查其中 4 項（`allocation.py:297` 空位算法、`service.py:386` `_current_phase`、deferred-work 第 119-120 行、tournaments 的 `_field_error` 回 422），都成立。
+  - 11 項全部處理，記在 Review Triage Log。
+- 問題與修正：
+  - AI 初稿的 I/O 矩陣「截止後撤回」一列，沿用 epics 3.6 的 E/F/G/H 範例，寫成「W 校撤回 1 隊後只有 F 遞補」。但那個狀態的正取只有 3 隊、名額 5。照 `backfill_vacancies` 的「空位＝名額−正取數」，F、G、H 會全部遞補，而且 `closed` 時截止補位早已補滿，這個狀態根本不會出現。獨立審查實際推算才抓到，改成撤回前名額已滿。
+  - AI 初稿用「賽事是 `open` 還是 `closed`」判斷先搶期或截止後，沒注意到畫面的候補順位用 `_current_phase`，只要過了截止時間就算截止後。worker 延遲轉狀態的期間，實際遞補的隊伍會和畫面顯示的候補第 1 位不同。審查指出後改用 `_current_phase`。
+  - AI 初稿把同校遞補和一般遞補寫成二選一，可能留下 6.5 不遞補時累積的空位；錯誤碼寫「422 或 409」沒有定案；打算刪除一項本份處理不到的 deferred 項目；漏了 epics 明定的 `waitlist_order` 兩階段單元測試。都由審查抓到後修正。
+  - 使用者決定接上 6.5 的同校遞補後，AI 發現只看「優先期學校沒有正取」會誤判代表隊超過名額、整校都在候補的學校，所以改在結算時記錄 `is_representative`，寫進 Design Notes。
+- 成熟度：L4（固定流程：子代理平行調查 → 寫 spec → 獨立子代理審查 → AI 抽查原始碼驗證審查結果；人只在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-7-withdraw-registration.md（Decisions、Review Triage Log、Design Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜程式＋測試／程式生成與審查｜Story 3.7 抽籤前撤回報名與提高名額遞補（實作）
+
+- Story／範圍：3.7（分支 story/3-7，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作、審查階段）＋ 子代理
+- 怎麼用：
+  - 主代理把核准的 spec 交給 1 個實作子代理（只給 spec 路徑），完成後主代理自己讀整份差異核對 Tasks，並重跑相關測試確認 I/O 矩陣每一列都有測試且通過。
+  - 再同時派 3 個互不相通的審查子代理（Blind Hunter 只看差異、Edge Case Hunter 追邊界、Verification Gap 找沒被測到的行為），主代理逐條讀程式核實後分類，小修正交回原實作子代理。
+- AI 產出：
+  - 後端：撤回 `withdraw_registration`、提高名額 `raise_capacity`、同校遞補純函式 `representative_backfill`、Alembic 遷移 1 支、2 個 API、tournaments 新增公開函式 `raise_tournament_capacity`、notifications 新增遞補通知規則。
+  - 前端：`useWithdrawRegistration.ts`、S17「退賽」按鈕與確認框、S17／S12「已遞補為正取」徽章，重新產生 client。
+  - 測試：新增 `test_withdraw_registration.py`、`test_raise_capacity.py`，另在 `test_allocation.py`、`test_rules.py`、`test_settlement_concurrency.py`、`team-pages.test.tsx` 補測試。
+- 人做了什麼：spec 階段已做完決策；實作子代理自行決定的 5 點（退賽 Toast 用「已撤回報名」、錯誤訊息文字、遞補的操作者記為系統、`backfilled`／`withdrawable` 不放進 `WaitlistFields`、兩欄位預設 False）待使用者確認。
+- 驗證：
+  - 後端 `scripts/test.sh` 2577 passed，覆蓋率 97%；`scripts/lint.sh` 通過。
+  - 前端 vitest 74 檔 1068 passed；Biome、`tsc --noEmit` 通過。Playwright e2e 沒有執行。
+  - 實作子代理回報：把遞補階段寫死成先搶期並拿掉同校遞補後，`test_withdraw_registration.py` 有 4 個測試失敗，證明測試抓得到錯（主代理沒有重做這個實驗）。
+  - 3 層審查合併後 18 項：修正 2、延後 1、駁回 15（駁回理由逐項記在 Review Triage Log）。
+- 問題與修正：
+  - 實作允許賽事「尚未開放」時提高名額，卻沒有測試；把這個狀態拿掉測試仍全綠。Verification Gap 實際推演後抓到，補上測試。
+  - 前端撤回被伺服器拒絕（409）時只重新取得 S17，S12 卡片仍顯示舊狀態。Edge Case Hunter 與 Blind Hunter 都抓到，`onError` 補上讓 S12 失效。
+  - 依 spec 刪除 deferred 項目時，舊項目的 evidence 裡還記著一個顯示問題（代表隊被取消資格後，同校候補仍顯示「不在遞補順序中」，下次送出卻先遞補它），刪除後就沒人追蹤。兩個審查者抓到，因修正要改 `allocation.py` 既有函式（spec 禁止），改記成新的 deferred 項目。
+  - 主代理在 Git Bash 用 `python` 改檔，兩次都沒改到（改 `sprint-status.yaml`、新增 deferred 項目），而且沒有檢查結束碼。用 `grep`／`git diff --stat` 檢查才發現沒寫進去，改用編輯工具重寫。主代理一開始誤判是 heredoc 的中文編碼問題；之後檢查換行時看到結束碼 49，才確認真正原因是這台機器 Git Bash 的 `python` 是 Windows 的佔位程式，根本沒有執行（可用 `uv run --no-project python`）。
+- 成熟度：L4（實作子代理依 spec 產出，主代理核對差異、3 個獨立審查子代理、全部測試與 lint 自動驗證；人只在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-7-withdraw-registration.md（Implementation Notes、Review Triage Log R1～R18）；deferred-work.md「Deferred from: spec-3-7-withdraw-registration.md」；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜測試／E2E 與收尾確認｜Story 3.7 抽籤前撤回報名與提高名額遞補（收尾）
+
+- Story／範圍：3.7（分支 story/3-7，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ 子代理
+- 怎麼用：使用者列出 7 項收尾確認（操作紀錄追溯、欄位缺省、撤回後的入隊限制、撤回通知、同校遞補是否合 spec、deferred 交接、Playwright E2E）。主代理查需求文件與程式逐項確認；Story 3.7 原本沒有 E2E，派 1 個子代理新增並執行。
+- AI 產出：
+  - E2E：`registration-withdraw.spec.ts`（3 個測試：退賽確認與成功撤回、拒絕撤回、先搶期遞補顯示）與 `support/withdraw.ts`。
+  - 後端測試補 2 處斷言：遞補的操作紀錄（操作者為系統）緊接在隊長撤回、主辦方改名額那筆之後。
+  - 前端修正 1 個 bug（`SubmitRegistrationSection.tsx`），單元測試的拒絕案例改寫。
+- 人做了什麼：原則上接受實作自行決定的 5 項；決定收尾範圍（只做必要修正與針對性測試，不重跑完整審查、不 commit）。
+- 驗證：
+  - E2E `--grep @story-3.7`：desktop、mobile-375 共 6 passed。
+  - 前端 vitest 74 檔 1068 passed，Biome、tsc 通過；相關後端測試 32 passed。
+  - 拿掉前端修正時，改寫後的單元測試會失敗（主代理在容器內實際驗證）。
+- 問題與修正：
+  - 撤回被拒（409）時錯誤訊息只閃一下就跟著確認框消失：`onError` 重新取得隊伍後 `withdrawable` 變 false，整個確認框被卸載。實作、單元測試與 3 層程式審查都沒抓到，因為單元測試 mock 的重新取得不會改變 `withdrawable`；E2E 對真的後端才重現。改成確認框開著時保持掛載。
+  - 修正後主代理寫的單元測試與 E2E 斷言各失敗一次：對話框開著時背景是 aria-hidden，查不到頁面標題。看錯誤內容後改成先檢查對話框、關閉後再檢查頁面。
+  - 本機 e2e image 太舊，缺 `psql`，第一次全部失敗（`spawn psql ENOENT`），子代理重 build 後解決。
+- 成熟度：L4（子代理寫 E2E 對真的服務執行並抓到 bug，主代理修正並用「拿掉修正測試會失敗」驗證測試有效；人只決定範圍）
+- 證據：spec-3-7-withdraw-registration.md（Implementation Notes「收尾確認」）；frontend/tests/e2e/registration-withdraw.spec.ts；commit 未記錄（尚未 commit）

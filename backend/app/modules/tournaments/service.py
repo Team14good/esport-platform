@@ -492,6 +492,54 @@ def transition_tournament(
     return _tournament_to_read(tournament)
 
 
+# 抽籤前（尚未開放、開放報名、報名截止）才能改名額
+_CAPACITY_EDITABLE_STATUSES = frozenset(
+    {TournamentStatus.UPCOMING, TournamentStatus.OPEN, TournamentStatus.CLOSED}
+)
+
+
+def raise_tournament_capacity(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    capacity: int,
+    actor_id: uuid.UUID | None,
+) -> TournamentRead:
+    """提高賽事名額（FR-9），回傳更新後的賽事；寫 `tournament.capacity_changed`。
+
+    呼叫前要先 `lock_tournament`（這裡也會再鎖一次，同一交易內不會等待）。賽事不是尚未
+    開放、開放報名、報名截止時拋 409 `CAPACITY_NOT_EDITABLE`；新名額小於或等於目前名額
+    時拋 422 `CAPACITY_NOT_INCREASED`（`loc=body.capacity`）。不檢查權限、不做遞補：
+    registration 的 `raise_capacity`（Story 3.7）檢查主辦方並在同一個鎖內讓候補遞補。
+    """
+    tournament = repository.get_tournament(session, tournament_id, for_update=True)
+    if tournament is None:
+        raise _tournament_not_found()
+    if TournamentStatus(tournament.status) not in _CAPACITY_EDITABLE_STATUSES:
+        raise BusinessError(
+            "CAPACITY_NOT_EDITABLE", "賽事抽籤後不能修改名額。", status_code=409
+        )
+    current = tournament.capacity
+    if capacity <= current:
+        raise _field_error(
+            "capacity",
+            "CAPACITY_NOT_INCREASED",
+            f"新名額必須大於目前的名額（{current} 隊）。",
+        )
+    repository.set_tournament_capacity(session, tournament, capacity, clock.now())
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=tournament.id,
+        action="tournament.capacity_changed",
+        entity_type="tournament",
+        entity_id=tournament.id,
+        before={"capacity": current},
+        after={"capacity": capacity},
+    )
+    return _tournament_to_read(tournament)
+
+
 def ensure_accepting_registrations(tournament: TournamentRead) -> None:
     """賽事開放報名中；否則拋 409 `REGISTRATION_CLOSED`。只看狀態，不碰資料庫。"""
     if tournament.status != TournamentStatus.OPEN:
