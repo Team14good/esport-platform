@@ -44,6 +44,7 @@ test("觀眾搜尋隊名看到晉級路徑；捲動時搜尋列固定在頂端�
     expect(new URL(page.url()).pathname).toBe(BRACKET_PATH)
     expect(new URL(page.url()).search).toBe("")
     await expectNoHorizontalScroll(page)
+    await page.screenshot({ path: test.info().outputPath("s3-search-hit.png") })
   })
 
   await test.step("搜尋框不在橫向捲動容器內；窄螢幕自動捲到該隊最遠的一輪", async () => {
@@ -84,6 +85,9 @@ test("觀眾搜尋隊名看到晉級路徑；捲動時搜尋列固定在頂端�
     const after = await search.boundingBox()
     expect(after?.x).toBe(before?.x)
     await expectNoHorizontalScroll(page)
+    await page.screenshot({
+      path: test.info().outputPath("s3-search-sticky.png"),
+    })
   })
 
   await test.step("零結果：「找到 0 隊」、說明文字、不清除輸入", async () => {
@@ -95,6 +99,9 @@ test("觀眾搜尋隊名看到晉級路徑；捲動時搜尋列固定在頂端�
     await expect(search).toHaveValue("不存在的隊伍")
     await expect(tree.locator("[data-search-hit]")).toHaveCount(0)
     await expectNoHorizontalScroll(page)
+    await page.screenshot({
+      path: test.info().outputPath("s3-search-empty.png"),
+    })
   })
 
   await test.step("清除：回到完整對戰樹", async () => {

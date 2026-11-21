@@ -2,7 +2,7 @@
 title: 'Story 4.7：對戰樹隊伍搜尋與晉級路徑'
 type: 'feature'
 created: '2026-11-21'
-status: 'in-progress'
+status: 'done'
 baseline_revision: 'f734988f1fd8de21d2cfc7419fbe03711a8a5e96'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -64,6 +64,8 @@ deferred: []
 - **「目前最遠的一輪」**：該隊出現過的最大輪次（季軍賽算最後一輪）；虛線待定列不算。捲動目標讓該欄完整露出並帶出下一段連接線，與示意稿相同；只在高亮的隊伍改變時捲動（含清除後重新搜尋），輪詢不捲。
 - **待定虛線列的判定**：取該隊最後一場非季軍賽場次；狀態為待開打、進行中、申訴期或申訴中，且不是決賽時，下一輪對應位置（`slot` 奇數為 A 方、偶數為 B 方）還沒有隊伍才加虛線。已取消（voided）的場次不算未確認。
 - **命中列字重**：照示意稿 `.row.hit .tn` 隊名加粗。
+- **`className` 移到最外層**（實作時決定）：欄頭移出捲動容器後，`BracketTree` 最外層改為 `[data-slot=bracket-explorer]`，`className` 加在它上面；目前沒有呼叫端傳這個 prop。
+- **手動檢查改搜「Titan」**（實作時決定）：32 隊假資料中清大 Hydra 第一輪就落敗，看不到虛線列；改用第一輪已勝、第二輪進行中的中興 Titan，e2e 也用它。
 - **元件切法**：純函式 `bracket-search.ts`（比對、路徑）可單元測試；`BracketTree` 只多接「高亮資料」與「固定列內容」兩個選用 prop，沒傳時畫面與 4.6 相同。
 
 ## Code Map
@@ -126,4 +128,4 @@ deferred: []
 - `docker compose --profile e2e run --rm e2e bunx playwright test tests/e2e/bracket-search.spec.ts tests/e2e/spectator.spec.ts` -- expected: desktop 與 mobile-375 通過。
 
 **Manual checks (if no CLI):**
-- 375 px 開 S3 搜尋「Hydra」，截圖確認路徑、虛線列與固定列。
+- 375 px 開 S3 搜尋「Titan」，截圖確認路徑、虛線列與固定列。
