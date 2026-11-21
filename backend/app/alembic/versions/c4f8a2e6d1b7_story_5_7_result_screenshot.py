@@ -3,7 +3,7 @@
 新增結算截圖（每個場次最多一列，更換時覆寫；只存檔案鍵值）。
 
 Revision ID: c4f8a2e6d1b7
-Revises: f2b6d8a1c3e5
+Revises: b3e7a1c9d5f2
 Create Date: 2026-11-20 12:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = "c4f8a2e6d1b7"
-down_revision = "f2b6d8a1c3e5"
+down_revision = "b3e7a1c9d5f2"
 branch_labels = None
 depends_on = None
 
