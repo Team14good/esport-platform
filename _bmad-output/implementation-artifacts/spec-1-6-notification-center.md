@@ -70,6 +70,12 @@ deferred: []
 - **`RefereeUnassigned` 只通知被取消的裁判**：事件沒有區分「晉級衝突」與「主辦方收回」，FR-37「晉級衝突時另通知主辦方」需要 competition 在事件加欄位，列入 deferred-work。
 - **BracketDrawn 的收件人取自對戰表**：抽籤後報名狀態已改為 `drawn`，從 `competition.get_bracket` 的場次隊伍取隊員，不用 `list_accepted_teams`。
 
+- **`MatchForfeited` 在 `rules.py` 以同名類別讀 payload**（實作時決定）：這個事件定義在 `competition/forfeit_job.py`，不是 `models.py`；跨模組只 import `service`、`models`，所以 notifications 另定義同名的 `MatchForfeited(Event)`，只取 `match_id`。日後 competition 把事件移到 `models.py` 時，改成直接 import。
+- **1.8 的 worker 測試改寫**（實作時決定）：`test_worker_marks_review_events_processed_without_sending_email` 檢查的是期中「審核事件不寄信」，與本 Story 衝突；改名為 `test_worker_notifies_applicants_of_review_once`，檢查申請人各收到一封、重跑不重寄。1.8 是 A 自己的 Story。
+- **`DataTablePagination` 改為 export**：S14 沿用 Data table 的分頁列，不另寫一份（1.8 的共用元件，A 負責）。
+- **deferred-work 的 1.5「重設信不建立站內通知沒有斷言」已在本 Story 補上斷言**（`test_reset_email_creates_no_in_app_notification`、`test_verification_email_creates_no_in_app_notification`），項目本身依 flow-bot 規則保留不刪，由人確認後刪除。
+- **dispatch 沒有重試上限與 dead-letter**：查不到實體與 payload 格式錯誤已略過；其他例外（資料庫暫時失敗等）照 AD-5 回滾重試。1.3 deferred 建議的 dead-letter 不在本 Story 驗收條件內，維持現狀。
+
 ### 收件規則表
 
 | 事件 | 收件人 | link |
