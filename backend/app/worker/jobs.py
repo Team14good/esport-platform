@@ -18,8 +18,14 @@ from app.worker import Job
 
 
 def dispatch_outbox(session: Session) -> bool:
-    """取一則未處理的事件交給 notifications 分派，再標為已處理。"""
-    event = events.next_unprocessed(session)
+    """取一則未處理的事件交給 notifications 分派，再標為已處理。
+
+    驗證信與重設密碼信的事件優先：某則一般事件一直分派失敗（每輪回滾、停在這則）時，
+    下一輪仍會先寄出這兩種信，註冊與重設密碼不會被一般通知卡住。
+    """
+    event = events.next_unprocessed_matching(
+        session, types=notifications_service.ACCOUNT_TOKEN_EVENT_TYPES
+    ) or events.next_unprocessed(session)
     if event is None:
         return False
     notifications_service.dispatch_event(session, event)

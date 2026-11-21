@@ -76,6 +76,12 @@ deferred: []
 - **deferred-work 的 1.5「重設信不建立站內通知沒有斷言」已在本 Story 補上斷言**（`test_reset_email_creates_no_in_app_notification`、`test_verification_email_creates_no_in_app_notification`），項目本身依 flow-bot 規則保留不刪，由人確認後刪除。
 - **dispatch 沒有重試上限與 dead-letter**：查不到實體與 payload 格式錯誤已略過；其他例外（資料庫暫時失敗等）照 AD-5 回滾重試。1.3 deferred 建議的 dead-letter 不在本 Story 驗收條件內，維持現狀。
 
+- **合併後審查（OG-Matcha，#100）的後續決定**（2026-11-21，flow-bot 依推薦做法選定）：
+  - **`dispatch_outbox` 先取驗證信與重設信事件**：一則一般事件一直分派失敗時，每輪仍會先消化這兩種事件，註冊與重設密碼不被一般通知卡住。選這個而不是加 `attempts` 上限，是因為不用改 `outbox_event` 的 schema、也不用多一個 worker 工作；一般事件之間的毒事件（重試上限、dead-letter）仍維持上一條的現狀，記進 deferred-work。核心新增 `events.next_unprocessed_matching(types=...)`，既有的 `next_unprocessed` 行為不變。
+  - **resolver 查不到實體改拋 `registry.RecipientsNotFound`**：分派端只略過 `BusinessError` 與 `RecipientsNotFound`；`KeyError`、`IndexError` 等程式錯誤往外拋、回滾重試，不再被 `LookupError` 吞掉。
+  - **`MatchForfeited` 的對應以 competition 的事件類別測試**：判棄權規則的測試直接發 `competition.forfeit_job.MatchForfeited`，並斷言兩邊的事件名稱相同、notifications 讀的欄位是 competition 欄位的子集合。
+  - **S14 網址頁碼超出範圍時以 replace 導回最後一頁**：不留下空卡片的歷史紀錄。
+
 ### 收件規則表
 
 | 事件 | 收件人 | link |
@@ -152,6 +158,8 @@ deferred: []
 ## Spec Change Log
 
 ## Review Triage Log
+
+- 2026-11-21 合併後審查（OG-Matcha，#100）4 項建議：第 1、2、3、4 項修正（見 Decisions〈合併後審查的後續決定〉）；第 1 項的一般事件重試上限記進 deferred-work。
 
 ## Design Notes
 

@@ -311,6 +311,30 @@ describe("S14 通知中心", () => {
     expect(router.state.location.search).toEqual({ page: 3 })
   })
 
+  it("網址的頁碼超出範圍時導回最後一頁", async () => {
+    mockUnread(0)
+    const list = vi
+      .spyOn(NotificationsService, "listNotifications")
+      .mockImplementation(((options?: { query?: { page?: number } }) => {
+        const page = options?.query?.page ?? 1
+        return Promise.resolve({
+          data: {
+            // 共 25 則：第 2 頁之後沒有資料
+            items: page <= 2 ? [notification(page)] : [],
+            total: 25,
+            page,
+            page_size: 20,
+          },
+        } as ListResult)
+      }) as unknown as typeof NotificationsService.listNotifications)
+    signInAs()
+    const router = renderApp("/notifications?page=9")
+
+    expect(await screen.findByText("通知 2")).toBeInTheDocument()
+    expect(list).toHaveBeenCalledWith({ query: { page: 9 } })
+    expect(router.state.location.search).toEqual({ page: 2 })
+  })
+
   it("點擊未讀通知：標為已讀並導向 link", async () => {
     const user = userEvent.setup()
     mockUnread(1, 0)
