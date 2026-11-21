@@ -36,6 +36,8 @@ type MatchSpectatorViewProps = {
   checkIn?: ReactNode
   /** 比分登錄面板（記分者才有）：有值時取代左欄的公開各局列表 */
   scoreEntry?: ReactNode
+  /** 結算截圖（5.7，系列結果送出後才有）：左欄各局列表（或比分登錄面板）下方 */
+  resultScreenshot?: ReactNode
   /** Score display 加「取消資格」標記的隊伍（6.5）：S4 路由傳入 useDisqualifiedMarks 的結果 */
   disqualifiedTeamIds?: ReadonlySet<string>
   className?: string
@@ -43,9 +45,9 @@ type MatchSpectatorViewProps = {
 
 /**
  * S4 場次頁（EXPERIENCE.md〈場次頁（S4）〉）：
- * - `≥ lg` 兩欄：左欄 Score display、各局列表（記分者為比分登錄面板）；
+ * - `≥ lg` 兩欄：左欄 Score display、各局列表（記分者為比分登錄面板）、結算截圖（送出後）；
  *   右欄報到（最上方）、申訴期、同輪其他場次（最下方）。
- * - `< lg` 單欄：頁首、Score display、目前動作區（比分登錄、報到、申訴期）、各局列表、同輪其他場次。
+ * - `< lg` 單欄：頁首、Score display、目前動作區（比分登錄、報到、申訴期）、各局列表、結算截圖、同輪其他場次。
  *
  * 每個區塊只渲染一次：`< lg` 時兩欄的容器是 `display: contents`，各區塊直接成為外層 grid 的項目，
  * 再用 `order` 把動作區排到 Score display 與各局列表之間；`≥ lg` 時容器恢復成兩欄。
@@ -58,9 +60,14 @@ export function MatchSpectatorView({
   headerExtra,
   checkIn,
   scoreEntry,
+  resultScreenshot,
   disqualifiedTeamIds,
   className,
 }: MatchSpectatorViewProps) {
+  const hasResultScreenshot =
+    resultScreenshot !== undefined &&
+    resultScreenshot !== null &&
+    resultScreenshot !== false
   const hasScoreEntry =
     scoreEntry !== undefined && scoreEntry !== null && scoreEntry !== false
   const hasCheckIn =
@@ -92,6 +99,14 @@ export function MatchSpectatorView({
             </div>
           ) : (
             <MatchGameList detail={detail} className="min-w-0 max-lg:order-3" />
+          )}
+          {hasResultScreenshot && (
+            <div
+              data-slot="match-result-screenshot"
+              className="min-w-0 max-lg:order-3"
+            >
+              {resultScreenshot}
+            </div>
           )}
         </div>
         <aside

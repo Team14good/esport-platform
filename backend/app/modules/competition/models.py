@@ -183,6 +183,25 @@ class CheckIn(SQLModel, table=True):
     at: datetime = Field(sa_type=DateTime(timezone=True))
 
 
+class ResultScreenshot(SQLModel, table=True):
+    """勝隊隊長上傳的結算截圖（5.7）；一場最多一列，更換時覆寫。
+
+    只存檔案鍵值（AD-15）。公開與否由 `result_screenshot.visible_at` 判斷：
+    上傳的隊伍要是目前的勝隊，且上傳時間不早於這次送出結果的時間。
+    """
+
+    __tablename__ = "result_screenshot"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    match_id: uuid.UUID = Field(foreign_key="match.id", unique=True)
+    # 上傳當下的勝隊；隊伍屬 registration，不建跨模組外鍵
+    team_id: uuid.UUID
+    file_key: str = Field(max_length=64)
+    uploaded_by: uuid.UUID = Field(foreign_key="account.id")
+    # 最後一次上傳（或更換）的時間
+    created_at: datetime = Field(sa_type=DateTime(timezone=True))
+
+
 # ---------------------------------------------------------------- 事件
 
 
@@ -456,6 +475,24 @@ class PublicMatchDetail(PublicMatch):
     check_in_b_at: datetime | None = None
     # 報到截止（= 棄權期限）；只在待開打且兩隊都確定時有值，給 S4 報到倒數
     forfeit_deadline: datetime | None = None
+    # 5.7：S4 要不要顯示「結算截圖」區塊：系列結果已送出（正常完賽且有送出時間）才為真。
+    # 欄位名稱刻意不含 submitted：公開單場不透露送出者（5.4 的測試以字串檢查）
+    result_screenshot_enabled: bool = False
+    # 5.7：目前公開的結算截圖的上傳時間；沒有可公開的截圖為 None。不含檔案鍵值（AD-19）
+    result_screenshot_at: datetime | None = None
+
+
+# ---------------------------------------------------------------- 結算截圖（5.7）
+
+ResultScreenshotReason = Literal["result_not_submitted", "not_winning_captain"]
+
+
+class ResultScreenshotState(BaseModel):
+    """登入者能不能上傳這場的結算截圖（S4 用，和上傳 API 同一套檢查）。"""
+
+    can_upload: bool
+    # 不能上傳的原因；可以上傳為 None
+    reason: ResultScreenshotReason | None
 
 
 # ---------------------------------------------------------------- 比分登錄（5.3、5.4）

@@ -89,6 +89,8 @@ class PublicMatchDetail(PublicMatch):   # 5.8：公開單場（A 的 S4 場次�
     check_in_a_at: datetime | None     # 5.1：a 隊報到時間，未報到或該方未確定為 null；未登入也看得到
     check_in_b_at: datetime | None     # 5.1：b 隊同上（同輪列表的 PublicMatch 不含這兩欄）
     forfeit_deadline: datetime | None  # 報到截止（＝棄權期限），只在待開打且兩隊都確定時有值；給 S4 報到倒數
+    result_screenshot_enabled: bool         # 5.7：系列結果已送出（正常完賽且有送出時間），S4 顯示「結算截圖」區塊
+    result_screenshot_at: datetime | None   # 5.7：目前公開的結算截圖的上傳時間；沒有為 null。圖片經 GET …/matches/{id}/result-screenshot 下載
 
 class CheckInRead(BaseModel):    # 5.1
     match_id: UUID

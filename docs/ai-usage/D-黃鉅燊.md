@@ -754,6 +754,29 @@
 - 成熟度：L3（AI 對照程式產出，人決定範圍）
 - 證據：本 PR 的 diff
 
+### 2026-11-20｜需求／設計｜Story 5.7 勝隊上傳結算截圖的 spec
+
+- Story／範圍：5.7（FR-28、FR-36、AD-15）；`spec-5-7-settlement-screenshot.md`
+- 工具：Claude Code（Fable 5.2 子代理）＋ bmad-build
+- 怎麼用：派工給在獨立 worktree 的子代理，要求讀 epics、PRD、UX、架構與既有的段位截圖／申訴附件程式後寫 spec，在 Checkpoint 1 停下回報 Decisions 與使用者會察覺的需求缺口
+- AI 產出：spec（Intent、Boundaries、7 個 Decisions、11 列 I/O 表、Code Map、13 個 task）與 4 個待決事項（上傳期限、改判後的舊截圖、S32 要不要連到場次頁、棄權場次能不能上傳）
+- 人做了什麼：四題都選提案選項並核准 Decisions 1～7；決定 S32 這次不動，記進 deferred-work 留給 B
+- 驗證：驗收條件逐條對照 epics.md Story 5.7、PRD FR-28、UX-DR32 的原文
+- 問題與修正：epics 沒寫的四件事 AI 沒有自己假設，列成問題問人；資料表比期中 B 文件多 `team_id`、`uploaded_by` 兩欄，在 Decisions 與 PR 說明標出
+- 成熟度：L3（AI 依既有規格產出 spec，人在 checkpoint 決策）
+- 證據：`_bmad-output/implementation-artifacts/spec-5-7-settlement-screenshot.md`
+
+### 2026-11-20｜程式／程式生成與審查｜Story 5.7 勝隊上傳結算截圖
+
+- Story／範圍：5.7；後端 competition（資料表、遷移、三支 API）、前端 S4「結算截圖」Card
+- 工具：Claude Code（Fable 5.2 子代理）＋ bmad-build；另開一個只拿到 diff 與期望結果的審查子代理
+- 怎麼用：spec 核准後由同一個子代理實作，自己跑測試、lint、e2e 與突變檢查；審查子代理不看製作過程，只挑毛病
+- AI 產出：後端 1 個新模組檔、1 支遷移、3 支 API、28 個整合測試；前端 3 個新檔、15 個單元測試、1 個走真 API 的 e2e（desktop＋mobile-375）；重新產生 API client
+- 人做了什麼：核准 spec；session 中斷後指示接續並先合併 main
+- 驗證：後端 competition／disputes／registration／core／worker 與架構、遷移測試 1973 passed；lint（mypy、ty、ruff）通過；前端 typecheck、biome 通過，單元測試 1040 passed；e2e 2 passed；突變檢查（拿掉勝隊隊長判斷）6 個測試失敗，還原後 28 passed
+- 問題與修正：(1) 公開單場的新欄位原本叫 `result_submitted`，既有測試 `test_public_match_hides_submitter` 以「回應不含 submitted」檢查而失敗，AI 改欄位名稱而不是改那個測試；(2) 審查子代理發現圖片查詢的 key 放在場次前綴下，頁面每次重抓都重新下載圖片，已移出前綴並補測試；(3) 審查指出 3 個測試「實作壞掉也會過」（提交失敗的清檔、看不到上傳區的斷言太早、送出後被取消資格），已補強；(4) AI 自己寫的提交失敗測試用 `monkeypatch.undo()` 連 fixture 的替身一起還原，跑測試時失敗才發現，改用獨立的 MonkeyPatch；(5) 前端單元測試整套跑時有 1～4 個與本次無關的案例偶發逾時（每次不同），改兩個 worker 後全過，判斷是機器負載，未修
+- 成熟度：L4（規劃 → 實作 → 獨立審查 → 測試與突變檢查，人只在 checkpoint 決策）
+- 證據：本 PR 的 diff、spec 的 Review Triage Log
 ### 2026-11-20｜程式／程式生成＋測試｜Story 4.2 報名截止時自動抽籤
 
 - Story／範圍：4.2（期中後的擱置 Story；分支 `story/4-2-auto-draw`，Draft PR）

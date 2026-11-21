@@ -179,6 +179,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-2-e2e-tournament-drill-3.md`
   summary: 3.9「公開正取名單」做完後，完整賽事演練要補「觀眾未登入在賽事頁看到分配後的正取隊伍」；目前改為抽籤後在公開對戰表看到隊伍。
   evidence: 3.9 期中擱置，S2 沒有正取名單分頁（`TournamentTabs.tsx` 的註解）。
+
+## Deferred from: spec-5-7-settlement-screenshot.md (2026-11-20)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-7-settlement-screenshot.md`
+  summary: （低）S32 申訴處理頁沒有通往 S4 場次頁的連結，主辦方處理申訴時要自己從對戰樹點進場次頁才看得到結算截圖；可在 S32 每個場次加「查看場次頁」連結（B 的 `AppealsPage.tsx`）。
+  evidence: 2026-11-20 Story 5.7 核准時使用者決定這次不動 S32，留給 B；期中 B 文件的申訴使用案例寫主辦方處理時「檢視說明、各局比分與結算截圖」。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`
   summary: （中）4.2 正取不足時的 `AutoDrawSkipped` 期中只寫進 outbox，notifications 沒有處理程式就標為已處理；同一次報名截止只發一次，做 1.6 時這段期間的事件不會補發，主辦方收不到。
   evidence: 2026-11-19 Story 4.2 審查第 1 點。符合〈期中範圍〉規則 2（只發事件、不補發）；做 1.6 時登錄 `AutoDrawSkipped` 的收件人（主辦方），並決定是否要在送達後才寫 `auto_draw_skip`。

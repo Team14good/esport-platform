@@ -113,6 +113,10 @@ competition/test_schedule.py:
   layer: unit
   stories: ["4.3"]
   frs: [FR-23]
+competition/test_result_screenshot.py:
+  layer: integration
+  stories: ["5.7"]
+  frs: [FR-28, FR-36]
 competition/test_score_concurrency.py:
   layer: integration
   stories: ["5.3", "5.4", "7.3"]

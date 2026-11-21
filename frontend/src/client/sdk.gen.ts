@@ -17,6 +17,9 @@ import type {
   competitionDeleteGameData,
   competitionDeleteGameErrors,
   competitionDeleteGameResponses,
+  competitionDownloadResultScreenshotData,
+  competitionDownloadResultScreenshotErrors,
+  competitionDownloadResultScreenshotResponses,
   competitionDrawData,
   competitionDrawErrors,
   competitionDrawResponses,
@@ -39,6 +42,9 @@ import type {
   competitionReadPublicMatchData,
   competitionReadPublicMatchErrors,
   competitionReadPublicMatchResponses,
+  competitionReadResultScreenshotStateData,
+  competitionReadResultScreenshotStateErrors,
+  competitionReadResultScreenshotStateResponses,
   competitionReadScoreEntryData,
   competitionReadScoreEntryErrors,
   competitionReadScoreEntryResponses,
@@ -54,6 +60,9 @@ import type {
   competitionUnassignRefereeData,
   competitionUnassignRefereeErrors,
   competitionUnassignRefereeResponses,
+  competitionUploadResultScreenshotData,
+  competitionUploadResultScreenshotErrors,
+  competitionUploadResultScreenshotResponses,
   disputesDownloadAppealAttachmentData,
   disputesDownloadAppealAttachmentErrors,
   disputesDownloadAppealAttachmentResponses,
@@ -1331,6 +1340,72 @@ export class CompetitionService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/submit",
+      ...options,
+    })
+  }
+
+  /**
+   * Download Result Screenshot
+   *
+   * 結算截圖（公開，不需登入；AD-15）；沒有可公開的截圖回 404 `RESULT_SCREENSHOT_NOT_FOUND`。
+   */
+  public static downloadResultScreenshot<ThrowOnError extends boolean = true>(
+    options: Options<competitionDownloadResultScreenshotData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionDownloadResultScreenshotResponses,
+      competitionDownloadResultScreenshotErrors,
+      ThrowOnError
+    >({
+      responseType: "blob",
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/result-screenshot",
+      ...options,
+    })
+  }
+
+  /**
+   * Upload Result Screenshot
+   *
+   * S22 勝隊隊長上傳或更換結算截圖（multipart；JPG／PNG，5 MB 內）。
+   *
+   * 系列結果送出後才能上傳；不影響結果確認與晉級。更換時，交易提交後才刪除舊檔。
+   */
+  public static uploadResultScreenshot<ThrowOnError extends boolean = true>(
+    options: Options<competitionUploadResultScreenshotData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<
+      competitionUploadResultScreenshotResponses,
+      competitionUploadResultScreenshotErrors,
+      ThrowOnError
+    >({
+      ...formDataBodySerializer,
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/result-screenshot",
+      ...options,
+      headers: {
+        "Content-Type": null,
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Read Result Screenshot State
+   *
+   * S4：登入者能不能上傳這場的結算截圖（勝隊隊長且系列結果已送出）。
+   */
+  public static readResultScreenshotState<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadResultScreenshotStateData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadResultScreenshotStateResponses,
+      competitionReadResultScreenshotStateErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/matches/{match_id}/result-screenshot-state",
       ...options,
     })
   }

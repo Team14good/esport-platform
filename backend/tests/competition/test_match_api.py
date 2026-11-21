@@ -58,6 +58,8 @@ DETAIL_KEYS = {
     "check_in_b_at",
     # A 的 #47：報到倒數
     "forfeit_deadline",
+    "result_screenshot_enabled",
+    "result_screenshot_at",
 }
 
 
