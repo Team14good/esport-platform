@@ -2,7 +2,8 @@
 title: 'Story 4.7：對戰樹隊伍搜尋與晉級路徑'
 type: 'feature'
 created: '2026-11-21'
-status: 'ready-for-dev'
+status: 'in-progress'
+baseline_revision: 'f734988f1fd8de21d2cfc7419fbe03711a8a5e96'
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -80,15 +81,15 @@ deferred: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `frontend/src/features/competition/bracket-search.ts` -- `searchBracketTeams(bracket, query)`：依第一次出現位置排序的命中隊伍；`bracketTeamPath(bracket, teamId)`：命中列（場次 id＋方）、相鄰輪連接線（子場次、父場次、是否虛線）、虛線待定列、最遠輪次。
-- [ ] `frontend/tests/unit/bracket-search.test.ts` -- I/O 矩陣中比對與路徑的各列（大小寫、空白、部分符合、排序、淘汰、冠軍、輪空、季軍賽、申訴期仍有虛線、決賽沒有虛線）。
-- [ ] `frontend/src/features/competition/bracket-layout.ts` -- 匯出單邊連接線 `d` 的產生函式，`layoutBracket` 改用它（輸出不變）。
-- [ ] `frontend/src/features/competition/BracketMatchCard.tsx` -- 選用 prop：命中的方、虛線待定的方；命中列 14% 底、左側 3px 實色條、1.5px 外框、隊名加粗，`data-search-hit`；虛線列 1.5px 虛線外框，`data-search-pending`。
-- [ ] `frontend/src/features/competition/BracketTree.tsx` -- 選用 prop `highlightTeamId`、`toolbar`（固定在頂端的搜尋列）、`toolbarNote`（搜尋列下方、不固定）；欄頭移出捲動容器並同步位移、垂直 sticky；畫高亮連接線；高亮隊伍改變時把容器 `scrollLeft` 設到最遠一輪。
-- [ ] `frontend/src/features/competition/BracketTeamSearch.tsx` -- 搜尋框（放大鏡、placeholder「搜尋隊名」、✕「清除搜尋」）、命中數「找到 N 隊」（`role=status`）、「上一隊」「下一隊」；`BracketExplorer`：持有搜尋 state、算命中、把結果交給 `BracketTree`。
-- [ ] `frontend/src/features/competition/TournamentBracketPage.tsx` -- S3 改用 `BracketExplorer`。
-- [ ] `frontend/tests/unit/bracket-team-search.test.tsx` -- 輸入即篩選、清除、多隊切換與循環、零結果文字、高亮列與虛線列屬性、rerender 新資料後輸入與高亮保留、自動捲動只在換隊時發生、未傳 prop 時 `BracketTree` 與 4.6 相同。
-- [ ] `frontend/tests/e2e/bracket-search.spec.ts` -- 32 隊假資料：搜尋一隊看到高亮與「找到 1 隊」、零結果文字、375 px 下搜尋框不在橫向捲動容器內、捲動後搜尋列固定在頂端、頁面沒有橫向捲軸。
+- [x] `frontend/src/features/competition/bracket-search.ts` -- `searchBracketTeams(bracket, query)`：依第一次出現位置排序的命中隊伍；`bracketTeamPath(bracket, teamId)`：命中列（場次 id＋方）、相鄰輪連接線（子場次、父場次、是否虛線）、虛線待定列、最遠輪次。
+- [x] `frontend/tests/unit/bracket-search.test.ts` -- I/O 矩陣中比對與路徑的各列（大小寫、空白、部分符合、排序、淘汰、冠軍、輪空、季軍賽、申訴期仍有虛線、決賽沒有虛線）。
+- [x] `frontend/src/features/competition/bracket-layout.ts` -- 匯出單邊連接線 `d` 的產生函式，`layoutBracket` 改用它（輸出不變）。
+- [x] `frontend/src/features/competition/BracketMatchCard.tsx` -- 選用 prop：命中的方、虛線待定的方；命中列 14% 底、左側 3px 實色條、1.5px 外框、隊名加粗，`data-search-hit`；虛線列 1.5px 虛線外框，`data-search-pending`。
+- [x] `frontend/src/features/competition/BracketTree.tsx` -- 選用 prop `highlightTeamId`、`toolbar`（固定在頂端的搜尋列）、`toolbarNote`（搜尋列下方、不固定）；欄頭移出捲動容器並同步位移、垂直 sticky；畫高亮連接線；高亮隊伍改變時把容器 `scrollLeft` 設到最遠一輪。
+- [x] `frontend/src/features/competition/BracketTeamSearch.tsx` -- 搜尋框（放大鏡、placeholder「搜尋隊名」、✕「清除搜尋」）、命中數「找到 N 隊」（`role=status`）、「上一隊」「下一隊」；`BracketExplorer`：持有搜尋 state、算命中、把結果交給 `BracketTree`。
+- [x] `frontend/src/features/competition/TournamentBracketPage.tsx` -- S3 改用 `BracketExplorer`。
+- [x] `frontend/tests/unit/bracket-team-search.test.tsx` -- 輸入即篩選、清除、多隊切換與循環、零結果文字、高亮列與虛線列屬性、rerender 新資料後輸入與高亮保留、自動捲動只在換隊時發生、未傳 prop 時 `BracketTree` 與 4.6 相同。
+- [x] `frontend/tests/e2e/bracket-search.spec.ts` -- 32 隊假資料：搜尋一隊看到高亮與「找到 1 隊」、零結果文字、375 px 下搜尋框不在橫向捲動容器內、捲動後搜尋列固定在頂端、頁面沒有橫向捲軸。
 
 **Acceptance Criteria:**
 - Given 已抽籤的 S3，when 觀眾在「搜尋隊名」輸入部分隊名（大小寫不同），then 不按 Enter 就出現「找到 N 隊」並高亮第一隊的晉級路徑，網址不變。
