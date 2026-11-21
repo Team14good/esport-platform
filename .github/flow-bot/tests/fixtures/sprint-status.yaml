@@ -1,0 +1,110 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 10-15-2026 22:44
+last_updated: 11-10-2026 21:30
+project: se-final-project
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+# 期中分工（2026-10-28，詳見 CONTRIBUTING.md 第 6 節）：行尾「負責：A～D」為負責組員
+# （A 王閎立、B 蘇采羚、C 邱芯彤、D 黃鉅燊），
+# 「擱置」為期中前不做的 Story，狀態維持 backlog；期末改由「負責：X（期末）」認領（CONTRIBUTING.md 第 7 節）。註解若被工具改寫而消失，以 CONTRIBUTING.md 為準。
+development_status:
+  epic-1: in-progress
+  1-1-以官方範本建立可一鍵啟動的專案骨架: done
+  1-2-flow-前端外框與主題: done
+  1-3-以-email-註冊並完成驗證: done
+  1-4-登入-登出-帳號資料與身分切換器: done
+  1-5-忘記與重設密碼: done
+  1-6-通知中心: backlog  # 負責：A（期末）
+  1-7-申請成為主辦方: done  # 負責：A
+  1-8-平台管理員審核主辦方申請: done  # 負責：A
+  epic-1-retrospective: optional
+
+  epic-2: in-progress
+  2-1-平台管理員維護遊戲設定與學校清單: done  # 負責：B；第一階段（後端，PR #9）、第二階段（S36 畫面，PR #30）完成
+  2-2-主辦方建立賽事: done  # 負責：B；第一階段（後端，PR #15）、第二階段（S25～S27 畫面，PR #31）完成
+  2-3-分輪設定-bo-數: backlog  # 負責：B（期末）
+  2-4-公開賽事列表與賽事頁: done  # 負責：B；第一階段（API、S1、S2 總覽、Countdown、Page banner，PR #29）、第二階段狀態徽章與申請主辦方 banner（PR #32）已合併；第二階段第 3 項 S1 空狀態對主辦方的「建立賽事」（PR #38，spec-2-4-s1-empty-create-tournament.md）已合併；補遺 S27 倒數（報名開始、優先期結束、報名截止，PR #62，spec-2-4-s27-countdowns.md）
+  2-5-抽籤前修改賽事: backlog  # 負責：B（期末）
+  2-6-取消賽事: backlog  # 負責：B（期末）
+  2-7-邀請裁判: done  # 負責：B；第一階段（後端，PR #40）、第二階段（S31、S23 畫面，PR #54）完成
+  2-8-主辦方查閱操作紀錄: backlog  # 負責：A（期末）
+  epic-2-retrospective: optional
+
+  epic-3: in-progress
+  3-1-建立隊伍與邀請隊員: done  # 負責：C
+  3-2-選手填寫參賽資料: done  # 負責：C
+  3-3-送出報名與鎖定名單: done  # 負責：C
+  3-4-優先期結束自動分配: done  # 負責：C；第一階段（allocation.py 純函式，含 3.5、3.6 規則）與第二階段（優先期結束自動分配，PR #50）完成；3.5、3.6 第二階段已分別於 spec-3-5-first-come-allocation、spec-3-6-deadline-fill 完成
+  3-5-先搶期即時分配: done  # 負責：C；規則已在 3.4 的 allocation.py；先搶期送出當下分配（spec-3-5-first-come-allocation）完成
+  3-6-報名截止與截止補位: done  # 負責：C；截止補位規則已在 3.4 第一階段完成（allocation.py）；抽籤用函式（PR #53）與報名截止 worker 工作 close_registrations（spec-3-6-deadline-fill）完成
+  3-7-抽籤前撤回報名: backlog  # 負責：C（期末）
+  3-8-主辦方檢視段位截圖與退回報名: backlog  # 負責：C（期末）
+  3-9-公開正取名單與取消賽事通知: backlog  # 負責：A（期末）
+  3-10-自訂模式的先到先得分配: backlog  # 負責：C（期末）
+  3-11-隊員異動與解散隊伍: backlog  # 負責：C（期末）
+  epic-3-retrospective: optional
+
+  epic-4: in-progress
+  4-1-主辦方提前抽籤並產生對戰表: done  # 負責：D；第一階段（bracket.py）、第二階段後端（資料表、抽籤 service 與 API）、C 的 registration 函式（#53）、S27 抽籤按鈕（抽籤狀態 API＋DrawButton）完成
+  4-2-報名截止時自動抽籤: backlog  # 負責：D（期末）
+  4-3-排定與修改場次時間: done  # 負責：D；第一階段（schedule.py 純函式）、第二階段後端（#26）、S30 場次管理頁與修改時間完成
+  4-4-指派裁判到場次: done  # 負責：D；後端（#46）、S30 指派選單（#48）、S13 我執法的場次與身分切換器「裁判」（#51）
+  4-5-抽籤後退賽與候補遞補: backlog  # 負責：D（期末）
+  4-6-視覺化對戰樹: done  # 負責：A；第一階段（PR #13）、第二階段（S3，PR #33）完成
+  4-7-對戰樹隊伍搜尋與晉級路徑: backlog  # 負責：A（期末）
+  epic-4-retrospective: optional
+
+  epic-5: in-progress
+  5-1-場次頁與隊長報到: done  # 負責：D；第一階段（#7）、第二階段後端（#22）、S4 接上真資料與報到（A，#47、#49、#52）、S12 下一場（spec-5-1-s12-next-match.md）完成
+  5-2-逾時判棄權: done  # 負責：A；第一階段規則與 worker 工作（#16）、接上 worker（#34）、S4 申訴期倒數與棄權標記（#39）完成
+  5-3-裁判逐局登錄比分: done  # 負責：D；第一階段（#8）、第二階段後端（#25）、S4 比分登錄面板（A，#47）完成；記分者指派由 4.4（#46）處理
+  5-4-送出系列結果: done  # 負責：D；規則在 5.3 的 scoring.py；第二階段與 5.3 合併（#25）、S4 送出面板與申訴期倒數（A，#47、#43）完成
+  5-5-申訴期滿自動確認與一般晉級: done  # 負責：D；第一階段（#6）、第二階段後端（#20）、晉級後裁判衝突（4.4，#46）、S4 申訴期倒數（A，#39、#43）、S12 下一場（spec-5-1-s12-next-match.md）完成
+  5-6-季軍賽-雙方棄權與賽事結束: done  # 負責：D；規則在 progression.py，寫入資料庫與賽事結束在 5.5 第二階段完成；S2／S3 頒獎台與名次標記（A，spec-5-6-podium-and-placement-marks.md）完成；2026-11-09 統一 code review 對照 AC 全數完成
+  5-7-勝隊上傳結算截圖: backlog  # 負責：D（期末）
+  5-8-場次頁與對戰樹結果標示: done  # 負責：A；第一階段（#12）、公開單場 API（#21）、第二階段接真資料與報到、比分面板（spec-5-8-real-match-data.md）完成；2026-11-09 統一 code review 修正雙方棄權場次的下一輪位置仍顯示「勝者」待定列
+  epic-5-retrospective: optional
+
+  epic-6: in-progress
+  6-1-提出申訴: done  # 負責：B；spec-6-1-file-appeal.md，PR #63 已合併
+  6-2-主辦方處理申訴: done  # 負責：B（含 competition 端，D 審查）；spec-6-2-resolve-appeals.md，PR #69 已合併（例外修改 D 的 get_replay_window）；審查後續 PR #71（spec-6-2-review-fixes.md）
+  6-3-申訴逾期提醒與受影響場次暫停: backlog  # 負責：B（期末）
+  6-4-提出檢舉: done  # 負責：C
+  6-5-查證檢舉與取消資格: done  # 負責：B（含 competition 端，D 審查）；第一階段（competition disqualify，spec-6-5-disqualify.md，PR #65）已合併；第二階段 A（resolve_report＋S33，spec-6-5-resolve-report.md，PR #73）、B（S27 待處理清單加入檢舉，spec-6-5-s27-reports.md，PR #75）已合併；C（對戰樹標記與取消資格理由，spec-6-5-dq-marks.md，PR #76）由 D 接手審查、修正與瀏覽器實走後完成
+  epic-6-retrospective: optional
+
+  epic-7: done
+  7-1-一鍵載入示範資料: done  # 負責：A；2026-11-09 統一 code review 對照 AC 完成，直播連結（使用者 2026-11-04 決定不做）與回滾殘留截圖登記於 deferred-work
+  7-2-端對端演練-兩款遊戲的完整賽事: done  # 負責：A；第三階段（報名到頒獎，spec-7-2-e2e-tournament-drill-3.md，#77）與審查修正（#80）完成，S4 比分表 375 px 由 D 修正（#78、#79）；2026-11-10 統一 code review 對照 AC 完成，完整 e2e（desktop＋mobile-375）20 passed
+  7-3-測試覆蓋率與測試報告素材: done  # 負責：A；總指令、併發測試、報告與追溯完成；2026-11-09 統一 code review 對照 AC 完成，小問題登記於 deferred-work
+  epic-7-retrospective: optional
