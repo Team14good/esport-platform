@@ -957,3 +957,15 @@
 - 問題與修正：AI 上一輪把「期末改依完整驗收條件」只寫進 CONTRIBUTING 第 7.3 節，沒有想到 `bmad-build` 讀的是 epics.md 與 epic context，AI 照做會把期末的 Story 做小，由審查者指出；這次是就地修改 context，不是用編譯指示整份重產，讀不到的新規則因此靠人工維持一致
 - 成熟度：L5（修正的是 AI 工作流程讀不到規則的問題，審查者發現缺口後補上，並用 context 過期判斷規則驗證）
 - 證據：分支 `docs/epic-context-final`；PR #96 的審查留言
+
+### 2026-11-21｜專案管理與流程／改善 AI 工作流程｜flow-bot：GitHub 事件驅動的自動開發機器人
+
+- Story／範圍：期末流程自動化（非 Story），分支 `story/flow-bot`
+- 工具：Claude Code（Opus 5.5）＋ superpowers brainstorming、writing-plans、executing-plans、test-driven-development；最終審查用另一個 Opus 子代理
+- 怎麼用：先和 AI 釐清需求並比較做法，我選 GitHub Actions＋claude-code-action，再追加「自動合併」「main 有變動就同步」「不看時間做到 A 的 Story 全部完成」；AI 寫設計文件與 7 個任務的計畫，依 TDD 逐一實作
+- AI 產出：`.github/flow-bot/` 8 支 Python 檔（gate、事件分類、分工解析、腳本任務、狀態 issue、審查送出、防核准檢查、gh 包裝）與 90 個 pytest；`.claude/skills/flow-bot/` 的 skill 加 5 份任務說明；`flow-bot.yml`、`flow-bot-relay.yml`；`ci.yml` 新增 flow-bot 測試
+- 人做了什麼：決定做法（雲端事件觸發）、審查只留意見不核准、需要判斷時停下來問、追加自動合併與同步、不看期限
+- 驗證：pytest 90 passed；actionlint 1.7.7 兩支 workflow 無錯誤；用 repo 真資料試跑 gate，正確挑出下一個 Story 為 1.6，recheck 也回報仍需執行；新檔無 CRLF。尚未在 GitHub 上實際執行（要等 secrets 與 Environment 設好）
+- 問題與修正：最終審查（另一個子代理）找出 3 個 Critical、6 個 Important，AI 自己的計畫與實作都沒發現：(1) 權杖放 repo secret，組員在任何分支加 workflow 就能讀到 → 改放 main 限定的 Environment，審查事件改走不帶 secret 的中繼 workflow；(2) repo 是公開的，陌生人留言或開 fork PR 就能觸發 → 只理會 CONTRIBUTING 7.1 的組員；(3) 機器人請我核准時會寫出 `/flow-bot approve`，自己的留言會被當成我的指令而自行開工 → 含標記的留言一律忽略；另外，禁止核准的規則可以被繞過、排隊中的 job 會被取代而遺失核准、核准附意見時可能修正前就合併、spec 階段被核准會誤標 done。每項先寫失敗的測試再修，測試由 58 個增加到 90 個。修正前 AI 自評「權杖保護已處理」，其實只擋住 pull_request_target 一條路
+- 成熟度：L5（用 AI 建立 AI 工作流程本身的自動化，獨立審查者抓出 AI 的安全漏洞，修正都有測試證據）
+- 證據：分支 `story/flow-bot`（commit 985c9d2～e78aded）；設計 `docs/superpowers/specs/2026-11-21-flow-bot-design.md`；計畫 `docs/superpowers/plans/2026-11-21-flow-bot.md`
