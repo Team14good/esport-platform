@@ -17,11 +17,18 @@ export function teamSearchCountText(count: number): string {
   return `找到 ${count} 隊`
 }
 
+/** 多隊命中時給報讀軟體的目前位置：「，第 2 隊：中興 Titan」 */
+export function teamSearchCurrentText(position: number, name: string): string {
+  return `，第 ${position} 隊：${name}`
+}
+
 type BracketTeamSearchProps = {
   query: string
   onQueryChange: (query: string) => void
   /** 有搜尋時的命中隊數；沒有搜尋時為 null（不顯示命中數） */
   hitCount: number | null
+  /** 多隊命中時目前高亮的是第幾隊（從 1 起算）與隊名，只給報讀軟體 */
+  current?: { position: number; name: string } | null
   onPrevious: () => void
   onNext: () => void
 }
@@ -31,6 +38,7 @@ export function BracketTeamSearch({
   query,
   onQueryChange,
   hitCount,
+  current = null,
   onPrevious,
   onNext,
 }: BracketTeamSearchProps) {
@@ -82,6 +90,11 @@ export function BracketTeamSearch({
         )}
       >
         {hitCount === null ? null : teamSearchCountText(hitCount)}
+        {hitCount !== null && hitCount > 1 && current !== null && (
+          <span className="sr-only">
+            {teamSearchCurrentText(current.position, current.name)}
+          </span>
+        )}
       </span>
       {hitCount !== null && hitCount > 1 && (
         <div className="flex shrink-0 items-center">
@@ -161,6 +174,11 @@ export function BracketExplorer({
             setSelectedTeamId(null)
           }}
           hitCount={searching ? hits.length : null}
+          current={
+            current === null
+              ? null
+              : { position: currentIndex + 1, name: current.name }
+          }
           onPrevious={() => step(-1)}
           onNext={() => step(1)}
         />

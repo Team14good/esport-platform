@@ -97,7 +97,8 @@ describe("對戰樹隊伍搜尋", () => {
     expect(screen.getByRole("status")).toHaveTextContent("")
     await user.type(searchbox(), "TITAN")
 
-    expect(screen.getByRole("status")).toHaveTextContent("找到 1 隊")
+    // 只有一隊時不必報讀「第 1 隊」
+    expect(screen.getByRole("status").textContent).toBe("找到 1 隊")
     expect(hitRows(container)).toEqual(["M1a", "M5a"])
     expect(pendingRows(container)).toEqual(["M7a"])
     expect(row(container, "M7", "a")).toHaveTextContent("M5 勝者")
@@ -158,11 +159,18 @@ describe("對戰樹隊伍搜尋", () => {
     await user.type(searchbox(), "大")
 
     // 輔大 Blaze、清大 Hydra、交大 Nova、台大 Phoenix、成大 Kraken、政大 Viper、師大 Aurora
-    expect(screen.getByRole("status")).toHaveTextContent("找到 7 隊")
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "找到 7 隊，第 1 隊：輔大 Blaze",
+    )
     expect(hitRows(container)).toEqual(["M1b"])
 
     await user.click(screen.getByRole("button", { name: "下一隊" }))
     expect(hitRows(container)).toEqual(["M2a"])
+    // 報讀軟體會念出目前跳到哪一隊；畫面上只顯示命中數
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "找到 7 隊，第 2 隊：清大 Hydra",
+    )
+    expect(screen.getByText("，第 2 隊：清大 Hydra")).toHaveClass("sr-only")
 
     await user.click(screen.getByRole("button", { name: "上一隊" }))
     await user.click(screen.getByRole("button", { name: "上一隊" }))

@@ -42,7 +42,19 @@ describe("searchBracketTeams", () => {
     ])
   })
 
-  it.each(["", "   "])("空字串（%j）視為沒有搜尋", (query) => {
+  it("全形英數與空白不影響比對：搜尋字與隊名都做 NFKC 並去掉空白", () => {
+    expect(
+      searchBracketTeams(bracket, "ｔｉｔａｎ").map((t) => t.name),
+    ).toEqual(["中興 Titan"])
+    expect(searchBracketTeams(bracket, "清大Hydra").map((t) => t.name)).toEqual(
+      ["清大 Hydra"],
+    )
+    expect(
+      searchBracketTeams(bracket, "台大　ＰＨＯ").map((t) => t.name),
+    ).toEqual(["台大 Phoenix"])
+  })
+
+  it.each(["", "   ", "\u3000"])("空字串（%j）視為沒有搜尋", (query) => {
     expect(searchBracketTeams(bracket, query)).toEqual([])
   })
 
@@ -238,6 +250,61 @@ describe("bracketTeamPath", () => {
 
     expect(path.pending).toBeNull()
     expect(path.hits.map((h) => h.matchId)).toContain(id("M7"))
+  })
+
+  it("一方棄權（forfeit）的敗方：只命中那一場，沒有虛線列", () => {
+    const bracket = createBracketFixture({
+      teamCount: 8,
+      scenario: "in_progress",
+    })
+    expect(matchByCode(bracket, "M4").outcome).toBe("forfeit")
+    const path = bracketTeamPath(bracket, teamId(bracket, "政大 Viper"))
+
+    expect(path.hits).toEqual([{ matchId: id("M4"), side: "a" }])
+    expect(path.connectors).toEqual([])
+    expect(path.pending).toBeNull()
+    expect(path.farthestRound).toBe(1)
+  })
+
+  it("雙方棄權（double_forfeit）：兩隊都停在那一場，下一輪的空位不畫虛線列", () => {
+    const bracket = createBracketFixture({
+      teamCount: 8,
+      scenario: "third_place_voided",
+    })
+    const m5 = matchByCode(bracket, "M5")
+    expect(m5.outcome).toBe("double_forfeit")
+    // 下一輪等它勝者的位置是空的，但場次已確認，不是「等結果」
+    expect(matchByCode(bracket, "M7").team_a).toBeNull()
+
+    for (const team of [m5.team_a, m5.team_b]) {
+      const path = bracketTeamPath(bracket, team!.id)
+      expect(path.pending).toBeNull()
+      expect(path.connectors.every((c) => !c.dashed)).toBe(true)
+      expect(path.hits.map((h) => h.matchId)).not.toContain(id("M7"))
+      expect(path.farthestRound).toBe(2)
+    }
+  })
+
+  it("取消資格（disqualified）：被取消資格的一方停在那一場，對手晉級並接上連接線", () => {
+    const bracket = createBracketFixture({ teamCount: 8, scenario: "finished" })
+    const m6 = matchByCode(bracket, "M6")
+    expect(m6.outcome).toBe("disqualified")
+    const winner = m6.team_a!
+    const loser = m6.team_b!
+
+    const loserPath = bracketTeamPath(bracket, loser.id)
+    expect(loserPath.pending).toBeNull()
+    expect(loserPath.connectors.map((c) => c.parent.matchId)).not.toContain(
+      id("M7"),
+    )
+
+    const winnerPath = bracketTeamPath(bracket, winner.id)
+    expect(winnerPath.pending).toBeNull()
+    expect(winnerPath.connectors).toContainEqual({
+      child: { matchId: id("M6"), side: "a" },
+      parent: { matchId: id("M7"), side: "b" },
+      dashed: false,
+    })
   })
 
   it("不在對戰表上的隊伍：沒有任何路徑", () => {

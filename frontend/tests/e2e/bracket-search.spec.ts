@@ -75,6 +75,30 @@ test("觀眾搜尋隊名看到晉級路徑；捲動時搜尋列固定在頂端�
       return hit?.closest("[data-slot=bracket-toolbar]") !== null
     })
     expect(covered, "頂欄位置應被固定的搜尋列蓋住").toBe(true)
+    // 搜尋列的底色延伸到視窗左右兩端：最上面一列像素，兩端要和中間（搜尋列底色）一樣，
+    // 不能露出頂欄。box-shadow 不參與 elementFromPoint，所以直接比對截圖像素。
+    const strip = await page.screenshot({
+      clip: { x: 0, y: 0, width: page.viewportSize()?.width ?? 0, height: 4 },
+    })
+    const edges = await page.evaluate(async (base64) => {
+      const image = new Image()
+      image.src = `data:image/png;base64,${base64}`
+      await image.decode()
+      const canvas = document.createElement("canvas")
+      canvas.width = image.width
+      canvas.height = image.height
+      const context = canvas.getContext("2d")!
+      context.drawImage(image, 0, 0)
+      const pixel = (x: number) =>
+        [...context.getImageData(x, 1, 1, 1).data].join(",")
+      return {
+        left: pixel(1),
+        center: pixel(Math.floor(image.width / 2)),
+        right: pixel(image.width - 2),
+      }
+    }, strip.toString("base64"))
+    expect(edges.left, "左側不應露出頂欄").toBe(edges.center)
+    expect(edges.right, "右側不應露出頂欄").toBe(edges.center)
     await expect(page.getByRole("tablist")).not.toBeInViewport()
 
     // 左右捲動對戰樹：搜尋框不動

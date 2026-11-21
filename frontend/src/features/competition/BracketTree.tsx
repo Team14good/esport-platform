@@ -176,6 +176,11 @@ export function BracketTree({
   }, [highlightTeamId, farthestRound, syncHeads])
 
   const sticky = toolbar !== undefined
+  // 固定列的底色往左右延伸到整個視窗寬：main 有左右內距、寬螢幕還有 max-w-content-max，
+  // 只靠元素本身的底色會在兩側露出被蓋住的頂欄。box-shadow 不佔版面、不會造成橫向捲動，
+  // clip-path 把陰影限制在元素的上下範圍內。
+  const fullBleed =
+    "shadow-[0_0_0_100vmax_var(--background)] [clip-path:inset(0_-100vmax)]"
 
   return (
     <div data-slot="bracket-explorer" className={cn("min-w-0", className)}>
@@ -183,7 +188,10 @@ export function BracketTree({
         <div
           data-slot="bracket-toolbar"
           // z-[45]：蓋過全站頂欄（z-40），垂直捲動時看起來像頂欄捲走；對話框（z-50）仍在上層
-          className="sticky top-0 z-[45] flex h-13 items-center bg-background"
+          className={cn(
+            "sticky top-0 z-[45] flex h-13 items-center bg-background",
+            fullBleed,
+          )}
         >
           {toolbar}
         </div>
@@ -193,7 +201,7 @@ export function BracketTree({
         data-slot="bracket-round-heads-viewport"
         className={cn(
           "overflow-hidden",
-          sticky && "sticky top-13 z-[45] bg-background",
+          sticky && cn("sticky top-13 z-[45] bg-background", fullBleed),
         )}
       >
         <div

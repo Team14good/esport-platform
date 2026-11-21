@@ -67,6 +67,9 @@ deferred: []
 - **`className` 移到最外層**（實作時決定）：欄頭移出捲動容器後，`BracketTree` 最外層改為 `[data-slot=bracket-explorer]`，`className` 加在它上面；目前沒有呼叫端傳這個 prop。
 - **手動檢查改搜「Titan」**（實作時決定）：32 隊假資料中清大 Hydra 第一輪就落敗，看不到虛線列；改用第一輪已勝、第二輪進行中的中興 Titan，e2e 也用它。
 - **元件切法**：純函式 `bracket-search.ts`（比對、路徑）可單元測試；`BracketTree` 只多接「高亮資料」與「固定列內容」兩個選用 prop，沒傳時畫面與 4.6 相同。
+- **固定列底色延伸到整個視窗寬**（PR #101 審查）：`main` 有左右內距、寬螢幕還有 `max-w-content-max`，搜尋列與欄頭只有內容區寬，捲動時兩側會露出頂欄。改用 `box-shadow: 0 0 0 100vmax var(--background)` 加 `clip-path: inset(0 -100vmax)` 讓底色延伸；不用負邊距，因為負邊距只補得了 `main` 的內距、補不了寬螢幕超出 `max-w-content-max` 的部分，box-shadow 也不佔版面、不會造成橫向捲動。e2e 比對最上面一列像素的兩端與中間顏色相同。
+- **比對時正規化成 NFKC、轉小寫、去掉所有空白**（PR #101 審查）：搜尋字與隊名套同一個函式 `normalizeTeamQuery`。注音輸入法切到全形打「ｔｉｔａｎ」、或少打空白「清大Hydra」都要找得到。原本只去前後空白，現在中間的空白也忽略。
+- **報讀目前高亮的隊伍**（PR #101 審查）：多隊命中時 `role=status` 內多一段 `sr-only`「，第 2 隊：中興 Titan」，按上一隊／下一隊時報讀軟體會念出跳到哪一隊；畫面上仍只顯示「找到 N 隊」。只有一隊命中時不加。
 
 ## Code Map
 

@@ -60,13 +60,16 @@ function treeOrder(matches: readonly PublicMatch[]): PublicMatch[] {
   )
 }
 
-/** 搜尋字串正規化：去掉前後空白、轉小寫；空字串代表沒有搜尋 */
+/**
+ * 搜尋字串與隊名共用的正規化：NFKC（全形英數轉半形）、轉小寫、去掉所有空白。
+ * 搜尋字正規化後為空字串代表沒有搜尋。
+ */
 export function normalizeTeamQuery(query: string): string {
-  return query.trim().toLocaleLowerCase()
+  return query.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, "")
 }
 
 /**
- * 隊名部分符合（不分大小寫）的隊伍，依它在對戰樹第一次出現的位置排序。
+ * 隊名部分符合（不分大小寫、全形半形、空白）的隊伍，依它在對戰樹第一次出現的位置排序。
  * 空字串（或只有空白）回傳空陣列。
  */
 export function searchBracketTeams(
@@ -82,7 +85,7 @@ export function searchBracketTeams(
       if (
         team !== null &&
         !found.has(team.id) &&
-        team.name.toLocaleLowerCase().includes(needle)
+        normalizeTeamQuery(team.name).includes(needle)
       ) {
         found.set(team.id, team)
       }
