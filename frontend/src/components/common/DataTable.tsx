@@ -65,7 +65,8 @@ export function pageNumbers(
   return pages
 }
 
-function DataTablePagination({
+/** Data table 的分頁列（S14 通知列表也沿用）。 */
+export function DataTablePagination({
   page,
   totalPages,
   onPageChange,

@@ -2,12 +2,13 @@ import { Link } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
 import { useCurrentIdentity, useIsSignedIn } from "@/features/identity/auth"
+import { NotificationBell } from "@/features/notifications/NotificationBell"
 import { IdentitySwitcher } from "./IdentitySwitcher"
 import { Logo } from "./Logo"
 import { MobileMenu } from "./MobileMenu"
 import { ThemeToggle } from "./ThemeToggle"
 
-/** 所有頁面共用的頂欄：未登入時有「登入」「註冊」，登入後換成身分切換器。 */
+/** 所有頁面共用的頂欄：未登入時有「登入」「註冊」，登入後換成通知鈴鐺與身分切換器。 */
 export function TopBar() {
   const signedIn = useIsSignedIn()
   const currentIdentity = useCurrentIdentity()
@@ -30,7 +31,10 @@ export function TopBar() {
             <ThemeToggle />
           </div>
           {signedIn ? (
-            <IdentitySwitcher />
+            <>
+              <NotificationBell />
+              <IdentitySwitcher />
+            </>
           ) : (
             <>
               <Button asChild variant="ghost" className="h-touch-target">

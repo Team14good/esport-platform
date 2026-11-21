@@ -24,9 +24,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-5-forgot-reset-password.md`
   summary: `tests/test_migrations.py` 的測試資料庫每次從空表升級，測不到「既有帳號升級後拿到 0」（低；若遷移檔被改錯，為 medium：有資料的資料庫升級失敗，或舊登入全部失效）。`compare_server_default` 已在 PR #94 開啟，這筆只剩資料升級的部分。
   evidence: 2026-10-28 Story 1.5 第二輪 Code Review（Verification Gap）；PR #94 審查要求保留本半句。處理時另寫一支「升到上一版、插入帳號、再升到 head」的測試。
-- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-forgot-reset-password.md`
-  summary: 「重設信只寄 Email、不建立站內通知」目前沒有任何斷言（1.5 第一輪審查移除了 `"notification" not in metadata.tables`）；Story 1.6 加入站內通知後，若 `dispatch_event` 誤替 `PasswordResetRequested`（或 `VerificationEmailRequested`）建立站內通知，現有測試照樣通過。
-  evidence: 2026-10-28 Story 1.5 第二輪 Code Review（Blind Hunter、Acceptance Auditor）。目前還沒有 notification 表，無從斷言。Story 1.6 建立站內通知時，在 `tests/notifications/test_email_delivery.py` 的重設信與驗證信測試補上「站內通知筆數不變」的斷言。
 ## Deferred from: spec-3-2-player-registration-info.md 第一段 (2026-10-30)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-player-registration-info.md`
@@ -194,3 +191,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`
   summary: （低）做 2.5 延長報名時，賽事必須由 `closed` 轉回 `open`；自動抽籤只看狀態是 `closed`，若 2.5 只改報名截止時間而維持 `closed`，worker 會在新截止時間前就抽籤。
   evidence: 2026-11-19 Story 4.2 審查第 6 點；`auto_draw_skip` 以（賽事, 報名截止時間）為鍵，轉回 `open` 再截止時會重新嘗試（`test_new_registration_end_is_tried_again`）。
+
+## Deferred from: spec-1-6-notification-center.md (2026-11-21)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
+  summary: （低）FR-37「裁判指派因晉級衝突被取消時另通知主辦方」沒有做：`RefereeUnassigned` 沒有區分「晉級衝突自動收回」與「主辦方收回、改派」，notifications 無從判斷，目前只通知被取消的裁判。
+  evidence: Story 1.6 Decisions。修法：competition 在 `RefereeUnassigned` 加一個原因欄位（例如 `reason: "conflict" | "organizer"`，5.5 `unassign_referee_if_member` 發 `conflict`），notifications 的 `_referee_unassigned` 在 `conflict` 時另加主辦方一份草稿（link `/organizer/tournaments/{tid}/matches`）。

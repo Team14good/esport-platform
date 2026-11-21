@@ -1,11 +1,13 @@
 """notifications 的業務規則、資源層級權限、狀態轉換、操作紀錄與事件；不得 commit 或 rollback。
 
-事件分派（目前只有 VerificationEmailRequested、PasswordResetRequested；事件類型登錄
-機制在 Story 1.6）：
-worker 每次取一則未處理事件呼叫 `dispatch_event`，再以 `send_next_email` 逐封寄出。
+事件分派：worker 每次取一則未處理事件呼叫 `dispatch_event`，再以 `send_next_email`
+逐封寄出。`VerificationEmailRequested`、`PasswordResetRequested` 只寄 Email；其他事件
+依 `registry` 登錄的收件規則（`rules.py`）為每位收件人建立 Notification 與 EmailDelivery。
 """
 
 import logging
+import uuid
+from collections.abc import Iterable
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -14,15 +16,25 @@ from sqlmodel import Session
 
 from app.core import clock, events
 from app.core.config import settings
+from app.core.errors import BusinessError
 from app.core.events import OutboxEvent
 from app.modules.identity import service as identity_service
 from app.modules.identity.models import (
     PasswordResetRequested,
     VerificationEmailRequested,
 )
-from app.modules.notifications import repository
+from app.modules.notifications import registry, repository
+from app.modules.notifications import rules as _rules  # noqa: F401  匯入即登錄收件規則
 from app.modules.notifications.email import EmailMessage, EmailSender, render_email
-from app.modules.notifications.models import DeliveryStatus, EmailDelivery
+from app.modules.notifications.models import (
+    PAGE_SIZE,
+    DeliveryStatus,
+    EmailDelivery,
+    NotificationPage,
+    NotificationRead,
+    UnreadCount,
+)
+from app.modules.notifications.registry import NotificationDraft
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +70,50 @@ def dispatch_event(session: Session, event: OutboxEvent) -> None:
             session, event_id=event.id, account_id=payload.account_id, now=clock.now()
         )
         return
-    # 其他事件類型的收件規則由之後的 Story 登錄
-    logger.info("No handler for event type %s (%s); skipped", event.type, event.id)
+    rule = registry.get_rule(event.type)
+    if rule is None:
+        logger.info("No handler for event type %s (%s); skipped", event.type, event.id)
+        return
+    try:
+        rule_payload = rule.event_class.model_validate(event.payload)
+    except ValidationError:
+        logger.exception("Malformed %s event %s; skipped", event.type, event.id)
+        return
+    try:
+        drafts = rule.resolver(session, rule_payload)
+    except BusinessError, LookupError:
+        # 實體已不存在：重試也不會成功，記錄後略過，免得卡住後面的事件
+        logger.exception(
+            "Recipients of %s event %s not found; skipped", event.type, event.id
+        )
+        return
+    now = clock.now()
+    for draft in _dedupe_by_account(drafts):
+        repository.add_notification_if_absent(
+            session,
+            event_id=event.id,
+            account_id=draft.account_id,
+            type=event.type,
+            title=draft.title,
+            body=draft.body,
+            link=draft.link,
+            now=now,
+        )
+        repository.add_delivery_if_absent(
+            session, event_id=event.id, account_id=draft.account_id, now=now
+        )
+
+
+def _dedupe_by_account(drafts: Iterable[NotificationDraft]) -> list[NotificationDraft]:
+    """同一位收件人只留第一份草稿。"""
+    seen: set[uuid.UUID] = set()
+    unique: list[NotificationDraft] = []
+    for draft in drafts:
+        if draft.account_id in seen:
+            continue
+        seen.add(draft.account_id)
+        unique.append(draft)
+    return unique
 
 
 def verification_link(token: str, redirect: str | None) -> str:
@@ -117,7 +171,24 @@ def _compose(
             button_label="設定新密碼",
             button_url=reset_password_link(reset.token),
         )
-    raise LookupError(f"no email template for event type {event.type}")
+    # 一般通知：以（event_id, account_id）找回同一則通知組信
+    notification = repository.get_by_event_and_account(
+        session, event_id=event.id, account_id=delivery.account_id
+    )
+    if notification is None:
+        raise LookupError(f"no notification for event {event.id} and recipient")
+    return render_email(
+        to=contact.email,
+        title=notification.title,
+        body=notification.body,
+        button_label="前往 FLOW 查看",
+        button_url=notification_link(notification.link),
+    )
+
+
+def notification_link(link: str) -> str:
+    host = settings.FRONTEND_HOST.rstrip("/")
+    return f"{host}{link}"
 
 
 def send_next_email(session: Session, *, sender: EmailSender) -> bool:
@@ -175,3 +246,48 @@ def send_next_email(session: Session, *, sender: EmailSender) -> bool:
         events.drop_payload_keys(session, event, "token")
     session.flush()
     return True
+
+
+# ---------------------------------------------------------------- 通知中心（Story 1.6）
+
+
+def _notification_not_found() -> BusinessError:
+    return BusinessError("NOTIFICATION_NOT_FOUND", "找不到這則通知。", status_code=404)
+
+
+def list_notifications(
+    session: Session, *, account_id: uuid.UUID, page: int
+) -> NotificationPage:
+    """自己的通知，依 `created_at` 由新到舊（同時間依 id），每頁 `PAGE_SIZE` 則。"""
+    items, total = repository.list_for_account(
+        session, account_id, offset=(page - 1) * PAGE_SIZE, limit=PAGE_SIZE
+    )
+    return NotificationPage(
+        items=[
+            NotificationRead.model_validate(item, from_attributes=True)
+            for item in items
+        ],
+        total=total,
+        page=page,
+        page_size=PAGE_SIZE,
+    )
+
+
+def unread_count(session: Session, *, account_id: uuid.UUID) -> UnreadCount:
+    return UnreadCount(count=repository.count_unread(session, account_id))
+
+
+def mark_read(
+    session: Session, *, account_id: uuid.UUID, notification_id: uuid.UUID
+) -> NotificationRead:
+    """標為已讀；已讀過的保持原本的 `read_at`。別人的或不存在：404 `NOTIFICATION_NOT_FOUND`。"""
+    notification = repository.get_for_account(
+        session, notification_id, account_id, for_update=True
+    )
+    if notification is None:
+        raise _notification_not_found()
+    if notification.read_at is None:
+        notification.read_at = clock.now()
+        session.add(notification)
+        session.flush()
+    return NotificationRead.model_validate(notification, from_attributes=True)

@@ -24,7 +24,11 @@ from app.modules.notifications.email import (
     SmtpEmailSender,
     render_email,
 )
-from app.modules.notifications.models import DeliveryStatus, EmailDelivery
+from app.modules.notifications.models import (
+    DeliveryStatus,
+    EmailDelivery,
+    Notification,
+)
 from tests.conftest import FakeEmailSender, FrozenClock
 
 
@@ -141,7 +145,7 @@ def test_event_name_comes_from_the_identity_event_class() -> None:
 
 
 def test_verification_email_creates_no_in_app_notification(session: Session) -> None:
-    # 本 Story 還沒有 Notification 表；分派只會寫 email_delivery
+    # 只寄 Email 的事件不建立站內通知（Story 1.6 AC 2）
     _email, event = _register(session)
     before = session.exec(select(func.count()).select_from(EmailDelivery)).one()
 
@@ -150,7 +154,12 @@ def test_verification_email_creates_no_in_app_notification(session: Session) -> 
     assert session.exec(select(func.count()).select_from(EmailDelivery)).one() == (
         before + 1
     )
-    assert "notification" not in EmailDelivery.metadata.tables
+    notifications = session.exec(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.event_id == event.id)
+    ).one()
+    assert notifications == 0
 
 
 def test_send_failure_records_attempt_and_retries_on_later_polls(
@@ -458,6 +467,21 @@ def _reset_events(session: Session) -> list[OutboxEvent]:
 def test_reset_event_name_comes_from_the_identity_event_class() -> None:
     assert service.PASSWORD_RESET_REQUESTED == PasswordResetRequested.event_type
     assert service.PASSWORD_RESET_REQUESTED == "PasswordResetRequested"
+
+
+def test_reset_email_creates_no_in_app_notification(session: Session) -> None:
+    # 重設密碼信只寄 Email、不建立站內通知（Story 1.6 AC 2）
+    _email, event = _request_reset(session)
+
+    service.dispatch_event(session, event)
+
+    assert len(_deliveries(session, event.id)) == 1
+    notifications = session.exec(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.event_id == event.id)
+    ).one()
+    assert notifications == 0
 
 
 def test_reset_password_link_points_to_s9() -> None:

@@ -155,6 +155,14 @@ import type {
   identityVerifyEmailData,
   identityVerifyEmailErrors,
   identityVerifyEmailResponses,
+  notificationsGetUnreadCountData,
+  notificationsGetUnreadCountResponses,
+  notificationsListNotificationsData,
+  notificationsListNotificationsErrors,
+  notificationsListNotificationsResponses,
+  notificationsMarkNotificationReadData,
+  notificationsMarkNotificationReadErrors,
+  notificationsMarkNotificationReadResponses,
   registrationCreateTeamData,
   registrationCreateTeamErrors,
   registrationCreateTeamResponses,
@@ -1838,6 +1846,68 @@ export class DisputesService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/teams/{team_id}/disqualification",
+      ...options,
+    })
+  }
+}
+
+export class NotificationsService {
+  /**
+   * List Notifications
+   *
+   * 自己的通知：依建立時間由新到舊、每頁 20 則。
+   */
+  public static listNotifications<ThrowOnError extends boolean = true>(
+    options?: Options<notificationsListNotificationsData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      notificationsListNotificationsResponses,
+      notificationsListNotificationsErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/notifications",
+      ...options,
+    })
+  }
+
+  /**
+   * Get Unread Count
+   *
+   * 自己的未讀通知數（頂欄鈴鐺每 30 秒輪詢）。
+   */
+  public static getUnreadCount<ThrowOnError extends boolean = true>(
+    options?: Options<notificationsGetUnreadCountData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<
+      notificationsGetUnreadCountResponses,
+      unknown,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/notifications/unread-count",
+      ...options,
+    })
+  }
+
+  /**
+   * Mark Notification Read
+   *
+   * 把自己的一則通知標為已讀；別人的或不存在回 404 `NOTIFICATION_NOT_FOUND`。
+   */
+  public static markNotificationRead<ThrowOnError extends boolean = true>(
+    options: Options<notificationsMarkNotificationReadData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      notificationsMarkNotificationReadResponses,
+      notificationsMarkNotificationReadErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/notifications/{notification_id}/read",
       ...options,
     })
   }
