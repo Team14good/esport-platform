@@ -18,6 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: astral-sh/setup-uv@v6
+
+      - name: flow-bot 測試
+        run: uv run --no-project --with pytest python -m pytest .github/flow-bot/tests -q
+
       - name: 啟動服務
         run: |
           cp .env.example .env

@@ -1,0 +1,172 @@
+# flow-bot：A 的期末自動開發機器人（設計：docs/superpowers/specs/2026-11-21-flow-bot-design.md）。
+# 先由 gate 判斷有沒有事做，沒事就結束；腳本任務與 Claude 任務分成兩個 matrix job。
+# 總開關：repo variable FLOWBOT_ENABLED=true。所有寫入都用 secrets.FLOWBOT_PAT（OWNER 本人的權杖）。
+name: flow-bot
+
+on:
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+  # 審查別人的 PR 用 pull_request_target：workflow 一律取 main 的版本，
+  # 組員改自己分支裡的 workflow 拿不到 OWNER 的權杖；也不 checkout PR 的程式。
+  pull_request_target:
+    types: [opened, ready_for_review, reopened]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 要執行的任務
+        type: choice
+        options: [sync_and_story, review_others, feedback]
+        default: sync_and_story
+      pr:
+        description: PR 號碼（review_others、feedback 需要）
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  FLOWBOT_OWNER: ${{ vars.FLOWBOT_OWNER || 'max930000' }}
+
+jobs:
+  gate:
+    if: vars.FLOWBOT_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      script_tasks: ${{ steps.gate.outputs.script_tasks }}
+      claude_tasks: ${{ steps.gate.outputs.claude_tasks }}
+      has_script: ${{ steps.gate.outputs.has_script }}
+      has_claude: ${{ steps.gate.outputs.has_claude }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: 判斷要做的任務
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.FLOWBOT_PAT }}
+        run: python3 .github/flow-bot/gate.py
+
+  script:
+    needs: gate
+    if: needs.gate.outputs.has_script == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        task: ${{ fromJSON(needs.gate.outputs.script_tasks) }}
+    concurrency:
+      group: ${{ matrix.task.group }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.FLOWBOT_PAT }}
+          fetch-depth: 0
+      - name: 設定 git 身分
+        env:
+          GH_TOKEN: ${{ secrets.FLOWBOT_PAT }}
+        run: |
+          id=$(gh api "users/$FLOWBOT_OWNER" --jq .id)
+          git config user.name "$FLOWBOT_OWNER"
+          git config user.email "${id}+${FLOWBOT_OWNER}@users.noreply.github.com"
+      - name: 執行腳本任務
+        env:
+          GH_TOKEN: ${{ secrets.FLOWBOT_PAT }}
+          TASK: ${{ toJSON(matrix.task) }}
+        run: python3 .github/flow-bot/actions.py "$TASK"
+
+  claude:
+    needs: gate
+    if: needs.gate.outputs.has_claude == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ (matrix.task.kind == 'story_spec' || matrix.task.kind == 'story_impl') && 120 || 30 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        task: ${{ fromJSON(needs.gate.outputs.claude_tasks) }}
+    concurrency:
+      group: ${{ matrix.task.group }}
+      cancel-in-progress: false
+    steps:
+      - name: 找出要 checkout 的分支
+        id: ref
+        env:
+          GH_TOKEN: ${{ secrets.FLOWBOT_PAT }}
+          KIND: ${{ matrix.task.kind }}
+          CHECKOUT: ${{ matrix.task.checkout }}
+          PR: ${{ matrix.task.pr }}
+        run: |
+          # 只有 OWNER 自己 PR 的任務會 checkout head；review_others 永遠用 main。
+          if [ "$CHECKOUT" = "head" ] && [ "$KIND" != "review_others" ]; then
+            echo "ref=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json headRefName --jq .headRefName)" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+          token: ${{ secrets.FLOWBOT_PAT }}
+          fetch-depth: 0
+      - name: 設定 git 身分
+        env:
+          GH_TOKEN: ${{ secrets.FLOWBOT_PAT }}
+        run: |
+          id=$(gh api "users/$FLOWBOT_OWNER" --jq .id)
+          git config user.name "$FLOWBOT_OWNER"
+          git config user.email "${id}+${FLOWBOT_OWNER}@users.noreply.github.com"
+      - uses: astral-sh/setup-uv@v6
+      - name: 執行任務
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.FLOWBOT_PAT }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.FLOWBOT_PAT }}
+          prompt: >-
+            使用 flow-bot skill（.claude/skills/flow-bot/SKILL.md）。
+            任務：${{ matrix.task.kind }}；
+            PR：${{ matrix.task.pr || '無' }}；
+            Story：${{ matrix.task.story || '無' }}；
+            OWNER：${{ env.FLOWBOT_OWNER }}；
+            指示：${{ matrix.task.text || '無' }}；
+            執行紀錄：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          claude_args: >-
+            --max-turns ${{ matrix.task.kind == 'review_others' && 40 || 200 }}
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep,Task,Skill,TodoWrite"
+            --disallowedTools "Bash(git push --force:*),Bash(git push -f:*),Bash(git push --force-with-lease:*),Bash(git rebase:*),Bash(gh pr merge:*),Bash(gh pr review --approve:*),Bash(gh pr review -a:*)"
+      - name: 上傳畫面截圖
+        if: always() && hashFiles('e2e-screenshots/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots-${{ matrix.task.kind }}-${{ matrix.task.pr || matrix.task.story }}
+          path: e2e-screenshots/
+      - name: 關閉服務
+        if: always()
+        run: docker compose down -v || true
+
+  status:
+    needs: [gate, script, claude]
+    if: always() && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: flow-bot-status
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: 更新狀態 issue
+        env:
+          GH_TOKEN: ${{ secrets.FLOWBOT_PAT }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 .github/flow-bot/status_issue.py
