@@ -711,6 +711,57 @@ def test_settlement_marks_accepted_representatives(
     assert (rep_q.status, rep_q.is_representative) == (S.WAITLISTED, False)
 
 
+def test_close_registration_after_deadline_skips_same_school_backfill(
+    session: Session, frozen_clock: FrozenClock
+) -> None:
+    """報名截止時補做先搶期（`close_registration` → `_first_come_locked`）：已是截止後，
+    不套用先搶期的同校遞補。P 校代表隊已取消資格、P2 候補；N（X 校）先搶期送出仍為
+    `pending` → N 依先搶期規則正取，P2 仍候補、沒有 `RegistrationBackfilled`。"""
+    tournament = _tournament(session, frozen_clock, capacity=2)
+    school_p, school_q, school_x = (_school(session) for _ in range(3))
+    _settled(session, tournament, [school_p, school_q])
+    rep = _preset(
+        session,
+        tournament,
+        school_p,
+        S.DISQUALIFIED,
+        submitted_at=_in_window(tournament, 10),
+        score="95",
+    )
+    rep.is_representative = True
+    session.add(rep)
+    session.flush()
+    _preset(
+        session,
+        tournament,
+        school_q,
+        S.ACCEPTED,
+        submitted_at=_in_window(tournament, 11),
+    )
+    p2 = _preset(
+        session,
+        tournament,
+        school_p,
+        S.WAITLISTED,
+        submitted_at=_in_window(tournament, 12),
+        score="10",
+    )
+    pending = _preset(
+        session,
+        tournament,
+        school_x,
+        S.PENDING,
+        submitted_at=_first_come(tournament, 1),
+    )
+    frozen_clock.set(tournament.registration_end + timedelta(minutes=1))
+
+    assert service.close_registration(session, tournament_id=tournament.id)
+
+    assert _status(session, pending) == S.ACCEPTED
+    assert _status(session, p2) == S.WAITLISTED
+    assert _events(session, tournament, "RegistrationBackfilled") == []
+
+
 # ---------------------------------------------------------------- 截止後的遞補
 
 

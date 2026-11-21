@@ -160,6 +160,14 @@ context:
 - `backfilled`／`withdrawable` 缺省為 False 時只會少顯示（不顯示退賽、徽章顯示「正取」），不會誤顯示可退賽；後端只有 `_build_detail`、`list_my_teams` 建立這兩個模型，都明確給值。
 - E2E（新增 `frontend/tests/e2e/registration-withdraw.spec.ts`、`support/withdraw.ts`，`@story-3.7`）抓到 bug：撤回被拒（409）後 `onError` 重新取得隊伍，`withdrawable` 變 false，`SubmitRegistrationSection` 把整個確認框卸載，錯誤訊息只閃一下。修正：退賽確認框改由 `SubmitRegistrationSection` 控制開關，開著時保持掛載，關閉後按鈕才消失。單元測試的拒絕案例改成重新取得時回傳已撤回；拿掉修正時該測試會失敗。E2E desktop、mobile-375 共 6 passed。
 
+PR #105 組員審查（2026-11-22，D 核准，4 點不擋合併）：
+
+- 第 1 點：遷移 `a7c3e9f1b5d8` 與 #103 的 `a7d3e9b2c6f4` 同為 `down_revision = "d1f3a5c7e9b2"`；後合併的一方改 `down_revision`。
+- 第 2 點（已修）：`raise_capacity` 先不鎖讀賽事檢查主辦方，再鎖、鎖內再檢查；新測試 `test_non_organizer_gets_403_without_waiting_for_the_tournament_lock`（拿掉修正時得到 `LockNotAvailable`）。
+- 第 3 點（已修）：`_first_come_locked` 只在 `_current_phase` 為先搶期時做同校遞補（`close_registration`、截止後抽籤也會呼叫它）；新測試 `test_close_registration_after_deadline_skips_same_school_backfill`。
+- 第 4 點（已補）：`test_parallel_withdraw_and_close_registration`、`test_parallel_withdraw_and_draw`。實作子代理把撤回改成不加鎖時，抽籤那組 5 次都失敗；截止結算那組抓不到這個錯誤實作。
+- 驗證：後端 2581 passed（覆蓋率 97%），lint 通過。
+
 ## Spec Change Log
 
 ## Review Triage Log

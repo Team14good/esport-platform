@@ -10,6 +10,7 @@
 會檢查總數）。
 """
 
+import random
 import secrets
 import threading
 import uuid
@@ -18,12 +19,15 @@ from datetime import timedelta
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, text, update
 from sqlmodel import Session, col, select
 
 from app.core.audit import AuditLog
 from app.core.db import engine
+from app.core.errors import BusinessError
 from app.core.events import OutboxEvent
+from app.modules.competition import service as competition_service
+from app.modules.competition.models import Bracket, Match
 from app.modules.identity.models import School
 from app.modules.registration import service
 from app.modules.registration.models import (
@@ -358,3 +362,296 @@ def test_parallel_withdraw_and_submit_never_exceed_capacity(
             )
             cleanup.execute(delete(Team).where(col(Team.id).in_(team_ids)))
             cleanup.commit()
+
+
+# ---------------------------------------------------------------- Story 3.7 審查補充
+
+
+def _cancel(tournament_id: uuid.UUID) -> None:
+    """留在測試資料庫的賽事改為已取消，worker 工作與抽籤候選不會再挑到它。"""
+    with Session(engine) as db:
+        db.execute(
+            update(Tournament)
+            .where(col(Tournament.id) == tournament_id)
+            .values(status=TournamentStatus.CANCELLED)
+        )
+        db.commit()
+
+
+def test_non_organizer_gets_403_without_waiting_for_the_tournament_lock() -> None:
+    """另一條連線鎖住賽事列（交易不結束）時，非主辦方提高名額要立刻得到 403。
+
+    呼叫端連線設 `lock_timeout`：若先鎖賽事再檢查主辦方，會等鎖逾時而拋資料庫錯誤，
+    不是 403。
+    """
+    with Session(engine) as setup:
+        game = make_game(setup)
+        _demote_game_creator(setup, game.id)
+        tournament = make_tournament(setup, game=game, capacity=4)
+        setup.commit()
+        tournament_id = tournament.id
+    try:
+        with Session(engine) as holder, Session(engine) as caller:
+            holder.exec(
+                select(Tournament)
+                .where(Tournament.id == tournament_id)
+                .with_for_update()
+            ).one()
+            caller.execute(text("SET lock_timeout = '2s'"))
+            with pytest.raises(BusinessError) as raised:
+                service.raise_capacity(
+                    caller,
+                    tournament_id=tournament_id,
+                    capacity=6,
+                    actor_id=uuid.uuid4(),
+                )
+            assert raised.value.code == "TOURNAMENT_OWNER_REQUIRED"
+            caller.rollback()
+            holder.rollback()
+    finally:
+        _cancel(tournament_id)
+
+
+class _WithdrawWorld:
+    """已提交的賽事：名額 2、A 與 B 正取、C 候補（三校各一隊，各有隊長），已結算。
+
+    A 是要撤回的隊伍。時鐘設在報名截止後 1 分鐘；`status` 是賽事狀態。
+    """
+
+    def __init__(self, frozen_clock: FrozenClock, status: TournamentStatus) -> None:
+        with Session(engine) as setup:
+            self.event_ids_before = set(setup.exec(select(OutboxEvent.id)).all())
+            organizer = make_account(setup, organizer=True, hashed_password="x")
+            game = make_game(setup)
+            _demote_game_creator(setup, game.id)
+            tournament = make_tournament(
+                setup,
+                organizer=organizer,
+                game=game,
+                capacity=2,
+                starters=1,
+                substitutes=0,
+                registration_start=(
+                    frozen_clock.now() - timedelta(hours=1)
+                ).isoformat(),
+                priority_hours=1,
+            )
+            schools = list(setup.exec(select(School).order_by(col(School.id)).limit(3)))
+            setup.add(
+                PriorityWindowSettlement(
+                    tournament_id=tournament.id,
+                    settled_at=tournament.priority_end,
+                    priority_school_ids=[],
+                )
+            )
+            self.team_ids: list[uuid.UUID] = []
+            self.captain_ids: list[uuid.UUID] = []
+            statuses = [
+                RegistrationStatus.ACCEPTED,
+                RegistrationStatus.ACCEPTED,
+                RegistrationStatus.WAITLISTED,
+            ]
+            for i, (school, initial) in enumerate(zip(schools, statuses, strict=True)):
+                captain = make_account(setup, school_id=school.id, hashed_password="x")
+                created = service.create_team(
+                    setup,
+                    tournament_id=tournament.id,
+                    account_id=captain.id,
+                    name=f"撤回審查-{i}-{uuid.uuid4().hex[:6]}",
+                )
+                registration = setup.exec(
+                    select(Registration).where(Registration.team_id == created.id)
+                ).one()
+                registration.status = initial
+                registration.school_id = school.id
+                registration.avg_rank_score = Decimal(30 - i)
+                registration.submitted_at = tournament.priority_end + timedelta(
+                    minutes=i + 1
+                )
+                setup.add(registration)
+                self.team_ids.append(created.id)
+                self.captain_ids.append(captain.id)
+            setup.flush()
+            if status != TournamentStatus.OPEN:
+                setup.execute(
+                    update(Tournament)
+                    .where(col(Tournament.id) == tournament.id)
+                    .values(status=status)
+                )
+            setup.commit()
+            self.tournament_id = tournament.id
+            self.organizer_id = organizer.id
+        frozen_clock.set(tournament.registration_end + timedelta(minutes=1))
+
+    def withdraw(self, db: Session) -> object:
+        return service.withdraw_registration(
+            db, team_id=self.team_ids[0], account_id=self.captain_ids[0]
+        )
+
+    def statuses(self, db: Session) -> list[RegistrationStatus]:
+        by_team = {
+            r.team_id: r.status
+            for r in db.exec(
+                select(Registration).where(
+                    Registration.tournament_id == self.tournament_id
+                )
+            ).all()
+        }
+        return [by_team[team_id] for team_id in self.team_ids]
+
+    def new_events(self, db: Session) -> list[OutboxEvent]:
+        return [
+            e
+            for e in db.exec(select(OutboxEvent)).all()
+            if e.id not in self.event_ids_before
+        ]
+
+    def cleanup(self) -> None:
+        with Session(engine) as db:
+            db.execute(
+                delete(Match).where(col(Match.tournament_id) == self.tournament_id)
+            )
+            db.execute(
+                delete(Bracket).where(col(Bracket.tournament_id) == self.tournament_id)
+            )
+            db.execute(
+                delete(OutboxEvent).where(
+                    col(OutboxEvent.id).in_([e.id for e in self.new_events(db)])
+                )
+            )
+            db.execute(
+                delete(PriorityWindowSettlement).where(
+                    col(PriorityWindowSettlement.tournament_id) == self.tournament_id
+                )
+            )
+            db.execute(
+                delete(Registration).where(
+                    col(Registration.tournament_id) == self.tournament_id
+                )
+            )
+            db.execute(
+                delete(TeamMember).where(col(TeamMember.team_id).in_(self.team_ids))
+            )
+            db.execute(delete(Team).where(col(Team.id).in_(self.team_ids)))
+            db.commit()
+        _cancel(self.tournament_id)
+
+
+def _race(actions: list[Callable[[Session], object]]) -> dict[int, str]:
+    """各用一條連線同時開始；回傳每個動作（依索引）的結果："ok" 或業務錯誤代碼。"""
+    start = threading.Barrier(len(actions))
+    outcomes: dict[int, str] = {}
+    outcomes_lock = threading.Lock()
+
+    def _run(index: int, action: Callable[[Session], object]) -> None:
+        with Session(engine) as db:
+            try:
+                start.wait(timeout=10)
+                action(db)
+                db.commit()
+                result = "ok"
+            except BusinessError as exc:
+                result = exc.code
+            except Exception as exc:  # 讓非預期錯誤出現在斷言訊息裡
+                result = repr(exc)
+        with outcomes_lock:
+            outcomes[index] = result
+
+    threads = [
+        threading.Thread(target=_run, args=(i, a)) for i, a in enumerate(actions)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert not any(thread.is_alive() for thread in threads)
+    return outcomes
+
+
+def test_parallel_withdraw_and_close_registration(frozen_clock: FrozenClock) -> None:
+    """已過報名截止、賽事仍為開放報名：A 撤回與報名截止工作同時執行。
+
+    先撤回：依截止後順位由 C 遞補，截止工作沒有空位可補。先截止：賽事轉 `closed`，撤回後
+    同樣由 C 遞補。兩種順序都是 A 撤回、B 與 C 正取、只遞補一次、賽事 `closed`。
+    """
+    world = _WithdrawWorld(frozen_clock, TournamentStatus.OPEN)
+    try:
+        outcomes = _race(
+            [
+                world.withdraw,
+                lambda db: service.close_registration(
+                    db, tournament_id=world.tournament_id
+                ),
+            ]
+        )
+
+        assert outcomes == {0: "ok", 1: "ok"}, outcomes
+        with Session(engine) as check:
+            statuses = world.statuses(check)
+            assert statuses == [
+                RegistrationStatus.WITHDRAWN,
+                RegistrationStatus.ACCEPTED,
+                RegistrationStatus.ACCEPTED,
+            ]
+            assert statuses.count(RegistrationStatus.ACCEPTED) <= 2
+            status = check.exec(
+                select(Tournament.status).where(Tournament.id == world.tournament_id)
+            ).one()
+            assert status == TournamentStatus.CLOSED
+            backfilled = [
+                e for e in world.new_events(check) if e.type == "RegistrationBackfilled"
+            ]
+            assert [e.payload["team_id"] for e in backfilled] == [
+                str(world.team_ids[2])
+            ]
+    finally:
+        world.cleanup()
+
+
+def test_parallel_withdraw_and_draw(frozen_clock: FrozenClock) -> None:
+    """報名截止（`closed`）後 A 撤回與主辦方抽籤（competition `draw`）同時執行。
+
+    先撤回：C 遞補，抽籤 B、C。先抽籤：A、B 已參賽，撤回得到 409
+    `REGISTRATION_NOT_WITHDRAWABLE`。兩種都不超過名額，抽籤後沒有留下 `accepted`，
+    對戰表上的隊伍都不是 `withdrawn`。
+    """
+    world = _WithdrawWorld(frozen_clock, TournamentStatus.CLOSED)
+    try:
+        outcomes = _race(
+            [
+                world.withdraw,
+                lambda db: competition_service.draw(
+                    db,
+                    tournament_id=world.tournament_id,
+                    actor_id=world.organizer_id,
+                    rng=random.Random(1),
+                ),
+            ]
+        )
+
+        assert outcomes[1] == "ok", outcomes
+        assert outcomes[0] in ("ok", "REGISTRATION_NOT_WITHDRAWABLE"), outcomes
+        drawn = RegistrationStatus.DRAWN
+        with Session(engine) as check:
+            statuses = world.statuses(check)
+            if outcomes[0] == "ok":
+                expected = [RegistrationStatus.WITHDRAWN, drawn, drawn]
+            else:
+                expected = [drawn, drawn, RegistrationStatus.WAITLISTED]
+            assert statuses == expected
+            assert RegistrationStatus.ACCEPTED not in statuses
+            assert statuses.count(drawn) <= 2
+            matches = check.exec(
+                select(Match).where(Match.tournament_id == world.tournament_id)
+            ).all()
+            on_bracket = {
+                team_id
+                for m in matches
+                for team_id in (m.team_a_id, m.team_b_id)
+                if team_id is not None
+            }
+            by_team = dict(zip(world.team_ids, statuses, strict=True))
+            assert on_bracket == {t for t, s in by_team.items() if s == drawn}
+            assert all(by_team[t] != RegistrationStatus.WITHDRAWN for t in on_bracket)
+    finally:
+        world.cleanup()

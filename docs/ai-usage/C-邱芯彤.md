@@ -592,3 +592,22 @@
   - 本機 e2e image 太舊，缺 `psql`，第一次全部失敗（`spawn psql ENOENT`），子代理重 build 後解決。
 - 成熟度：L4（子代理寫 E2E 對真的服務執行並抓到 bug，主代理修正並用「拿掉修正測試會失敗」驗證測試有效；人只決定範圍）
 - 證據：spec-3-7-withdraw-registration.md（Implementation Notes「收尾確認」）；frontend/tests/e2e/registration-withdraw.spec.ts；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜程式＋測試／依組員審查修正｜Story 3.7 PR #105 審查回應
+
+- Story／範圍：3.7（PR #105）
+- 工具：Claude Code（Opus 5.5）＋ 子代理
+- 怎麼用：D 核准 PR 並提 4 點（不擋合併）。主代理讀程式逐點查證後整理成表給使用者；使用者決定修第 2、3 點、補第 4 點，主代理把要求交回原實作子代理，完成後自己看差異並跑完整後端測試。
+- AI 產出：
+  - `service.py` 改 2 處：`raise_capacity` 鎖之前先檢查主辦方；`_first_come_locked` 只在先搶期做同校遞補。
+  - 新增 4 個測試：鎖被占用時非主辦方立即得到 403、截止結算不做同校遞補、撤回對截止結算的真實併發、撤回對抽籤的真實併發。
+- 人做了什麼：D 審查並核准；使用者決定修正範圍（第 1 點遷移衝突留到合併時由後合併的一方處理）。
+- 驗證：
+  - 後端 `scripts/test.sh` 2581 passed，覆蓋率 97%；`lint.sh` 通過。
+  - 子代理回報：拿掉第 2 點修正時新測試得到 `LockNotAvailable`、拿掉第 3 點修正時新測試失敗；把撤回改成不加鎖時，撤回對抽籤的併發測試 5 次都失敗（主代理沒有重做這些實驗）。
+- 問題與修正：
+  - AI 實作的 `raise_capacity` 先拿 FOR UPDATE 鎖才檢查權限，任何已驗證帳號都能讓抽籤、送出排隊等鎖；3 層 AI 程式審查沒有抓到，組員 D 對照 competition `get_draw_status` 的寫法才發現。
+  - 同校遞補接到 `_first_come_locked` 時，AI 沒注意到截止結算與截止後抽籤也會呼叫它，可能在截止後套用先搶期規則；同樣由 D 讀呼叫端發現，改成只在先搶期執行。
+  - 子代理誠實回報：撤回對截止結算的併發測試抓不到「撤回不加鎖」的錯誤實作，只有撤回對抽籤那組抓得到。
+- 成熟度：L4（組員審查找出 AI 審查漏掉的問題，AI 查證後依人的決定修正，並用「拿掉修正測試會失敗」驗證）
+- 證據：PR #105（D 的審查）；spec-3-7-withdraw-registration.md（Implementation Notes「PR #105 組員審查」）；commit 未記錄（尚未 commit）

@@ -1033,11 +1033,12 @@ def _first_come_locked(
 ) -> None:
     """已鎖定的賽事補做先搶期（FR-15）：仍為 `pending` 的報名依送出時間（同時再依 id）逐筆判定。
 
-    每一筆都以最新狀態重建 candidates：先做代表隊的同校遞補
-    （`_representative_backfill_locked`，Story 3.7：抽籤前退出的代表隊由同校候補遞補，
-    發 `RegistrationBackfilled`），再讓當下有順位的候補依 `backfill_vacancies` 遞補為
-    正取，最後以 `decide_first_come` 判定這一筆；前一筆剛正取的隊伍因此會算進學校資格
-    與名額。`priority_schools` 取自結算紀錄（沒有紀錄時為空集合）。
+    每一筆都以最新狀態重建 candidates：當下為先搶期（`_current_phase`）時先做代表隊的
+    同校遞補（`_representative_backfill_locked`，Story 3.7：抽籤前退出的代表隊由同校候補
+    遞補，發 `RegistrationBackfilled`；報名截止時 `close_registration`、截止後抽籤也會呼叫
+    本函式，那時已是截止後，不套用先搶期的同校遞補），再讓當下有順位的候補依
+    `backfill_vacancies` 遞補為正取，最後以 `decide_first_come` 判定這一筆；前一筆剛正取
+    的隊伍因此會算進學校資格與名額。`priority_schools` 取自結算紀錄（沒有紀錄時為空集合）。
     """
     priority_schools = _priority_schools(session, tournament.id)
     pending = sorted(
@@ -1046,8 +1047,10 @@ def _first_come_locked(
         ).values(),
         key=lambda r: (_candidate(r).submitted_at, r.id),
     )
+    first_come = _current_phase(tournament) == allocation.AllocationPhase.FIRST_COME
     for registration in pending:
-        _representative_backfill_locked(session, tournament)
+        if first_come:
+            _representative_backfill_locked(session, tournament)
         current = _registrations_in(session, tournament.id, _FIRST_COME_STATUSES)
         backfilled = allocation.backfill_vacancies(
             [_candidate(r) for r in current.values()],
@@ -1263,11 +1266,13 @@ def raise_capacity(
 ) -> TournamentRead:
     """主辦方提高名額（FR-9），在同一個鎖與交易內讓候補遞補；回傳改名額後的賽事。
 
-    先鎖住賽事、檢查主辦方（403 `TOURNAMENT_OWNER_REQUIRED`），再由 tournaments
+    先不鎖讀賽事擋掉非主辦方（403 `TOURNAMENT_OWNER_REQUIRED`；不讓無權限者排隊等鎖，
+    與抽籤、送出搶鎖），再鎖住賽事、鎖內再檢查一次，由 tournaments
     `raise_tournament_capacity` 檢查狀態與名額（409 `CAPACITY_NOT_EDITABLE`、422
     `CAPACITY_NOT_INCREASED`）並寫操作紀錄；之後以新名額依 `_backfill_released_locked`
     遞補（操作者為系統）。
     """
+    authz.ensure_tournament_owner(_get_tournament(session, tournament_id), actor_id)
     tournament = _lock_tournament(session, tournament_id)
     authz.ensure_tournament_owner(tournament, actor_id)
     updated = tournaments_service.raise_tournament_capacity(
