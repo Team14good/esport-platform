@@ -207,6 +207,9 @@ import type {
   tournamentsAcceptRefereeInvitationData,
   tournamentsAcceptRefereeInvitationErrors,
   tournamentsAcceptRefereeInvitationResponses,
+  tournamentsCancelMyTournamentData,
+  tournamentsCancelMyTournamentErrors,
+  tournamentsCancelMyTournamentResponses,
   tournamentsCreateGameData,
   tournamentsCreateGameErrors,
   tournamentsCreateGameResponses,
@@ -904,6 +907,29 @@ export class TournamentsService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/organizer/tournaments/{tournament_id}",
+      ...options,
+    })
+  }
+
+  /**
+   * Cancel My Tournament
+   *
+   * 取消自己的賽事，發出 `TournamentCancelled`。
+   *
+   * 不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；已結束或已取消 409
+   * `TOURNAMENT_NOT_CANCELLABLE`。
+   */
+  public static cancelMyTournament<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsCancelMyTournamentData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      tournamentsCancelMyTournamentResponses,
+      tournamentsCancelMyTournamentErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/cancel",
       ...options,
     })
   }

@@ -26,6 +26,8 @@ type ConfirmDialogProps = {
   description: ReactNode
   /** 確認鈕重複動作名（「核准」「退回申請」），不用「確定」 */
   confirmLabel: string
+  /** 關閉鈕的文字；預設「取消」，確認鈕本身含「取消」時改用不會混淆的文字 */
+  cancelLabel?: string
   /** 破壞性動作：確認鈕用 destructive 樣式 */
   destructive?: boolean
   /** 必填理由欄：沒填（去除前後空白後為空）時確認鈕停用 */
@@ -49,6 +51,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = CANCEL_TEXT,
   destructive = false,
   reason,
   onConfirm,
@@ -133,7 +136,7 @@ export function ConfirmDialog({
         )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>
-            {CANCEL_TEXT}
+            {cancelLabel}
           </AlertDialogCancel>
           <LoadingButton
             variant={destructive ? "destructive" : "default"}
