@@ -1,24 +1,33 @@
 """registration 的 HTTP 端點：帳號層級權限、開啟並提交交易（router 才能 commit）。"""
 
 import uuid
-from typing import Annotated
+from collections.abc import Iterator
+from typing import Annotated, BinaryIO
 
-from fastapi import APIRouter, File, Form, UploadFile, status
+from fastapi import APIRouter, File, Form, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 
 from app.core import storage
 from app.core.db import SessionDep
-from app.modules.identity.deps import CurrentAccount, VerifiedAccount
+from app.modules.identity.deps import CurrentAccount, Organizer, VerifiedAccount
 from app.modules.registration import service
 from app.modules.registration.models import (
     CapacityUpdate,
     MyTeamCard,
+    OrganizerRegistration,
+    OrganizerRegistrationPage,
+    RegistrationRejection,
+    RegistrationStatus,
     TeamCreate,
     TeamDetail,
     TeamInvitePreview,
 )
-from app.modules.tournaments.models import TournamentRead
+from app.modules.tournaments.models import MAX_PAGE, TournamentRead
 
 router = APIRouter(tags=["registration"])
+
+_CHUNK_BYTES = 64 * 1024
+_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png"}
 
 
 @router.post("/tournaments/{tournament_id}/teams", status_code=status.HTTP_201_CREATED)
@@ -155,3 +164,99 @@ def raise_capacity(
 def list_my_teams(session: SessionDep, account: CurrentAccount) -> list[MyTeamCard]:
     """S12 我的隊伍：目前帳號加入的每支隊伍與報名狀態。"""
     return service.list_my_teams(session, account_id=account.id)
+
+
+# ---------------------------------------------------------------- 主辦方檢視與退回（Story 3.8）
+
+
+@router.get("/organizer/tournaments/{tournament_id}/registrations")
+def list_organizer_registrations(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    status_filter: Annotated[RegistrationStatus | None, Query(alias="status")] = None,
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
+) -> OrganizerRegistrationPage:
+    """S29 報名清單：送出過的報名，依分配結果分組排序、每頁 20 筆；`status` 省略表示全部。
+
+    不存在 404 `TOURNAMENT_NOT_FOUND`；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`。
+    """
+    return service.list_organizer_registrations(
+        session,
+        tournament_id=tournament_id,
+        actor_id=organizer.id,
+        status=status_filter,
+        page=page,
+    )
+
+
+def _stream(file: BinaryIO) -> Iterator[bytes]:
+    try:
+        while chunk := file.read(_CHUNK_BYTES):
+            yield chunk
+    finally:
+        file.close()
+
+
+@router.get(
+    "/organizer/tournaments/{tournament_id}/registrations/{registration_id}"
+    "/members/{account_id}/rank-screenshot",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"image/png": {}, "image/jpeg": {}}}},
+)
+def download_rank_screenshot(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    registration_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> StreamingResponse:
+    """下載隊員的段位截圖：只有該賽事主辦方（隊長、隊員、上傳者本人都是 403）。
+
+    報名不屬於這個賽事 404 `REGISTRATION_NOT_FOUND`；不是這支隊伍的隊員 404
+    `TEAM_MEMBER_NOT_FOUND`；沒有截圖 404 `FILE_NOT_FOUND`。
+    """
+    file, media_type = service.open_rank_screenshot(
+        session,
+        tournament_id=tournament_id,
+        registration_id=registration_id,
+        account_id=account_id,
+        actor_id=organizer.id,
+    )
+    filename = f"rank-{registration_id}-{account_id}.{_EXTENSIONS[media_type]}"
+    return StreamingResponse(
+        _stream(file),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # 段位截圖只給主辦方：不讓瀏覽器猜測內容型態，也不留在任何快取
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@router.post(
+    "/organizer/tournaments/{tournament_id}/registrations/{registration_id}/rejection"
+)
+def reject_registration(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    registration_id: uuid.UUID,
+    body: RegistrationRejection,
+) -> OrganizerRegistration:
+    """主辦方退回報名（必填原因）：名單解鎖，正取釋出的名額依當下階段由候補遞補。
+
+    報名不是已送出・待分配／正取／候補，或賽事不是開放報名／報名截止時回 409
+    `REGISTRATION_NOT_REJECTABLE`。
+    """
+    registration = service.reject_registration(
+        session,
+        tournament_id=tournament_id,
+        registration_id=registration_id,
+        actor_id=organizer.id,
+        reason=body.reason,
+    )
+    session.commit()
+    return registration

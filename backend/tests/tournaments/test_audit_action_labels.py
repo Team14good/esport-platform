@@ -25,6 +25,7 @@ LABELED_ACTIONS = {
     "registration.submitted",
     "registration.status_changed",
     "registration.priority_window_settled",
+    "registration.rejected",
     "bracket.drawn",
     "bracket.auto_draw_skipped",
     "match.referee_assigned",

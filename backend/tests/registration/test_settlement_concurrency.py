@@ -655,3 +655,174 @@ def test_parallel_withdraw_and_draw(frozen_clock: FrozenClock) -> None:
             assert all(by_team[t] != RegistrationStatus.WITHDRAWN for t in on_bracket)
     finally:
         world.cleanup()
+
+
+# ---------------------------------------------------------------- Story 3.8 退回
+
+REJECT_REASON = "段位截圖與申報段位不符"
+
+
+def _reject_action(
+    world: _WithdrawWorld, team_index: int = 0
+) -> Callable[[Session], object]:
+    """主辦方退回第 `team_index` 隊的報名（報名 id 先查好，race 時只做退回）。"""
+    with Session(engine) as db:
+        registration_id = db.exec(
+            select(Registration.id).where(
+                Registration.team_id == world.team_ids[team_index]
+            )
+        ).one()
+
+    def act(db: Session) -> object:
+        return service.reject_registration(
+            db,
+            tournament_id=world.tournament_id,
+            registration_id=registration_id,
+            actor_id=world.organizer_id,
+            reason=REJECT_REASON,
+        )
+
+    return act
+
+
+class _RejectSubmitWorld(_WithdrawWorld):
+    """已提交的賽事：先搶期、名額 2、A 與 B 正取，C 填完資料尚未送出（三校各一隊）。
+
+    時鐘設在優先期結束後 10 分鐘；清理沿用 `_WithdrawWorld`。
+    """
+
+    def __init__(self, frozen_clock: FrozenClock) -> None:
+        with Session(engine) as setup:
+            self.event_ids_before = set(setup.exec(select(OutboxEvent.id)).all())
+            organizer = make_account(setup, organizer=True, hashed_password="x")
+            game = make_game(setup)
+            _demote_game_creator(setup, game.id)
+            tournament = make_tournament(
+                setup,
+                organizer=organizer,
+                game=game,
+                capacity=2,
+                starters=1,
+                substitutes=0,
+                registration_start=(
+                    frozen_clock.now() - timedelta(hours=1)
+                ).isoformat(),
+                priority_hours=1,
+            )
+            schools = list(setup.exec(select(School).order_by(col(School.id)).limit(3)))
+            setup.add(
+                PriorityWindowSettlement(
+                    tournament_id=tournament.id,
+                    settled_at=tournament.priority_end,
+                    priority_school_ids=[],
+                )
+            )
+            self.team_ids: list[uuid.UUID] = []
+            self.captain_ids: list[uuid.UUID] = []
+            for i, school in enumerate(schools):
+                captain = make_account(setup, school_id=school.id, hashed_password="x")
+                created = service.create_team(
+                    setup,
+                    tournament_id=tournament.id,
+                    account_id=captain.id,
+                    name=f"退回併發-{i}-{uuid.uuid4().hex[:6]}",
+                )
+                _fill(setup, created.id, captain)
+                if i < 2:
+                    registration = setup.exec(
+                        select(Registration).where(Registration.team_id == created.id)
+                    ).one()
+                    registration.status = RegistrationStatus.ACCEPTED
+                    registration.school_id = school.id
+                    registration.avg_rank_score = Decimal(30)
+                    registration.submitted_at = tournament.priority_end + timedelta(
+                        minutes=i + 1
+                    )
+                    setup.add(registration)
+                self.team_ids.append(created.id)
+                self.captain_ids.append(captain.id)
+            setup.commit()
+            self.tournament_id = tournament.id
+            self.organizer_id = organizer.id
+        frozen_clock.set(tournament.priority_end + timedelta(minutes=10))
+
+
+def test_parallel_reject_and_submit_never_exceed_capacity(
+    frozen_clock: FrozenClock,
+) -> None:
+    """Story 3.8：名額 2 已滿，先搶期中主辦方退回正取 A 與 C 送出同時發生。
+
+    先退回：沒有候補可遞補，名額保留，C 送出時正取。先送出：C 依已滿的名額候補，A 被
+    退回後 C 遞補。兩種順序都是 A 退回、B 與 C 正取，不超收、不重複遞補。
+    """
+    world = _RejectSubmitWorld(frozen_clock)
+    try:
+        outcomes = _race(
+            [
+                _reject_action(world),
+                lambda db: service.submit_registration(
+                    db, team_id=world.team_ids[2], account_id=world.captain_ids[2]
+                ),
+            ]
+        )
+
+        assert outcomes == {0: "ok", 1: "ok"}, outcomes
+        with Session(engine) as check:
+            assert world.statuses(check) == [
+                RegistrationStatus.REJECTED,
+                RegistrationStatus.ACCEPTED,
+                RegistrationStatus.ACCEPTED,
+            ]
+            types = [e.type for e in world.new_events(check)]
+            assert types.count("RegistrationRejected") == 1
+            assert types.count("RegistrationAllocated") == 1
+            assert types.count("RegistrationBackfilled") <= 1
+    finally:
+        world.cleanup()
+
+
+def test_parallel_reject_and_draw(frozen_clock: FrozenClock) -> None:
+    """報名截止（`closed`）後主辦方退回正取 A 與抽籤同時執行。
+
+    先退回：C 遞補，抽籤 B、C。先抽籤：A、B 已參賽，退回得到 409
+    `REGISTRATION_NOT_REJECTABLE`。對戰表上沒有 `rejected`，抽籤後沒有遺留 `accepted`。
+    """
+    world = _WithdrawWorld(frozen_clock, TournamentStatus.CLOSED)
+    try:
+        outcomes = _race(
+            [
+                _reject_action(world),
+                lambda db: competition_service.draw(
+                    db,
+                    tournament_id=world.tournament_id,
+                    actor_id=world.organizer_id,
+                    rng=random.Random(1),
+                ),
+            ]
+        )
+
+        assert outcomes[1] == "ok", outcomes
+        assert outcomes[0] in ("ok", "REGISTRATION_NOT_REJECTABLE"), outcomes
+        drawn = RegistrationStatus.DRAWN
+        with Session(engine) as check:
+            statuses = world.statuses(check)
+            if outcomes[0] == "ok":
+                expected = [RegistrationStatus.REJECTED, drawn, drawn]
+            else:
+                expected = [drawn, drawn, RegistrationStatus.WAITLISTED]
+            assert statuses == expected
+            assert RegistrationStatus.ACCEPTED not in statuses
+            matches = check.exec(
+                select(Match).where(Match.tournament_id == world.tournament_id)
+            ).all()
+            on_bracket = {
+                team_id
+                for m in matches
+                for team_id in (m.team_a_id, m.team_b_id)
+                if team_id is not None
+            }
+            by_team = dict(zip(world.team_ids, statuses, strict=True))
+            assert on_bracket == {t for t, s in by_team.items() if s == drawn}
+            assert all(by_team[t] != RegistrationStatus.REJECTED for t in on_bracket)
+    finally:
+        world.cleanup()

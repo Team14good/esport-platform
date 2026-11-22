@@ -140,7 +140,7 @@ type SubmitRegistrationSectionProps = {
   onDeadlinePassed: () => void
 }
 
-/** 組隊中：報名截止倒數、「送出報名」（隊長）或「由隊長送出報名」（隊員），與逐項的停用原因。 */
+/** 組隊中或被退回：報名截止倒數、「送出報名」（隊長）或「由隊長送出報名」（隊員），與逐項的停用原因。 */
 function FormingSubmit({
   team,
   onDeadlinePassed,
@@ -311,7 +311,11 @@ function StatusSection({
   team,
   onDeadlinePassed,
 }: SubmitRegistrationSectionProps) {
-  if (team.registration_status === "forming") {
+  // 被主辦方退回（Story 3.8）後名單解鎖，與組隊中一樣可修正後重新送出
+  if (
+    team.registration_status === "forming" ||
+    team.registration_status === "rejected"
+  ) {
     return <FormingSubmit team={team} onDeadlinePassed={onDeadlinePassed} />
   }
   if (team.registration_status === "pending") {

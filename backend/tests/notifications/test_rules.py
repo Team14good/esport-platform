@@ -36,6 +36,7 @@ from app.modules.notifications import rules
 from app.modules.registration.models import (
     RegistrationAllocated,
     RegistrationBackfilled,
+    RegistrationRejected,
     RegistrationStatus,
 )
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
@@ -276,6 +277,65 @@ def test_registration_backfilled_notifies_all_team_members(
             "報名結果：已遞補為正取",
             f"「隊伍1」在「{w.tournament.name}」已由候補遞補為正取。",
         )
+    }
+
+
+@pytest.mark.parametrize(
+    ("can_resubmit", "next_step"),
+    [
+        (True, "請在報名截止前修正後重新送出。"),
+        (False, "報名已截止，無法重新送出。"),
+    ],
+)
+def test_registration_rejected_notifies_all_team_members(
+    client: TestClient, session: Session, can_resubmit: bool, next_step: str
+) -> None:
+    """Story 3.8：退回通知發給全隊，內文依退回當下能否重送分兩種。"""
+    w = _world(client, session, count=2)
+    team = w.teams[0]
+
+    notifications = _publish(
+        session,
+        RegistrationRejected(
+            registration_id=uuid.uuid4(),
+            team_id=team.id,
+            tournament_id=w.tid,
+            reason="段位截圖與申報段位不符",
+            can_resubmit=can_resubmit,
+        ),
+    )
+
+    assert set(notifications) == team.members
+    assert _links(notifications) == {f"/teams/{team.id}"}
+    assert {(n.title, n.body) for n in notifications.values()} == {
+        (
+            "報名結果：退回",
+            f"「隊伍0」在「{w.tournament.name}」的報名被主辦方退回，"
+            f"原因：段位截圖與申報段位不符。{next_step}",
+        )
+    }
+
+
+def test_registration_rejected_reason_ending_with_period_is_not_doubled(
+    client: TestClient, session: Session
+) -> None:
+    w = _world(client, session, count=1)
+    team = w.teams[0]
+
+    notifications = _publish(
+        session,
+        RegistrationRejected(
+            registration_id=uuid.uuid4(),
+            team_id=team.id,
+            tournament_id=w.tid,
+            reason="段位截圖與申報段位不符。",
+            can_resubmit=True,
+        ),
+    )
+
+    assert {n.body for n in notifications.values()} == {
+        f"「隊伍0」在「{w.tournament.name}」的報名被主辦方退回，"
+        "原因：段位截圖與申報段位不符。請在報名截止前修正後重新送出。"
     }
 
 

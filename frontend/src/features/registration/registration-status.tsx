@@ -44,6 +44,8 @@ type WaitlistReason = NonNullable<WaitlistInfo["waitlist_reason"]>
 type WaitlistPhase = NonNullable<WaitlistInfo["waitlist_phase"]>
 
 export const WAITLIST_UNRANKED_LABEL = "候補・目前不在遞補順序中"
+/** 主辦方退回的原因（Story 3.8）：S17 標頭、S12 卡片、S29 都顯示，重新送出後不再回傳。 */
+export const REJECT_REASON_PREFIX = "退回原因："
 /** 名額釋出後由候補遞補為正取（Story 3.7）；抽籤後改顯示「已參賽」。 */
 export const BACKFILLED_LABEL = "已遞補為正取"
 
@@ -65,6 +67,12 @@ export const WAITLIST_REASON_MESSAGES: Record<WaitlistReason, string> = {
 /** 與後端 `allocation.REPRESENTATIVE_BACKFILL_MESSAGE` 逐字相同。 */
 export const REPRESENTATIVE_BACKFILL_MESSAGE =
   "本校代表隊退出時，由本校平均段位積分次高的隊伍遞補。"
+
+/**
+ * 有順位的同校遞補（Story 3.8，D 在 PR #105 的決定）：本校代表隊已退出、本校目前沒有正取，
+ * 這隊是本校平均段位積分最高的候補，排在一般先搶期順位之前；取代先搶期的規則說明。
+ */
+export const DEPARTED_REPRESENTATIVE_MESSAGE = "本校代表隊已退出，由本校遞補"
 
 /** 當下階段的遞補規則說明（EXPERIENCE.md〈固定介面字串〉，Story 3.4 決定）。 */
 export const WAITLIST_PHASE_RULES: Record<WaitlistPhase, string> = {
@@ -93,7 +101,8 @@ export function registrationStatusLabel(
 
 /**
  * 候補徽章下方的說明（`muted`）：沒有順位時的原因（＋代表隊遞補的補充），
- * 以及當下階段的遞補規則說明。不是候補或沒有候補資訊時不顯示。
+ * 以及當下階段的遞補規則說明；有順位且為同校遞補（`representative_backfill`）時改寫
+ * 「本校代表隊已退出，由本校遞補」。不是候補或沒有候補資訊時不顯示。
  */
 export function WaitlistDetails({
   status,
@@ -113,7 +122,11 @@ export function WaitlistDetails({
       lines.push(REPRESENTATIVE_BACKFILL_MESSAGE)
     }
   }
-  lines.push(WAITLIST_PHASE_RULES[phase])
+  if (waitlist.waitlist_position !== null && waitlist.representative_backfill) {
+    lines.push(DEPARTED_REPRESENTATIVE_MESSAGE)
+  } else {
+    lines.push(WAITLIST_PHASE_RULES[phase])
+  }
   // 用 span：S12 的卡片整張是連結（行內內容），不能放 div、p
   return (
     <span
