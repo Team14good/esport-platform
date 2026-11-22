@@ -993,3 +993,121 @@
 - 問題與修正：1.8 的 `test_worker_marks_review_events_processed_without_sending_email` 斷言期中「審核事件不寄信」，與本 Story 衝突而失敗（全套 2530 個中 1 個失敗）；實作代理判斷是預期中的行為改變，改寫成檢查新行為，而不是刪測試
 - 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
 - 證據：commit 3808723、346478f；`backend/tests/notifications/`、`frontend/tests/unit/notifications.test.tsx`、`frontend/tests/e2e/identity.spec.ts`
+
+### 2026-11-21｜需求／Story spec｜Story 4.7 對戰樹隊伍搜尋與晉級路徑
+
+- Story／範圍：4.7（分支 `story/4-7-bracket-team-search`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 以 bmad-build-auto 讀 epic-4-context、4.6 spec、epics.md Story 4.7 原版驗收條件與 EXPERIENCE.md／DESIGN.md 的隊伍搜尋、示意稿 `key-s3-bracket.html` 寫 spec
+- AI 產出：`spec-4-7-bracket-team-search.md`：I/O 矩陣 10 列、4 條 AC、9 個任務、9 條 Decisions（搜尋列蓋過頂欄而不改共用 `TopBar`、桌機也固定、一次只高亮一隊、虛線待定列的判定、最遠輪次的定義等）
+- 人做了什麼：無人值守執行；Decisions 由 AI 依推薦做法選定，列在 PR「給審查者」等組員提出異議
+- 驗證：spec 通過 READY FOR DEVELOPMENT 自檢；實作後 I/O 矩陣 10 列逐列對照，都有通過的測試
+- 問題與修正：spec 的手動檢查寫搜「Hydra」，但 32 隊假資料裡清大 Hydra 第一輪就落敗，看不到虛線待定列；實作代理截圖時發現，改用中興 Titan，並補進 Decisions
+- 成熟度：L4（AI 依固定流程讀需求來源、產出 spec，再交給實作代理與自動驗證）
+- 證據：commit f734988；`_bmad-output/implementation-artifacts/spec-4-7-bracket-team-search.md`
+
+### 2026-11-21｜程式／程式生成｜Story 4.7 隊伍搜尋、晉級路徑高亮與固定搜尋列
+
+- Story／範圍：4.7（分支 `story/4-7-bracket-team-search`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：bmad-build-auto step-03 交給一個沒有對話脈絡的實作代理，只依 spec 實作；完成後主流程讀 diff、重跑 CI 的全部檢查
+- AI 產出：純前端。新增 `bracket-search.ts`（`searchBracketTeams`、`bracketTeamPath`）、`BracketTeamSearch.tsx`（搜尋框與 `BracketExplorer`）；`BracketTree` 多 3 個選用 prop、欄頭移出橫向捲動容器並同步位移、畫高亮與虛線連接線、換隊時自動橫向捲動；`BracketMatchCard` 命中列與虛線列樣式；`bracket-layout.ts` 匯出單邊連接線產生函式
+- 人做了什麼：無人值守執行；主流程審 diff 時把實作中的兩個決定（`className` 移到最外層、手動檢查改搜 Titan）補進 spec Decisions
+- 驗證：前端 build、typecheck、biome（314 個檔）全過；後端 `scripts/test.sh` 2531 passed、`scripts/lint.sh` 全過；`generate-client.sh` 後 client 無差異；Alembic 單一 head
+- 問題與修正：無（主流程讀 diff 沒有發現要退回的問題；375 px 截圖可見搜尋列兩側頁面內距處仍露出頂欄邊緣，列在 PR 給審查者判斷）
+- 成熟度：L4（spec → 實作代理 → 主流程審 diff 與自動驗證，人只在 PR 決策）
+- 證據：commit 0d10dbc
+
+### 2026-11-21｜測試／測試個案產生｜Story 4.7 搜尋與路徑的單元測試及端對端測試
+
+- Story／範圍：4.7（分支 `story/4-7-bracket-team-search`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：實作代理依 I/O 矩陣寫單元與端對端測試；主流程逐列對照矩陣確認涵蓋，並在 e2e 加上截圖供 PR artifact
+- AI 產出：`bracket-search.test.ts` 18 個、`bracket-team-search.test.tsx` 15 個（含 `bracketScrollLeftForRound`）、`tournament-bracket-page.test.tsx` 新增 2 個（網址不變、未抽籤沒有搜尋框）；e2e `bracket-search.spec.ts` 1 個測試 5 個步驟，desktop 與 mobile-375 各 3 張截圖
+- 人做了什麼：無人值守執行
+- 驗證：前端單元測試 76 個檔、1093 個通過；Playwright `bracket-search.spec.ts`＋`spectator.spec.ts` desktop 與 mobile-375 共 8 個通過（含 4.6 的 S3→S4 流程），375 px 沒有橫向捲軸
+- 問題與修正：無
+- 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
+- 證據：`frontend/tests/unit/bracket-search.test.ts`、`frontend/tests/unit/bracket-team-search.test.tsx`、`frontend/tests/e2e/bracket-search.spec.ts`
+
+### 2026-11-21｜測試／程式審查｜Story 4.7 對戰樹隊伍搜尋：處理審查意見
+
+- Story／範圍：4.7（PR #101）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 讀 D 黃鉅燊在 PR 的 2 個 thread 與核准留言（4 條不擋合併的建議），逐條到程式碼驗證後修正、補測試、回覆
+- AI 產出：改 3 個檔（`BracketTree.tsx` 固定列底色用 box-shadow＋clip-path 延伸滿版、`bracket-search.ts` 比對改 NFKC＋去空白、`BracketTeamSearch.tsx` 報讀目前隊伍）；新增單元測試 5 個（全形／空白比對、空白字元 U+3000、forfeit、double_forfeit、disqualified）、擴充 2 個既有測試的斷言，e2e 加頂端兩側像素比對；spec Decisions 新增 3 條
+- 人做了什麼：D 審查並指出問題；這輪無人值守執行
+- 驗證：前端單元測試 76 個檔、1098 個通過；typecheck、biome、build 通過；Playwright `@story-4.7` desktop 與 mobile-375 共 2 個通過。另外把底色修正暫時拿掉重跑 e2e，兩個專案都在「左側不應露出頂欄」失敗，確認新斷言抓得到原本的問題
+- 問題與修正：審查者抓到 AI 上一輪的 3 個問題：(1) sticky 搜尋列只有 `main` 內容區寬，375 px 往下捲時左右各露出 16 px 頂欄，原 e2e 只用 `elementFromPoint` 檢查畫面正中間一點所以沒抓到；而且 box-shadow 不參與 hit test，新的檢查改成比對截圖像素。審查者建議用負邊距，但負邊距補不了寬螢幕超出 `max-w-content-max` 的部分，改用 box-shadow 延伸。(2) 比對只去前後空白，全形「ｔｉｔａｎ」與「清大Hydra」都找不到。(3) 切換上一隊／下一隊時 `role=status` 不變，報讀軟體不知道跳到哪一隊。另外 AI 補 disqualified 測試時第一次沒指定 `scenario: "finished"`（假資料預設是待開打），測試失敗後修正
+- 成熟度：L4（組員審查找出問題，AI 驗證後修正並以單元測試與 e2e 驗證，並反向確認 e2e 抓得到原問題）
+- 證據：PR #101、commit eca0317、`_bmad-output/implementation-artifacts/spec-4-7-bracket-team-search.md`
+### 2026-11-21｜需求／Story spec｜Story 2.8 主辦方查閱操作紀錄
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 以 bmad-build-auto 讀 epic-2-context、epics.md Story 2.8 原版驗收條件、UX 的 S34 與 Data table 規格，盤點 `core/audit.py`、目前所有寫進操作紀錄的動作代碼與既有分頁 API 格式後寫 spec
+- AI 產出：`spec-2-8-organizer-audit-log.md`：I/O 矩陣 13 列、8 個任務、8 條 Decisions（由新到舊、伺服器端分頁沿用 `OrganizerApplicationPage` 格式、system 操作者由前端顯示「系統自動」、時間到秒、變更內容只列差異欄位、欄位名稱與 id 不翻譯等）
+- 人做了什麼：無人值守執行；Decisions 由 AI 依推薦做法選定，列在 PR「給審查者」等組員提出異議
+- 驗證：spec 通過 READY FOR DEVELOPMENT 自檢；epic context 依 git 規則判斷未過期（`7fc4a57` 之後沒有 commit 動到 planning artifacts），沒有重新產生
+- 問題與修正：spec 的 Code Map 寫 e2e 建立賽事的函式在 `tournament.spec.ts`，實際上在 `support/drill.ts`；實作代理寫 e2e 時發現，已記在 spec Implementation Notes
+- 成熟度：L4（AI 依固定流程讀需求來源、產出 spec，再交給實作代理與自動驗證）
+- 證據：commit 5caac65；`_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`
+
+### 2026-11-21｜程式／程式生成｜Story 2.8 操作紀錄 API 與 S34 頁面
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：bmad-build-auto step-03 交給一個沒有對話脈絡的實作代理，只依 spec 實作；完成後由主流程讀 diff、重跑 CI 檢查並對照 I/O 矩陣
+- AI 產出：tournaments 新增 `AuditLogEntry`、`AuditLogPage`、公開函式 `list_audit_log` 與 `GET /organizer/tournaments/{id}/audit-log`；前端 `audit-log.ts`（30 個動作的繁中對照、台北時間到秒、變更差異計算）、`AuditLogPage.tsx`、路由 `audit-log.tsx`、側欄「操作紀錄」；重新產生 API client；contracts 與 deferred-work 各補項目
+- 人做了什麼：無人值守執行；主流程審 diff 時把實作中的決定（各模組自定 `PAGE_SIZE`、查不到名稱顯示「未知帳號」、動作用詞待組員確認）補進 spec Decisions
+- 驗證：後端 `scripts/lint.sh` 全過；前端 build、typecheck、`biome check`（314 個檔）全過；`generate-client.sh` 後 client 無差異；Alembic 單一 head；沒有新增遷移
+- 問題與修正：主流程看 e2e 截圖時發現側欄「總覽」與「操作紀錄」同時顯示為目前頁面；查到是共用 `BackofficeLayout` 以前綴比對 active 的既有問題，不在本 Story 範圍，記在 spec Implementation Notes 與 PR 說明
+- 成熟度：L4（spec → 實作代理 → 主流程審 diff 與自動驗證，人只在 PR 決策）
+- 證據：commit 05debf2
+
+### 2026-11-21｜測試／測試個案產生｜Story 2.8 操作紀錄 API、S34 畫面與端對端測試
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：實作代理依 I/O 矩陣寫後端整合測試、前端單元測試與 e2e；主流程逐列對照矩陣，確認每列都有執行且通過的測試
+- AI 產出：`test_audit_log.py`（9 個測試函式、參數化後 10 個案例：排序含同一時間、分頁、超出頁碼、422、system 與帳號操作者、不含其他賽事、403 兩種、401、404）；`audit-log.test.tsx` 15 個；`organizer-tournaments.test.tsx` 補側欄斷言；e2e `audit-log.spec.ts`
+- 人做了什麼：無人值守執行
+- 驗證：`test_audit_log.py` 10 passed；後端全套 2540 passed、1 failed（見下）；前端單元測試 75 個檔、1075 個通過；Playwright `audit-log.spec.ts` desktop 與 mobile-375 共 2 個通過，375 px 沒有橫向捲軸
+- 問題與修正：主流程第二次跑全套後端測試時，同時另開 pytest 跑單一檔案，測試資料庫初始化中斷了全套那邊的連線（`AdminShutdown`），`test_teams.py::test_create_team_requires_verified_email` 失敗；判斷是測試方式錯誤而不是程式問題，單獨重跑 `test_teams.py` 125 個全過。之前另一次全套測試的輸出也被截斷，因為 `docker compose --profile e2e run` 重啟了 backend 容器。教訓：全套測試期間不要並行跑其他會碰資料庫或容器的指令
+- 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
+- 證據：commit 05debf2；`backend/tests/tournaments/test_audit_log.py`、`frontend/tests/unit/audit-log.test.tsx`、`frontend/tests/e2e/audit-log.spec.ts`
+
+### 2026-11-21｜測試／程式審查｜Story 2.8 PR #104 審查建議：對照表漏項檢查
+
+- Story／範圍：2.8（PR #104，分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 讀 @OG-Matcha 的核准留言（附「不擋」建議），先確認建議成立再決定做法
+- AI 產出：`backend/tests/tournaments/test_audit_action_labels.py`（3 個測試）：以 AST 掃描 `app/` 下 42 處 `audit.record(...)`，取 `tournament_id` 不是 None 的動作（可解析字串、條件運算式、模組常數），與前端 `AUDIT_ACTION_LABELS` 鍵值的副本雙向比對；`traceability.yaml` 補一列；`audit-log.ts` 註解指向這個測試；spec Decisions 補一條
+- 人做了什麼：審查者 D 對照全部 audit 動作與對照表後，指出「新增動作卻忘了加對照，畫面會直接顯示英文代碼」且目前沒有任何測試會擋；AI 只負責實作防護
+- 驗證：新測試與 `test_traceability.py` 6 passed；故意刪掉 `match.voided` 後測試失敗並指出 `app/modules/competition/service.py:1048`；後端全套 `scripts/test.sh` exit 0（通過數未記錄）；`scripts/lint.sh` 全過；`biome check` 314 個檔無修正
+- 問題與修正：原本實作沒有任何機制保證對照表與後端動作同步，由人工審查發現。AI 評估過讓前端測試直接讀後端原始碼，但兩個容器 build 時只複製各自目錄，不可行，改用後端快照測試；另外驗證時用掛載目錄跑 `sed` 製造失敗案例，修改寫回了本機檔案，AI 發現後還原並重跑格式檢查
+- 成熟度：L4（人工審查提出缺口，AI 實作並以故意製造的失敗驗證測試有效）
+- 證據：commit 4647d4e；`backend/tests/tournaments/test_audit_action_labels.py`
+### 2026-11-21｜測試／程式審查｜Story 1.6 合併後審查建議的後續修正
+
+- Story／範圍：1.6（原 PR #100，後續分支 `story/1-6-followup`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot followup 任務讀 D（OG-Matcha）在 #100 核准時留的 4 項建議與 2 則逐行意見，逐條在 main 的程式碼驗證是否成立，再修正、補測試
+- AI 產出：審查者抓到 4 個問題，4 個都成立：(1) 一則分派失敗的事件會卡住整條 outbox，驗證信也寄不出去 → `dispatch_outbox` 先取驗證信與重設信事件，core 新增 `events.next_unprocessed_matching`；一般事件之間的重試上限記進 deferred-work；(2) `except LookupError` 會把 `KeyError`／`IndexError` 程式錯誤當成查不到而吞掉 → 改用自訂 `registry.RecipientsNotFound`；(3) `MatchForfeited` 的對應測試用的是 notifications 自己的類別 → 改發 competition 的事件類別，並斷言事件名稱相同；(4) S14 手動輸入超出範圍的頁碼顯示空卡片 → 以 replace 導回最後一頁。新增後端測試 4 個（含參數化）、前端 1 個
+- 人做了什麼：D 審查並提出 4 項建議；修法由 AI 依推薦做法選定，寫進 spec Decisions，等組員在新 PR 提出異議
+- 驗證：後端 `scripts/test.sh` exit 0（覆蓋率 97%）、`scripts/lint.sh` 全過；notifications、worker、identity 測試 354 個通過；前端 typecheck、biome 全過，單元測試 74 個檔、1061 個通過
+- 問題與修正：原 Story 的實作代理用 `LookupError` 代表「查不到實體」、讓分派只略過這兩種例外，兩個自動審查都沒抓到它會吞掉 `KeyError`，是 D 人工審查才發現。這次 followup 中，AI 對整個 `tests/` 跑 `ruff format`，連帶改了 5 個不相關的測試檔；看 `git status` 發現後還原，只保留本次修改的檔案
+- 成熟度：L4（人審查提出問題，AI 依固定流程驗證、修正並自動驗證）
+- 證據：commit a88d62a、febee63、855d749、4f16057；PR #100 的審查
+
+### 2026-11-21｜測試／程式審查｜PR #102 核准留言的格式小意見
+
+- Story／範圍：1.6 後續（PR #102，分支 `story/1-6-followup`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot feedback 任務讀 D（OG-Matcha）在 #102 的核准留言，對照 diff 確認 4 項修正已被逐條認可，再驗證附帶的格式意見
+- AI 產出：審查者指出 `notifications/service.py` 的 `except` 區塊註解後多一行空白，查證成立，刪除該空行
+- 人做了什麼：D 審查並核准，提出格式小意見（標明不用改）
+- 驗證：`ruff check`、`ruff format --check` 對該檔通過；只刪空行，未重跑測試
+- 問題與修正：前一輪 followup 的 AI 在改寫 except 註解時留下多餘空行，`ruff format` 不會移除註解後的空行所以沒被自動檢查抓到，是 D 人工審查發現
+- 成熟度：L4（人審查提出問題，AI 驗證並修正）
+- 證據：commit 606ecf5；PR #102 的審查留言

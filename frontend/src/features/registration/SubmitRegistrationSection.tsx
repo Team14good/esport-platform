@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { REGISTRATION_STATUS_LABELS } from "./registration-status"
 import { useSubmitRegistration } from "./useSubmitRegistration"
+import { useWithdrawRegistration } from "./useWithdrawRegistration"
 
 export const SUBMIT_TEXT = "送出報名"
 export const SUBMIT_CONFIRM_DESCRIPTION =
@@ -23,6 +24,9 @@ export const DEADLINE_LABEL = "報名截止"
 export const DEADLINE_PASSED_TEXT = "已截止"
 export const PRIORITY_COUNTDOWN_LABEL = "優先期結束後分配名額"
 export const ALLOCATION_HEADING = "名額分配"
+export const WITHDRAW_TEXT = "退賽"
+export const WITHDRAW_CONFIRM_DESCRIPTION =
+  "退賽後這支隊伍的報名會撤回，無法恢復。若隊伍是正取，名額會由候補遞補。"
 /** 只供畫面停用「送出報名」：倒數歸零到重新取得隊伍之間，先在本地補上這一項 */
 const DEADLINE_PASSED_BLOCKER: SubmitBlocker = {
   code: "REGISTRATION_CLOSED",
@@ -268,8 +272,42 @@ function AcceptedCountdown({ registrationEnd }: { registrationEnd: string }) {
   )
 }
 
-/** S17 的報名區塊：組隊中可送出報名，已送出後顯示分配前的倒數，正取時顯示報名截止倒數。 */
-export function SubmitRegistrationSection({
+/**
+ * 抽籤前的「退賽」（Story 3.7）：只在伺服器回 `withdrawable`（隊長、已送出・待分配／
+ * 正取／候補、抽籤前）時出現；確認後報名撤回，按鈕隨回應消失。抽籤後的退賽由 4.5 處理。
+ */
+function WithdrawRegistration({
+  teamId,
+  open,
+  onOpenChange,
+}: {
+  teamId: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const withdraw = useWithdrawRegistration(teamId)
+  return (
+    <ConfirmDialog
+      title={WITHDRAW_TEXT}
+      description={WITHDRAW_CONFIRM_DESCRIPTION}
+      confirmLabel={WITHDRAW_TEXT}
+      destructive
+      open={open}
+      onOpenChange={onOpenChange}
+      onConfirm={() => withdraw.mutateAsync()}
+      trigger={
+        <Button
+          variant="outline"
+          className="h-10 w-full sm:w-auto sm:self-start"
+        >
+          {WITHDRAW_TEXT}
+        </Button>
+      }
+    />
+  )
+}
+
+function StatusSection({
   team,
   onDeadlinePassed,
 }: SubmitRegistrationSectionProps) {
@@ -283,4 +321,29 @@ export function SubmitRegistrationSection({
     return <AcceptedCountdown registrationEnd={team.registration_end} />
   }
   return null
+}
+
+/**
+ * S17 的報名區塊：組隊中可送出報名，已送出後顯示分配前的倒數，正取時顯示報名截止倒數；
+ * 隊長在抽籤前另有「退賽」。
+ */
+export function SubmitRegistrationSection({
+  team,
+  onDeadlinePassed,
+}: SubmitRegistrationSectionProps) {
+  // 對話框開著時保持掛載：被拒（409）後重新取得的隊伍 `withdrawable` 變 false，
+  // 仍要讓使用者在對話框內看到原因，關閉後按鈕才消失
+  const [withdrawOpen, setWithdrawOpen] = useState(false)
+  return (
+    <>
+      <StatusSection team={team} onDeadlinePassed={onDeadlinePassed} />
+      {(team.withdrawable || withdrawOpen) && (
+        <WithdrawRegistration
+          teamId={team.id}
+          open={withdrawOpen}
+          onOpenChange={setWithdrawOpen}
+        />
+      )}
+    </>
+  )
 }

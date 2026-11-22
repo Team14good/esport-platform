@@ -3,7 +3,7 @@
 新增分輪 BO：以「距決賽的輪數」（決賽＝0、4 強＝1…）儲存；主鍵 (tournament_id, rounds_from_final)。
 
 Revision ID: a7d3e9b2c6f4
-Revises: d1f3a5c7e9b2
+Revises: a7c3e9f1b5d8
 Create Date: 2026-11-21 12:00:00.000000
 
 """
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a7d3e9b2c6f4"
-down_revision = "d1f3a5c7e9b2"
+down_revision = "a7c3e9f1b5d8"
 branch_labels = None
 depends_on = None
 

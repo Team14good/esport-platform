@@ -602,6 +602,8 @@ NO_WAITLIST = {
     "waitlist_reason": None,
     "representative_backfill": None,
     "waitlist_phase": None,
+    "backfilled": False,
+    "withdrawable": False,
 }
 
 

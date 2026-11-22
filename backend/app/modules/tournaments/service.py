@@ -12,8 +12,11 @@ from app.core.errors import BusinessError, FieldError
 from app.modules.identity import service as identity_service
 from app.modules.tournaments import repository
 from app.modules.tournaments.models import (
+    PAGE_SIZE,
     REFEREE_INVITATION_DAYS,
     REFEREE_INVITATION_TOKEN_BYTES,
+    AuditLogEntry,
+    AuditLogPage,
     GameIn,
     GameRead,
     GameTitle,
@@ -574,6 +577,54 @@ def transition_tournament(
     return _read(session, tournament)
 
 
+# 抽籤前（尚未開放、開放報名、報名截止）才能改名額
+_CAPACITY_EDITABLE_STATUSES = frozenset(
+    {TournamentStatus.UPCOMING, TournamentStatus.OPEN, TournamentStatus.CLOSED}
+)
+
+
+def raise_tournament_capacity(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    capacity: int,
+    actor_id: uuid.UUID | None,
+) -> TournamentRead:
+    """提高賽事名額（FR-9），回傳更新後的賽事；寫 `tournament.capacity_changed`。
+
+    呼叫前要先 `lock_tournament`（這裡也會再鎖一次，同一交易內不會等待）。賽事不是尚未
+    開放、開放報名、報名截止時拋 409 `CAPACITY_NOT_EDITABLE`；新名額小於或等於目前名額
+    時拋 422 `CAPACITY_NOT_INCREASED`（`loc=body.capacity`）。不檢查權限、不做遞補：
+    registration 的 `raise_capacity`（Story 3.7）檢查主辦方並在同一個鎖內讓候補遞補。
+    """
+    tournament = repository.get_tournament(session, tournament_id, for_update=True)
+    if tournament is None:
+        raise _tournament_not_found()
+    if TournamentStatus(tournament.status) not in _CAPACITY_EDITABLE_STATUSES:
+        raise BusinessError(
+            "CAPACITY_NOT_EDITABLE", "賽事抽籤後不能修改名額。", status_code=409
+        )
+    current = tournament.capacity
+    if capacity <= current:
+        raise _field_error(
+            "capacity",
+            "CAPACITY_NOT_INCREASED",
+            f"新名額必須大於目前的名額（{current} 隊）。",
+        )
+    repository.set_tournament_capacity(session, tournament, capacity, clock.now())
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=tournament.id,
+        action="tournament.capacity_changed",
+        entity_type="tournament",
+        entity_id=tournament.id,
+        before={"capacity": current},
+        after={"capacity": capacity},
+    )
+    return _read(session, tournament)
+
+
 def ensure_accepting_registrations(tournament: TournamentRead) -> None:
     """賽事開放報名中；否則拋 409 `REGISTRATION_CLOSED`。只看狀態，不碰資料庫。"""
     if tournament.status != TournamentStatus.OPEN:
@@ -876,3 +927,41 @@ def list_referees(session: Session, *, tournament_id: uuid.UUID) -> list[Referee
     return [
         _referee_to_read(referee, names[referee.account_id]) for referee in referees
     ]
+
+
+# ---------------------------------------------------------------- 操作紀錄（Story 2.8）
+
+
+def list_audit_log(
+    session: Session, *, tournament_id: uuid.UUID, page: int
+) -> AuditLogPage:
+    """S34：某賽事的操作紀錄，由新到舊（同時間依寫入順序倒序），每頁 `PAGE_SIZE` 筆。
+
+    只透過 `core.audit.list_for_tournament()` 查詢（AD-9）；它回傳由舊到新，
+    這裡反轉後切片（資料庫層分頁列為延後項目）。權限由 router 先檢查。
+    """
+    logs = audit.list_for_tournament(session, tournament_id)
+    logs.reverse()
+    start = (page - 1) * PAGE_SIZE
+    page_logs = logs[start : start + PAGE_SIZE]
+    names = identity_service.get_display_names(
+        session,
+        account_ids=[log.actor_id for log in page_logs if log.actor_id is not None],
+    )
+    items = [
+        AuditLogEntry(
+            id=log.id,
+            at=log.at,
+            actor_id=log.actor_id,
+            actor_display_name=(
+                names.get(log.actor_id) if log.actor_id is not None else None
+            ),
+            action=log.action,
+            entity_type=log.entity_type,
+            entity_id=log.entity_id,
+            before=log.before,
+            after=log.after,
+        )
+        for log in page_logs
+    ]
+    return AuditLogPage(items=items, total=len(logs), page=page, page_size=PAGE_SIZE)

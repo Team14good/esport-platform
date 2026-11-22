@@ -395,6 +395,80 @@ export type AppealStatus = "open" | "closed"
 export type ApplicationStatus = "pending" | "approved" | "rejected"
 
 /**
+ * AuditLogEntry
+ *
+ * S34 的一筆操作紀錄；變更內容照原始資料，不翻譯欄位名稱與 id。
+ */
+export type AuditLogEntry = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * At
+   */
+  at: string
+  /**
+   * Actor Id
+   */
+  actor_id: string | null
+  /**
+   * Actor Display Name
+   */
+  actor_display_name: string | null
+  /**
+   * Action
+   */
+  action: string
+  /**
+   * Entity Type
+   */
+  entity_type: string
+  /**
+   * Entity Id
+   */
+  entity_id: string
+  /**
+   * Before
+   */
+  before: {
+    [key: string]: unknown
+  } | null
+  /**
+   * After
+   */
+  after: {
+    [key: string]: unknown
+  } | null
+}
+
+/**
+ * AuditLogPage
+ *
+ * 操作紀錄的分頁結果（格式同 `OrganizerApplicationPage`）。
+ *
+ * `page` 超過總頁數時 `items` 為空、`total` 照實。
+ */
+export type AuditLogPage = {
+  /**
+   * Items
+   */
+  items: Array<AuditLogEntry>
+  /**
+   * Total
+   */
+  total: number
+  /**
+   * Page
+   */
+  page: number
+  /**
+   * Page Size
+   */
+  page_size: number
+}
+
+/**
  * Body_competition-upload_result_screenshot
  */
 export type Body_competition_upload_result_screenshot = {
@@ -486,6 +560,18 @@ export type BracketRead = {
    * Matches
    */
   matches: Array<MatchRead>
+}
+
+/**
+ * CapacityUpdate
+ *
+ * 提高名額（Story 3.7，FR-9）；只能比目前的名額大。
+ */
+export type CapacityUpdate = {
+  /**
+   * Capacity
+   */
+  capacity: number
 }
 
 /**
@@ -917,6 +1003,14 @@ export type MyTeamCard = {
    */
   game_name: string
   registration_status: RegistrationStatus
+  /**
+   * Backfilled
+   */
+  backfilled?: boolean
+  /**
+   * Withdrawable
+   */
+  withdrawable?: boolean
 }
 
 /**
@@ -2262,6 +2356,14 @@ export type TeamDetail = {
    * Submitted At
    */
   submitted_at: string | null
+  /**
+   * Backfilled
+   */
+  backfilled?: boolean
+  /**
+   * Withdrawable
+   */
+  withdrawable?: boolean
 }
 
 /**
@@ -3446,6 +3548,43 @@ export type tournamentsListTournamentRefereesResponses = {
 export type tournamentsListTournamentRefereesResponse =
   tournamentsListTournamentRefereesResponses[keyof tournamentsListTournamentRefereesResponses]
 
+export type tournamentsListTournamentAuditLogData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: {
+    /**
+     * Page
+     */
+    page?: number
+  }
+  url: "/api/v1/organizer/tournaments/{tournament_id}/audit-log"
+}
+
+export type tournamentsListTournamentAuditLogErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsListTournamentAuditLogError =
+  tournamentsListTournamentAuditLogErrors[keyof tournamentsListTournamentAuditLogErrors]
+
+export type tournamentsListTournamentAuditLogResponses = {
+  /**
+   * Successful Response
+   */
+  200: AuditLogPage
+}
+
+export type tournamentsListTournamentAuditLogResponse =
+  tournamentsListTournamentAuditLogResponses[keyof tournamentsListTournamentAuditLogResponses]
+
 export type tournamentsPreviewRefereeInvitationData = {
   body?: never
   path: {
@@ -3701,6 +3840,70 @@ export type registrationSubmitRegistrationResponses = {
 
 export type registrationSubmitRegistrationResponse =
   registrationSubmitRegistrationResponses[keyof registrationSubmitRegistrationResponses]
+
+export type registrationWithdrawRegistrationData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/withdrawal"
+}
+
+export type registrationWithdrawRegistrationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationWithdrawRegistrationError =
+  registrationWithdrawRegistrationErrors[keyof registrationWithdrawRegistrationErrors]
+
+export type registrationWithdrawRegistrationResponses = {
+  /**
+   * Successful Response
+   */
+  200: TeamDetail
+}
+
+export type registrationWithdrawRegistrationResponse =
+  registrationWithdrawRegistrationResponses[keyof registrationWithdrawRegistrationResponses]
+
+export type registrationRaiseCapacityData = {
+  body: CapacityUpdate
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/capacity"
+}
+
+export type registrationRaiseCapacityErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationRaiseCapacityError =
+  registrationRaiseCapacityErrors[keyof registrationRaiseCapacityErrors]
+
+export type registrationRaiseCapacityResponses = {
+  /**
+   * Successful Response
+   */
+  200: TournamentRead
+}
+
+export type registrationRaiseCapacityResponse =
+  registrationRaiseCapacityResponses[keyof registrationRaiseCapacityResponses]
 
 export type registrationListMyTeamsData = {
   body?: never

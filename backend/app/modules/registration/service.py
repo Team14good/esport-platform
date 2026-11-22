@@ -1,8 +1,8 @@
 """registration 的業務規則、資源層級權限、狀態轉換、操作紀錄與事件；不得 commit 或 rollback。
 
 賽事只透過 tournaments 的公開函式 `get_tournament`、`lock_tournament`、
-`ensure_accepting_registrations`、`transition_tournament`、`find_due_registration_end_id`
-取得、檢查與改變狀態（contracts/tournaments.md）。
+`ensure_accepting_registrations`、`transition_tournament`、`find_due_registration_end_id`、
+`raise_tournament_capacity` 取得、檢查與改變狀態與名額（contracts/tournaments.md）。
 """
 
 import secrets
@@ -27,6 +27,7 @@ from app.modules.registration.models import (
     PriorityWindowSettlement,
     Registration,
     RegistrationAllocated,
+    RegistrationBackfilled,
     RegistrationRead,
     RegistrationStatus,
     SubmitBlocker,
@@ -177,6 +178,14 @@ def _rank_screenshot_required() -> FieldError:
 def _registration_not_found() -> BusinessError:
     return BusinessError(
         "REGISTRATION_NOT_FOUND", "找不到這支隊伍的報名。", status_code=404
+    )
+
+
+def _registration_not_withdrawable() -> BusinessError:
+    return BusinessError(
+        "REGISTRATION_NOT_WITHDRAWABLE",
+        "這支隊伍的報名目前不能撤回。",
+        status_code=409,
     )
 
 
@@ -441,6 +450,41 @@ def _waitlist_fields(
     )
 
 
+# 抽籤前可撤回的報名狀態與賽事狀態（Story 3.7）；抽籤後的退賽由 4.5 處理
+_WITHDRAWABLE_STATUSES = frozenset(
+    {
+        RegistrationStatus.PENDING,
+        RegistrationStatus.ACCEPTED,
+        RegistrationStatus.WAITLISTED,
+    }
+)
+_WITHDRAWABLE_TOURNAMENT_STATUSES = frozenset(
+    {TournamentStatus.OPEN, TournamentStatus.CLOSED}
+)
+
+
+def _can_withdraw(tournament: TournamentRead, registration: Registration) -> bool:
+    return (
+        registration.status in _WITHDRAWABLE_STATUSES
+        and tournament.status in _WITHDRAWABLE_TOURNAMENT_STATUSES
+    )
+
+
+def _withdrawable(
+    tournament: TournamentRead, registration: Registration, role: MemberRole
+) -> bool:
+    """S17、S12 的「退賽」：檢視者是隊長且報名目前可撤回。"""
+    return role == MemberRole.CAPTAIN and _can_withdraw(tournament, registration)
+
+
+def _backfilled(registration: Registration) -> bool:
+    """名額釋出後遞補為正取：正取且有遞補時間（抽籤後為已參賽，不再顯示）。"""
+    return (
+        registration.status == RegistrationStatus.ACCEPTED
+        and registration.backfilled_at is not None
+    )
+
+
 def _build_detail(
     session: Session, team: Team, tournament: TournamentRead, viewer: TeamMember
 ) -> TeamDetail:
@@ -501,6 +545,8 @@ def _build_detail(
         priority_end=tournament.priority_end,
         registration_end=tournament.registration_end,
         submitted_at=registration.submitted_at,
+        backfilled=_backfilled(registration),
+        withdrawable=_withdrawable(tournament, registration, viewer.role),
         **_waitlist_fields(session, registration, tournament).model_dump(),
     )
 
@@ -827,6 +873,8 @@ def list_my_teams(session: Session, *, account_id: uuid.UUID) -> list[MyTeamCard
                 tournament_name=tournament.name,
                 game_name=tournament.game_name,
                 registration_status=registration.status,
+                backfilled=_backfilled(registration),
+                withdrawable=_withdrawable(tournament, registration, membership.role),
                 **_waitlist_fields(session, registration, tournament).model_dump(),
             )
         )
@@ -870,6 +918,7 @@ def _settle_locked(
     """已鎖定、尚未結算的賽事做優先期結算；不檢查賽事狀態與時間（由呼叫端決定）。
 
     只有 `pending` 且在優先期內（`submitted_at <= priority_end`）送出的報名參加結算。
+    正取的代表隊記為 `is_representative`（Story 3.7 同校遞補用）。
     結果依 `allocation.allocate_priority_window`，逐筆改狀態並發事件，再寫結算紀錄
     （`settled_at` 為當下時間，提前抽籤時可能早於 `priority_end`）與一筆摘要。
     """
@@ -888,6 +937,9 @@ def _settle_locked(
         *((i, RegistrationStatus.ACCEPTED) for i in result.accepted),
         *((i, RegistrationStatus.WAITLISTED) for i in result.waitlisted),
     ]
+    # 結算時正取的都是代表隊（Story 3.7 同校遞補用）；超過名額而候補的代表隊不記
+    for registration_id in result.accepted:
+        registrations[registration_id].is_representative = True
     for registration_id, status in outcomes:
         _allocate(session, registrations[registration_id], status, actor_id)
 
@@ -981,9 +1033,12 @@ def _first_come_locked(
 ) -> None:
     """已鎖定的賽事補做先搶期（FR-15）：仍為 `pending` 的報名依送出時間（同時再依 id）逐筆判定。
 
-    每一筆都以最新狀態重建 candidates：先讓當下有順位的候補依 `backfill_vacancies`
-    遞補為正取，再以 `decide_first_come` 判定這一筆；前一筆剛正取的隊伍因此會算進
-    學校資格與名額。`priority_schools` 取自結算紀錄（沒有紀錄時為空集合）。
+    每一筆都以最新狀態重建 candidates：當下為先搶期（`_current_phase`）時先做代表隊的
+    同校遞補（`_representative_backfill_locked`，Story 3.7：抽籤前退出的代表隊由同校候補
+    遞補，發 `RegistrationBackfilled`；報名截止時 `close_registration`、截止後抽籤也會呼叫
+    本函式，那時已是截止後，不套用先搶期的同校遞補），再讓當下有順位的候補依
+    `backfill_vacancies` 遞補為正取，最後以 `decide_first_come` 判定這一筆；前一筆剛正取
+    的隊伍因此會算進學校資格與名額。`priority_schools` 取自結算紀錄（沒有紀錄時為空集合）。
     """
     priority_schools = _priority_schools(session, tournament.id)
     pending = sorted(
@@ -992,7 +1047,10 @@ def _first_come_locked(
         ).values(),
         key=lambda r: (_candidate(r).submitted_at, r.id),
     )
+    first_come = _current_phase(tournament) == allocation.AllocationPhase.FIRST_COME
     for registration in pending:
+        if first_come:
+            _representative_backfill_locked(session, tournament)
         current = _registrations_in(session, tournament.id, _FIRST_COME_STATUSES)
         backfilled = allocation.backfill_vacancies(
             [_candidate(r) for r in current.values()],
@@ -1011,6 +1069,83 @@ def _first_come_locked(
             capacity=tournament.capacity,
         )
         _allocate(session, registration, status, actor_id)
+
+
+# 代表隊已退出的狀態（3.8 加上 `rejected`）
+_DEPARTED_STATUSES = frozenset(
+    {RegistrationStatus.WITHDRAWN, RegistrationStatus.DISQUALIFIED}
+)
+
+
+def _backfill(session: Session, registration: Registration) -> None:
+    """名額釋出後把候補遞補為正取（Story 3.7）：寫遞補時間、`mark_status`（操作者為
+    系統），發 `RegistrationBackfilled`（不發 `RegistrationAllocated`）。"""
+    registration.backfilled_at = clock.now()
+    mark_status(
+        session,
+        registration=registration,
+        to=RegistrationStatus.ACCEPTED,
+        actor_id=None,
+    )
+    events.publish(
+        session,
+        RegistrationBackfilled(
+            registration_id=registration.id,
+            team_id=registration.team_id,
+            tournament_id=registration.tournament_id,
+        ),
+    )
+
+
+def _representative_backfill_locked(
+    session: Session, tournament: TournamentRead
+) -> None:
+    """已鎖定的賽事做代表隊的同校遞補（FR-17，Story 3.7），規則見
+    `allocation.representative_backfill`。遞補上來的隊伍也記為代表隊。"""
+    registrations = repository.list_registrations(session, tournament.id)
+    departed = {
+        r.school_id
+        for r in registrations
+        if r.is_representative
+        and r.status in _DEPARTED_STATUSES
+        and r.school_id is not None
+    }
+    if not departed:
+        return
+    current = {r.id: r for r in registrations if r.status in _ORDER_STATUSES}
+    for registration_id in allocation.representative_backfill(
+        [_candidate(r) for r in current.values()],
+        departed_schools=departed,
+        capacity=tournament.capacity,
+    ):
+        registration = current[registration_id]
+        registration.is_representative = True
+        _backfill(session, registration)
+
+
+def _backfill_released_locked(session: Session, tournament: TournamentRead) -> None:
+    """已鎖定的賽事在名額釋出後（撤回、提高名額）讓候補遞補（Story 3.7）。
+
+    `tournament` 要是鎖內拿到的值（提高名額時是改名額後的值）。自訂模式、或校園賽還沒有
+    結算紀錄（優先期內）時不遞補。階段依 `_current_phase`（與畫面的候補順位一致）：
+    先搶期先做代表隊的同校遞補，再一律以 `backfill_vacancies` 遞補剩下的空位；截止後以
+    截止後的順位遞補。沒有空位時 `backfill_vacancies` 回空，所以撤回候補也照跑。
+    """
+    if tournament.mode != TournamentMode.CAMPUS:
+        return
+    if repository.get_settlement(session, tournament.id) is None:
+        return
+    phase = _current_phase(tournament)
+    if phase == allocation.AllocationPhase.FIRST_COME:
+        _representative_backfill_locked(session, tournament)
+    current = _registrations_in(session, tournament.id, _ORDER_STATUSES)
+    for registration_id in allocation.backfill_vacancies(
+        [_candidate(r) for r in current.values()],
+        phase=phase,
+        priority_schools=_priority_schools(session, tournament.id),
+        capacity=tournament.capacity,
+    ):
+        _backfill(session, current[registration_id])
 
 
 def _fill_at_deadline_locked(
@@ -1079,6 +1214,73 @@ def close_due_registration(session: Session) -> bool:
         return False
     close_registration(session, tournament_id=tournament_id)
     return True
+
+
+# ---------------------------------------------------------------- 撤回與提高名額（Story 3.7）
+
+
+def withdraw_registration(
+    session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+) -> TeamDetail:
+    """S17 隊長在抽籤前退賽：報名撤回（`withdrawn`），釋出的名額依當下階段由候補遞補。
+
+    先查隊伍、鎖住賽事，再檢查隊員（403 `TEAM_MEMBER_REQUIRED`）與隊長（403
+    `TEAM_CAPTAIN_REQUIRED`）；鎖內重新讀取報名，報名不是已送出・待分配／正取／候補、
+    或賽事不是開放報名／報名截止時拋 409 `REGISTRATION_NOT_WITHDRAWABLE`，不改任何資料
+    （不交給 `mark_status`：`forming` → `withdrawn` 是合法轉換，留給 3.11 解散隊伍）。
+    撤回的操作者為隊長；遞補在同一個鎖與交易內（`_backfill_released_locked`），操作者為系統。
+    """
+    team = repository.get_team(session, team_id)
+    if team is None:
+        raise _team_not_found()
+    tournament = _lock_tournament(session, team.tournament_id)
+    members = repository.list_members(session, team.id)
+    viewer = next((m for m in members if m.account_id == account_id), None)
+    if viewer is None:
+        raise _team_member_required()
+    authz.ensure_captain(
+        _team_read(team, members), account_id, message="只有隊長可以退賽"
+    )
+    registration = _registration_of(session, team)
+    # 鎖住賽事後以資料庫最新值判斷（等鎖期間可能已被分配、抽籤或撤回）
+    session.refresh(registration)
+    if not _can_withdraw(tournament, registration):
+        raise _registration_not_withdrawable()
+    mark_status(
+        session,
+        registration=registration,
+        to=RegistrationStatus.WITHDRAWN,
+        actor_id=account_id,
+    )
+    _backfill_released_locked(session, tournament)
+    session.flush()
+    return _build_detail(session, team, tournament, viewer)
+
+
+def raise_capacity(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    capacity: int,
+    actor_id: uuid.UUID,
+) -> TournamentRead:
+    """主辦方提高名額（FR-9），在同一個鎖與交易內讓候補遞補；回傳改名額後的賽事。
+
+    先不鎖讀賽事擋掉非主辦方（403 `TOURNAMENT_OWNER_REQUIRED`；不讓無權限者排隊等鎖，
+    與抽籤、送出搶鎖），再鎖住賽事、鎖內再檢查一次，由 tournaments
+    `raise_tournament_capacity` 檢查狀態與名額（409 `CAPACITY_NOT_EDITABLE`、422
+    `CAPACITY_NOT_INCREASED`）並寫操作紀錄；之後以新名額依 `_backfill_released_locked`
+    遞補（操作者為系統）。
+    """
+    authz.ensure_tournament_owner(_get_tournament(session, tournament_id), actor_id)
+    tournament = _lock_tournament(session, tournament_id)
+    authz.ensure_tournament_owner(tournament, actor_id)
+    updated = tournaments_service.raise_tournament_capacity(
+        session, tournament_id=tournament.id, capacity=capacity, actor_id=actor_id
+    )
+    _backfill_released_locked(session, updated)
+    session.flush()
+    return updated
 
 
 # ---------------------------------------------------------------- 公開函式（給其他模組）
@@ -1211,7 +1413,8 @@ def disqualify_registration(
     先鎖住賽事（AD-6）。報名不存在拋 404 `REGISTRATION_NOT_FOUND`；已是取消資格拋
     409 `TEAM_ALREADY_DISQUALIFIED`；其他不能轉為取消資格的狀態（組隊中、退回、撤回、
     退賽）由 `mark_status` 拋 409 `REGISTRATION_INVALID_TRANSITION`。拒絕時不改任何資料。
-    不做遞補（期中版）：抽籤前空出的名額交給之後的分配（3.4 `backfill_vacancies`）。
+    本身不做遞補：抽籤前空出的名額交給之後的分配（先搶期送出時 `_first_come_locked`
+    先做代表隊的同校遞補、再 `backfill_vacancies`；截止補位）。
     操作紀錄 `registration.status_changed` 的操作者為 `actor_id`；不發事件。
     """
     registration = repository.get_registration_by_team(session, team_id)
