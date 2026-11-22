@@ -91,6 +91,11 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
   - `GET /referee-invites/{token}`（不需登入）：`PublicRefereeInvitation`；不存在 404 `REFEREE_INVITATION_NOT_FOUND`，過期仍回 200（`expired: true`）。
   - `POST /referee-invites/{token}/accept`（已驗證 Email）：200 回 `RefereeRead`；已是裁判回原本的資料（冪等）。不存在 404、過期或已作廢 409 `REFEREE_INVITATION_EXPIRED`、賽事已結束或已取消 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`、主辦方本人 409 `ORGANIZER_CANNOT_BE_REFEREE`、未登入 401、未驗證 403 `EMAIL_NOT_VERIFIED`。
   - 不檢查受邀者是否為參賽隊員，由 4.4 指派裁判時檢查。
+- 操作紀錄 API（2.8）：`GET /organizer/tournaments/{tournament_id}/audit-log?page=`（主辦方，唯讀）：`AuditLogPage`（`items: list[AuditLogEntry]`、`total`、`page`、`page_size`，每頁 20 筆）。
+  - `AuditLogEntry`：`id`、`at`、`actor_id`、`actor_display_name`、`action`、`entity_type`、`entity_id`、`before`、`after`；`actor_id` 為 null 代表系統（worker），此時 `actor_display_name` 也是 null（「系統自動」由前端顯示）。
+  - 由新到舊（同時間依寫入順序倒序）；`page` 超過總頁數時 `items` 為空、`total` 照實；`page` 小於 1 或大於 100000 回 422。
+  - 只經 `core.audit.list_for_tournament()` 查詢，service 反轉後切片（資料庫層分頁列為延後項目）；不含其他賽事與帳號類紀錄。
+  - 不存在 404 `TOURNAMENT_NOT_FOUND`、別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`、不是主辦方 403 `ORGANIZER_REQUIRED`、未登入 401。
 - 公開 API（2.4，不需登入）：`GET /tournaments` 回傳所有賽事的 `list[PublicTournament]`，依開賽時間排序；`GET /tournaments/{tournament_id}` 回傳 `PublicTournament`，不存在 404 `TOURNAMENT_NOT_FOUND`，id 格式錯誤 422。
 
 ## 二、公開函式
@@ -109,13 +114,14 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `is_referee(session, *, tournament_id, account_id) -> bool` | D（4.4） | 已接受該賽事的裁判邀請；只在該賽事有效（經 `core.authz.is_tournament_referee` 判斷） | 2.7 |
 | `list_referees(session, *, tournament_id) -> list[RefereeRead]` | D（4.4 的 S30 選單） | 依接受邀請的時間排序 | 2.7 |
 | `has_referee_role(session, *, account_id) -> bool` | 組裝層（`app/api/main.py`）註冊給 identity 的 `register_referee_lookup`（4.4 S13） | 帳號是不是任一賽事的裁判（有 `TournamentReferee` 列即是，不看賽事狀態）；身分切換器的「裁判」用 | 4.4 |
+| `list_audit_log(session, *, tournament_id, page) -> AuditLogPage` | tournaments 的主辦方路由（2.8 S34） | 由新到舊分頁的操作紀錄（含操作者顯示名稱）；不檢查權限，呼叫前先 `ensure_tournament_owner` | 2.8 |
 | `ensure_accepting_referees(tournament: TournamentRead) -> None` | tournaments 的裁判邀請（2.7）；其他模組需要時可呼叫 | 狀態為 `finished`、`cancelled` 時拋 `TOURNAMENT_NOT_ACCEPTING_REFEREES` 409；不碰資料庫 | 2.7 |
 | `find_due_registration_end_id(session) -> UUID \| None` | C（3.6 報名截止 worker 工作） | 一筆狀態為 `open`、`registration_end <= clock.now()` 的賽事 id，依報名截止時間、再依 id，最早到期的優先；不加鎖，呼叫端鎖住後要重新檢查。沒有任何報名的賽事也找得到（C 在 3.6 新增） | 3.6 |
 | `list_closed_tournament_ids(session) -> list[UUID]` | D（4.2 自動抽籤 worker 工作） | 狀態為 `closed`、`start_at > clock.now()` 的賽事 id，依報名截止時間、再依 id；不加鎖，呼叫端鎖住後要重新檢查（D 在 4.2 新增） | 4.2 |
 
 三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
 
-期中不提供（擱置的 Story）：`update_tournament`、`cancel_tournament`（2.5、2.6）、`reset_invite_link`（3.10）、`list_audit_logs`（2.8）。registration 的「提高名額」（FR-9）同樣到期末。
+期中不提供（擱置的 Story）：`update_tournament`、`cancel_tournament`（2.5、2.6）、`reset_invite_link`（3.10）。registration 的「提高名額」（FR-9）同樣到期末。
 
 ## 三、狀態轉換
 

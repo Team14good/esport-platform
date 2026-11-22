@@ -1041,6 +1041,53 @@
 - 問題與修正：審查者抓到 AI 上一輪的 3 個問題：(1) sticky 搜尋列只有 `main` 內容區寬，375 px 往下捲時左右各露出 16 px 頂欄，原 e2e 只用 `elementFromPoint` 檢查畫面正中間一點所以沒抓到；而且 box-shadow 不參與 hit test，新的檢查改成比對截圖像素。審查者建議用負邊距，但負邊距補不了寬螢幕超出 `max-w-content-max` 的部分，改用 box-shadow 延伸。(2) 比對只去前後空白，全形「ｔｉｔａｎ」與「清大Hydra」都找不到。(3) 切換上一隊／下一隊時 `role=status` 不變，報讀軟體不知道跳到哪一隊。另外 AI 補 disqualified 測試時第一次沒指定 `scenario: "finished"`（假資料預設是待開打），測試失敗後修正
 - 成熟度：L4（組員審查找出問題，AI 驗證後修正並以單元測試與 e2e 驗證，並反向確認 e2e 抓得到原問題）
 - 證據：PR #101、commit eca0317、`_bmad-output/implementation-artifacts/spec-4-7-bracket-team-search.md`
+### 2026-11-21｜需求／Story spec｜Story 2.8 主辦方查閱操作紀錄
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 以 bmad-build-auto 讀 epic-2-context、epics.md Story 2.8 原版驗收條件、UX 的 S34 與 Data table 規格，盤點 `core/audit.py`、目前所有寫進操作紀錄的動作代碼與既有分頁 API 格式後寫 spec
+- AI 產出：`spec-2-8-organizer-audit-log.md`：I/O 矩陣 13 列、8 個任務、8 條 Decisions（由新到舊、伺服器端分頁沿用 `OrganizerApplicationPage` 格式、system 操作者由前端顯示「系統自動」、時間到秒、變更內容只列差異欄位、欄位名稱與 id 不翻譯等）
+- 人做了什麼：無人值守執行；Decisions 由 AI 依推薦做法選定，列在 PR「給審查者」等組員提出異議
+- 驗證：spec 通過 READY FOR DEVELOPMENT 自檢；epic context 依 git 規則判斷未過期（`7fc4a57` 之後沒有 commit 動到 planning artifacts），沒有重新產生
+- 問題與修正：spec 的 Code Map 寫 e2e 建立賽事的函式在 `tournament.spec.ts`，實際上在 `support/drill.ts`；實作代理寫 e2e 時發現，已記在 spec Implementation Notes
+- 成熟度：L4（AI 依固定流程讀需求來源、產出 spec，再交給實作代理與自動驗證）
+- 證據：commit 5caac65；`_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`
+
+### 2026-11-21｜程式／程式生成｜Story 2.8 操作紀錄 API 與 S34 頁面
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：bmad-build-auto step-03 交給一個沒有對話脈絡的實作代理，只依 spec 實作；完成後由主流程讀 diff、重跑 CI 檢查並對照 I/O 矩陣
+- AI 產出：tournaments 新增 `AuditLogEntry`、`AuditLogPage`、公開函式 `list_audit_log` 與 `GET /organizer/tournaments/{id}/audit-log`；前端 `audit-log.ts`（30 個動作的繁中對照、台北時間到秒、變更差異計算）、`AuditLogPage.tsx`、路由 `audit-log.tsx`、側欄「操作紀錄」；重新產生 API client；contracts 與 deferred-work 各補項目
+- 人做了什麼：無人值守執行；主流程審 diff 時把實作中的決定（各模組自定 `PAGE_SIZE`、查不到名稱顯示「未知帳號」、動作用詞待組員確認）補進 spec Decisions
+- 驗證：後端 `scripts/lint.sh` 全過；前端 build、typecheck、`biome check`（314 個檔）全過；`generate-client.sh` 後 client 無差異；Alembic 單一 head；沒有新增遷移
+- 問題與修正：主流程看 e2e 截圖時發現側欄「總覽」與「操作紀錄」同時顯示為目前頁面；查到是共用 `BackofficeLayout` 以前綴比對 active 的既有問題，不在本 Story 範圍，記在 spec Implementation Notes 與 PR 說明
+- 成熟度：L4（spec → 實作代理 → 主流程審 diff 與自動驗證，人只在 PR 決策）
+- 證據：commit 05debf2
+
+### 2026-11-21｜測試／測試個案產生｜Story 2.8 操作紀錄 API、S34 畫面與端對端測試
+
+- Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：實作代理依 I/O 矩陣寫後端整合測試、前端單元測試與 e2e；主流程逐列對照矩陣，確認每列都有執行且通過的測試
+- AI 產出：`test_audit_log.py`（9 個測試函式、參數化後 10 個案例：排序含同一時間、分頁、超出頁碼、422、system 與帳號操作者、不含其他賽事、403 兩種、401、404）；`audit-log.test.tsx` 15 個；`organizer-tournaments.test.tsx` 補側欄斷言；e2e `audit-log.spec.ts`
+- 人做了什麼：無人值守執行
+- 驗證：`test_audit_log.py` 10 passed；後端全套 2540 passed、1 failed（見下）；前端單元測試 75 個檔、1075 個通過；Playwright `audit-log.spec.ts` desktop 與 mobile-375 共 2 個通過，375 px 沒有橫向捲軸
+- 問題與修正：主流程第二次跑全套後端測試時，同時另開 pytest 跑單一檔案，測試資料庫初始化中斷了全套那邊的連線（`AdminShutdown`），`test_teams.py::test_create_team_requires_verified_email` 失敗；判斷是測試方式錯誤而不是程式問題，單獨重跑 `test_teams.py` 125 個全過。之前另一次全套測試的輸出也被截斷，因為 `docker compose --profile e2e run` 重啟了 backend 容器。教訓：全套測試期間不要並行跑其他會碰資料庫或容器的指令
+- 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
+- 證據：commit 05debf2；`backend/tests/tournaments/test_audit_log.py`、`frontend/tests/unit/audit-log.test.tsx`、`frontend/tests/e2e/audit-log.spec.ts`
+
+### 2026-11-21｜測試／程式審查｜Story 2.8 PR #104 審查建議：對照表漏項檢查
+
+- Story／範圍：2.8（PR #104，分支 `story/2-8-organizer-audit-log`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 讀 @OG-Matcha 的核准留言（附「不擋」建議），先確認建議成立再決定做法
+- AI 產出：`backend/tests/tournaments/test_audit_action_labels.py`（3 個測試）：以 AST 掃描 `app/` 下 42 處 `audit.record(...)`，取 `tournament_id` 不是 None 的動作（可解析字串、條件運算式、模組常數），與前端 `AUDIT_ACTION_LABELS` 鍵值的副本雙向比對；`traceability.yaml` 補一列；`audit-log.ts` 註解指向這個測試；spec Decisions 補一條
+- 人做了什麼：審查者 D 對照全部 audit 動作與對照表後，指出「新增動作卻忘了加對照，畫面會直接顯示英文代碼」且目前沒有任何測試會擋；AI 只負責實作防護
+- 驗證：新測試與 `test_traceability.py` 6 passed；故意刪掉 `match.voided` 後測試失敗並指出 `app/modules/competition/service.py:1048`；後端全套 `scripts/test.sh` exit 0（通過數未記錄）；`scripts/lint.sh` 全過；`biome check` 314 個檔無修正
+- 問題與修正：原本實作沒有任何機制保證對照表與後端動作同步，由人工審查發現。AI 評估過讓前端測試直接讀後端原始碼，但兩個容器 build 時只複製各自目錄，不可行，改用後端快照測試；另外驗證時用掛載目錄跑 `sed` 製造失敗案例，修改寫回了本機檔案，AI 發現後還原並重跑格式檢查
+- 成熟度：L4（人工審查提出缺口，AI 實作並以故意製造的失敗驗證測試有效）
+- 證據：commit 4647d4e；`backend/tests/tournaments/test_audit_action_labels.py`
 ### 2026-11-21｜測試／程式審查｜Story 1.6 合併後審查建議的後續修正
 
 - Story／範圍：1.6（原 PR #100，後續分支 `story/1-6-followup`）
