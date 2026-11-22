@@ -51,6 +51,7 @@ from app.modules.registration import service as registration_service
 from app.modules.registration.models import (
     RegistrationAllocated,
     RegistrationBackfilled,
+    RegistrationRejected,
     RegistrationStatus,
 )
 from app.modules.tournaments import service as tournaments_service
@@ -420,3 +421,36 @@ def _registration_backfilled(
 
 
 register(RegistrationBackfilled, _registration_backfilled)
+
+
+# ---------------------------------------------------------------- 退回（3.8）
+
+_SENTENCE_END = "。．.！？!?"
+
+
+def _registration_rejected(
+    session: Session, event: RegistrationRejected
+) -> list[NotificationDraft]:
+    team = registration_service.get_team(session, team_id=event.team_id)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=event.tournament_id
+    )
+    # 原因以句末標點結尾時不再重複「。」；只有標點時沿用原字串（PR #107 審查）
+    reason = event.reason.rstrip(_SENTENCE_END) or event.reason
+    next_step = (
+        "請在報名截止前修正後重新送出。"
+        if event.can_resubmit
+        else "報名已截止，無法重新送出。"
+    )
+    return _drafts(
+        _member_ids(session, team.id),
+        title="報名結果：退回",
+        body=(
+            f"「{team.name}」在「{tournament.name}」的報名被主辦方退回，"
+            f"原因：{reason}。{next_step}"
+        ),
+        link=f"/teams/{team.id}",
+    )
+
+
+register(RegistrationRejected, _registration_rejected)
