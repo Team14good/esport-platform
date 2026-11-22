@@ -177,6 +177,9 @@ import type {
   registrationPreviewTeamInviteData,
   registrationPreviewTeamInviteErrors,
   registrationPreviewTeamInviteResponses,
+  registrationRaiseCapacityData,
+  registrationRaiseCapacityErrors,
+  registrationRaiseCapacityResponses,
   registrationReadTeamData,
   registrationReadTeamErrors,
   registrationReadTeamResponses,
@@ -186,6 +189,9 @@ import type {
   registrationUpdateMyPlayerProfileData,
   registrationUpdateMyPlayerProfileErrors,
   registrationUpdateMyPlayerProfileResponses,
+  registrationWithdrawRegistrationData,
+  registrationWithdrawRegistrationErrors,
+  registrationWithdrawRegistrationResponses,
   tournamentsAcceptRefereeInvitationData,
   tournamentsAcceptRefereeInvitationErrors,
   tournamentsAcceptRefereeInvitationResponses,
@@ -1174,6 +1180,56 @@ export class RegistrationService {
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/teams/{team_id}/submission",
       ...options,
+    })
+  }
+
+  /**
+   * Withdraw Registration
+   *
+   * S17 隊長在抽籤前退賽：報名撤回，正取釋出的名額依當下階段由候補遞補。
+   *
+   * 報名不是已送出・待分配／正取／候補，或賽事不是開放報名／報名截止時回 409
+   * `REGISTRATION_NOT_WITHDRAWABLE`。
+   */
+  public static withdrawRegistration<ThrowOnError extends boolean = true>(
+    options: Options<registrationWithdrawRegistrationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationWithdrawRegistrationResponses,
+      registrationWithdrawRegistrationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/withdrawal",
+      ...options,
+    })
+  }
+
+  /**
+   * Raise Capacity
+   *
+   * 主辦方提高名額（抽籤前），候補依當下階段遞補。
+   *
+   * 只有該賽事的主辦方可以呼叫（403 `TOURNAMENT_OWNER_REQUIRED`）；新名額不大於目前
+   * 名額時回 422 `CAPACITY_NOT_INCREASED`；抽籤後回 409 `CAPACITY_NOT_EDITABLE`。
+   */
+  public static raiseCapacity<ThrowOnError extends boolean = true>(
+    options: Options<registrationRaiseCapacityData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationRaiseCapacityResponses,
+      registrationRaiseCapacityErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/tournaments/{tournament_id}/capacity",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 

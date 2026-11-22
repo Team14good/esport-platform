@@ -16,6 +16,7 @@ LABELED_ACTIONS = {
     "tournament.created",
     "tournament.status_changed",
     "tournament.podium",
+    "tournament.capacity_changed",
     "referee_invitation.created",
     "referee.accepted",
     "team.created",

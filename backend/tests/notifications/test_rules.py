@@ -33,7 +33,11 @@ from app.modules.notifications import service
 from app.modules.notifications.models import Notification
 from app.modules.competition.forfeit_job import MatchForfeited
 from app.modules.notifications import rules
-from app.modules.registration.models import RegistrationAllocated, RegistrationStatus
+from app.modules.registration.models import (
+    RegistrationAllocated,
+    RegistrationBackfilled,
+    RegistrationStatus,
+)
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
 from tests.disputes.test_reports import _set_registration
 from tests.registration.test_teams import (
@@ -250,6 +254,29 @@ def test_registration_allocated_notifies_all_team_members(
     assert set(notifications) == team.members
     assert _links(notifications) == {f"/teams/{team.id}"}
     assert {n.title for n in notifications.values()} == {"報名結果：候補"}
+
+
+def test_registration_backfilled_notifies_all_team_members(
+    client: TestClient, session: Session
+) -> None:
+    w = _world(client, session, count=2)
+    team = w.teams[1]
+
+    notifications = _publish(
+        session,
+        RegistrationBackfilled(
+            registration_id=uuid.uuid4(), team_id=team.id, tournament_id=w.tid
+        ),
+    )
+
+    assert set(notifications) == team.members
+    assert _links(notifications) == {f"/teams/{team.id}"}
+    assert {(n.title, n.body) for n in notifications.values()} == {
+        (
+            "報名結果：已遞補為正取",
+            f"「隊伍1」在「{w.tournament.name}」已由候補遞補為正取。",
+        )
+    }
 
 
 def test_bracket_drawn_notifies_members_of_every_team_on_the_bracket(

@@ -58,9 +58,6 @@
   summary: 4.3 第二階段的改時間 service 呼叫 `reschedule_window`／`check_reschedule` 時，準決賽的 `next_match_at` 要傳決賽與季軍賽中較早的那一場。
   evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
-  summary: `allocation.py` 沒有「優先期代表隊退出時，由同校平均段位積分次高的隊伍遞補」的對象函式（FR-17）。
-  evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Blind Hunter）。只在代表隊撤回或被退回時觸發（3.7、3.8 期中擱置），期中不會發生；做 3.7 或 3.8 時在本模組新增，並讓先搶期名額釋出時的遞補先處理這個情況（medium）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
   evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
@@ -115,9 +112,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
   summary: （低）示範賽事的時間在第一次建立時固定（開賽＝當時＋7 天）；保留資料庫、超過 7 天後再次啟動時，tournaments 步驟依「主辦方＋名稱」沿用這場已過開賽時間的賽事，competition 步驟的抽籤會因 `TOURNAMENT_START_PASSED` 一直略過。
   evidence: 2026-11-04 Story 7.1 tournaments 步驟第一輪審查（Blind Hunter、Edge Case Hunter）。凍結區塊規定已存在就沿用、不覆寫；Demo 前用 `docker compose down -v` 清掉資料庫即可。要自動處理時，需由人決定：過期就另建一場（會有兩場同名賽事）或改寫既有賽事的時間（違反「不覆寫」）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
-  summary: （中）先搶期釋出的是優先期代表隊（期中由 6.5 抽籤前取消資格觸發）時，`backfill_vacancies` 依先搶期順位把名額給別校，沒有依 FR-17「由同校平均段位積分次高的隊伍遞補」。
-  evidence: 2026-11-04 PR #28 審查修正的 Code Review（Blind Hunter）。3.4 第一階段的 deferred 項目寫「代表隊退出只在撤回、退回時觸發，期中不會發生」，但期中 6.5 可在先搶期取消優先期代表隊的資格，之後分配時就會走到這條路；同校候補的 `representative_backfill` 也會因代表隊不再是正取而變成 False。修正需在本模組新增同校遞補規則（需確認 `priority_schools` 中哪一隊是代表隊），並讓 `backfill_vacancies` 先處理。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-s30-matches-page.md`
   summary: 主辦方賽事後台側欄在子頁（例如 S30 `/organizer/tournaments/{id}/matches`）時，「總覽」（`/organizer/tournaments/{id}`）也顯示為目前位置：`BackofficeLayout` 的 `Link` 沒設 `activeOptions`，以前綴比對；「我的賽事」（`/organizer`）在所有賽事頁也同樣亮起。
   evidence: 2026-11-04 S30 實作時發現；B 的 S31 裁判頁也會遇到。修法需要改 B 的 `components/layout/BackofficeLayout.tsx`（例如 `BackofficeNavItem` 加選填的 `exact`，傳給 `activeOptions`），S30 spec 禁止改 B 的元件，交給 B 決定。
@@ -201,6 +195,11 @@
   summary: （低）FR-37「裁判指派因晉級衝突被取消時另通知主辦方」沒有做：`RefereeUnassigned` 沒有區分「晉級衝突自動收回」與「主辦方收回、改派」，notifications 無從判斷，目前只通知被取消的裁判。
   evidence: Story 1.6 Decisions。修法：competition 在 `RefereeUnassigned` 加一個原因欄位（例如 `reason: "conflict" | "organizer"`，5.5 `unassign_referee_if_member` 發 `conflict`），notifications 的 `_referee_unassigned` 在 `conflict` 時另加主辦方一份草稿（link `/organizer/tournaments/{tid}/matches`）。
 
+## Deferred from: spec-3-7-withdraw-registration.md (2026-11-22)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-withdraw-registration.md`
+  summary: （中）優先期代表隊被取消資格（6.5，不立即遞補）後，同校候補在 S17／S12 仍顯示「候補・目前不在遞補順序中」（`SCHOOL_NOT_ELIGIBLE`、`representative_backfill=false`），但下一次先搶期送出時 `_first_come_locked` 會先由它同校遞補，畫面順位與實際遞補順序不一致（FR-17「候補順位＝接下來第幾個被遞補」）。
+  evidence: 2026-11-22 Story 3.7 程式審查（Blind Hunter、Edge Case Hunter）。`allocation.waitlist_order`／`_first_come_order` 不知道哪些學校的代表隊已退出；撤回時同一交易內就遞補，所以只有取消資格（以及 3.8 退回）這種不立即遞補的路徑會看到。修正需讓 `waitlist_order` 接收已退出代表隊的學校（改 `allocation.py` 既有函式語意，3.7 spec 的 Never 禁止），或讓取消資格也立即遞補。原 deferred（spec-3-4-allocation-backfill）的 evidence 提過這個顯示問題，3.7 刪除該項時改記於此。
 ## Deferred from: spec-2-8-organizer-audit-log.md (2026-11-21)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`

@@ -10,12 +10,14 @@ from app.core.db import SessionDep
 from app.modules.identity.deps import CurrentAccount, VerifiedAccount
 from app.modules.registration import service
 from app.modules.registration.models import (
+    CapacityUpdate,
     MyTeamCard,
     PublicAcceptedTeams,
     TeamCreate,
     TeamDetail,
     TeamInvitePreview,
 )
+from app.modules.tournaments.models import TournamentRead
 
 router = APIRouter(tags=["registration"])
 
@@ -121,6 +123,44 @@ def submit_registration(
     team = service.submit_registration(session, team_id=team_id, account_id=account.id)
     session.commit()
     return team
+
+
+@router.post("/teams/{team_id}/withdrawal")
+def withdraw_registration(
+    session: SessionDep, account: VerifiedAccount, team_id: uuid.UUID
+) -> TeamDetail:
+    """S17 隊長在抽籤前退賽：報名撤回，正取釋出的名額依當下階段由候補遞補。
+
+    報名不是已送出・待分配／正取／候補，或賽事不是開放報名／報名截止時回 409
+    `REGISTRATION_NOT_WITHDRAWABLE`。
+    """
+    team = service.withdraw_registration(
+        session, team_id=team_id, account_id=account.id
+    )
+    session.commit()
+    return team
+
+
+@router.post("/tournaments/{tournament_id}/capacity")
+def raise_capacity(
+    session: SessionDep,
+    account: VerifiedAccount,
+    tournament_id: uuid.UUID,
+    body: CapacityUpdate,
+) -> TournamentRead:
+    """主辦方提高名額（抽籤前），候補依當下階段遞補。
+
+    只有該賽事的主辦方可以呼叫（403 `TOURNAMENT_OWNER_REQUIRED`）；新名額不大於目前
+    名額時回 422 `CAPACITY_NOT_INCREASED`；抽籤後回 409 `CAPACITY_NOT_EDITABLE`。
+    """
+    tournament = service.raise_capacity(
+        session,
+        tournament_id=tournament_id,
+        capacity=body.capacity,
+        actor_id=account.id,
+    )
+    session.commit()
+    return tournament
 
 
 @router.get("/accounts/me/teams")

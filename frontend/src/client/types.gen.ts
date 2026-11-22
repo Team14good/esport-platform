@@ -563,6 +563,18 @@ export type BracketRead = {
 }
 
 /**
+ * CapacityUpdate
+ *
+ * 提高名額（Story 3.7，FR-9）；只能比目前的名額大。
+ */
+export type CapacityUpdate = {
+  /**
+   * Capacity
+   */
+  capacity: number
+}
+
+/**
  * CheckInRead
  */
 export type CheckInRead = {
@@ -991,6 +1003,14 @@ export type MyTeamCard = {
    */
   game_name: string
   registration_status: RegistrationStatus
+  /**
+   * Backfilled
+   */
+  backfilled?: boolean
+  /**
+   * Withdrawable
+   */
+  withdrawable?: boolean
 }
 
 /**
@@ -2355,6 +2375,14 @@ export type TeamDetail = {
    * Submitted At
    */
   submitted_at: string | null
+  /**
+   * Backfilled
+   */
+  backfilled?: boolean
+  /**
+   * Withdrawable
+   */
+  withdrawable?: boolean
 }
 
 /**
@@ -3855,6 +3883,70 @@ export type registrationSubmitRegistrationResponses = {
 
 export type registrationSubmitRegistrationResponse =
   registrationSubmitRegistrationResponses[keyof registrationSubmitRegistrationResponses]
+
+export type registrationWithdrawRegistrationData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/withdrawal"
+}
+
+export type registrationWithdrawRegistrationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationWithdrawRegistrationError =
+  registrationWithdrawRegistrationErrors[keyof registrationWithdrawRegistrationErrors]
+
+export type registrationWithdrawRegistrationResponses = {
+  /**
+   * Successful Response
+   */
+  200: TeamDetail
+}
+
+export type registrationWithdrawRegistrationResponse =
+  registrationWithdrawRegistrationResponses[keyof registrationWithdrawRegistrationResponses]
+
+export type registrationRaiseCapacityData = {
+  body: CapacityUpdate
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/capacity"
+}
+
+export type registrationRaiseCapacityErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationRaiseCapacityError =
+  registrationRaiseCapacityErrors[keyof registrationRaiseCapacityErrors]
+
+export type registrationRaiseCapacityResponses = {
+  /**
+   * Successful Response
+   */
+  200: TournamentRead
+}
+
+export type registrationRaiseCapacityResponse =
+  registrationRaiseCapacityResponses[keyof registrationRaiseCapacityResponses]
 
 export type registrationListMyTeamsData = {
   body?: never

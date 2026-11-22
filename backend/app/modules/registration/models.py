@@ -23,7 +23,7 @@ from sqlmodel import Field, SQLModel
 
 from app.core import clock
 from app.core.events import Event
-from app.modules.tournaments.models import RankTierRead
+from app.modules.tournaments.models import CapacityField, RankTierRead
 
 
 class MemberRole(StrEnum):
@@ -135,6 +135,16 @@ class Registration(SQLModel, table=True):
     # 段位積分上限是 PostgreSQL integer 上限，numeric(6,2) 會溢位
     avg_rank_score: Decimal | None = Field(default=None, sa_type=Numeric(12, 2))
     submitted_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    # Story 3.7：名額釋出後由候補遞補為正取的時間（撤回、提高名額、代表隊的同校遞補）；
+    # 其他方式成為正取（優先期結算、先搶期、截止補位）為 null
+    backfilled_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+    # Story 3.7：優先期代表隊（結算時正取的隊伍，以及同校遞補上來的隊伍）。結算紀錄只存
+    # 學校，分不出「代表隊離開的學校」與「代表隊超過名額、整校都是候補的學校」，所以記在報名上
+    is_representative: bool = Field(
+        default=False, sa_column_kwargs={"server_default": "false"}
+    )
 
 
 class PriorityWindowSettlement(SQLModel, table=True):
@@ -163,6 +173,17 @@ class RegistrationAllocated(Event):
     team_id: uuid.UUID
     tournament_id: uuid.UUID
     status: RegistrationStatus
+
+
+class RegistrationBackfilled(Event):
+    """名額釋出後候補已遞補為正取（Story 3.7：撤回、提高名額、代表隊的同校遞補）。
+
+    遞補時只發這個事件，不發 `RegistrationAllocated`。
+    """
+
+    registration_id: uuid.UUID
+    team_id: uuid.UUID
+    tournament_id: uuid.UUID
 
 
 # ---------------------------------------------------------------- API schema
@@ -289,6 +310,12 @@ class TeamDetail(WaitlistFields):
     # 送出報名的時間：由 `submit_registration` 寫入；組隊中、或不經送出而離開組隊中
     # 的報名（例如撤回）為 null
     submitted_at: datetime | None
+    # 名額釋出後由候補遞補為正取（Story 3.7）：正取且有遞補時間；抽籤後（已參賽）為 false。
+    # 有預設值：其他模組自行建立的 TeamDetail／MyTeamCard（測試替身）不必跟著改
+    backfilled: bool = False
+    # 目前檢視者能退賽（Story 3.7）：檢視者是隊長、報名為已送出・待分配／正取／候補，
+    # 且賽事為開放報名或報名截止（抽籤前）
+    withdrawable: bool = False
 
 
 class TeamInvitePreview(BaseModel):
@@ -313,6 +340,15 @@ class MyTeamCard(WaitlistFields):
     tournament_name: str
     game_name: str
     registration_status: RegistrationStatus
+    # 與 `TeamDetail` 同義（Story 3.7）
+    backfilled: bool = False
+    withdrawable: bool = False
+
+
+class CapacityUpdate(BaseModel):
+    """提高名額（Story 3.7，FR-9）；只能比目前的名額大。"""
+
+    capacity: CapacityField
 
 
 class TeamMemberRole(BaseModel):

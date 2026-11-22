@@ -28,6 +28,7 @@ export function RegistrationStatusCard({ card }: { card: MyTeamCard }) {
         <RegistrationStatusBadge
           status={card.registration_status}
           waitlist={card}
+          backfilled={card.backfilled}
         />
         <ChevronRightIcon
           aria-hidden="true"
