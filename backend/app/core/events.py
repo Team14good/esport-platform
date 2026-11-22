@@ -7,6 +7,7 @@ service 呼叫 `publish(session, event)`，事件與業務資料一起 commit；
 
 import re
 import uuid
+from collections.abc import Collection
 from datetime import datetime
 from typing import Any, ClassVar
 
@@ -73,10 +74,21 @@ def get(session: Session, event_id: uuid.UUID) -> OutboxEvent | None:
 
 def next_unprocessed(session: Session) -> OutboxEvent | None:
     """取最舊的一則未處理事件並加鎖；其他交易已鎖住的事件略過。"""
+    return next_unprocessed_matching(session)
+
+
+def next_unprocessed_matching(
+    session: Session, *, types: Collection[str] | None = None
+) -> OutboxEvent | None:
+    """同 `next_unprocessed`，但只取類型在 `types` 內的事件（None 代表不限）。
+
+    讓 worker 先消化某幾類事件：其他事件一直處理失敗時，不會卡住這幾類。
+    """
+    statement = select(OutboxEvent).where(col(OutboxEvent.processed_at).is_(None))
+    if types is not None:
+        statement = statement.where(col(OutboxEvent.type).in_(list(types)))
     statement = (
-        select(OutboxEvent)
-        .where(col(OutboxEvent.processed_at).is_(None))
-        .order_by(col(OutboxEvent.created_at), col(OutboxEvent.id))
+        statement.order_by(col(OutboxEvent.created_at), col(OutboxEvent.id))
         .limit(1)
         .with_for_update(skip_locked=True)
     )
