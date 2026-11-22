@@ -259,7 +259,7 @@ notifications/test_notification_api.py:
   frs: [FR-38, NFR-5]
 notifications/test_rules.py:
   layer: integration
-  stories: ["1.6", "3.7", "3.8"]
+  stories: ["1.6", "3.7", "3.8", "3.11"]
   frs: [FR-37]
 registration/test_allocation.py:
   layer: unit
@@ -309,6 +309,10 @@ registration/test_report_functions.py:
   layer: integration
   stories: ["6.4"]
   frs: [FR-32]
+registration/test_roster_changes.py:
+  layer: integration
+  stories: ["3.11"]
+  frs: [FR-41, FR-37, NFR-3]
 registration/test_settlement_concurrency.py:
   layer: integration
   stories: ["3.4", "3.6", "3.7", "3.8"]
@@ -319,8 +323,8 @@ registration/test_submit_registration.py:
   frs: [FR-13, NFR-1]
 registration/test_team_concurrency.py:
   layer: integration
-  stories: ["3.1"]
-  frs: [FR-11, NFR-1]
+  stories: ["3.1", "3.11"]
+  frs: [FR-11, FR-41, NFR-1]
 registration/test_teams.py:
   layer: integration
   stories: ["3.1"]
@@ -375,7 +379,7 @@ tournaments/test_public_tournaments.py:
   frs: [FR-34]
 tournaments/test_audit_action_labels.py:
   layer: unit
-  stories: ["2.8"]
+  stories: ["2.8", "3.11"]
   frs: [NFR-3]
 tournaments/test_audit_log.py:
   layer: integration

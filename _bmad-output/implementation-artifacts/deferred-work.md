@@ -218,3 +218,11 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
   summary: （中）一般通知事件之間仍沒有重試上限：某則事件的 resolver 每次都拋非預期例外（程式錯誤、DataError）時，`dispatch_outbox` 每輪回滾、停在這則，之後的一般通知全部延後；驗證信與重設信已改為優先處理，不受影響。
   evidence: 2026-11-21 OG-Matcha 在 #100 的審查第 1 點；followup 只做了 token 事件優先。修法：`outbox_event` 加 `attempts`／`last_error`（需遷移，`core/events.py`），失敗時在獨立交易裡累加，超過上限標為 dead-letter 並寫 log；或改成略過時記錄到操作紀錄。
+## Deferred from: spec-3-11-roster-changes-and-disband-team.md (2026-11-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （低）3.7 撤回的隊伍隊員仍佔同賽事一隊：撤回後 `TeamMember` 列保留，`ALREADY_IN_TOURNAMENT` 與唯一鍵 (tournament_id, account_id) 讓隊員無法加入同賽事的其他隊伍；3.11 只處理名單鎖定前的異動（FR-41），撤回後的報名名單已鎖定，移除、退出、解散都回 409 `ROSTER_LOCKED`。
+  evidence: Story 3.11 Decisions。修法候選：撤回時比照解散把原隊員搬到 `disbanded_team_member`（或另一張保存表）並刪除隊員列；或 `_ensure_can_join` 與唯一鍵改為排除報名已撤回的隊伍（要改唯一鍵與遷移）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （中）既有通知規則在 worker 處理時才以 `_member_ids` 查隊員（`notifications/rules.py`）：主辦方退回後、worker 處理前隊長就移除隊員或解散，`RegistrationRejected`、`RegistrationAllocated`、`RegistrationBackfilled` 只寄給處理當下仍在隊上的人（解散則沒有人收到）。
+  evidence: Story 3.11 spec 審查第 3 點、Design Notes。修法候選：這些事件改帶發生當下的收件人帳號（違反 AD-8「事件只帶 id」，需要人決定），或規則在隊伍已解散時改查 `registration.service.list_disbanded_member_ids`（只補解散的情況，移除仍會少人）。

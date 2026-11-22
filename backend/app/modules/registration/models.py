@@ -154,6 +154,34 @@ class Registration(SQLModel, table=True):
     rejected_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
+class DisbandedTeamMember(SQLModel, table=True):
+    """解散當下的原隊員（Story 3.11）：解散時刪除所有 `TeamMember` 列（原隊員才能加入同
+    賽事的其他隊伍），另存帳號與角色，供 S12 的「撤回」卡片、S17 唯讀頁與 S29 使用。
+
+    只在解散時一次寫入，之後不再變動；不含參賽資料（截圖檔已在解散後刪除）。
+    """
+
+    __tablename__ = "disbanded_team_member"
+    __table_args__ = (
+        UniqueConstraint(
+            "team_id",
+            "account_id",
+            name="uq_disbanded_team_member_team_id_account_id",
+        ),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    team_id: uuid.UUID = Field(foreign_key="team.id")
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id")
+    account_id: uuid.UUID = Field(foreign_key="account.id", index=True)
+    role: MemberRole = Field(sa_type=String(16))
+    # 原 `TeamMember.created_at`（S12 依加入時間排序）
+    joined_at: datetime = Field(sa_type=DateTime(timezone=True))
+    created_at: datetime = Field(
+        default_factory=clock.now, sa_type=DateTime(timezone=True)
+    )
+
+
 class PriorityWindowSettlement(SQLModel, table=True):
     """優先期結算紀錄（Story 3.4）：一場賽事一筆，存在就代表已結算，worker 不再處理。
 
@@ -206,6 +234,31 @@ class RegistrationRejected(Event):
     can_resubmit: bool
 
 
+class TeamMemberRemoved(Event):
+    """隊長移除隊員（Story 3.11）。被移除者在 worker 處理時已不在隊上，所以帶帳號 id。"""
+
+    team_id: uuid.UUID
+    tournament_id: uuid.UUID
+    account_id: uuid.UUID
+
+
+class CaptainTransferred(Event):
+    """隊長轉讓（Story 3.11）：`from_account_id` 原隊長、`to_account_id` 新隊長。"""
+
+    team_id: uuid.UUID
+    tournament_id: uuid.UUID
+    from_account_id: uuid.UUID
+    to_account_id: uuid.UUID
+
+
+class TeamDisbanded(Event):
+    """隊長解散隊伍（Story 3.11）。不帶收件人清單（AD-8）：通知規則以
+    `service.list_disbanded_member_ids` 查解散當下的原隊員。"""
+
+    team_id: uuid.UUID
+    tournament_id: uuid.UUID
+
+
 # ---------------------------------------------------------------- API schema
 
 
@@ -246,9 +299,9 @@ RejectReasonField = Annotated[
     str, BeforeValidator(_require_str), AfterValidator(_validate_reject_reason)
 ]
 
-# 邀請連結的狀態：可加入、隊伍已滿、報名已截止（不在報名期間）、名單已鎖定（報名已送出）
-# 優先順序：locked > closed > full > active
-InviteStatus = Literal["active", "full", "closed", "locked"]
+# 邀請連結的狀態：可加入、隊伍已滿、報名已截止（不在報名期間）、名單已鎖定（報名已送出）、
+# 隊伍已解散（Story 3.11）。優先順序：disbanded > locked > closed > full > active
+InviteStatus = Literal["active", "full", "closed", "locked", "disbanded"]
 
 
 class TeamCreate(BaseModel):
@@ -328,9 +381,10 @@ class TeamDetail(WaitlistFields):
     max_members: int
     members: list[TeamMemberRead]
     registration_status: RegistrationStatus
-    invite_token: str
+    # 已解散的隊伍（Story 3.11）為 null：邀請連結失效，唯讀頁也不顯示
+    invite_token: str | None
     invite_status: InviteStatus
-    # 目前檢視者在這支隊伍的角色
+    # 目前檢視者在這支隊伍的角色（已解散的隊伍取解散當下的角色）
     my_role: MemberRole
     # 賽事快照的段位對照表（積分由高到低），S18 的段位選項
     rank_tiers: list[RankTierRead]
@@ -355,6 +409,18 @@ class TeamDetail(WaitlistFields):
     withdrawable: bool = False
     # 主辦方退回的原因（Story 3.8）：只在 `rejected` 時有值，重新送出後為 null
     reject_reason: str | None = None
+    # 名單可以異動（Story 3.11）：名單未鎖定（組隊中或被退回）且賽事為開放報名或報名
+    # 截止；S17 依此顯示隊員列的選單與「解散隊伍」
+    roster_editable: bool = False
+    # 隊伍已由隊長解散（Story 3.11）：原隊員看到的唯讀頁；`members` 是解散當下的原隊員
+    # （參賽欄位為 null），不能做任何操作
+    disbanded: bool = False
+
+
+class CaptainTransfer(BaseModel):
+    """轉讓隊長（Story 3.11）：對象是本隊的隊員。"""
+
+    account_id: uuid.UUID
 
 
 class TeamInvitePreview(BaseModel):
@@ -424,6 +490,8 @@ class OrganizerRegistration(WaitlistFields):
     rejectable: bool
     reject_reason: str | None
     members: list[OrganizerRegistrationMember]
+    # 隊伍已由隊長解散（Story 3.11）：`members` 是解散當下的原隊員，只有名稱與角色
+    disbanded: bool = False
 
 
 class OrganizerRegistrationPage(BaseModel):
@@ -450,7 +518,10 @@ class TeamMemberRole(BaseModel):
 
 
 class TeamRead(BaseModel):
-    """給其他模組使用的隊伍資料：隊名、隊員帳號與角色（判斷隊長請用 `registration.service.is_captain`）。"""
+    """給其他模組使用的隊伍資料：隊名、隊員帳號與角色（判斷隊長請用 `registration.service.is_captain`）。
+
+    已解散的隊伍（Story 3.11）`members` 為空；原隊員請用 `service.list_disbanded_member_ids`。
+    """
 
     id: uuid.UUID
     tournament_id: uuid.UUID

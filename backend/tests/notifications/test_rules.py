@@ -33,11 +33,14 @@ from app.modules.notifications import service
 from app.modules.notifications.models import Notification
 from app.modules.competition.forfeit_job import MatchForfeited
 from app.modules.notifications import rules
+from app.modules.registration import service as registration_service
 from app.modules.registration.models import (
+    CaptainTransferred,
     RegistrationAllocated,
     RegistrationBackfilled,
     RegistrationRejected,
     RegistrationStatus,
+    TeamMemberRemoved,
 )
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
 from tests.disputes.test_reports import _set_registration
@@ -568,3 +571,97 @@ def test_report_filed_and_resolved_notify_organizer_then_both_teams(
         assert to_teams[account_id].link == f"/teams/{reporter.id}"
     for account_id in reported.members:
         assert to_teams[account_id].link == f"/teams/{reported.id}"
+
+
+# ---------------------------------------------------------------- 隊員異動與解散（3.11）
+
+
+def test_team_member_removed_notifies_only_the_removed_account(
+    client: TestClient, session: Session
+) -> None:
+    """被移除者在 worker 處理時已不在隊上：收件人取自事件，連結賽事頁。"""
+    w = _world(client, session, count=1)
+    team = w.teams[0]
+
+    notifications = _publish(
+        session,
+        TeamMemberRemoved(
+            team_id=team.id, tournament_id=w.tid, account_id=team.player.id
+        ),
+    )
+
+    assert set(notifications) == {team.player.id}
+    assert {(n.title, n.body, n.link) for n in notifications.values()} == {
+        (
+            "已被移出隊伍",
+            f"你已被隊長移出「隊伍0」（{w.tournament.name}）。",
+            f"/tournaments/{w.tid}",
+        )
+    }
+
+
+def test_captain_transferred_notifies_the_new_captain(
+    client: TestClient, session: Session
+) -> None:
+    w = _world(client, session, count=1)
+    team = w.teams[0]
+
+    notifications = _publish(
+        session,
+        CaptainTransferred(
+            team_id=team.id,
+            tournament_id=w.tid,
+            from_account_id=team.captain.id,
+            to_account_id=team.player.id,
+        ),
+    )
+
+    assert set(notifications) == {team.player.id}
+    assert {(n.title, n.body, n.link) for n in notifications.values()} == {
+        (
+            "你成為隊長",
+            f"「隊伍0」（{w.tournament.name}）的隊長已轉讓給你。",
+            f"/teams/{team.id}",
+        )
+    }
+
+
+def test_team_disbanded_notifies_every_former_member_including_captain(
+    client: TestClient, session: Session
+) -> None:
+    """解散後隊伍沒有隊員；收件人取自解散名單（含隊長本人，FR-37）。"""
+    w = _world(client, session, count=1)
+    team = w.teams[0]
+    _set_registration(session, str(team.id), RegistrationStatus.FORMING)
+    registration_service.disband_team(
+        session, team_id=team.id, account_id=team.captain.id
+    )
+    [event] = [
+        e
+        for e in _outbox(session, "TeamDisbanded")
+        if e.payload["team_id"] == str(team.id)
+    ]
+
+    notifications = _dispatch(session, event)
+
+    assert set(notifications) == team.members
+    assert {(n.title, n.body, n.link) for n in notifications.values()} == {
+        (
+            "隊伍已解散",
+            f"「隊伍0」（{w.tournament.name}）已被隊長解散，報名已撤回。",
+            f"/teams/{team.id}",
+        )
+    }
+
+
+def test_roster_events_of_unknown_team_are_skipped(session: Session) -> None:
+    missing = uuid.uuid4()
+
+    notifications = _publish(
+        session,
+        TeamMemberRemoved(
+            team_id=missing, tournament_id=uuid.uuid4(), account_id=missing
+        ),
+    )
+
+    assert notifications == {}

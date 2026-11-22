@@ -49,10 +49,13 @@ from app.modules.notifications.registry import (
 )
 from app.modules.registration import service as registration_service
 from app.modules.registration.models import (
+    CaptainTransferred,
     RegistrationAllocated,
     RegistrationBackfilled,
     RegistrationRejected,
     RegistrationStatus,
+    TeamDisbanded,
+    TeamMemberRemoved,
 )
 from app.modules.tournaments import service as tournaments_service
 
@@ -454,3 +457,61 @@ def _registration_rejected(
 
 
 register(RegistrationRejected, _registration_rejected)
+
+
+# ---------------------------------------------------------------- 隊員異動與解散（3.11）
+
+
+def _team_label(session: Session, team_id: uuid.UUID, tournament_id: uuid.UUID) -> str:
+    """「「隊名」（賽事）」：解散後隊伍沒有隊員，隊名用 `get_team_names` 查。"""
+    names = registration_service.get_team_names(session, team_ids=[team_id])
+    if team_id not in names:
+        raise RecipientsNotFound(f"team {team_id} not found")
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=tournament_id
+    )
+    return f"「{names[team_id]}」（{tournament.name}）"
+
+
+def _team_member_removed(
+    session: Session, event: TeamMemberRemoved
+) -> list[NotificationDraft]:
+    # 被移除者在 worker 處理時已不在隊上，收件人取自事件
+    label = _team_label(session, event.team_id, event.tournament_id)
+    return _drafts(
+        [event.account_id],
+        title="已被移出隊伍",
+        body=f"你已被隊長移出{label}。",
+        link=f"/tournaments/{event.tournament_id}",
+    )
+
+
+def _captain_transferred(
+    session: Session, event: CaptainTransferred
+) -> list[NotificationDraft]:
+    label = _team_label(session, event.team_id, event.tournament_id)
+    return _drafts(
+        [event.to_account_id],
+        title="你成為隊長",
+        body=f"{label}的隊長已轉讓給你。",
+        link=f"/teams/{event.team_id}",
+    )
+
+
+def _team_disbanded(session: Session, event: TeamDisbanded) -> list[NotificationDraft]:
+    # 所有原隊員（含隊長本人，FR-37）；解散後隊伍已沒有隊員，查解散名單
+    recipients = registration_service.list_disbanded_member_ids(
+        session, team_id=event.team_id
+    )
+    label = _team_label(session, event.team_id, event.tournament_id)
+    return _drafts(
+        recipients,
+        title="隊伍已解散",
+        body=f"{label}已被隊長解散，報名已撤回。",
+        link=f"/teams/{event.team_id}",
+    )
+
+
+register(TeamMemberRemoved, _team_member_removed)
+register(CaptainTransferred, _captain_transferred)
+register(TeamDisbanded, _team_disbanded)

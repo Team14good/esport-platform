@@ -732,3 +732,105 @@
   - 第 3 點：AI 把「先結算」插在記錄原本狀態之前，操作紀錄的「退回前狀態」因此記成結算後的值，由 D 讀程式發現。
 - 成熟度：L4（組員審查找出 AI 審查漏掉的問題，AI 查證並依人的決定修正，以完整測試與 E2E 驗證）
 - 證據：PR #107（D 的審查）；spec-3-8-review-and-reject-registration.md（Implementation Notes「PR #107 組員審查」）；commit 見本次推送
+
+### 2026-11-23｜需求／spec 撰寫與審查｜Story 3.11 隊員異動與解散隊伍
+
+- Story／範圍：3.11（分支 story/3-11，尚未實作）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（規劃階段）＋ 子代理
+- 怎麼用：
+  - AI 派 3 個子代理平行調查後端（加鎖、狀態轉換、邀請連結、刪資料、通知與 Email）、前端（Roster list、選單、確認框、測試 helper）、需求與 UX 文件（FR-41、FR-37、UX-DR34、狀態表、期中文件 B），整理成 spec 草稿與 5 個待決問題。
+  - 使用者選「審查 spec」後，AI 另派 1 個沒參與規劃的子代理，對照需求、架構、期中文件與程式獨立審查。
+- AI 產出：spec `spec-3-11-roster-changes-and-disband-team.md`：I/O 矩陣 19 列、Tasks 12 項、Decisions 17 條（含子項），Review Triage Log 16 列。
+- 人做了什麼：
+  - 決定 spec 長度保留完整版。
+  - 追問「五項建議是否都符合原規劃」，AI 重新對照文件後承認其中 3 處偏離原規劃，使用者改採符合原規劃的選項。
+  - 回答解散後唯讀頁內容、通知連結，以及審查後的 7 個問題；選擇「批准並停止」。
+- 驗證：
+  - 獨立審查提出 16 項：high 2、medium 7、low 7。AI 抽查 AD-8 原文（「不帶收件人」）、`TeamDetail` 的必填欄位、`_invite_status` 在截止後的行為，都成立。
+  - 9 項由 AI 依程式修 spec，7 項由使用者決定，全部記在 Review Triage Log。
+- 問題與修正：
+  - AI 第一版的 5 個建議中，有 3 處偏離原規劃，卻寫成「建議」：解散後讓原隊員看不到（UX 狀態表寫唯讀可見）、加上報名期間限制（FR-41 只看名單是否鎖定）、解散通知排除隊長（FR-37 寫所有隊員）。使用者追問「是否符合原規劃」後，AI 逐條對照文件才發現。
+  - AI 讓 `TeamDisbanded` 事件帶原隊員名單，違反架構 AD-8「事件不帶收件人清單」；獨立審查對照架構文件才抓到。
+  - AI 沒定義解散後唯讀頁的 API 形狀（現有 `TeamDetail` 的 `invite_token`、`my_role` 必填，照 spec 做不出來），也沒考慮賽事抽籤、取消後組隊中的隊伍仍能解散；都由獨立審查發現。
+  - AI 回報矩陣列數時兩次算錯（說 16、20 列，實際為 15、19 列），整理紀錄時重新計算才發現並向使用者更正。
+- 成熟度：L4（子代理平行調查 → 寫 spec → 獨立子代理審查 → AI 抽查查證；人在 checkpoint 決策，並靠追問抓到 AI 偏離規劃）
+- 證據：_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md（Decisions、Review Triage Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-23｜程式／測試｜Story 3.11 隊員異動與解散隊伍
+
+- Story／範圍：3.11（分支 story/3-11，接續同日的 spec 紀錄）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作與審查階段）＋ 子代理
+- 怎麼用：
+  - AI 先合併 main（#108），再派 1 個實作子代理依 spec 實作，只給 spec 路徑。
+  - 完成後主流程讀完整 diff，逐項對照 Tasks 與 I/O 矩陣，自己重跑測試。
+  - 接著派 3 個獨立審查子代理（Blind Hunter、Edge Case Hunter、Verification Gap）平行審查；主流程逐項查證後分類，可修的送回原實作子代理修正。
+- AI 產出：
+  - 後端：四個操作 `remove_member`、`transfer_captain`、`leave_team`、`disband_team`；四個端點、新資料表 `disbanded_team_member` 與遷移、三個事件與三條通知規則；S12、S17、S19、S29 的解散唯讀顯示。
+  - 前端：`⋯` 列選單、「解散隊伍」、四個確認框、四個 mutation hook、解散後唯讀頁。
+  - 程式與測試共 23 個檔（不含自動產生的 client）。
+  - 新增測試：
+    - 後端 40 個：`test_roster_changes.py` 34 個（含參數化）、通知規則 4 個、真實併發 2 個。
+    - 前端單元測試 16 個。
+    - E2E 1 個（桌機與 375 px）。
+- 人做了什麼：
+  - 啟動 bmad-build。
+  - 實作期間 E2E 跑了約 24 分鐘，詢問「還在正常執行嗎」「現在在等什麼」；AI 查容器狀態回報是 E2E 在跑。
+  - 審查後待決：凍結區 Always 寫邀請狀態 `locked`，與 Decisions 的 `disbanded` 矛盾（AI 不能改凍結區）。
+- 驗證：
+  - AI 先比對容器內與本機檔案的 md5，確認測的是新版程式，再重跑：後端相關測試 67 passed、前端兩個測試檔 87 passed、`@story-3.11` E2E 2 passed。
+  - 審查共 20 項：修正 5 項（4 個根因，其中一個由兩個審查層分別找到），駁回 15 項，每項的判定與證據都記在 spec 的 Review Triage Log。
+  - 修正後完整驗證：
+    - 後端：lint 通過，`scripts/test.sh` 2712 passed，覆蓋率 97%。
+    - 前端：Biome、tsc 通過，vitest 78 檔 1169 passed。
+    - E2E：`@story-3.11` 2 passed。
+- 問題與修正：
+  - 退出、解散成功後，hook 先清掉隊伍快取才導頁，而且導頁沒有等待。確認框關閉時隊伍頁重繪，又送一次 `GET /teams/{id}`，退出後會得到 403、閃出錯誤頁。這個順序是 spec 的 Code Map 指定的，實作照做，兩個審查子代理分別發現；改成導頁完成後才清快取，並加斷言確認不會重抓。
+  - 測試缺口（Verification Gap 審查發現）：
+    - 前端四個操作紀錄名稱沒有任何測試，拼錯也不會失敗；已補。
+    - 退出、解散、轉讓被拒（409）的路徑沒有測試，只有「移除隊員」有；已補 3 個案例。
+  - E2E 標了 `@FR-37`（通知）卻沒有檢查通知，註解也把賽事名額 4 寫成人數；已移除標籤、改註解。
+  - 實作子代理第一版後端測試有 8 個失敗，原因都在測試本身：凍結時鐘下名單順序不固定、預設狀態沒有送出快照、`AuditLog` 時間欄位名稱寫錯。
+  - 實作子代理照 spec 把 E2E 寫成 4 人隊，但這個遊戲先發 3、替補 0，裝不下，改成 3 人隊。
+  - 前端「非 destructive」的斷言誤中按鈕 focus ring 的 class，改成檢查 `bg-destructive`。
+  - 環境：`docker compose up --build` 卡在 buildx 的檔案讀取權限提示，改用 `docker build` 建映像，再 `docker compose up --no-build`。
+- 成熟度：L4（實作子代理 → 主流程對照 diff 驗收並重跑測試 → 3 個獨立審查子代理 → 逐項查證分類 → 送回修正 → 完整驗證）
+- 證據：_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md（Implementation Notes、Review Triage Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-23｜測試／人工檢視與紀錄補充｜Story 3.11 隊員異動與解散隊伍
+
+- Story／範圍：3.11（接續同日的實作紀錄，分支 story/3-11）
+- 工具：Claude Code（Opus 5.5）＋ run skill（Playwright＋Chromium，在 e2e 容器）
+- 怎麼用：使用者問「AI 使用紀錄有記清楚嗎，瀏覽器實際走過了嗎」。AI 承認先前只跑了自動化 E2E 斷言，沒有人看過畫面。之後寫一支暫時的 Playwright 腳本，用真的 Chromium 走完整個流程並逐步截圖，再由 AI 逐張看圖；腳本看完即刪除，沒有提交。
+- AI 產出：桌機與 375 px 各 17 張截圖。流程：S17 隊長頁 → 自己那列選單 → 隊員那列選單 → 移除確認框 → Toast → 轉讓確認框 → 轉讓後 → 一般隊員的退出選單 → 退出確認框 → S12 → 只剩隊長一人的選單 → 解散確認框 → S12「撤回」卡片 → 解散唯讀頁 → S19「連結已失效：隊伍已解散。」→ 被移除者的通知中心「已被移出隊伍」。
+- 人做了什麼：
+  - 追問紀錄是否完整、瀏覽器是否實際走過，要求兩者都補。
+  - 審查後的三個決定：凍結區 Always 段的邀請狀態改為 `disbanded`；非隊員的 403 訊息維持兩種文字；接受建置替代做法（`docker build` 後 `docker compose up --no-build`）。
+- 驗證：腳本兩個 project 都通過（2 passed）。看截圖確認：選單內容、確認框文字、destructive 樣式、Toast、導頁、唯讀頁都符合 spec，375 px 沒有水平捲動。
+- 問題與修正：
+  - 上一筆紀錄的部分數字不是主流程親眼看到的：「第一版後端測試 8 個失敗」「E2E 原本寫成 4 人隊」「focus ring 斷言誤判」都來自實作子代理的回報，主流程沒看到原始輸出；「前端單元測試 16 個」是依子代理回報加總（12＋3＋1），只有 vitest 總數 1166→1169 這個增量是主流程親自執行看到的。
+  - 上一筆把「E2E 通過」寫成驗證，但當時沒有人看過畫面；這次看截圖才發現兩個 375 px 的版面問題：
+    - `⋯` 選單展開時貼齊螢幕左緣，沒有留邊距。
+    - 隊長自己那列的 `⋯` 按鈕被擠到下一行、靠左單獨一行。
+  - 兩個都還沒修，等使用者決定。
+  - 通知中心的「剛剛」在截圖裡字跡像疊在一起，屬於 Story 1.6 的元件，不在本 Story 範圍，只記錄觀察。
+  - 桌機的整頁截圖裡，固定標頭蓋在標題上；判斷是頁面捲動 150 px 後擷取整頁的假象（確認框中心也剛好落在捲動後的位置），不是版面錯誤。
+- 成熟度：L4（自動化測試之外，以真實瀏覽器截圖做人工檢視，找出自動化斷言抓不到的版面問題；人追問後才補做）
+- 證據：截圖在本機暫存資料夾，未提交；spec-3-11-roster-changes-and-disband-team.md（Decisions「程式審查後」）；commit 未記錄（尚未 commit）
+
+### 2026-11-23｜程式／版面修正｜Story 3.11 隊員異動與解散隊伍（375 px）
+
+- Story／範圍：3.11（接續同日的人工檢視紀錄）
+- 工具：Claude Code（Opus 5.5）＋ Playwright（e2e 容器）
+- 怎麼用：使用者決定修好人工檢視找到的兩個 375 px 問題後再 commit、開 PR。
+- AI 產出：`RosterList.tsx` 每列改為「可換行的名稱與資料區＋固定在右側的 `⋯`」，選單加 16 px 的邊緣距離（`collisionPadding`）。
+- 人做了什麼：決定先修再提交。
+- 驗證：
+  - 前端 Biome、tsc 通過，vitest 78 檔 1169 passed，`@story-3.11` E2E 2 passed。
+  - 重拍 375 px 截圖：`⋯` 留在每列右側，選單不再貼齊螢幕邊緣。
+- 問題與修正：
+  - AI 重拍截圖的腳本失敗：按 Esc 後立刻再點同一個 `⋯`，選單沒有打開。AI 沒有直接當成 bug，另寫實驗比對四種點法：
+    - 選單完全關閉後再點、等 1 秒再點，都能打開。
+    - 只有在關閉動畫中就點下去時打不開。
+  - 判斷這是 Radix 下拉選單本身的行為，加上自動化點得太快，不是本 Story 的 bug；實驗腳本看完即刪除。
+- 成熟度：L4（人工檢視發現問題 → 修正 → 重拍驗證；遇到測試失敗先做實驗區分真 bug 與測試假象）
+- 證據：spec-3-11-roster-changes-and-disband-team.md（Implementation Notes「瀏覽器人工檢視後」）；commit 見本次 PR

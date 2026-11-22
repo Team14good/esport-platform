@@ -13,6 +13,7 @@ from app.modules.identity.deps import CurrentAccount, Organizer, VerifiedAccount
 from app.modules.registration import service
 from app.modules.registration.models import (
     CapacityUpdate,
+    CaptainTransfer,
     MyTeamCard,
     OrganizerRegistration,
     OrganizerRegistrationPage,
@@ -136,6 +137,78 @@ def withdraw_registration(
     )
     session.commit()
     return team
+
+
+# ---------------------------------------------------------------- 隊員異動與解散（Story 3.11）
+
+
+def _commit_then_delete(session: SessionDep, keys: list[str]) -> None:
+    """提交交易後才刪截圖檔：提交失敗時不會留下指向已刪檔案的資料列。"""
+    session.commit()
+    for key in keys:
+        storage.delete_file(key)
+
+
+@router.post("/teams/{team_id}/members/{account_id}/removal")
+def remove_team_member(
+    session: SessionDep,
+    account: VerifiedAccount,
+    team_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> TeamDetail:
+    """S17 隊長在名單鎖定前移除隊員：參賽資料一併刪除，被移除者收到通知。
+
+    賽事不是開放報名／報名截止、或名單已鎖定時 409 `ROSTER_LOCKED`；不是隊員 403
+    `TEAM_MEMBER_REQUIRED`；不是隊長 403 `TEAM_CAPTAIN_REQUIRED`；移除自己 409
+    `CAPTAIN_CANNOT_REMOVE_SELF`；對象不在本隊 404 `TEAM_MEMBER_NOT_FOUND`。
+    """
+    result = service.remove_member(
+        session, team_id=team_id, account_id=account.id, target_id=account_id
+    )
+    _commit_then_delete(session, result.deleted_keys)
+    return result.detail
+
+
+@router.post("/teams/{team_id}/captain-transfer")
+def transfer_team_captain(
+    session: SessionDep,
+    account: VerifiedAccount,
+    team_id: uuid.UUID,
+    body: CaptainTransfer,
+) -> TeamDetail:
+    """S17 隊長在名單鎖定前把隊長轉讓給隊員：兩人角色互換，新隊長收到通知。
+
+    錯誤同移除隊員；轉給自己 409 `ALREADY_CAPTAIN`。
+    """
+    team = service.transfer_captain(
+        session, team_id=team_id, account_id=account.id, target_id=body.account_id
+    )
+    session.commit()
+    return team
+
+
+@router.post("/teams/{team_id}/departure", status_code=status.HTTP_204_NO_CONTENT)
+def leave_team(
+    session: SessionDep, account: VerifiedAccount, team_id: uuid.UUID
+) -> None:
+    """S17 隊員在名單鎖定前自行退出：參賽資料一併刪除，不發通知。
+
+    隊長要先轉讓才能退出（409 `CAPTAIN_MUST_TRANSFER`）；其他錯誤同移除隊員。
+    """
+    keys = service.leave_team(session, team_id=team_id, account_id=account.id)
+    _commit_then_delete(session, keys)
+
+
+@router.post("/teams/{team_id}/disbandment", status_code=status.HTTP_204_NO_CONTENT)
+def disband_team(
+    session: SessionDep, account: VerifiedAccount, team_id: uuid.UUID
+) -> None:
+    """S17 隊長在名單鎖定前解散隊伍：報名改為撤回、所有隊員離隊，原隊員保留唯讀頁並收到通知。
+
+    錯誤同移除隊員。
+    """
+    keys = service.disband_team(session, team_id=team_id, account_id=account.id)
+    _commit_then_delete(session, keys)
 
 
 @router.post("/tournaments/{tournament_id}/capacity")
