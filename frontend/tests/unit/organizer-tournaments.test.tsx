@@ -875,6 +875,7 @@ describe("S27 賽事總覽", () => {
     expect(links.map((link) => link.textContent)).toEqual([
       "查看賽事頁",
       "總覽",
+      "報名清單",
       "場次管理",
       "裁判",
       "申訴",
@@ -886,17 +887,21 @@ describe("S27 賽事總覽", () => {
     expect(links[1]).toHaveAttribute("data-status", "active")
     expect(links[2]).toHaveAttribute(
       "href",
-      "/organizer/tournaments/t-1/matches",
+      "/organizer/tournaments/t-1/registrations",
     )
     expect(links[3]).toHaveAttribute(
       "href",
-      "/organizer/tournaments/t-1/referees",
+      "/organizer/tournaments/t-1/matches",
     )
     expect(links[4]).toHaveAttribute(
       "href",
+      "/organizer/tournaments/t-1/referees",
+    )
+    expect(links[5]).toHaveAttribute(
+      "href",
       "/organizer/tournaments/t-1/appeals",
     )
-    expect(links[6]).toHaveAttribute(
+    expect(links[7]).toHaveAttribute(
       "href",
       "/organizer/tournaments/t-1/audit-log",
     )

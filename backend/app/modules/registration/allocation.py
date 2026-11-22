@@ -7,7 +7,8 @@
   積分高者優先 → 送出時間早者優先 → 報名 id 小者優先。
 - `allocate_priority_window`：優先期結算（FR-14）。
 - `decide_first_come`：先搶期送出當下判定正取或候補（FR-15）。
-- `waitlist_order`：依階段算出每個候補的順位，或沒有順位的原因（FR-17）。
+- `waitlist_order`：依階段算出每個候補的順位，或沒有順位的原因（FR-17）；先搶期可傳入
+  代表隊已退出的學校，讓同校遞補排進順位（Story 3.8，與實際遞補順序一致）。
 - `fill_from_waitlist`：截止補位（FR-16）＝報名截止後階段的順位前 N 名。
 - `backfill_vacancies`：有空位時，當下階段有順位的候補依順位遞補（PR #28 審查）。
   期中抽籤前取消資格不立即遞補，空出的名額留給之後的分配；之後分配時（先搶期新送出、
@@ -93,8 +94,10 @@ class WaitlistEntry:
     """某個候補的順位。
 
     `position` 為 1 起算的「候補第 N 位」；沒有順位時為 None，並帶 `reason`。
-    `representative_backfill` 只在先搶期、本校優先期代表隊為正取時為 True
-    （同校專屬遞補，不計入順位）。
+    `representative_backfill` 只在先搶期為 True，兩種情況：
+    - 沒有順位：本校優先期代表隊為正取（代表隊退出時才由同校遞補）。
+    - 有順位：本校代表隊已退出、本校目前沒有正取，這筆是本校 `sort_key` 第一名，排在
+      一般先搶期順位之前（Story 3.8，與 `representative_backfill()` 的實際遞補順序一致）。
     """
 
     registration_id: UUID
@@ -196,23 +199,28 @@ def waitlist_order(
     *,
     phase: AllocationPhase,
     priority_schools: Collection[UUID],
+    departed_schools: Collection[UUID] = (),
 ) -> dict[UUID, WaitlistEntry]:
     """依階段算出每個候補（`waitlisted`）的順位（FR-17）。
 
     `candidates` 是該賽事目前的報名；正取（`accepted`、`drawn`）用來判斷學校資格與每校上限。
     回傳以報名 id 為鍵，依「有順位者依順位，再接沒有順位者」的固定順序排列。
 
-    - 先搶期：只有「優先期沒有報名、目前也沒有正取」的學校有資格；每個有資格的學校只有
+    - 先搶期：`departed_schools`（優先期代表隊已退出的學校，由呼叫端算出）中目前沒有正取
+      的學校，各由本校 `sort_key` 第一名的候補排在最前面（多校依 `sort_key`），
+      `representative_backfill=True`；這些學校的其他候補沒有順位（`SCHOOL_NOT_ELIGIBLE`）。
+      之後只有「優先期沒有報名、目前也沒有正取」的學校有資格；每個有資格的學校只有
       最早送出的一隊有順位，依送出時間（同時再依 id）排序。
     - 報名截止後：所有候補依 `sort_key` 排入；排入後會使該校正取超過 2 隊的略過。
 
-    `priority_schools` 在報名截止後不影響順位。
+    `priority_schools`、`departed_schools` 在報名截止後不影響順位；`departed_schools`
+    預設為空，結果與 Story 3.8 之前相同（`backfill_vacancies`、`fill_from_waitlist` 不傳）。
     """
     items = _check_unique(candidates)
     accepted = _accepted_per_school(items)
     waiting = [c for c in items if c.status == RegistrationStatus.WAITLISTED]
     if phase == AllocationPhase.FIRST_COME:
-        return _first_come_order(waiting, accepted, priority_schools)
+        return _first_come_order(waiting, accepted, priority_schools, departed_schools)
     return _after_deadline_order(waiting, accepted)
 
 
@@ -220,11 +228,31 @@ def _first_come_order(
     waiting: list[Candidate],
     accepted: Counter[UUID],
     priority_schools: Collection[UUID],
+    departed_schools: Collection[UUID],
 ) -> dict[UUID, WaitlistEntry]:
+    # 代表隊已退出、目前沒有正取的學校：本校 sort_key 第一名排最前（同 representative_backfill）
+    representatives: dict[UUID, Candidate] = {}
+    for c in sorted(waiting, key=sort_key):
+        if (
+            c.school_id in departed_schools
+            and accepted[c.school_id] == 0
+            and c.school_id not in representatives
+        ):
+            representatives[c.school_id] = c
+    first = sorted(representatives.values(), key=sort_key)
+    first_ids = {c.id for c in first}
     positioned: list[Candidate] = []
     skipped: list[WaitlistEntry] = []
     seen_schools: set[UUID] = set()
     for c in sorted(waiting, key=_submit_key):
+        if c.id in first_ids:
+            continue
+        if c.school_id in representatives:
+            # 本校的遞補名額已由 sort_key 第一名排入；遞補後本校有正取，其他隊不再遞補
+            skipped.append(
+                WaitlistEntry(c.id, None, WaitlistReason.SCHOOL_NOT_ELIGIBLE)
+            )
+            continue
         in_priority = c.school_id in priority_schools
         if in_priority or accepted[c.school_id] > 0:
             # 先搶期的優先期學校不會有新的正取，所以這裡的正取就是優先期代表隊
@@ -243,7 +271,14 @@ def _first_come_order(
         else:
             seen_schools.add(c.school_id)
             positioned.append(c)
-    entries = [WaitlistEntry(c.id, n, None) for n, c in enumerate(positioned, start=1)]
+    entries = [
+        WaitlistEntry(c.id, n, None, representative_backfill=True)
+        for n, c in enumerate(first, start=1)
+    ]
+    entries += [
+        WaitlistEntry(c.id, n, None)
+        for n, c in enumerate(positioned, start=len(first) + 1)
+    ]
     return {e.registration_id: e for e in [*entries, *skipped]}
 
 

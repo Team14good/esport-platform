@@ -30,6 +30,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "registration.submitted": "送出報名",
   "registration.status_changed": "報名狀態變更",
   "registration.priority_window_settled": "優先期結算",
+  "registration.rejected": "退回報名",
   "bracket.drawn": "抽籤",
   "bracket.auto_draw_skipped": "略過自動抽籤",
   "match.referee_assigned": "指派裁判",

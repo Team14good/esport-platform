@@ -2,7 +2,11 @@ import { Link } from "@tanstack/react-router"
 import { ChevronRightIcon } from "lucide-react"
 
 import type { MyTeamCard } from "@/client"
-import { RegistrationStatusBadge, WaitlistDetails } from "./registration-status"
+import {
+  REJECT_REASON_PREFIX,
+  RegistrationStatusBadge,
+  WaitlistDetails,
+} from "./registration-status"
 
 /**
  * Registration status card（UX-DR35，S12）：賽事名＋遊戲、隊伍名、右側狀態徽章；
@@ -36,6 +40,16 @@ export function RegistrationStatusCard({ card }: { card: MyTeamCard }) {
         />
       </span>
       <WaitlistDetails status={card.registration_status} waitlist={card} />
+      {card.reject_reason && (
+        <span
+          data-slot="reject-reason"
+          title={card.reject_reason}
+          className="truncate text-caption text-muted-foreground"
+        >
+          {REJECT_REASON_PREFIX}
+          {card.reject_reason}
+        </span>
+      )}
     </Link>
   )
 }

@@ -195,11 +195,11 @@
   summary: （低）FR-37「裁判指派因晉級衝突被取消時另通知主辦方」沒有做：`RefereeUnassigned` 沒有區分「晉級衝突自動收回」與「主辦方收回、改派」，notifications 無從判斷，目前只通知被取消的裁判。
   evidence: Story 1.6 Decisions。修法：competition 在 `RefereeUnassigned` 加一個原因欄位（例如 `reason: "conflict" | "organizer"`，5.5 `unassign_referee_if_member` 發 `conflict`），notifications 的 `_referee_unassigned` 在 `conflict` 時另加主辦方一份草稿（link `/organizer/tournaments/{tid}/matches`）。
 
-## Deferred from: spec-3-7-withdraw-registration.md (2026-11-22)
+## Deferred from: spec-3-8-review-and-reject-registration.md (2026-11-22)
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-withdraw-registration.md`
-  summary: （中）優先期代表隊被取消資格（6.5，不立即遞補）後，同校候補在 S17／S12 仍顯示「候補・目前不在遞補順序中」（`SCHOOL_NOT_ELIGIBLE`、`representative_backfill=false`），但下一次先搶期送出時 `_first_come_locked` 會先由它同校遞補，畫面順位與實際遞補順序不一致（FR-17「候補順位＝接下來第幾個被遞補」）。
-  evidence: 2026-11-22 Story 3.7 程式審查（Blind Hunter、Edge Case Hunter）。`allocation.waitlist_order`／`_first_come_order` 不知道哪些學校的代表隊已退出；撤回時同一交易內就遞補，所以只有取消資格（以及 3.8 退回）這種不立即遞補的路徑會看到。修正需讓 `waitlist_order` 接收已退出代表隊的學校（改 `allocation.py` 既有函式語意，3.7 spec 的 Never 禁止），或讓取消資格也立即遞補。原 deferred（spec-3-4-allocation-backfill）的 evidence 提過這個顯示問題，3.7 刪除該項時改記於此。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-review-and-reject-registration.md`
+  summary: （低）3.7 撤回在「優先期已過、worker 還沒結算」時沒有先結算：`withdraw_registration` 直接撤回再 `_backfill_released_locked`，沒有結算紀錄就不遞補；撤回的若是優先期內送出的 `pending`，之後 worker 結算時該校會被當成優先期沒有報名（`priority_school_ids` 不含該校）。3.8 的退回已比照 `submit_registration` 先結算。
+  evidence: Story 3.8 spec 審查第 8 點。修法：`withdraw_registration` 在鎖內、撤回前比照 `reject_registration`，校園賽且 `now > priority_end` 時先呼叫 `settle_priority_window`（已結算時不做任何事），並補「優先期已過、尚未結算時撤回」的測試。
 ## Deferred from: spec-2-8-organizer-audit-log.md (2026-11-21)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`

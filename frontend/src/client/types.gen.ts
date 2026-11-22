@@ -1011,6 +1011,10 @@ export type MyTeamCard = {
    * Withdrawable
    */
   withdrawable?: boolean
+  /**
+   * Reject Reason
+   */
+  reject_reason?: string | null
 }
 
 /**
@@ -1299,6 +1303,136 @@ export type OrganizerApplicationRejection = {
    * Reason
    */
   reason: string
+}
+
+/**
+ * OrganizerRegistration
+ *
+ * S29 報名清單的一列（Story 3.8）：送出過的報名，分配結果與候補順位與 S17 相同。
+ *
+ * `avg_rank_score` 是送出時的快照；`rejectable`：報名為已送出・待分配／正取／候補，
+ * 且賽事為開放報名或報名截止；`reject_reason` 只在 `rejected` 時有值。
+ */
+export type OrganizerRegistration = {
+  /**
+   * Waitlist Position
+   */
+  waitlist_position: number | null
+  /**
+   * Waitlist Reason
+   */
+  waitlist_reason:
+    | "SCHOOL_NOT_ELIGIBLE"
+    | "LATER_THAN_SCHOOLMATE"
+    | "SCHOOL_LIMIT_REACHED"
+    | null
+  /**
+   * Representative Backfill
+   */
+  representative_backfill: boolean | null
+  /**
+   * Waitlist Phase
+   */
+  waitlist_phase: "first_come" | "after_deadline" | null
+  /**
+   * Registration Id
+   */
+  registration_id: string
+  /**
+   * Team Id
+   */
+  team_id: string
+  /**
+   * Team Name
+   */
+  team_name: string
+  status: RegistrationStatus
+  /**
+   * Submitted At
+   */
+  submitted_at: string
+  /**
+   * Avg Rank Score
+   */
+  avg_rank_score: number
+  /**
+   * Backfilled
+   */
+  backfilled: boolean
+  /**
+   * Rejectable
+   */
+  rejectable: boolean
+  /**
+   * Reject Reason
+   */
+  reject_reason: string | null
+  /**
+   * Members
+   */
+  members: Array<OrganizerRegistrationMember>
+}
+
+/**
+ * OrganizerRegistrationMember
+ *
+ * S29 報名清單的隊員（隊長在前，再依加入順序）。
+ *
+ * 不含截圖原始檔名（只回給本人）與截圖鍵值；`rank_screenshot_version` 由鍵值雜湊而來，
+ * 換截圖就會改變，只供前端當快取鍵；沒有截圖時為 null。
+ */
+export type OrganizerRegistrationMember = {
+  /**
+   * Account Id
+   */
+  account_id: string
+  /**
+   * Display Name
+   */
+  display_name: string
+  role: MemberRole
+  /**
+   * Game Account Id
+   */
+  game_account_id: string | null
+  /**
+   * Rank Tier
+   */
+  rank_tier: string | null
+  /**
+   * Has Rank Screenshot
+   */
+  has_rank_screenshot: boolean
+  /**
+   * Rank Screenshot Version
+   */
+  rank_screenshot_version: string | null
+}
+
+/**
+ * OrganizerRegistrationPage
+ *
+ * S29 報名清單的分頁結果（格式同 `OrganizerApplicationPage`）。
+ *
+ * `page` 超過總頁數時 `items` 為空、`total` 照實。
+ */
+export type OrganizerRegistrationPage = {
+  /**
+   * Items
+   */
+  items: Array<OrganizerRegistration>
+  /**
+   * Total
+   */
+  total: number
+  /**
+   * Page
+   */
+  page: number
+  /**
+   * Page Size
+   */
+  page_size: number
 }
 
 /**
@@ -1938,6 +2072,18 @@ export type RegisteredAccount = {
 }
 
 /**
+ * RegistrationRejection
+ *
+ * 主辦方退回報名（Story 3.8）：原因去除前後空白後必填，最多 200 字。
+ */
+export type RegistrationRejection = {
+  /**
+   * Reason
+   */
+  reason: string
+}
+
+/**
  * RegistrationStatus
  *
  * 報名狀態：組隊中、已送出・待分配、正取、候補、退回、撤回、已參賽、退賽、取消資格。
@@ -2364,6 +2510,10 @@ export type TeamDetail = {
    * Withdrawable
    */
   withdrawable?: boolean
+  /**
+   * Reject Reason
+   */
+  reject_reason?: string | null
 }
 
 /**
@@ -3923,6 +4073,120 @@ export type registrationListMyTeamsResponses = {
 
 export type registrationListMyTeamsResponse =
   registrationListMyTeamsResponses[keyof registrationListMyTeamsResponses]
+
+export type registrationListOrganizerRegistrationsData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: {
+    /**
+     * Status
+     */
+    status?: RegistrationStatus | null
+    /**
+     * Page
+     */
+    page?: number
+  }
+  url: "/api/v1/organizer/tournaments/{tournament_id}/registrations"
+}
+
+export type registrationListOrganizerRegistrationsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationListOrganizerRegistrationsError =
+  registrationListOrganizerRegistrationsErrors[keyof registrationListOrganizerRegistrationsErrors]
+
+export type registrationListOrganizerRegistrationsResponses = {
+  /**
+   * Successful Response
+   */
+  200: OrganizerRegistrationPage
+}
+
+export type registrationListOrganizerRegistrationsResponse =
+  registrationListOrganizerRegistrationsResponses[keyof registrationListOrganizerRegistrationsResponses]
+
+export type registrationDownloadRankScreenshotData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Registration Id
+     */
+    registration_id: string
+    /**
+     * Account Id
+     */
+    account_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/registrations/{registration_id}/members/{account_id}/rank-screenshot"
+}
+
+export type registrationDownloadRankScreenshotErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationDownloadRankScreenshotError =
+  registrationDownloadRankScreenshotErrors[keyof registrationDownloadRankScreenshotErrors]
+
+export type registrationDownloadRankScreenshotResponses = {
+  /**
+   * Successful Response
+   */
+  200: unknown
+}
+
+export type registrationRejectRegistrationData = {
+  body: RegistrationRejection
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+    /**
+     * Registration Id
+     */
+    registration_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/registrations/{registration_id}/rejection"
+}
+
+export type registrationRejectRegistrationErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationRejectRegistrationError =
+  registrationRejectRegistrationErrors[keyof registrationRejectRegistrationErrors]
+
+export type registrationRejectRegistrationResponses = {
+  /**
+   * Successful Response
+   */
+  200: OrganizerRegistration
+}
+
+export type registrationRejectRegistrationResponse =
+  registrationRejectRegistrationResponses[keyof registrationRejectRegistrationResponses]
 
 export type competitionDrawData = {
   body?: never
