@@ -866,3 +866,99 @@ def test_representative_backfill_rejects_bad_input() -> None:
     cs = [cand(1, 1, status=S.WAITLISTED), cand(1, 2, status=S.WAITLISTED)]
     with pytest.raises(ValueError, match="重複"):
         representative_backfill(cs, departed_schools=(), capacity=3)
+
+
+# ── Story 3.8：代表隊已退出的學校排進先搶期順位（D 在 PR #105 的決定） ─────
+
+
+def _departed_scenario() -> list[Candidate]:
+    """6.5 取消代表隊後：P 校代表隊取消資格；P 校候補 P2（80）、P3（90）；
+    X 校符合先搶期的候補（最早送出）；Q 校代表隊仍為正取，Q2 候補。"""
+    p, x, q = 1, 2, 3
+    return [
+        cand(1, p, 95, status=S.DISQUALIFIED),
+        cand(2, p, 80, minute=1, status=S.WAITLISTED),  # P2：較早送出
+        cand(3, p, 90, minute=5, status=S.WAITLISTED),  # P3：積分較高
+        cand(4, x, 10, minute=0, status=S.WAITLISTED),  # X
+        cand(5, q, 99, status=S.ACCEPTED),
+        cand(6, q, 70, minute=2, status=S.WAITLISTED),  # Q2
+    ]
+
+
+def test_first_come_departed_school_first_by_sort_key() -> None:
+    """P3 候補第 1 位（同校遞補）、X 第 2 位；P2 沒有順位；Q2 維持同校專屬說明。"""
+    p, q = 1, 3
+    order = waitlist_order(
+        _departed_scenario(),
+        phase=FIRST,
+        priority_schools={school(p), school(q)},
+        departed_schools={school(p)},
+    )
+    assert list(order.values()) == [
+        WaitlistEntry(uid(3), 1, None, representative_backfill=True),
+        WaitlistEntry(uid(4), 2, None),
+        WaitlistEntry(uid(2), None, WaitlistReason.SCHOOL_NOT_ELIGIBLE),
+        WaitlistEntry(
+            uid(6),
+            None,
+            WaitlistReason.SCHOOL_NOT_ELIGIBLE,
+            representative_backfill=True,
+        ),
+    ]
+
+
+def test_first_come_departed_order_matches_actual_backfill() -> None:
+    """順位與實際遞補一致：同校遞補先、再一般遞補，依序就是順位前 N 名。"""
+    p, q = 1, 3
+    cs = _departed_scenario()
+    priority = {school(p), school(q)}
+    order = waitlist_order(
+        cs, phase=FIRST, priority_schools=priority, departed_schools={school(p)}
+    )
+    first = representative_backfill(cs, departed_schools={school(p)}, capacity=3)
+    after = [replace(c, status=S.ACCEPTED) if c.id in first else c for c in cs]
+    rest = backfill_vacancies(after, phase=FIRST, priority_schools=priority, capacity=3)
+    positioned = [e.registration_id for e in order.values() if e.position is not None]
+    assert [*first, *rest] == positioned
+
+
+def test_first_come_departed_schools_ordered_by_sort_key() -> None:
+    """兩校代表隊都已退出：依 sort_key 排（積分高者先），再接一般先搶期順位。"""
+    cs = [
+        cand(1, 1, 60, minute=0, status=S.WAITLISTED),
+        cand(2, 2, 70, minute=9, status=S.WAITLISTED),
+        cand(3, 3, 10, minute=1, status=S.WAITLISTED),
+    ]
+    order = waitlist_order(
+        shuffled(cs, 5),
+        phase=FIRST,
+        priority_schools={school(1), school(2)},
+        departed_schools={school(1), school(2)},
+    )
+    assert [(e.registration_id, e.position) for e in order.values()] == [
+        (uid(2), 1),
+        (uid(1), 2),
+        (uid(3), 3),
+    ]
+
+
+def test_first_come_departed_school_with_acceptance_is_not_reordered() -> None:
+    """已由同校遞補（本校有正取）的學校不再排入；與沒傳 departed 的結果相同。"""
+    cs = [
+        cand(1, 1, 90, status=S.ACCEPTED),
+        cand(2, 1, 80, status=S.WAITLISTED),
+        cand(3, 2, 10, status=S.WAITLISTED),
+    ]
+    with_departed = waitlist_order(
+        cs, phase=FIRST, priority_schools={school(1)}, departed_schools={school(1)}
+    )
+    assert with_departed == waitlist_order(
+        cs, phase=FIRST, priority_schools={school(1)}
+    )
+
+
+def test_departed_schools_ignored_after_deadline() -> None:
+    cs = _departed_scenario()
+    assert waitlist_order(
+        cs, phase=AFTER, priority_schools=(), departed_schools={school(1)}
+    ) == waitlist_order(cs, phase=AFTER, priority_schools=())

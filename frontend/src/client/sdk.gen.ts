@@ -166,6 +166,9 @@ import type {
   registrationCreateTeamData,
   registrationCreateTeamErrors,
   registrationCreateTeamResponses,
+  registrationDownloadRankScreenshotData,
+  registrationDownloadRankScreenshotErrors,
+  registrationDownloadRankScreenshotResponses,
   registrationJoinTeamData,
   registrationJoinTeamErrors,
   registrationJoinTeamResponses,
@@ -174,6 +177,9 @@ import type {
   registrationListAcceptedTeamsResponses,
   registrationListMyTeamsData,
   registrationListMyTeamsResponses,
+  registrationListOrganizerRegistrationsData,
+  registrationListOrganizerRegistrationsErrors,
+  registrationListOrganizerRegistrationsResponses,
   registrationPreviewTeamInviteData,
   registrationPreviewTeamInviteErrors,
   registrationPreviewTeamInviteResponses,
@@ -183,6 +189,9 @@ import type {
   registrationReadTeamData,
   registrationReadTeamErrors,
   registrationReadTeamResponses,
+  registrationRejectRegistrationData,
+  registrationRejectRegistrationErrors,
+  registrationRejectRegistrationResponses,
   registrationSubmitRegistrationData,
   registrationSubmitRegistrationErrors,
   registrationSubmitRegistrationResponses,
@@ -195,6 +204,9 @@ import type {
   tournamentsAcceptRefereeInvitationData,
   tournamentsAcceptRefereeInvitationErrors,
   tournamentsAcceptRefereeInvitationResponses,
+  tournamentsCancelMyTournamentData,
+  tournamentsCancelMyTournamentErrors,
+  tournamentsCancelMyTournamentResponses,
   tournamentsCreateGameData,
   tournamentsCreateGameErrors,
   tournamentsCreateGameResponses,
@@ -897,6 +909,29 @@ export class TournamentsService {
   }
 
   /**
+   * Cancel My Tournament
+   *
+   * 取消自己的賽事，發出 `TournamentCancelled`。
+   *
+   * 不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；已結束或已取消 409
+   * `TOURNAMENT_NOT_CANCELLABLE`。
+   */
+  public static cancelMyTournament<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsCancelMyTournamentData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      tournamentsCancelMyTournamentResponses,
+      tournamentsCancelMyTournamentErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/cancel",
+      ...options,
+    })
+  }
+
+  /**
    * Read Referee Invitation
    *
    * 目前（最新一筆）的裁判邀請，含是否過期；從未產生過回 `null`。
@@ -1250,6 +1285,78 @@ export class RegistrationService {
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/accounts/me/teams",
       ...options,
+    })
+  }
+
+  /**
+   * List Organizer Registrations
+   *
+   * S29 報名清單：送出過的報名，依分配結果分組排序、每頁 20 筆；`status` 省略表示全部。
+   *
+   * 不存在 404 `TOURNAMENT_NOT_FOUND`；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`。
+   */
+  public static listOrganizerRegistrations<ThrowOnError extends boolean = true>(
+    options: Options<registrationListOrganizerRegistrationsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      registrationListOrganizerRegistrationsResponses,
+      registrationListOrganizerRegistrationsErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/registrations",
+      ...options,
+    })
+  }
+
+  /**
+   * Download Rank Screenshot
+   *
+   * 下載隊員的段位截圖：只有該賽事主辦方（隊長、隊員、上傳者本人都是 403）。
+   *
+   * 報名不屬於這個賽事 404 `REGISTRATION_NOT_FOUND`；不是這支隊伍的隊員 404
+   * `TEAM_MEMBER_NOT_FOUND`；沒有截圖 404 `FILE_NOT_FOUND`。
+   */
+  public static downloadRankScreenshot<ThrowOnError extends boolean = true>(
+    options: Options<registrationDownloadRankScreenshotData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      registrationDownloadRankScreenshotResponses,
+      registrationDownloadRankScreenshotErrors,
+      ThrowOnError
+    >({
+      responseType: "blob",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/registrations/{registration_id}/members/{account_id}/rank-screenshot",
+      ...options,
+    })
+  }
+
+  /**
+   * Reject Registration
+   *
+   * 主辦方退回報名（必填原因）：名單解鎖，正取釋出的名額依當下階段由候補遞補。
+   *
+   * 報名不是已送出・待分配／正取／候補，或賽事不是開放報名／報名截止時回 409
+   * `REGISTRATION_NOT_REJECTABLE`。
+   */
+  public static rejectRegistration<ThrowOnError extends boolean = true>(
+    options: Options<registrationRejectRegistrationData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationRejectRegistrationResponses,
+      registrationRejectRegistrationErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/registrations/{registration_id}/rejection",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 }

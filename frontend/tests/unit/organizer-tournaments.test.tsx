@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query"
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
@@ -16,13 +17,25 @@ import {
   EXPIRE_TIMEOUT_TEXT,
   EXPIRED_TEXT,
 } from "@/components/common/Countdown"
+import { DRAW_TEXT } from "@/features/competition/DrawButton"
 import { formatMatchDateTime } from "@/features/competition/match-time"
+import { OPEN_DISPUTES_TITLE } from "@/features/disputes/OpenDisputesPanel"
+import {
+  CANCEL_TOURNAMENT_CONFIRM_TEXT,
+  CANCEL_TOURNAMENT_TEXT,
+  KEEP_TOURNAMENT_TEXT,
+} from "@/features/tournaments/CancelTournamentButton"
 import {
   CAPACITY_WARNING_TEXT,
   TOURNAMENT_CREATED_TEXT,
 } from "@/features/tournaments/CreateTournamentForm"
 import { PRIORITY_ENDED_TEXT } from "@/features/tournaments/OrganizerTournamentOverview"
 import { NO_TOURNAMENTS_TEXT } from "@/features/tournaments/OrganizerTournamentsPage"
+import {
+  myTournamentsQueryOptions,
+  TOURNAMENT_CANCELLED_TEXT,
+} from "@/features/tournaments/organizer-queries"
+import { PUBLIC_TOURNAMENTS_KEY } from "@/features/tournaments/queries"
 import { REGISTRATION_OPENING_TEXT } from "@/features/tournaments/TournamentOverview"
 import { FORBIDDEN_FALLBACK_MESSAGE } from "@/lib/api-error"
 import { taipeiLocalToIso } from "@/lib/datetime"
@@ -766,6 +779,7 @@ describe("S27 賽事總覽", () => {
     expect(links.map((link) => link.textContent)).toEqual([
       "查看賽事頁",
       "總覽",
+      "報名清單",
       "場次管理",
       "裁判",
       "申訴",
@@ -777,17 +791,21 @@ describe("S27 賽事總覽", () => {
     expect(links[1]).toHaveAttribute("data-status", "active")
     expect(links[2]).toHaveAttribute(
       "href",
-      "/organizer/tournaments/t-1/matches",
+      "/organizer/tournaments/t-1/registrations",
     )
     expect(links[3]).toHaveAttribute(
       "href",
-      "/organizer/tournaments/t-1/referees",
+      "/organizer/tournaments/t-1/matches",
     )
     expect(links[4]).toHaveAttribute(
       "href",
+      "/organizer/tournaments/t-1/referees",
+    )
+    expect(links[5]).toHaveAttribute(
+      "href",
       "/organizer/tournaments/t-1/appeals",
     )
-    expect(links[6]).toHaveAttribute(
+    expect(links[7]).toHaveAttribute(
       "href",
       "/organizer/tournaments/t-1/audit-log",
     )
@@ -1348,5 +1366,158 @@ describe("權限與入口", () => {
     expect(
       await screen.findByRole("heading", { name: "我的賽事" }),
     ).toBeInTheDocument()
+  })
+})
+
+describe("S27 取消賽事", () => {
+  type CancelResult = Awaited<
+    ReturnType<typeof TournamentsService.cancelMyTournament>
+  >
+
+  async function openOverview(tournament: TournamentRead = TOURNAMENT) {
+    signInAs({ account: ORGANIZER })
+    renderApp(`/organizer/tournaments/${tournament.id}`)
+    await screen.findByRole("heading", { name: tournament.name })
+  }
+
+  function cancelButton() {
+    return screen.queryByRole("button", { name: CANCEL_TOURNAMENT_TEXT })
+  }
+
+  it.each<TournamentStatus>([
+    "upcoming",
+    "open",
+    "closed",
+    "published",
+    "ongoing",
+  ])("狀態 %s：顯示「取消賽事」", async (status) => {
+    mockRead({ ...TOURNAMENT, status })
+    await openOverview()
+
+    expect(cancelButton()).toBeInTheDocument()
+  })
+
+  it.each<TournamentStatus>(["finished", "cancelled"])(
+    "狀態 %s：不顯示「取消賽事」",
+    async (status) => {
+      mockRead({ ...TOURNAMENT, status })
+      await openOverview()
+
+      expect(cancelButton()).toBeNull()
+    },
+  )
+
+  it("已取消：S27 沒有任何動作（抽籤、待處理清單都不顯示）", async () => {
+    vi.spyOn(CompetitionService, "readDrawStatus").mockResolvedValue({
+      data: { can_draw: true, reason: null, expected_teams: 8 },
+    } as Awaited<ReturnType<typeof CompetitionService.readDrawStatus>>)
+    mockRead({ ...TOURNAMENT, status: "cancelled" })
+    await openOverview()
+
+    expect(screen.getByText("已取消")).toBeInTheDocument()
+    expect(cancelButton()).toBeNull()
+    expect(screen.queryByRole("button", { name: DRAW_TEXT })).toBeNull()
+    expect(
+      screen.queryByRole("heading", { name: OPEN_DISPUTES_TITLE }),
+    ).toBeNull()
+  })
+
+  it("確認對話框：標題、內文與 destructive 確認鈕；按取消不呼叫 API", async () => {
+    const user = userEvent.setup()
+    const cancel = vi.spyOn(TournamentsService, "cancelMyTournament")
+    mockRead()
+    await openOverview()
+
+    await user.click(cancelButton() as HTMLElement)
+
+    const dialog = await screen.findByRole("alertdialog")
+    expect(
+      within(dialog).getByRole("heading", { name: CANCEL_TOURNAMENT_TEXT }),
+    ).toBeInTheDocument()
+    expect(dialog).toHaveTextContent(CANCEL_TOURNAMENT_CONFIRM_TEXT)
+    const confirm = within(dialog).getByRole("button", {
+      name: CANCEL_TOURNAMENT_TEXT,
+    })
+    expect(confirm).toHaveClass("bg-destructive")
+    expect(within(dialog).queryByRole("button", { name: "取消" })).toBeNull()
+
+    await user.click(
+      within(dialog).getByRole("button", { name: KEEP_TOURNAMENT_TEXT }),
+    )
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(cancel).not.toHaveBeenCalled()
+  })
+
+  it("確認後呼叫 API：徽章變「已取消」、按鈕消失，成功 Toast", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries")
+    const cancel = vi
+      .spyOn(TournamentsService, "cancelMyTournament")
+      .mockResolvedValue({
+        data: { ...TOURNAMENT, status: "cancelled" },
+      } as CancelResult)
+    const read = mockRead()
+    await openOverview()
+
+    await user.click(cancelButton() as HTMLElement)
+    const dialog = await screen.findByRole("alertdialog")
+    // 之後重抓 S27 時回傳已取消的狀態
+    read.mockResolvedValue({
+      data: { ...TOURNAMENT, status: "cancelled" },
+    } as ReadMineResult)
+    await user.click(
+      within(dialog).getByRole("button", { name: CANCEL_TOURNAMENT_TEXT }),
+    )
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(cancel.mock.calls[0][0].path).toEqual({ tournament_id: "t-1" })
+    expect(await screen.findByText("已取消")).toBeInTheDocument()
+    expect(screen.queryByText("開放報名")).toBeNull()
+    expect(cancelButton()).toBeNull()
+    expect(success).toHaveBeenCalledWith(
+      TOURNAMENT_CANCELLED_TEXT,
+      expect.anything(),
+    )
+    // S25 清單與公開賽事（S1 列表、S2 詳情）也標記為過期
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: myTournamentsQueryOptions().queryKey,
+      }),
+    )
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: PUBLIC_TOURNAMENTS_KEY }),
+    )
+  })
+
+  it("409：錯誤 Toast 顯示伺服器訊息，重抓後依最新狀態隱藏按鈕", async () => {
+    const user = userEvent.setup()
+    const error = vi.spyOn(toast, "error")
+    const message = "已結束或已取消的賽事不能取消。"
+    vi.spyOn(TournamentsService, "cancelMyTournament").mockRejectedValue(
+      httpError(409, {
+        detail: { code: "TOURNAMENT_NOT_CANCELLABLE", message },
+      }),
+    )
+    const read = mockRead()
+    await openOverview()
+
+    await user.click(cancelButton() as HTMLElement)
+    const dialog = await screen.findByRole("alertdialog")
+    read.mockResolvedValue({
+      data: { ...TOURNAMENT, status: "finished" },
+    } as ReadMineResult)
+    await user.click(
+      within(dialog).getByRole("button", { name: CANCEL_TOURNAMENT_TEXT }),
+    )
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(message, expect.anything()),
+    )
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(await screen.findByText("已結束")).toBeInTheDocument()
+    expect(cancelButton()).toBeNull()
   })
 })

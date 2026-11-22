@@ -6,8 +6,11 @@ import {
 
 import { type TournamentCreate, TournamentsService } from "@/client"
 import { parseApiError } from "@/lib/api-error"
+import { notifyError, notifySuccess } from "@/lib/feedback"
 import { shouldRetryQuery } from "@/lib/query-client"
-import { isTournamentNotFound } from "./queries"
+import { isTournamentNotFound, PUBLIC_TOURNAMENTS_KEY } from "./queries"
+
+export const TOURNAMENT_CANCELLED_TEXT = "已取消賽事。"
 
 const ORGANIZER_TOURNAMENTS_KEY = ["tournaments", "organizer"] as const
 
@@ -66,5 +69,41 @@ export function useCreateTournament() {
         queryKey: myTournamentsQueryOptions().queryKey,
       })
     },
+  })
+}
+
+/**
+ * 取消賽事（2.6）。成功 Toast「已取消賽事。」並以回傳值更新 S27；失敗（含 409
+ * `TOURNAMENT_NOT_CANCELLABLE`）以錯誤 Toast 顯示伺服器訊息，並重抓 S27 讓狀態跟上。
+ * 兩種情況都讓 S25 清單與公開賽事（S1、S2）失效，等重抓完 mutation 才結束。
+ */
+export function useCancelTournament(tournamentId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () =>
+      (
+        await TournamentsService.cancelMyTournament({
+          path: { tournament_id: tournamentId },
+        })
+      ).data,
+    onSuccess: (cancelled) => {
+      queryClient.setQueryData(
+        myTournamentQueryOptions(tournamentId).queryKey,
+        cancelled,
+      )
+      notifySuccess(TOURNAMENT_CANCELLED_TEXT)
+    },
+    onError: (error) => {
+      notifyError(error)
+      return queryClient.invalidateQueries({
+        queryKey: myTournamentQueryOptions(tournamentId).queryKey,
+      })
+    },
+    onSettled: () =>
+      Promise.all(
+        [myTournamentsQueryOptions().queryKey, PUBLIC_TOURNAMENTS_KEY].map(
+          (queryKey) => queryClient.invalidateQueries({ queryKey }),
+        ),
+      ),
   })
 }

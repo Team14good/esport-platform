@@ -5,6 +5,7 @@ import {
   FlagIcon,
   GavelIcon,
   LayoutDashboardIcon,
+  ListChecksIcon,
   ScrollTextIcon,
   TrophyIcon,
   UserCheckIcon,
@@ -36,6 +37,11 @@ export function tournamentNav(tournamentId: string): BackofficeNavItem[] {
       to: `/organizer/tournaments/${id}` as LinkOptions["to"],
       label: "總覽",
       icon: LayoutDashboardIcon,
+    },
+    {
+      to: `/organizer/tournaments/${id}/registrations` as LinkOptions["to"],
+      label: "報名清單",
+      icon: ListChecksIcon,
     },
     {
       to: `/organizer/tournaments/${id}/matches` as LinkOptions["to"],

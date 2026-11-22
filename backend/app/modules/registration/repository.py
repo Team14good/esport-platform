@@ -115,6 +115,28 @@ def get_registration_by_team(
     ).first()
 
 
+def get_registration(
+    session: Session, registration_id: uuid.UUID
+) -> Registration | None:
+    return session.get(Registration, registration_id)
+
+
+def list_members_by_team_ids(
+    session: Session, team_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, list[TeamMember]]:
+    """多支隊伍的隊員一次查出：以隊伍 id 為鍵，各依加入時間（同時間依 id）排列。"""
+    members: dict[uuid.UUID, list[TeamMember]] = {team_id: [] for team_id in team_ids}
+    if not members:
+        return members
+    for member in session.exec(
+        select(TeamMember)
+        .where(col(TeamMember.team_id).in_(list(members)))
+        .order_by(col(TeamMember.created_at), col(TeamMember.id))
+    ):
+        members[member.team_id].append(member)
+    return members
+
+
 def add_team(session: Session, team: Team) -> Team:
     """新增隊伍；同賽事已有同名隊伍時拋 DuplicateTeamNameError，外層交易不受影響。"""
     try:

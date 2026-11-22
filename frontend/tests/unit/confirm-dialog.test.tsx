@@ -40,6 +40,19 @@ describe("ConfirmDialog", () => {
     expect(screen.queryByRole("button", { name: "確定" })).toBeNull()
   })
 
+  it("自訂關閉鈕文字：顯示 cancelLabel，不顯示「取消」；按下後關閉、不呼叫 onConfirm", async () => {
+    const user = userEvent.setup()
+    const { onConfirm } = renderDialog({ cancelLabel: "保留賽事" })
+
+    await user.click(screen.getByRole("button", { name: "開啟" }))
+    await screen.findByRole("alertdialog")
+    expect(screen.queryByRole("button", { name: "取消" })).toBeNull()
+    await user.click(screen.getByRole("button", { name: "保留賽事" }))
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   it("確認成功：以 undefined 呼叫 onConfirm 後關閉", async () => {
     const user = userEvent.setup()
     const { onConfirm } = renderDialog()
