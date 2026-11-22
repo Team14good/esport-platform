@@ -209,3 +209,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`
   summary: （低）S34 的變更內容照原始資料顯示：欄位名稱是英文代碼（如 `registration_end`、`rank_tiers`），id 是 UUID（如 `game_id`、`organizer_id`），時間是 UTC ISO 字串；主辦方不一定看得懂。
   evidence: Story 2.8 Decisions。翻譯欄位名稱、把 id 換成名稱需要各模組提供對照（各模組寫紀錄的欄位不同），可在前端 `features/tournaments/audit-log.ts` 依 `entity_type` 加欄位名稱對照表，id 換名稱則需後端各模組提供批次查名稱的公開函式。
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
+  summary: （中）一般通知事件之間仍沒有重試上限：某則事件的 resolver 每次都拋非預期例外（程式錯誤、DataError）時，`dispatch_outbox` 每輪回滾、停在這則，之後的一般通知全部延後；驗證信與重設信已改為優先處理，不受影響。
+  evidence: 2026-11-21 OG-Matcha 在 #100 的審查第 1 點；followup 只做了 token 事件優先。修法：`outbox_event` 加 `attempts`／`last_error`（需遷移，`core/events.py`），失敗時在獨立交易裡累加，超過上限標為 dead-letter 並寫 log；或改成略過時記錄到操作紀錄。

@@ -4,7 +4,8 @@
 收到事件 payload 後，只經各模組 `service.py` 的公開函式查出收件人，
 回傳每位收件人一份 `NotificationDraft`（標題、說明、連結可以因人而異）。
 
-resolver 查不到實體時拋 `BusinessError` 或 `LookupError`，分派端記錄後略過該事件。
+resolver 查不到實體時拋 `BusinessError` 或 `RecipientsNotFound`，分派端記錄後略過該事件；
+其他例外（包括 `KeyError` 等程式錯誤）往外拋，由 worker 回滾後重試。
 """
 
 import uuid
@@ -15,6 +16,13 @@ from typing import cast
 from sqlmodel import Session
 
 from app.core.events import Event
+
+
+class RecipientsNotFound(Exception):
+    """resolver 查不到決定收件人所需的實體（例如對戰表已不存在）；分派端記錄後略過該事件。
+
+    不用 `LookupError`：它也是 `KeyError`、`IndexError` 的父類別，會把程式錯誤當成查不到。
+    """
 
 
 @dataclass(frozen=True)
