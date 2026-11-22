@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlmodel import Session
 
-from app.core import audit, authz, clock
+from app.core import audit, authz, clock, events
 from app.core.errors import BusinessError, FieldError
 from app.modules.identity import service as identity_service
 from app.modules.tournaments import repository
@@ -25,6 +25,7 @@ from app.modules.tournaments.models import (
     RefereeInvitationRead,
     RefereeRead,
     Tournament,
+    TournamentCancelled,
     TournamentCreate,
     TournamentMode,
     TournamentRead,
@@ -490,6 +491,33 @@ def transition_tournament(
         after={"status": to.value},
     )
     return _tournament_to_read(tournament)
+
+
+def cancel_tournament(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> TournamentRead:
+    """主辦方取消賽事（FR-10）：鎖賽事、轉為 `cancelled`、發 `TournamentCancelled`。
+
+    權限由呼叫端（router）先以 `authz.ensure_tournament_owner` 判斷。不存在拋 404
+    `TOURNAMENT_NOT_FOUND`；已結束或已取消拋 409 `TOURNAMENT_NOT_CANCELLABLE`，
+    狀態、操作紀錄與事件都不變。
+    """
+    tournament = lock_tournament(session, tournament_id=tournament_id)
+    # 能不能取消以狀態轉換表為準（已結束、已取消不能轉為 cancelled）
+    if TournamentStatus.CANCELLED not in _TRANSITIONS[tournament.status]:
+        raise BusinessError(
+            "TOURNAMENT_NOT_CANCELLABLE",
+            "已結束或已取消的賽事不能取消。",
+            status_code=409,
+        )
+    cancelled = transition_tournament(
+        session,
+        tournament_id=tournament_id,
+        to=TournamentStatus.CANCELLED,
+        actor_id=actor_id,
+    )
+    events.publish(session, TournamentCancelled(tournament_id=tournament_id))
+    return cancelled
 
 
 def ensure_accepting_registrations(tournament: TournamentRead) -> None:

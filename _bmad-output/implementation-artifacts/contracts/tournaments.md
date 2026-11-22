@@ -92,6 +92,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
   - `POST /referee-invites/{token}/accept`（已驗證 Email）：200 回 `RefereeRead`；已是裁判回原本的資料（冪等）。不存在 404、過期或已作廢 409 `REFEREE_INVITATION_EXPIRED`、賽事已結束或已取消 409 `TOURNAMENT_NOT_ACCEPTING_REFEREES`、主辦方本人 409 `ORGANIZER_CANNOT_BE_REFEREE`、未登入 401、未驗證 403 `EMAIL_NOT_VERIFIED`。
   - 不檢查受邀者是否為參賽隊員，由 4.4 指派裁判時檢查。
 - 公開 API（2.4，不需登入）：`GET /tournaments` 回傳所有賽事的 `list[PublicTournament]`，依開賽時間排序；`GET /tournaments/{tournament_id}` 回傳 `PublicTournament`，不存在 404 `TOURNAMENT_NOT_FOUND`，id 格式錯誤 422。
+- 取消賽事 API（2.6）：`POST /organizer/tournaments/{tournament_id}/cancel`（主辦方本人），200 回 `TournamentRead`（`status: cancelled`）。不存在 404 `TOURNAMENT_NOT_FOUND`；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；非主辦方 403 `ORGANIZER_REQUIRED`；未登入 401；已結束或已取消 409 `TOURNAMENT_NOT_CANCELLABLE`（「已結束或已取消的賽事不能取消。」），狀態、操作紀錄與事件都不變。
 
 ## 二、公開函式
 
@@ -112,10 +113,11 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `ensure_accepting_referees(tournament: TournamentRead) -> None` | tournaments 的裁判邀請（2.7）；其他模組需要時可呼叫 | 狀態為 `finished`、`cancelled` 時拋 `TOURNAMENT_NOT_ACCEPTING_REFEREES` 409；不碰資料庫 | 2.7 |
 | `find_due_registration_end_id(session) -> UUID \| None` | C（3.6 報名截止 worker 工作） | 一筆狀態為 `open`、`registration_end <= clock.now()` 的賽事 id，依報名截止時間、再依 id，最早到期的優先；不加鎖，呼叫端鎖住後要重新檢查。沒有任何報名的賽事也找得到（C 在 3.6 新增） | 3.6 |
 | `list_closed_tournament_ids(session) -> list[UUID]` | D（4.2 自動抽籤 worker 工作） | 狀態為 `closed`、`start_at > clock.now()` 的賽事 id，依報名截止時間、再依 id；不加鎖，呼叫端鎖住後要重新檢查（D 在 4.2 新增） | 4.2 |
+| `cancel_tournament(session, *, tournament_id, actor_id) -> TournamentRead` | tournaments 的取消賽事 API（2.6 S27） | 先 `lock_tournament`，再經 `transition_tournament` 轉為 `cancelled`（操作紀錄 `tournament.status_changed`），同一交易發出 `TournamentCancelled`。已結束或已取消拋 `TOURNAMENT_NOT_CANCELLABLE` 409；不存在拋 `TOURNAMENT_NOT_FOUND` 404。主辦方權限由呼叫端以 `authz.ensure_tournament_owner` 判斷 | 2.6 |
 
 三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
 
-期中不提供（擱置的 Story）：`update_tournament`、`cancel_tournament`（2.5、2.6）、`reset_invite_link`（3.10）、`list_audit_logs`（2.8）。registration 的「提高名額」（FR-9）同樣到期末。
+期中不提供（擱置的 Story）：`update_tournament`（2.5）、`reset_invite_link`（3.10）、`list_audit_logs`（2.8）。registration 的「提高名額」（FR-9）同樣到期末。
 
 ## 三、狀態轉換
 
@@ -126,7 +128,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `open` → `published`、`closed` → `published` | D（4.1 抽籤） | 抽籤完成；開放報名中提前抽籤時直接從 `open` 轉 |
 | `published` → `ongoing` | D（5.x） | 最早一場開放報到時（開賽前 30 分鐘） |
 | `ongoing` → `finished` | D（5.5） | 決賽與季軍賽確定（季軍賽取消或不存在也算） |
-| 任何非 `finished` → `cancelled` | B（2.6，期中擱置） | 主辦方取消；期中只保留轉換規則與防呆 |
+| 任何非 `finished` → `cancelled` | B（2.6 `cancel_tournament`） | 主辦方在 S27 取消；發出 `TournamentCancelled` |
 | `closed` → `open` | B（2.5，期中擱置） | 正取不足 2 隊時延長報名 |
 
 中文名稱：尚未開放、開放報名、報名截止、賽程已公布、進行中、已結束、已取消。
@@ -134,7 +136,8 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 ## 四、其他約定
 
 - **操作紀錄**：2.2 在 `audit_log.tournament_id` 加上外鍵到 `tournament.id`（`core/audit.py` 的註記）。各模組寫賽事相關的操作紀錄時帶 `tournament_id`。
-- **事件**：tournaments 期中不發其他模組需要處理的事件；之後新增時補在這裡。
+- **事件**（`tournaments/models.py`）：
+  - `TournamentCancelled(tournament_id: UUID)`（2.6）：主辦方取消賽事時，在同一交易經 `core.events.publish` 寫入 outbox；只帶實體 id。收件規則（所有已報名隊伍的隊長與選手）由 A 的 3.9 在 notifications 登錄，登錄前不會發通知。
 - **權限**：主辦方對自己賽事的權限，用 `TournamentRead.organizer_id` 交給 `core.authz.ensure_tournament_owner` 判斷。
 - **裁判權限**：`core.authz.is_tournament_referee(referee_tournament_ids, tournament_id)` 與 `ensure_tournament_referee(...)`（403 `TOURNAMENT_REFEREE_REQUIRED`）只比對呼叫端已載入的「該帳號擔任裁判的賽事 id」；一般情況直接呼叫 `is_referee`。
 

@@ -119,6 +119,24 @@ def read_my_tournament(
     return tournament
 
 
+@router.post("/organizer/tournaments/{tournament_id}/cancel")
+def cancel_my_tournament(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> TournamentRead:
+    """取消自己的賽事，發出 `TournamentCancelled`。
+
+    不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；已結束或已取消 409
+    `TOURNAMENT_NOT_CANCELLABLE`。
+    """
+    tournament = service.get_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, organizer.id)
+    cancelled = service.cancel_tournament(
+        session, tournament_id=tournament_id, actor_id=organizer.id
+    )
+    session.commit()
+    return cancelled
+
+
 # ---------------------------------------------------------------- 裁判
 
 

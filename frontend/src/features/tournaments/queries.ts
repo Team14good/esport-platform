@@ -4,7 +4,7 @@ import { TournamentsService } from "@/client"
 import { parseApiError } from "@/lib/api-error"
 import { shouldRetryQuery } from "@/lib/query-client"
 
-const PUBLIC_TOURNAMENTS_KEY = ["tournaments", "public"] as const
+export const PUBLIC_TOURNAMENTS_KEY = ["tournaments", "public"] as const
 
 /** S1：所有公開賽事（不需登入）。 */
 export const publicTournamentsQueryOptions = () =>

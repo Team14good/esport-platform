@@ -337,6 +337,10 @@ test_traceability.py:
   layer: unit
   stories: ["7.3"]
   frs: [NFR-2]
+tournaments/test_cancel_tournament.py:
+  layer: integration
+  stories: ["2.6"]
+  frs: [FR-10]
 tournaments/test_demo_data.py:
   layer: integration
   stories: ["7.1"]
@@ -369,6 +373,10 @@ worker/test_auto_draw.py:
   layer: integration
   stories: ["4.2", "3.6"]
   frs: [FR-16, FR-19, NFR-4]
+worker/test_cancelled_tournament_skipped.py:
+  layer: integration
+  stories: ["2.6"]
+  frs: [FR-10]
 worker/test_confirm_expired_appeals.py:
   layer: integration
   stories: ["5.5"]
