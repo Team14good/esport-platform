@@ -118,7 +118,7 @@ Story 2.6（B，取消賽事）尚未完成：目前沒有取消賽事的 API、
 - [x] `frontend/src/client` -- `scripts/generate-client.sh` 重新產生
 - [x] `frontend/src/features/registration/queries.ts` -- 新增 `publicAcceptedTeamsQueryOptions(tournamentId)`
 - [x] `frontend/src/features/disputes/AcceptedTeamReportAction.tsx` -- 新檔：每列「檢舉」的資格判斷 hook 與按鈕／「已檢舉・處理中」，以及開 `ReportTeamDialog`（只傳該列一隊）
-- [x] `frontend/src/features/registration/AcceptedTeamsPage.tsx` -- 新檔：「正取隊伍」分頁頁面（骨架、優先期空狀態與倒數、名單、空名單、錯誤）；匯出總覽用的 `AcceptedCount`
+- [x] `frontend/src/features/registration/AcceptedTeamsPage.tsx` -- 新檔：「正取隊伍」分頁頁面（骨架、優先期空狀態與倒數、名單、空名單、錯誤）；總覽用的 `AcceptedCount` 放在 `AcceptedCount.tsx`（見 Implementation Notes）
 - [x] `frontend/src/routes/tournaments/$tournamentId/teams.tsx` -- 新路由；重新產生 `routeTree.gen.ts`
 - [x] `frontend/src/features/tournaments/TournamentTabs.tsx` -- 白名單加「正取隊伍」；更新檔頭註解
 - [x] `frontend/src/features/tournaments/TournamentOverview.tsx` -- `open` 分支加 `<AcceptedCount>` 掛載點
@@ -132,6 +132,11 @@ Story 2.6（B，取消賽事）尚未完成：目前沒有取消賽事的 API、
 - Given 開放報名的賽事，when 開啟 S2 總覽，then 顯示「已正取 n／名額 隊」。
 - Given 校園賽、優先期尚未結束，when 開啟「正取隊伍」，then 顯示「優先期結束後公布正取隊伍。」與優先期結束倒數。
 - Given 後端與前端，when 執行 `ci.yml` 的檢查，then 全部通過。
+
+## Implementation Notes
+
+- 2026-11-22 實作後：`AcceptedCount` 原本由 `AcceptedTeamsPage.tsx` 匯出，造成 `TournamentOverview` → `AcceptedTeamsPage` → `TournamentPage` → `TournamentOverview` 的循環 import（建置與測試都正常，但模組初始化順序脆弱），拆到 `features/registration/AcceptedCount.tsx`。
+- 本機驗證、e2e 截圖與測試數記在 PR 說明的〈本機驗證〉。
 
 ## Spec Change Log
 

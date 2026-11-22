@@ -30,11 +30,6 @@ import { publicAcceptedTeamsQueryOptions } from "./queries"
 export const PRIORITY_HIDDEN_TEXT = "優先期結束後公布正取隊伍。"
 export const NO_ACCEPTED_TEAMS_TEXT = "目前還沒有正取隊伍。"
 
-/** 總覽的已正取隊數文字 */
-export function acceptedCountText(count: number, capacity: number): string {
-  return `已正取 ${count}／${capacity} 隊`
-}
-
 /**
  * 分頁標題「{賽事名稱} · FLOW」；離開頁面時還原。
  * 下一頁的 head 可能已先寫入自己的標題，那時不還原，免得蓋掉它。
@@ -127,23 +122,6 @@ function AcceptedTeamsList({ tournament }: { tournament: PublicTournament }) {
         重新載入
       </Button>
     </div>
-  )
-}
-
-/** 總覽（開放報名時）的「已正取 n／名額 隊」；載入中或失敗時不顯示。 */
-export function AcceptedCount({
-  tournamentId,
-  capacity,
-}: {
-  tournamentId: string
-  capacity: number
-}) {
-  const accepted = useQuery(publicAcceptedTeamsQueryOptions(tournamentId))
-  if (!accepted.data) return null
-  return (
-    <p className="text-body">
-      {acceptedCountText(accepted.data.teams.length, capacity)}
-    </p>
   )
 }
 
