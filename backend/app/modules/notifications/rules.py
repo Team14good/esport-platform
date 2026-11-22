@@ -21,10 +21,12 @@ from app.core.events import Event
 from app.modules.competition import service as competition_service
 from app.modules.competition.models import (
     AutoDrawSkipped,
+    BracketBackfilled,
     BracketDrawn,
     MatchOpponentsDecided,
     MatchRead,
     MatchRescheduled,
+    OpponentRetired,
     RefereeAssigned,
     RefereeUnassigned,
 )
@@ -454,3 +456,45 @@ def _registration_rejected(
 
 
 register(RegistrationRejected, _registration_rejected)
+
+
+# ---------------------------------------------------------------- 抽籤後退賽與遞補（4.5）
+
+
+def _bracket_backfilled(
+    session: Session, event: BracketBackfilled
+) -> list[NotificationDraft]:
+    match = competition_service.get_match(session, match_id=event.match_id)
+    team = registration_service.get_team(session, team_id=event.team_id)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=match.tournament_id
+    )
+    return _drafts(
+        _member_ids(session, team.id),
+        title="已遞補進入對戰表",
+        body=f"「{team.name}」已由候補遞補，接手「{tournament.name}」{match.code} 的位置。",
+        link=_match_link(match),
+    )
+
+
+def _opponent_retired(
+    session: Session, event: OpponentRetired
+) -> list[NotificationDraft]:
+    match = competition_service.get_match(session, match_id=event.match_id)
+    captains = [
+        account_id
+        for account_id in _member_ids(session, event.winner_id)
+        if registration_service.is_captain(
+            session, team_id=event.winner_id, account_id=account_id
+        )
+    ]
+    return _drafts(
+        captains,
+        title="對手退賽",
+        body=f"{match.code} 的對手已退賽，你們以輪空晉級。",
+        link=_match_link(match),
+    )
+
+
+register(BracketBackfilled, _bracket_backfilled)
+register(OpponentRetired, _opponent_retired)

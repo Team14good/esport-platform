@@ -46,6 +46,13 @@ class FakeRegistration:
     # 6.5：隊伍所屬的賽事（`list_accepted_teams` 時記下）與已取消資格的隊伍
     tournament_id: uuid.UUID | None = None
     disqualified: list[tuple[uuid.UUID, uuid.UUID]] = field(default_factory=list)
+    # 4.5：候補（依順位，第 1 位先遞補）、隊長與隊員、退賽紀錄、各隊報名狀態
+    waitlist: list[uuid.UUID] = field(default_factory=list)
+    captains: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
+    players: dict[uuid.UUID, set[uuid.UUID]] = field(default_factory=dict)
+    retired: list[tuple[uuid.UUID, uuid.UUID]] = field(default_factory=list)
+    statuses: dict[uuid.UUID, str] = field(default_factory=dict)
+    backfilled: list[uuid.UUID] = field(default_factory=list)
 
     def set_team_count(self, count: int) -> list[uuid.UUID]:
         self.teams = [uuid.uuid4() for _ in range(count)]
@@ -94,13 +101,78 @@ class FakeRegistration:
         return registration_port.RegistrationState(
             tournament_id=self.tournament_id,
             disqualified=any(team == team_id for team, _ in self.disqualified),
+            status=self.statuses.get(team_id, "drawn"),
         )
 
     def disqualify_registration(
         self, _session: Session, *, team_id: uuid.UUID, actor_id: uuid.UUID
     ) -> None:
         self.calls.append("disqualify_registration")
+        if self.statuses.get(team_id, "drawn") != "drawn":
+            raise BusinessError(
+                "REGISTRATION_INVALID_TRANSITION",
+                "報名目前的狀態不能進行這個操作。",
+                status_code=409,
+            )
+        self.statuses[team_id] = "disqualified"
         self.disqualified.append((team_id, actor_id))
+
+    def add_waitlist(self, count: int) -> list[uuid.UUID]:
+        """加入 `count` 支候補隊伍（尚未在 `teams`，遞補後才加入）。"""
+        added = [uuid.uuid4() for _ in range(count)]
+        self.waitlist.extend(added)
+        return added
+
+    def set_captain(self, team_id: uuid.UUID, account_id: uuid.UUID) -> None:
+        self.captains[team_id] = account_id
+        self.players.setdefault(team_id, set()).add(account_id)
+
+    def get_team_tournament_id(
+        self, _session: Session, *, team_id: uuid.UUID
+    ) -> uuid.UUID:
+        known = [*self.teams, *self.waitlist]
+        if team_id not in known or self.tournament_id is None:
+            raise BusinessError("TEAM_NOT_FOUND", "找不到這支隊伍。", status_code=404)
+        return self.tournament_id
+
+    def is_member(
+        self, _session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+    ) -> bool:
+        return account_id in self.players.get(team_id, set())
+
+    def is_captain(
+        self, _session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+    ) -> bool:
+        return self.captains.get(team_id) == account_id
+
+    def retire_registration(
+        self, _session: Session, *, team_id: uuid.UUID, actor_id: uuid.UUID
+    ) -> None:
+        self.calls.append("retire_registration")
+        if self.statuses.get(team_id, "drawn") != "drawn":
+            raise BusinessError(
+                "REGISTRATION_INVALID_TRANSITION",
+                "報名目前的狀態不能進行這個操作。",
+                status_code=409,
+            )
+        self.statuses[team_id] = "retired"
+        self.retired.append((team_id, actor_id))
+
+    def backfill_drawn_from_waitlist(
+        self, _session: Session, *, tournament_id: uuid.UUID
+    ) -> uuid.UUID | None:
+        self.calls.append("backfill_drawn_from_waitlist")
+        if not self.waitlist:
+            return None
+        team_id = self.waitlist.pop(0)
+        self.teams.append(team_id)
+        self.backfilled.append(team_id)
+        return team_id
+
+    def has_backfill_candidate(
+        self, _session: Session, *, tournament_id: uuid.UUID, leaving_team_id: uuid.UUID
+    ) -> bool:
+        return bool(self.waitlist)
 
     def list_disqualified_team_ids(
         self, _session: Session, *, tournament_id: uuid.UUID
@@ -122,6 +194,10 @@ def fake_registration(monkeypatch: pytest.MonkeyPatch) -> FakeRegistration:
         "get_registration_state",
         "disqualify_registration",
         "list_disqualified_team_ids",
+        "get_team_tournament_id",
+        "retire_registration",
+        "backfill_drawn_from_waitlist",
+        "has_backfill_candidate",
     ):
         monkeypatch.setattr(registration_port, name, getattr(fake, name))
     return fake

@@ -232,6 +232,21 @@ class MatchOpponentsDecided(Event):
     match_id: uuid.UUID
 
 
+class BracketBackfilled(Event):
+    """候補遞補進入對戰表（4.5 退賽、6.5 取消資格共用）：`team_id` 接手 `replaced_team_id` 的位置。"""
+
+    match_id: uuid.UUID
+    team_id: uuid.UUID
+    replaced_team_id: uuid.UUID
+
+
+class OpponentRetired(Event):
+    """沒有候補可遞補，對手退賽、`winner_id` 以輪空晉級（4.5；通知對手隊長）。"""
+
+    match_id: uuid.UUID
+    winner_id: uuid.UUID
+
+
 class MatchResultSubmitted(Event):
     """記分者送出系列結果，場次進入申訴期（5.4）。"""
 
@@ -435,6 +450,24 @@ class DisqualifyResult(BaseModel):
     # 之後由晉級推進連帶改動的場次不列入。抽籤前或只改報名狀態時為空
     affected_match_ids: list[uuid.UUID]
     # 頂替原位置的隊伍；沒有頂替為 None
+    replacement_team_id: uuid.UUID | None
+
+
+class RetirementStatus(BaseModel):
+    """S17 退賽按鈕（4.5）：`retirable` 為真才可按。
+
+    `retirable` 為假而 `reason` 有值時，按鈕停用並顯示原因（輪空隊伍對手未定又沒有候補）；
+    兩者都沒有時不顯示按鈕。
+    """
+
+    retirable: bool
+    reason: str | None = None
+
+
+class RetireResult(BaseModel):
+    """退賽的結果：被改動的場次，與接手的候補隊伍（沒有候補為 None，對手輪空晉級）。"""
+
+    match_id: uuid.UUID
     replacement_team_id: uuid.UUID | None
 
 

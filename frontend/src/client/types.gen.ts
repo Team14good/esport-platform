@@ -2262,6 +2262,41 @@ export type ResultScreenshotState = {
 }
 
 /**
+ * RetireResult
+ *
+ * 退賽的結果：被改動的場次，與接手的候補隊伍（沒有候補為 None，對手輪空晉級）。
+ */
+export type RetireResult = {
+  /**
+   * Match Id
+   */
+  match_id: string
+  /**
+   * Replacement Team Id
+   */
+  replacement_team_id: string | null
+}
+
+/**
+ * RetirementStatus
+ *
+ * S17 退賽按鈕（4.5）：`retirable` 為真才可按。
+ *
+ * `retirable` 為假而 `reason` 有值時，按鈕停用並顯示原因（輪空隊伍對手未定又沒有候補）；
+ * 兩者都沒有時不顯示按鈕。
+ */
+export type RetirementStatus = {
+  /**
+   * Retirable
+   */
+  retirable: boolean
+  /**
+   * Reason
+   */
+  reason?: string | null
+}
+
+/**
  * SchoolIn
  *
  * 平台管理員新增學校或修正學校名稱（名稱去除前後空白後儲存）。
@@ -4804,6 +4839,70 @@ export type competitionAssignRefereeResponses = {
 
 export type competitionAssignRefereeResponse =
   competitionAssignRefereeResponses[keyof competitionAssignRefereeResponses]
+
+export type competitionReadRetirementStatusData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/retirement"
+}
+
+export type competitionReadRetirementStatusErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadRetirementStatusError =
+  competitionReadRetirementStatusErrors[keyof competitionReadRetirementStatusErrors]
+
+export type competitionReadRetirementStatusResponses = {
+  /**
+   * Successful Response
+   */
+  200: RetirementStatus
+}
+
+export type competitionReadRetirementStatusResponse =
+  competitionReadRetirementStatusResponses[keyof competitionReadRetirementStatusResponses]
+
+export type competitionRetireTeamData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/retirement"
+}
+
+export type competitionRetireTeamErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionRetireTeamError =
+  competitionRetireTeamErrors[keyof competitionRetireTeamErrors]
+
+export type competitionRetireTeamResponses = {
+  /**
+   * Successful Response
+   */
+  200: RetireResult
+}
+
+export type competitionRetireTeamResponse =
+  competitionRetireTeamResponses[keyof competitionRetireTeamResponses]
 
 export type disputesListReportableTeamsData = {
   body?: never

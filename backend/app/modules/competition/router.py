@@ -26,6 +26,8 @@ from app.modules.competition.models import (
     RefereeTournamentMatches,
     RescheduleIn,
     ResultScreenshotState,
+    RetirementStatus,
+    RetireResult,
     ScoreEntryState,
 )
 from app.modules.identity.deps import CurrentAccount, Organizer, VerifiedAccount
@@ -331,5 +333,25 @@ def unassign_referee(
         match_id=match_id,
         actor_id=organizer.id,
     )
+    session.commit()
+    return result
+
+
+@router.get("/teams/{team_id}/retirement")
+def read_retirement_status(
+    session: SessionDep, account: VerifiedAccount, team_id: uuid.UUID
+) -> RetirementStatus:
+    """S17 退賽按鈕：這支隊伍現在能不能退賽；只限隊員，只讀（不 commit）。"""
+    return service.get_retirement_status(
+        session, team_id=team_id, account_id=account.id
+    )
+
+
+@router.post("/teams/{team_id}/retirement")
+def retire_team(
+    session: SessionDep, account: VerifiedAccount, team_id: uuid.UUID
+) -> RetireResult:
+    """抽籤後隊長退賽：候補第 1 位接手位置，沒有候補則對手輪空晉級。"""
+    result = service.retire_team(session, team_id=team_id, account_id=account.id)
     session.commit()
     return result

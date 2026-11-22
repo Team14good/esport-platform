@@ -788,3 +788,27 @@
 - 問題與修正：AI 第一版測試以為 `BracketRead` 有 `team_count`，第一次執行 4 項失敗，改用場次中的隊伍比對；第一版 `service.py` 沒照 ruff format，被 lint 擋下；審查子代理指出已判定不足的賽事每一輪都會被 `lock_tournament`，改為先以不加鎖的讀取排除；另外 5 點（期中事件不補發、持續拋錯只寫 log、registration `mark_drawn` 型別、併發測試是機率性、2.5 必須轉回 `open`）寫進 spec 與 deferred-work
 - 成熟度：L4（依 spec 實作，多層測試、變異測試與獨立審查子代理驗證；人只在派工與核准 spec 時決策）
 - 證據：`_bmad-output/implementation-artifacts/spec-4-2-auto-draw.md`、本 PR 的 diff
+
+### 2026-11-22｜需求／驗收條件與細部設計｜Story 4.5 抽籤後退賽與候補遞補 spec
+
+- Story／範圍：4.5（期中擱置、期末照原版 AC）；連帶 6.5 抽籤後取消資格改走遞補
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（子代理在獨立 worktree 執行，停在 Checkpoint 1）
+- 怎麼用：派工寫明既定方向（competition 主導、AD-6 鎖序、截止後順位與每校 2 隊、無候補 walkover、6.5 接上同一套）與驗證方式；AI 讀 epics 4.5／5.1／6.5、3.7／3.8／6.5／4.2 的 spec、架構 AD-4／6／7／20 與程式後寫 spec，需求沒講清楚的地方列成「待決定」
+- AI 產出：spec（Intent、Boundaries、16 列 I/O 表、Code Map、14 個 task）與 8 題待決定（每題 2～3 個選項＋建議）：輪空隊對手未定又沒有候補、自訂模式遞補、6.5 怎麼接（含 4 個子項）、報到後不能退賽、對話框文字、通知對象、重賽中的第一場、4.2 的後續
+- 人做了什麼：8 題全部採建議選項並核准，spec 超過 1,600 tokens 仍整份保留；自訂模式與 4.2 後續記進 deferred-work
+- 驗證：每條規則對照 epics 原文與實際程式（`disqualification._plan`、`_backfill_released_locked` 對非 campus 直接 return、`create_tournament` 一律 campus、`confirm_walkover` 要求一方為空）
+- 問題與修正：AI 查出 CONTRIBUTING 7.3「不改 B 的既有函式」與 6.5 必須改行為的衝突，沒有自己決定，列成選項；也查出 `backfill_vacancies` 以「名額 − 正取數」算空位、抽籤後不能沿用，寫進 Design Notes
+- 成熟度：L3（AI 依既有規格產出 spec，人在 checkpoint 決策）
+- 證據：`_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
+
+### 2026-11-23｜程式＋測試／程式生成、審查與突變檢查｜Story 4.5 抽籤後退賽與候補遞補
+
+- Story／範圍：4.5；competition 新檔 `retirement.py`、兩支 API、registration 新增 3 個公開函式、notifications 2 條規則、S17 退賽區塊
+- 工具：Claude Code（Opus 5.5）＋ bmad-build；1 個實作子代理、3 個只拿 diff 的審查子代理（Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：spec 核准後由子代理實作；三層審查找出問題，主 session 逐條判定後派回同一個子代理修正；主 session 自己跑完整測試與突變檢查
+- AI 產出：後端 5 個新測試檔（51 個測試）加既有檔新增 14 個測試；前端 3 個新檔、7 個單元測試、1 支 e2e（desktop＋mobile-375）
+- 人做了什麼：核准 spec 與 8 個決定；要求 6.5 只改 `service.disqualify` 那一行轉呼叫、B 的 `disqualification.py` 不動
+- 驗證：完整 `scripts/test.sh` 2725 passed（第一輪 1 failed，見下）、覆蓋率 97%、`retirement.py` 97%；`scripts/lint.sh` 通過；前端 build、typecheck、biome 通過，單元測試 1151 passed；e2e 2 passed；突變檢查：讓 `backfill_drawn_from_waitlist` 直接回 None，6 個測試失敗、還原後 14 passed；拿掉報到／比分／截圖的 `lock_tournament`，3 個鎖序測試失敗、還原後通過
+- 問題與修正：(1) 子代理的併發測試抓到報到只鎖場次、退賽先鎖賽事時會死結，報到改成先鎖賽事；審查再指出比分寫入與結算截圖是同一機制，一起修正並補確定性鎖序測試（順帶結掉 deferred 的兩項）；(2) 所有退賽測試都用替身、不看學校，「先讓離開的隊伍出局、再取候補」的順序沒有任何測試保護，補了真 registration 的測試，對調順序時失敗；(3) 寫入後才 `assert`，改成業務錯誤避免 500；(4) 退賽被拒後區塊被卸載、錯誤訊息一閃即逝（與 3.7 同一個 bug），改成確認框開著時保持掛載；(5) 第一輪完整測試因新測試檔沒寫進 `traceability.yaml` 失敗；(6) 21 項審查發現中 10 項駁回，理由記在 spec 的 Review Triage Log
+- 成熟度：L4（規劃 → 實作 → 三層獨立審查 → 完整測試、e2e 與突變檢查，人只在 checkpoint 決策）
+- 證據：spec 的 Implementation Notes、Review Triage Log；本 PR 的 diff

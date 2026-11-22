@@ -48,19 +48,11 @@
   evidence: 2026-10-31 公開單場 API 審查（Edge Case Hunter、Blind Hunter）。期中不能取消賽事（2.6 擱置），已結束的賽事也不會有停在申訴期的場次，所以目前不會發生。2.6 實作取消時，要決定公開頁對這類場次顯示什麼，並在 `get_public_match` 加上賽事狀態判斷。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
-  summary: （低）報到只鎖場次、讀賽事狀態不加鎖；2.6 做取消賽事時，取消與報到同時發生可能寫入一筆已取消賽事的報到紀錄。
-  evidence: 2026-11-01 5.1 第二階段審查（Blind Hunter、Edge Case Hunter）。期中不能取消賽事（2.6 擱置），所以目前不會發生。2.6 實作時改成先 `lock_tournament` 再 `lock_match`（AD-6 順序），或由取消流程鎖住所有場次。
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
   summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
   evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-schedule-rules.md`
   summary: 4.3 第二階段的改時間 service 呼叫 `reschedule_window`／`check_reschedule` 時，準決賽的 `next_match_at` 要傳決賽與季軍賽中較早的那一場。
   evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
-  summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
-  evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: （低）公開賽事列表 `GET /tournaments` 沒有分頁或上限，未登入的請求一次取回所有賽事（含已結束、已取消）。
@@ -211,3 +203,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
   summary: （中）一般通知事件之間仍沒有重試上限：某則事件的 resolver 每次都拋非預期例外（程式錯誤、DataError）時，`dispatch_outbox` 每輪回滾、停在這則，之後的一般通知全部延後；驗證信與重設信已改為優先處理，不受影響。
   evidence: 2026-11-21 OG-Matcha 在 #100 的審查第 1 點；followup 只做了 token 事件優先。修法：`outbox_event` 加 `attempts`／`last_error`（需遷移，`core/events.py`），失敗時在獨立交易裡累加，超過上限標為 dead-letter 並寫 log；或改成略過時記錄到操作紀錄。
+
+## Deferred from: spec-4-5-post-draw-withdrawal.md (2026-11-22)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
+  summary: （中）自訂模式抽籤後退賽／取消資格的遞補沒有做：registration `backfill_drawn_from_waitlist` 對非 `campus` 回 `None`，自訂賽事一律走「沒有候補」（退賽對手輪空、取消資格判對手勝）。
+  evidence: Story 4.5 Decisions 第 2 項（2026-11-22 黃鉅燊核准）。自訂模式的候補怎麼產生由 C 的 3.10 決定，目前 `create_tournament` 一律存 `campus`、無法端對端驗證。修法：3.10 在 `backfill_drawn_from_waitlist` 同一個函式內（依 AD-20 經 `allocation.py` 的策略）補「最早送出的候補遞補、不受每校 2 隊上限」，並補 epics 4.5「自訂模式」那條 AC 的測試。
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
+  summary: （低）4.2 截止時正取不足、`auto_draw` 寫了 `AutoDrawSkip` 後，主辦方在「報名截止」用 3.7 的 `raise_capacity` 讓候補遞補到 2 隊以上，同一個 `registration_end` 不會再自動抽籤（主辦方仍可手動抽籤）。
+  evidence: Story 4.5 Decisions 第 8 項（2026-11-22 黃鉅燊核准不在 4.5 做）。修法：competition `auto_draw` 鎖內查到略過紀錄時，若目前正取 ≥2 且大於 `skip.accepted_teams` 就照常抽籤（`auto_draw_due` 的不加鎖預先排除也要同樣放寬），補「略過後提高名額再自動抽籤」與「略過後正取仍不足不重複發事件」的測試。

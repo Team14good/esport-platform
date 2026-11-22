@@ -15,11 +15,11 @@ from app.core.errors import BusinessError
 from app.modules.competition import bracket as bracket_rules
 from app.modules.competition import checkin as checkin_rules
 from app.modules.competition import (
-    disqualification,
     progression,
     registration_port,
     repository,
     result_screenshot,
+    retirement,
     scoring,
 )
 from app.modules.competition import schedule as schedule_rules
@@ -64,6 +64,8 @@ from app.modules.competition.models import (
     RescheduleBlockReason,
     RescheduleInfo,
     ResultScreenshotState,
+    RetirementStatus,
+    RetireResult,
     ScoreEntryReason,
     ScoreEntryState,
     SeriesRead,
@@ -1275,9 +1277,11 @@ def check_in(
 ) -> CheckInRead:
     """隊長為本隊報到；隊伍由登入者是哪一隊的隊長推得。
 
-    先鎖場次再檢查（AD-6）；任何拒絕都不寫報到紀錄與操作紀錄。
+    先鎖賽事、再鎖場次（AD-6）：寫操作紀錄會對賽事列取共享鎖，只鎖場次時與先鎖賽事再鎖
+    場次的退賽（4.5）會互相等待而死結。任何拒絕都不寫報到紀錄與操作紀錄。
     """
     _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    tournaments_service.lock_tournament(session, tournament_id=tournament_id)
     match = lock_match(session, match_id=match_id)
     _side, team_id, reason = _evaluate_check_in(
         session, match=match, account_id=account_id
@@ -1536,10 +1540,12 @@ def _locked_for_scoring(
 ) -> tuple[Match, TournamentRead]:
     """寫入（登錄、刪除、送出）共用的檢查 1～6；通過時回傳鎖住的場次與賽事。
 
-    順序：404 → `lock_match`（AD-6，之後才讀狀態、局與報到紀錄）→ 賽事接受比分 →
+    順序：404 → `lock_tournament`、`lock_match`（AD-6，之後才讀狀態、局與報到紀錄；寫操作紀錄
+    會對賽事列取共享鎖，只鎖場次會與先鎖賽事的退賽互等而死結）→ 賽事接受比分 →
     記分者 → 場次狀態 → 兩隊確定與報到。
     """
     _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    tournaments_service.lock_tournament(session, tournament_id=tournament_id)
     match = lock_match(session, match_id=match_id)
     tournament = tournaments_service.get_tournament(
         session, tournament_id=match.tournament_id
@@ -1801,11 +1807,12 @@ def upload_result_screenshot(
 ) -> result_screenshot.UploadedScreenshot:
     """勝隊隊長上傳或更換結算截圖（FR-28）；不影響結果確認與晉級。
 
-    順序：404 `MATCH_NOT_FOUND` → `lock_match`（AD-6）→ 系列結果已送出（409
+    順序：404 `MATCH_NOT_FOUND` → `lock_tournament`、`lock_match`（AD-6）→ 系列結果已送出（409
     `RESULT_NOT_SUBMITTED`）→ 勝隊隊長（403 `WINNING_CAPTAIN_REQUIRED`）→ 存圖片
     （415／413）。任何拒絕都不寫資料、不留檔案。新舊檔的清理由 router 依回傳值處理。
     """
     _match_in_tournament(session, tournament_id=tournament_id, match_id=match_id)
+    tournaments_service.lock_tournament(session, tournament_id=tournament_id)
     match = lock_match(session, match_id=match_id)
     return result_screenshot.upload(
         session,
@@ -2556,7 +2563,33 @@ def disqualify(
     呼叫端須在同一交易把 `affected_match_ids` 每一場未結案的申訴結案（competition 不碰
     disputes 的資料表）。`affected_match_ids` 只含直接改動的場次，不含之後晉級推進連帶
     確認的場次；之後要通知時從事件或操作紀錄取得。
+
+    4.5：隊伍沒有已確認場次、唯一未結束的場次待開打時，改走 `retirement.disqualify`：有候補
+    就由候補第 1 位接手位置（`replacement_team_id`）；沒有候補維持判對手獲勝；其他情況
+    照舊交給 `disqualification.disqualify`。
     """
-    return disqualification.disqualify(
+    return retirement.disqualify(
         session, tournament_id=tournament_id, team_id=team_id, actor_id=actor_id
+    )
+
+
+# ---------------------------------------------------------------- 抽籤後退賽（4.5）
+
+
+def retire_team(
+    session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+) -> RetireResult:
+    """隊長在抽籤後替隊伍退賽，由候補第 1 位接手位置；沒有候補則對手輪空晉級。
+
+    規則、鎖的順序與錯誤碼見 `retirement.py`。不 commit（AD-5）。
+    """
+    return retirement.retire_team(session, team_id=team_id, account_id=account_id)
+
+
+def get_retirement_status(
+    session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+) -> RetirementStatus:
+    """S17：登入者能不能替這支隊伍退賽（只讀）；見 `retirement.get_retirement_status`。"""
+    return retirement.get_retirement_status(
+        session, team_id=team_id, account_id=account_id
     )
