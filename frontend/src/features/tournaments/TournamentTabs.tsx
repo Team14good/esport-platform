@@ -5,7 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { FileRouteTypes } from "@/routeTree.gen"
 
 // S2 的分頁列。每個分頁是一個路由（S3 對戰表是 `/tournaments/$tournamentId/bracket`），
-// 分頁按鈕是連結；之後的 Story（4.6 對戰表、3.9 正取隊伍）在 TOURNAMENT_TABS 加上自己的分頁。
+// 分頁按鈕是連結；各 Story 在 TOURNAMENT_TABS 加上自己的分頁（4.6 對戰表、3.9 正取隊伍
+// `/tournaments/$tournamentId/teams`）。
 
 /** 分頁可以連到的路由：賽事頁底下、但不是 S4 場次頁（`matches/`，不在分頁列） */
 type TournamentTabPath = Exclude<
@@ -20,6 +21,11 @@ const TOURNAMENT_TABS = [
     value: "bracket",
     label: "對戰表",
     to: "/tournaments/$tournamentId/bracket",
+  },
+  {
+    value: "teams",
+    label: "正取隊伍",
+    to: "/tournaments/$tournamentId/teams",
   },
 ] as const satisfies ReadonlyArray<{
   value: string

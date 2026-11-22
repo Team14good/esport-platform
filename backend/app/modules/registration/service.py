@@ -29,6 +29,8 @@ from app.modules.registration.models import (
     OrganizerRegistrationMember,
     OrganizerRegistrationPage,
     PriorityWindowSettlement,
+    PublicAcceptedTeam,
+    PublicAcceptedTeams,
     Registration,
     RegistrationAllocated,
     RegistrationBackfilled,
@@ -1951,3 +1953,41 @@ def list_teams_by_status(
         TeamSummary(id=team.id, name=team.name)
         for team in repository.list_teams_by_status(session, tournament_id, statuses)
     ]
+
+
+# ---------------------------------------------------------------- 公開正取名單（Story 3.9）
+
+# 列入公開名單的狀態：目前握有或曾經參賽的名額。取消資格不列（抽籤前會被遞補，
+# 抽籤後由對戰樹標示）；待分配、候補不列。
+PUBLIC_ACCEPTED_STATUSES = frozenset(
+    {
+        RegistrationStatus.ACCEPTED,
+        RegistrationStatus.DRAWN,
+        RegistrationStatus.RETIRED,
+    }
+)
+
+
+def list_public_accepted_teams(
+    session: Session, *, tournament_id: uuid.UUID
+) -> PublicAcceptedTeams:
+    """S2「正取隊伍」的公開名單：只有 id 與隊名，依 `(隊名, id)` 排序。
+
+    校園賽在優先期結束前不公布（`upcoming` 亦同），回 `announce_at = priority_end`、
+    `teams = []`；優先期結束那一刻起公布。自訂模式一律直接公布。
+    賽事不存在時由 tournaments 拋 404 `TOURNAMENT_NOT_FOUND`。
+    """
+    tournament = _get_tournament(session, tournament_id)
+    if (
+        tournament.mode == TournamentMode.CAMPUS
+        and clock.now() < tournament.priority_end
+    ):
+        return PublicAcceptedTeams(announce_at=tournament.priority_end, teams=[])
+    teams = list_teams_by_status(
+        session, tournament_id=tournament.id, statuses=PUBLIC_ACCEPTED_STATUSES
+    )
+    teams.sort(key=lambda team: (team.name, team.id))
+    return PublicAcceptedTeams(
+        announce_at=None,
+        teams=[PublicAcceptedTeam(id=team.id, name=team.name) for team in teams],
+    )
