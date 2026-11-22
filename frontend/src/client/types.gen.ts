@@ -395,6 +395,80 @@ export type AppealStatus = "open" | "closed"
 export type ApplicationStatus = "pending" | "approved" | "rejected"
 
 /**
+ * AuditLogEntry
+ *
+ * S34 的一筆操作紀錄；變更內容照原始資料，不翻譯欄位名稱與 id。
+ */
+export type AuditLogEntry = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * At
+   */
+  at: string
+  /**
+   * Actor Id
+   */
+  actor_id: string | null
+  /**
+   * Actor Display Name
+   */
+  actor_display_name: string | null
+  /**
+   * Action
+   */
+  action: string
+  /**
+   * Entity Type
+   */
+  entity_type: string
+  /**
+   * Entity Id
+   */
+  entity_id: string
+  /**
+   * Before
+   */
+  before: {
+    [key: string]: unknown
+  } | null
+  /**
+   * After
+   */
+  after: {
+    [key: string]: unknown
+  } | null
+}
+
+/**
+ * AuditLogPage
+ *
+ * 操作紀錄的分頁結果（格式同 `OrganizerApplicationPage`）。
+ *
+ * `page` 超過總頁數時 `items` 為空、`total` 照實。
+ */
+export type AuditLogPage = {
+  /**
+   * Items
+   */
+  items: Array<AuditLogEntry>
+  /**
+   * Total
+   */
+  total: number
+  /**
+   * Page
+   */
+  page: number
+  /**
+   * Page Size
+   */
+  page_size: number
+}
+
+/**
  * Body_competition-upload_result_screenshot
  */
 export type Body_competition_upload_result_screenshot = {
@@ -3449,6 +3523,43 @@ export type tournamentsListTournamentRefereesResponses = {
 
 export type tournamentsListTournamentRefereesResponse =
   tournamentsListTournamentRefereesResponses[keyof tournamentsListTournamentRefereesResponses]
+
+export type tournamentsListTournamentAuditLogData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: {
+    /**
+     * Page
+     */
+    page?: number
+  }
+  url: "/api/v1/organizer/tournaments/{tournament_id}/audit-log"
+}
+
+export type tournamentsListTournamentAuditLogErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsListTournamentAuditLogError =
+  tournamentsListTournamentAuditLogErrors[keyof tournamentsListTournamentAuditLogErrors]
+
+export type tournamentsListTournamentAuditLogResponses = {
+  /**
+   * Successful Response
+   */
+  200: AuditLogPage
+}
+
+export type tournamentsListTournamentAuditLogResponse =
+  tournamentsListTournamentAuditLogResponses[keyof tournamentsListTournamentAuditLogResponses]
 
 export type tournamentsPreviewRefereeInvitationData = {
   body?: never

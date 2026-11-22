@@ -209,6 +209,9 @@ import type {
   tournamentsListMyTournamentsResponses,
   tournamentsListPublicTournamentsData,
   tournamentsListPublicTournamentsResponses,
+  tournamentsListTournamentAuditLogData,
+  tournamentsListTournamentAuditLogErrors,
+  tournamentsListTournamentAuditLogResponses,
   tournamentsListTournamentRefereesData,
   tournamentsListTournamentRefereesErrors,
   tournamentsListTournamentRefereesResponses,
@@ -949,6 +952,28 @@ export class TournamentsService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/organizer/tournaments/{tournament_id}/referees",
+      ...options,
+    })
+  }
+
+  /**
+   * List Tournament Audit Log
+   *
+   * S34 操作紀錄（唯讀）：由新到舊、每頁 20 筆；`actor_id` 為 null 代表系統自動。
+   *
+   * 不存在 404 `TOURNAMENT_NOT_FOUND`；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`。
+   */
+  public static listTournamentAuditLog<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsListTournamentAuditLogData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      tournamentsListTournamentAuditLogResponses,
+      tournamentsListTournamentAuditLogErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/audit-log",
       ...options,
     })
   }

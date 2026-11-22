@@ -12,8 +12,11 @@ from app.core.errors import BusinessError, FieldError
 from app.modules.identity import service as identity_service
 from app.modules.tournaments import repository
 from app.modules.tournaments.models import (
+    PAGE_SIZE,
     REFEREE_INVITATION_DAYS,
     REFEREE_INVITATION_TOKEN_BYTES,
+    AuditLogEntry,
+    AuditLogPage,
     GameIn,
     GameRead,
     GameTitle,
@@ -825,3 +828,41 @@ def list_referees(session: Session, *, tournament_id: uuid.UUID) -> list[Referee
     return [
         _referee_to_read(referee, names[referee.account_id]) for referee in referees
     ]
+
+
+# ---------------------------------------------------------------- 操作紀錄（Story 2.8）
+
+
+def list_audit_log(
+    session: Session, *, tournament_id: uuid.UUID, page: int
+) -> AuditLogPage:
+    """S34：某賽事的操作紀錄，由新到舊（同時間依寫入順序倒序），每頁 `PAGE_SIZE` 筆。
+
+    只透過 `core.audit.list_for_tournament()` 查詢（AD-9）；它回傳由舊到新，
+    這裡反轉後切片（資料庫層分頁列為延後項目）。權限由 router 先檢查。
+    """
+    logs = audit.list_for_tournament(session, tournament_id)
+    logs.reverse()
+    start = (page - 1) * PAGE_SIZE
+    page_logs = logs[start : start + PAGE_SIZE]
+    names = identity_service.get_display_names(
+        session,
+        account_ids=[log.actor_id for log in page_logs if log.actor_id is not None],
+    )
+    items = [
+        AuditLogEntry(
+            id=log.id,
+            at=log.at,
+            actor_id=log.actor_id,
+            actor_display_name=(
+                names.get(log.actor_id) if log.actor_id is not None else None
+            ),
+            action=log.action,
+            entity_type=log.entity_type,
+            entity_id=log.entity_id,
+            before=log.before,
+            after=log.after,
+        )
+        for log in page_logs
+    ]
+    return AuditLogPage(items=items, total=len(logs), page=page, page_size=PAGE_SIZE)
