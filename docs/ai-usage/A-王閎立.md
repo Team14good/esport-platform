@@ -994,6 +994,53 @@
 - 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
 - 證據：commit 3808723、346478f；`backend/tests/notifications/`、`frontend/tests/unit/notifications.test.tsx`、`frontend/tests/e2e/identity.spec.ts`
 
+### 2026-11-21｜需求／Story spec｜Story 4.7 對戰樹隊伍搜尋與晉級路徑
+
+- Story／範圍：4.7（分支 `story/4-7-bracket-team-search`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 以 bmad-build-auto 讀 epic-4-context、4.6 spec、epics.md Story 4.7 原版驗收條件與 EXPERIENCE.md／DESIGN.md 的隊伍搜尋、示意稿 `key-s3-bracket.html` 寫 spec
+- AI 產出：`spec-4-7-bracket-team-search.md`：I/O 矩陣 10 列、4 條 AC、9 個任務、9 條 Decisions（搜尋列蓋過頂欄而不改共用 `TopBar`、桌機也固定、一次只高亮一隊、虛線待定列的判定、最遠輪次的定義等）
+- 人做了什麼：無人值守執行；Decisions 由 AI 依推薦做法選定，列在 PR「給審查者」等組員提出異議
+- 驗證：spec 通過 READY FOR DEVELOPMENT 自檢；實作後 I/O 矩陣 10 列逐列對照，都有通過的測試
+- 問題與修正：spec 的手動檢查寫搜「Hydra」，但 32 隊假資料裡清大 Hydra 第一輪就落敗，看不到虛線待定列；實作代理截圖時發現，改用中興 Titan，並補進 Decisions
+- 成熟度：L4（AI 依固定流程讀需求來源、產出 spec，再交給實作代理與自動驗證）
+- 證據：commit f734988；`_bmad-output/implementation-artifacts/spec-4-7-bracket-team-search.md`
+
+### 2026-11-21｜程式／程式生成｜Story 4.7 隊伍搜尋、晉級路徑高亮與固定搜尋列
+
+- Story／範圍：4.7（分支 `story/4-7-bracket-team-search`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：bmad-build-auto step-03 交給一個沒有對話脈絡的實作代理，只依 spec 實作；完成後主流程讀 diff、重跑 CI 的全部檢查
+- AI 產出：純前端。新增 `bracket-search.ts`（`searchBracketTeams`、`bracketTeamPath`）、`BracketTeamSearch.tsx`（搜尋框與 `BracketExplorer`）；`BracketTree` 多 3 個選用 prop、欄頭移出橫向捲動容器並同步位移、畫高亮與虛線連接線、換隊時自動橫向捲動；`BracketMatchCard` 命中列與虛線列樣式；`bracket-layout.ts` 匯出單邊連接線產生函式
+- 人做了什麼：無人值守執行；主流程審 diff 時把實作中的兩個決定（`className` 移到最外層、手動檢查改搜 Titan）補進 spec Decisions
+- 驗證：前端 build、typecheck、biome（314 個檔）全過；後端 `scripts/test.sh` 2531 passed、`scripts/lint.sh` 全過；`generate-client.sh` 後 client 無差異；Alembic 單一 head
+- 問題與修正：無（主流程讀 diff 沒有發現要退回的問題；375 px 截圖可見搜尋列兩側頁面內距處仍露出頂欄邊緣，列在 PR 給審查者判斷）
+- 成熟度：L4（spec → 實作代理 → 主流程審 diff 與自動驗證，人只在 PR 決策）
+- 證據：commit 0d10dbc
+
+### 2026-11-21｜測試／測試個案產生｜Story 4.7 搜尋與路徑的單元測試及端對端測試
+
+- Story／範圍：4.7（分支 `story/4-7-bracket-team-search`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：實作代理依 I/O 矩陣寫單元與端對端測試；主流程逐列對照矩陣確認涵蓋，並在 e2e 加上截圖供 PR artifact
+- AI 產出：`bracket-search.test.ts` 18 個、`bracket-team-search.test.tsx` 15 個（含 `bracketScrollLeftForRound`）、`tournament-bracket-page.test.tsx` 新增 2 個（網址不變、未抽籤沒有搜尋框）；e2e `bracket-search.spec.ts` 1 個測試 5 個步驟，desktop 與 mobile-375 各 3 張截圖
+- 人做了什麼：無人值守執行
+- 驗證：前端單元測試 76 個檔、1093 個通過；Playwright `bracket-search.spec.ts`＋`spectator.spec.ts` desktop 與 mobile-375 共 8 個通過（含 4.6 的 S3→S4 流程），375 px 沒有橫向捲軸
+- 問題與修正：無
+- 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑端對端測試）
+- 證據：`frontend/tests/unit/bracket-search.test.ts`、`frontend/tests/unit/bracket-team-search.test.tsx`、`frontend/tests/e2e/bracket-search.spec.ts`
+
+### 2026-11-21｜測試／程式審查｜Story 4.7 對戰樹隊伍搜尋：處理審查意見
+
+- Story／範圍：4.7（PR #101）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot 讀 D 黃鉅燊在 PR 的 2 個 thread 與核准留言（4 條不擋合併的建議），逐條到程式碼驗證後修正、補測試、回覆
+- AI 產出：改 3 個檔（`BracketTree.tsx` 固定列底色用 box-shadow＋clip-path 延伸滿版、`bracket-search.ts` 比對改 NFKC＋去空白、`BracketTeamSearch.tsx` 報讀目前隊伍）；新增單元測試 5 個（全形／空白比對、空白字元 U+3000、forfeit、double_forfeit、disqualified）、擴充 2 個既有測試的斷言，e2e 加頂端兩側像素比對；spec Decisions 新增 3 條
+- 人做了什麼：D 審查並指出問題；這輪無人值守執行
+- 驗證：前端單元測試 76 個檔、1098 個通過；typecheck、biome、build 通過；Playwright `@story-4.7` desktop 與 mobile-375 共 2 個通過。另外把底色修正暫時拿掉重跑 e2e，兩個專案都在「左側不應露出頂欄」失敗，確認新斷言抓得到原本的問題
+- 問題與修正：審查者抓到 AI 上一輪的 3 個問題：(1) sticky 搜尋列只有 `main` 內容區寬，375 px 往下捲時左右各露出 16 px 頂欄，原 e2e 只用 `elementFromPoint` 檢查畫面正中間一點所以沒抓到；而且 box-shadow 不參與 hit test，新的檢查改成比對截圖像素。審查者建議用負邊距，但負邊距補不了寬螢幕超出 `max-w-content-max` 的部分，改用 box-shadow 延伸。(2) 比對只去前後空白，全形「ｔｉｔａｎ」與「清大Hydra」都找不到。(3) 切換上一隊／下一隊時 `role=status` 不變，報讀軟體不知道跳到哪一隊。另外 AI 補 disqualified 測試時第一次沒指定 `scenario: "finished"`（假資料預設是待開打），測試失敗後修正
+- 成熟度：L4（組員審查找出問題，AI 驗證後修正並以單元測試與 e2e 驗證，並反向確認 e2e 抓得到原問題）
+- 證據：PR #101、commit eca0317、`_bmad-output/implementation-artifacts/spec-4-7-bracket-team-search.md`
 ### 2026-11-21｜需求／Story spec｜Story 2.8 主辦方查閱操作紀錄
 
 - Story／範圍：2.8（分支 `story/2-8-organizer-audit-log`）

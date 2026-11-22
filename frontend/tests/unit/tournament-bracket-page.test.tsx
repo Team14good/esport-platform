@@ -149,6 +149,28 @@ describe("S3 對戰表", () => {
     )
   })
 
+  it("已抽籤：對戰樹上方有隊伍搜尋，輸入後網址不變（4.7）", async () => {
+    mockTournament(tournament())
+    mockBracket(bracket())
+    const router = renderApp("/tournaments/t-1/bracket")
+
+    const input = await screen.findByRole("searchbox", { name: "搜尋隊名" })
+    await userEvent.type(input, "hydra")
+
+    expect(screen.getByText("找到 1 隊")).toHaveAttribute("role", "status")
+    expect(router.state.location.pathname).toBe("/tournaments/t-1/bracket")
+    expect(router.state.location.searchStr).toBe("")
+  })
+
+  it("尚未抽籤：不顯示隊伍搜尋（4.7）", async () => {
+    mockTournament(tournament({ status: "open" }))
+    mockNotDrawn()
+    renderApp("/tournaments/t-1/bracket")
+
+    expect(await screen.findByText(BRACKET_PENDING_TEXT)).toBeInTheDocument()
+    expect(screen.queryByRole("searchbox")).toBeNull()
+  })
+
   it.each([
     ["尚未開放", "upcoming"],
     ["開放報名", "open"],

@@ -78,7 +78,21 @@ export function matchCardAccessibleName(
     .join("，")
 }
 
-function TeamRow({ view, side }: { view: RowView; side: BracketSide }) {
+type TeamRowProps = {
+  view: RowView
+  side: BracketSide
+  /** 隊伍搜尋的命中列（4.7） */
+  searchHit?: boolean
+  /** 隊伍搜尋路徑上的虛線待定列（4.7） */
+  searchPending?: boolean
+}
+
+function TeamRow({
+  view,
+  side,
+  searchHit = false,
+  searchPending = false,
+}: TeamRowProps) {
   return (
     <div
       data-slot="bracket-team-row"
@@ -86,11 +100,21 @@ function TeamRow({ view, side }: { view: RowView; side: BracketSide }) {
       data-winner={view.winner || undefined}
       data-eliminated={view.eliminated || undefined}
       data-pending={view.pending || undefined}
+      data-search-hit={searchHit || undefined}
+      data-search-pending={searchPending || undefined}
       className={cn(
         "flex h-bracket-row-height items-center gap-2 px-2.5 text-bracket-row",
         side === "b" && "border-t",
         view.pending && "text-muted-foreground",
         view.eliminated && "text-status-eliminated",
+        (searchHit || searchPending) &&
+          (side === "a" ? "rounded-t-[7px]" : "rounded-b-[7px]"),
+        // DESIGN.md bracket-team-row-search-hit：14% 底、左側 3px 實色條、1.5px 外框
+        searchHit &&
+          "relative bg-[color-mix(in_oklab,var(--search-highlight)_14%,transparent)] shadow-[inset_3px_0_0_var(--search-highlight),0_0_0_1.5px_var(--search-highlight)]",
+        // DESIGN.md bracket-team-row-tbd 位於搜尋路徑上：1.5px 虛線外框
+        searchPending &&
+          "outline-[1.5px] outline-search-highlight outline-dashed -outline-offset-3",
       )}
     >
       <span
@@ -98,7 +122,7 @@ function TeamRow({ view, side }: { view: RowView; side: BracketSide }) {
         title={view.name}
         className={cn(
           "min-w-0 flex-1 truncate",
-          view.winner && "font-bold",
+          (view.winner || searchHit) && "font-bold",
           view.eliminated && "line-through decoration-1",
         )}
       >
@@ -132,6 +156,10 @@ type BracketMatchCardProps = {
   placements?: BracketPlacements
   /** 有提供時已取消資格的隊伍在它最後一張卡上加「取消資格」標記（隊伍 id → 場次 id，6.5） */
   disqualifiedLast?: ReadonlyMap<string, string>
+  /** 隊伍搜尋命中的那一方（4.7） */
+  searchHitSide?: BracketSide
+  /** 隊伍搜尋路徑上加虛線框的待定那一方（4.7） */
+  searchPendingSide?: BracketSide
   className?: string
   style?: CSSProperties
 }
@@ -143,6 +171,8 @@ export function BracketMatchCard({
   matchHref,
   placements,
   disqualifiedLast,
+  searchHitSide,
+  searchPendingSide,
   className,
   style,
 }: BracketMatchCardProps) {
@@ -189,10 +219,14 @@ export function BracketMatchCard({
       <TeamRow
         view={rowView(match, "a", placements, disqualifiedLast)}
         side="a"
+        searchHit={searchHitSide === "a"}
+        searchPending={searchPendingSide === "a"}
       />
       <TeamRow
         view={rowView(match, "b", placements, disqualifiedLast)}
         side="b"
+        searchHit={searchHitSide === "b"}
+        searchPending={searchPendingSide === "b"}
       />
     </article>
   )
