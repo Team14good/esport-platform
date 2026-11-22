@@ -1831,6 +1831,98 @@ def disqualify_registration(
     return RegistrationRead.model_validate(registration, from_attributes=True)
 
 
+# ---------------------------------------------------------------- 抽籤後退賽與遞補（competition 4.5）
+
+
+def retire_registration(
+    session: Session, *, team_id: uuid.UUID, actor_id: uuid.UUID
+) -> RegistrationRead:
+    """隊長在抽籤後退賽：報名由已參賽（`drawn`）轉為退賽（`retired`），回傳更新後的報名。
+
+    先鎖住賽事（AD-6），鎖內 `session.refresh` 後以最新值轉換。報名不存在拋 404
+    `REGISTRATION_NOT_FOUND`；不是已參賽由 `mark_status` 拋 409
+    `REGISTRATION_INVALID_TRANSITION`，不改任何資料。操作紀錄的操作者為 `actor_id`；
+    不遞補、不發事件（遞補由 `backfill_drawn_from_waitlist` 負責）。
+    """
+    registration = repository.get_registration_by_team(session, team_id)
+    if registration is None:
+        raise _registration_not_found()
+    _lock_tournament(session, registration.tournament_id)
+    session.refresh(registration)
+    mark_status(
+        session,
+        registration=registration,
+        to=RegistrationStatus.RETIRED,
+        actor_id=actor_id,
+    )
+    return RegistrationRead.model_validate(registration, from_attributes=True)
+
+
+def _first_waitlisted(
+    session: Session, tournament: TournamentRead, *, leaving_team_id: uuid.UUID | None
+) -> Registration | None:
+    """抽籤後候補的第 1 位（沒有則 None）；順位與 S17 顯示的一致（`_waitlist_order`）。
+
+    `leaving_team_id` 是即將退出的隊伍：不鎖定、只預估時，把它當成已不在正取的名單裡，
+    讓同校候補不會被它佔住每校上限。
+    """
+    registrations = [
+        r
+        for r in repository.list_registrations(session, tournament.id)
+        # 沒有送出快照的報名（直接寫入的測試資料）沒有學校，不影響任何人的順位
+        if r.team_id != leaving_team_id and r.submitted_at is not None
+    ]
+    _phase, order = _waitlist_order(session, tournament, registrations)
+    positioned = [e for e in order.values() if e.position is not None]
+    if not positioned:
+        return None
+    first = min(positioned, key=lambda e: e.position or 0)
+    return next(r for r in registrations if r.id == first.registration_id)
+
+
+def has_backfill_candidate(
+    session: Session, *, tournament_id: uuid.UUID, leaving_team_id: uuid.UUID
+) -> bool:
+    """`leaving_team_id` 退出後，是否有候補可以遞補（只讀、不鎖；退賽與取消資格預先判斷用）。
+
+    自訂模式回 False（與 `backfill_drawn_from_waitlist` 一致）。
+    """
+    tournament = _get_tournament(session, tournament_id)
+    if tournament.mode != TournamentMode.CAMPUS:
+        return False
+    return (
+        _first_waitlisted(session, tournament, leaving_team_id=leaving_team_id)
+        is not None
+    )
+
+
+def backfill_drawn_from_waitlist(
+    session: Session, *, tournament_id: uuid.UUID
+) -> uuid.UUID | None:
+    """抽籤後的一對一遞補：候補第 1 位轉為已參賽（`drawn`），回傳它的隊伍 id；沒有候補回 None。
+
+    先鎖住賽事。順位沿用 `_waitlist_order`（抽籤後一定是截止後：平均段位積分、送出時間、id，
+    每校正取與已參賽合計不超過 2 隊）；呼叫端要先讓退賽隊離開（`retire_registration`），
+    它的學校名額才會先釋出。不看賽事名額（一對一換位，不是補空位，所以不沿用
+    `backfill_vacancies`）。自訂模式回 None（3.10 再補規則）。寫 `backfilled_at`，操作者為系統；
+    不發 `RegistrationBackfilled`（它的文字是「遞補為正取」）。
+    """
+    tournament = _lock_tournament(session, tournament_id)
+    if tournament.mode != TournamentMode.CAMPUS:
+        return None
+    registration = _first_waitlisted(session, tournament, leaving_team_id=None)
+    if registration is None:
+        return None
+    registration.backfilled_at = clock.now()
+    mark_status(
+        session,
+        registration=registration,
+        to=RegistrationStatus.DRAWN,
+        actor_id=None,
+    )
+    return registration.team_id
+
+
 # ---------------------------------------------------------------- 檢舉用（disputes 6.4）
 
 

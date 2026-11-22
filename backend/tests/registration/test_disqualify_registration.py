@@ -137,7 +137,7 @@ def test_competition_port_reads_state_and_disqualifies(
         session, team_id=registration.team_id
     )
     assert state == registration_port.RegistrationState(
-        tournament_id=tournament.id, disqualified=False
+        tournament_id=tournament.id, disqualified=False, status="drawn"
     )
 
     registration_port.disqualify_registration(

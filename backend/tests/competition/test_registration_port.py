@@ -158,3 +158,111 @@ def test_list_drawn_teams_reads_real_my_team_cards(
         registration_port.DrawnTeamRef(team_id=TEAM_1, tournament_id=TOURNAMENT)
     ]
     assert calls == [ACTOR]
+
+
+# ---------------------------------------------------------------- 4.5 退賽與遞補
+
+
+def test_retirement_adapters_forward_to_registration_service(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def recorder(name: str, result: Any = None) -> Any:
+        def func(_session: Session, **kwargs: Any) -> Any:
+            calls.append((name, kwargs))
+            return result
+
+        return func
+
+    monkeypatch.setattr(
+        registration_service,
+        "get_team",
+        recorder("get_team", SimpleNamespace(tournament_id=TOURNAMENT)),
+    )
+    monkeypatch.setattr(
+        registration_service, "retire_registration", recorder("retire_registration")
+    )
+    monkeypatch.setattr(
+        registration_service,
+        "backfill_drawn_from_waitlist",
+        recorder("backfill_drawn_from_waitlist", TEAM_2),
+    )
+    monkeypatch.setattr(
+        registration_service,
+        "has_backfill_candidate",
+        recorder("has_backfill_candidate", True),
+    )
+
+    assert registration_port.get_team_tournament_id(session, team_id=TEAM_1) == TOURNAMENT
+    registration_port.retire_registration(session, team_id=TEAM_1, actor_id=ACTOR)
+    assert (
+        registration_port.backfill_drawn_from_waitlist(
+            session, tournament_id=TOURNAMENT
+        )
+        == TEAM_2
+    )
+    assert registration_port.has_backfill_candidate(
+        session, tournament_id=TOURNAMENT, leaving_team_id=TEAM_1
+    )
+
+    assert calls == [
+        ("get_team", {"team_id": TEAM_1}),
+        ("retire_registration", {"team_id": TEAM_1, "actor_id": ACTOR}),
+        ("backfill_drawn_from_waitlist", {"tournament_id": TOURNAMENT}),
+        (
+            "has_backfill_candidate",
+            {"tournament_id": TOURNAMENT, "leaving_team_id": TEAM_1},
+        ),
+    ]
+
+
+def test_missing_retirement_functions_are_503(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in (
+        "get_team",
+        "retire_registration",
+        "backfill_drawn_from_waitlist",
+        "has_backfill_candidate",
+    ):
+        monkeypatch.delattr(registration_service, name, raising=False)
+
+    for call in (
+        lambda: registration_port.get_team_tournament_id(session, team_id=TEAM_1),
+        lambda: registration_port.retire_registration(
+            session, team_id=TEAM_1, actor_id=ACTOR
+        ),
+        lambda: registration_port.backfill_drawn_from_waitlist(
+            session, tournament_id=TOURNAMENT
+        ),
+        lambda: registration_port.has_backfill_candidate(
+            session, tournament_id=TOURNAMENT, leaving_team_id=TEAM_1
+        ),
+    ):
+        with pytest.raises(BusinessError) as excinfo:
+            call()
+        assert (excinfo.value.code, excinfo.value.status_code) == (
+            "REGISTRATION_UNAVAILABLE",
+            503,
+        )
+
+
+def test_registration_state_carries_the_status(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        registration_service,
+        "get_registration",
+        lambda _session, *, team_id: SimpleNamespace(
+            tournament_id=TOURNAMENT, status=RegistrationStatus.RETIRED
+        ),
+    )
+
+    state = registration_port.get_registration_state(session, team_id=TEAM_1)
+
+    assert (state.tournament_id, state.disqualified, state.status) == (
+        TOURNAMENT,
+        False,
+        "retired",
+    )

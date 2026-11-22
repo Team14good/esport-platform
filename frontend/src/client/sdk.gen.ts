@@ -45,6 +45,9 @@ import type {
   competitionReadResultScreenshotStateData,
   competitionReadResultScreenshotStateErrors,
   competitionReadResultScreenshotStateResponses,
+  competitionReadRetirementStatusData,
+  competitionReadRetirementStatusErrors,
+  competitionReadRetirementStatusResponses,
   competitionReadScoreEntryData,
   competitionReadScoreEntryErrors,
   competitionReadScoreEntryResponses,
@@ -54,6 +57,9 @@ import type {
   competitionRescheduleMatchData,
   competitionRescheduleMatchErrors,
   competitionRescheduleMatchResponses,
+  competitionRetireTeamData,
+  competitionRetireTeamErrors,
+  competitionRetireTeamResponses,
   competitionSubmitResultData,
   competitionSubmitResultErrors,
   competitionSubmitResultResponses,
@@ -1755,6 +1761,46 @@ export class CompetitionService {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * Read Retirement Status
+   *
+   * S17 退賽按鈕：這支隊伍現在能不能退賽；只限隊員，只讀（不 commit）。
+   */
+  public static readRetirementStatus<ThrowOnError extends boolean = true>(
+    options: Options<competitionReadRetirementStatusData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      competitionReadRetirementStatusResponses,
+      competitionReadRetirementStatusErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/retirement",
+      ...options,
+    })
+  }
+
+  /**
+   * Retire Team
+   *
+   * 抽籤後隊長退賽：候補第 1 位接手位置，沒有候補則對手輪空晉級。
+   */
+  public static retireTeam<ThrowOnError extends boolean = true>(
+    options: Options<competitionRetireTeamData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      competitionRetireTeamResponses,
+      competitionRetireTeamErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/retirement",
+      ...options,
     })
   }
 }
