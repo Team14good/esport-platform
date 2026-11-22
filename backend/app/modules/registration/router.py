@@ -16,6 +16,7 @@ from app.modules.registration.models import (
     MyTeamCard,
     OrganizerRegistration,
     OrganizerRegistrationPage,
+    PublicAcceptedTeams,
     RegistrationRejection,
     RegistrationStatus,
     TeamCreate,
@@ -43,6 +44,17 @@ def create_team(
     )
     session.commit()
     return team
+
+
+@router.get("/tournaments/{tournament_id}/accepted-teams")
+def list_accepted_teams(
+    session: SessionDep, tournament_id: uuid.UUID
+) -> PublicAcceptedTeams:
+    """S2「正取隊伍」的公開名單（不需登入）：只有隊伍 id 與隊名。
+
+    校園賽優先期結束前不公布，回 `announce_at`（優先期結束時間）與空的 `teams`。
+    """
+    return service.list_public_accepted_teams(session, tournament_id=tournament_id)
 
 
 @router.get("/teams/{team_id}")

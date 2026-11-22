@@ -465,6 +465,24 @@ class TeamSummary(BaseModel):
     name: str
 
 
+class PublicAcceptedTeam(BaseModel):
+    """S2「正取隊伍」的一列（Story 3.9）：只有 id 與隊名，不含隊員與個資。"""
+
+    id: uuid.UUID
+    name: str
+
+
+class PublicAcceptedTeams(BaseModel):
+    """S2「正取隊伍」的公開名單（Story 3.9，不需登入）。
+
+    校園賽優先期內不公布：`announce_at` 為優先期結束時間、`teams` 為空；
+    已公布時 `announce_at` 為 None，`teams` 依 `(隊名, id)` 排序。
+    """
+
+    announce_at: datetime | None
+    teams: list[PublicAcceptedTeam]
+
+
 class RegistrationRead(BaseModel):
     """給其他模組使用的報名資料。
 

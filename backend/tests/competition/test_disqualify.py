@@ -828,3 +828,135 @@ def test_repository_clear_match_team_clears_one_side(
     assert row.updated_at == at
     repository.clear_match_team(session, row, "a", at)
     assert _slots(fake, _rows(session, tournament.id)["M1"]) == (None, None)
+
+
+# ---------------------------------------------------------------- 4.5：還沒比過的隊伍接上候補遞補
+
+
+def test_unplayed_team_is_replaced_by_first_waitlisted_team(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 8)
+    waiting = fake.add_waitlist(2)
+    rows = _rows(session, tournament.id)
+    # 被取消資格的隊伍已報到：移出場次時一併刪除
+    repository.add_check_in(
+        session,
+        CheckIn(
+            match_id=rows["M1"].id,
+            team_id=_team(fake, 7),
+            account_id=make_account(session).id,
+            at=clock.now(),
+        ),
+    )
+
+    result, actor = _dq(session, fake, tournament.id, 7)
+
+    rows = _rows(session, tournament.id)
+    assert result.affected_match_ids == [rows["M1"].id]
+    assert result.replacement_team_id == waiting[0]
+    assert fake.disqualified == [(_team(fake, 7), actor)]
+    assert fake.backfilled == [waiting[0]]
+    assert (rows["M1"].team_a_id, rows["M1"].team_b_id) == (waiting[0], _team(fake, 8))
+    assert rows["M1"].status == S.SCHEDULED
+    assert repository.list_check_ins(session, rows["M1"].id) == []
+    assert rows["M1"].forfeit_deadline == rows["M1"].scheduled_at + FORFEIT
+    changed = _logs(session, tournament.id, "match.teams_changed")
+    assert [log.actor_id for log in changed] == [actor]
+    assert changed[0].after is not None
+    assert changed[0].after["disqualified_team_id"] == str(_team(fake, 7))
+    assert _outbox(session, "BracketBackfilled") == [
+        {
+            "match_id": str(rows["M1"].id),
+            "team_id": str(waiting[0]),
+            "replaced_team_id": str(_team(fake, 7)),
+        }
+    ]
+    assert _outbox(session, "OpponentRetired") == []
+
+
+def test_unplayed_team_without_waitlist_still_awards_the_opponent(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 8)
+
+    result, _actor = _dq(session, fake, tournament.id, 7)
+
+    rows = _rows(session, tournament.id)
+    assert (result.affected_match_ids, result.replacement_team_id) == (
+        [rows["M1"].id],
+        None,
+    )
+    assert _result(rows["M1"]) == (S.CONFIRMED, O.DISQUALIFIED, _team(fake, 8))
+    assert _slots(fake, rows["M1"]) == (7, 8)  # 取消資格的隊伍仍留在場次上
+    assert _slots(fake, rows["M5"]) == (8, None)
+    assert _outbox(session, "BracketBackfilled") == []
+
+
+def test_started_first_match_is_awarded_even_with_waitlist(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 8)
+    fake.add_waitlist(1)
+    _update(session, _rows(session, tournament.id)["M1"], status=S.LIVE)
+
+    result, _actor = _dq(session, fake, tournament.id, 7)
+
+    rows = _rows(session, tournament.id)
+    assert result.replacement_team_id is None
+    assert _result(rows["M1"]) == (S.CONFIRMED, O.DISQUALIFIED, _team(fake, 8))
+    assert len(fake.waitlist) == 1
+    assert fake.backfilled == []
+
+
+def test_bye_team_with_pending_opponent_is_replaced_when_waitlist_exists(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 13)
+    waiting = fake.add_waitlist(1)
+    m6 = _rows(session, tournament.id)["M6"]
+    assert m6.team_a_id is not None
+    bye_team = fake.teams.index(m6.team_a_id) + 1
+
+    result, _actor = _dq(session, fake, tournament.id, bye_team)
+
+    m6 = _rows(session, tournament.id)["M6"]
+    assert result.replacement_team_id == waiting[0]
+    assert (m6.team_a_id, m6.team_b_id) == (waiting[0], None)
+    assert m6.status == S.SCHEDULED
+
+
+def test_team_that_already_won_is_still_replaced_by_the_loser_not_the_waitlist(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament_id, _rows_before = _eight_to_semis(session, fake)
+    fake.add_waitlist(1)
+
+    result, _actor = _dq(session, fake, tournament_id, 7)
+
+    # 隊伍 7 在 M5 等待，已贏過 M1：由輸給它的隊伍 8 頂替，候補不動
+    assert result.replacement_team_id == _team(fake, 8)
+    assert len(fake.waitlist) == 1
+    assert fake.backfilled == []
+
+
+def test_opponent_pending_without_waitlist_is_rejected_for_the_first_match(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 13)
+    m6 = _rows(session, tournament.id)["M6"]
+    assert m6.team_a_id is not None
+    before = _snapshot(session, tournament.id)
+
+    with pytest.raises(BusinessError) as caught:
+        _dq(session, fake, tournament.id, fake.teams.index(m6.team_a_id) + 1)
+
+    assert caught.value.code == "DISQUALIFY_OPPONENT_PENDING"
+    assert fake.disqualified == []
+    assert _snapshot(session, tournament.id) == before

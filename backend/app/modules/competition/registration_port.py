@@ -142,6 +142,8 @@ class RegistrationState:
 
     tournament_id: uuid.UUID
     disqualified: bool
+    # 報名狀態值（退賽要求 `drawn`）
+    status: str
 
 
 def get_registration_state(
@@ -154,6 +156,7 @@ def get_registration_state(
     return RegistrationState(
         tournament_id=registration.tournament_id,
         disqualified=registration.status == _DISQUALIFIED,
+        status=str(registration.status),
     )
 
 
@@ -163,4 +166,42 @@ def disqualify_registration(
     """把隊伍的報名改為取消資格（6.5）；registration 尚未提供時拋 503。"""
     _lookup("disqualify_registration", action="取消資格")(
         session, team_id=team_id, actor_id=actor_id
+    )
+
+
+def get_team_tournament_id(session: Session, *, team_id: uuid.UUID) -> uuid.UUID:
+    """隊伍所屬的賽事（退賽用）；隊伍不存在由 registration 拋 404 `TEAM_NOT_FOUND`。"""
+    return cast(
+        uuid.UUID,
+        _lookup("get_team", action="退賽")(session, team_id=team_id).tournament_id,
+    )
+
+
+def retire_registration(
+    session: Session, *, team_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    """把隊伍的報名由已參賽改為退賽（4.5）；registration 尚未提供時拋 503。"""
+    _lookup("retire_registration", action="退賽")(
+        session, team_id=team_id, actor_id=actor_id
+    )
+
+
+def backfill_drawn_from_waitlist(
+    session: Session, *, tournament_id: uuid.UUID
+) -> uuid.UUID | None:
+    """候補第 1 位轉為已參賽並回傳它的隊伍 id；沒有候補回 None（4.5）。"""
+    team_id = _lookup("backfill_drawn_from_waitlist", action="遞補")(
+        session, tournament_id=tournament_id
+    )
+    return cast("uuid.UUID | None", team_id)
+
+
+def has_backfill_candidate(
+    session: Session, *, tournament_id: uuid.UUID, leaving_team_id: uuid.UUID
+) -> bool:
+    """`leaving_team_id` 退出後有沒有候補可遞補（只讀；退賽與取消資格預先判斷用）。"""
+    return bool(
+        _lookup("has_backfill_candidate", action="遞補")(
+            session, tournament_id=tournament_id, leaving_team_id=leaving_team_id
+        )
     )

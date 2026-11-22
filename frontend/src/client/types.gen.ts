@@ -1492,6 +1492,41 @@ export type ProfileUpdate = {
 }
 
 /**
+ * PublicAcceptedTeam
+ *
+ * S2「正取隊伍」的一列（Story 3.9）：只有 id 與隊名，不含隊員與個資。
+ */
+export type PublicAcceptedTeam = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+}
+
+/**
+ * PublicAcceptedTeams
+ *
+ * S2「正取隊伍」的公開名單（Story 3.9，不需登入）。
+ *
+ * 校園賽優先期內不公布：`announce_at` 為優先期結束時間、`teams` 為空；
+ * 已公布時 `announce_at` 為 None，`teams` 依 `(隊名, id)` 排序。
+ */
+export type PublicAcceptedTeams = {
+  /**
+   * Announce At
+   */
+  announce_at: string | null
+  /**
+   * Teams
+   */
+  teams: Array<PublicAcceptedTeam>
+}
+
+/**
  * PublicAppealResult
  *
  * 公開的申訴處理結果（S4）；不含申訴內容（AD-19）。未經申訴處理或重新比賽為 None。
@@ -2259,6 +2294,41 @@ export type ResultScreenshotState = {
    * Reason
    */
   reason: "result_not_submitted" | "not_winning_captain" | null
+}
+
+/**
+ * RetireResult
+ *
+ * 退賽的結果：被改動的場次，與接手的候補隊伍（沒有候補為 None，對手輪空晉級）。
+ */
+export type RetireResult = {
+  /**
+   * Match Id
+   */
+  match_id: string
+  /**
+   * Replacement Team Id
+   */
+  replacement_team_id: string | null
+}
+
+/**
+ * RetirementStatus
+ *
+ * S17 退賽按鈕（4.5）：`retirable` 為真才可按。
+ *
+ * `retirable` 為假而 `reason` 有值時，按鈕停用並顯示原因（輪空隊伍對手未定又沒有候補）；
+ * 兩者都沒有時不顯示按鈕。
+ */
+export type RetirementStatus = {
+  /**
+   * Retirable
+   */
+  retirable: boolean
+  /**
+   * Reason
+   */
+  reason?: string | null
 }
 
 /**
@@ -3863,6 +3933,38 @@ export type registrationCreateTeamResponses = {
 export type registrationCreateTeamResponse =
   registrationCreateTeamResponses[keyof registrationCreateTeamResponses]
 
+export type registrationListAcceptedTeamsData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/accepted-teams"
+}
+
+export type registrationListAcceptedTeamsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationListAcceptedTeamsError =
+  registrationListAcceptedTeamsErrors[keyof registrationListAcceptedTeamsErrors]
+
+export type registrationListAcceptedTeamsResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicAcceptedTeams
+}
+
+export type registrationListAcceptedTeamsResponse =
+  registrationListAcceptedTeamsResponses[keyof registrationListAcceptedTeamsResponses]
+
 export type registrationReadTeamData = {
   body?: never
   path: {
@@ -4860,6 +4962,70 @@ export type competitionAssignRefereeResponses = {
 
 export type competitionAssignRefereeResponse =
   competitionAssignRefereeResponses[keyof competitionAssignRefereeResponses]
+
+export type competitionReadRetirementStatusData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/retirement"
+}
+
+export type competitionReadRetirementStatusErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionReadRetirementStatusError =
+  competitionReadRetirementStatusErrors[keyof competitionReadRetirementStatusErrors]
+
+export type competitionReadRetirementStatusResponses = {
+  /**
+   * Successful Response
+   */
+  200: RetirementStatus
+}
+
+export type competitionReadRetirementStatusResponse =
+  competitionReadRetirementStatusResponses[keyof competitionReadRetirementStatusResponses]
+
+export type competitionRetireTeamData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/retirement"
+}
+
+export type competitionRetireTeamErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type competitionRetireTeamError =
+  competitionRetireTeamErrors[keyof competitionRetireTeamErrors]
+
+export type competitionRetireTeamResponses = {
+  /**
+   * Successful Response
+   */
+  200: RetireResult
+}
+
+export type competitionRetireTeamResponse =
+  competitionRetireTeamResponses[keyof competitionRetireTeamResponses]
 
 export type disputesListReportableTeamsData = {
   body?: never

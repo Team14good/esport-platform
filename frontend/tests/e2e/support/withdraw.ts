@@ -201,3 +201,13 @@ export async function createOpenTournamentWithOrganizerByApi(
   }
   return { tournamentId: tournament.id, organizer }
 }
+
+/** Story 4.5：主辦方走 API 抽籤（開放報名中抽籤會立即結束報名），之後的退賽走畫面。 */
+export async function apiDrawBracket(
+  tournamentId: string,
+  organizer: TestAccount,
+) {
+  await request("POST", `/tournaments/${tournamentId}/draw`, {
+    token: await apiLogin(organizer),
+  })
+}

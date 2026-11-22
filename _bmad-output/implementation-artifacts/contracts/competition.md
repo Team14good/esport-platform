@@ -187,6 +187,14 @@ class PublicBracket(BaseModel):
     matches: list[PublicMatch]
     podium: PublicPodium | None   # 5.5 新增：賽事為 finished 才有，否則 null（場次資料不自洽時也為 null 並記錄日誌）
     updated_at: datetime          # 前端判斷是否有變動（update-flash）
+
+class RetirementStatus(BaseModel):   # 4.5 S17：退賽按鈕
+    retirable: bool               # true 才可按
+    reason: str | None            # retirable=false 且有值：按鈕停用並顯示原因；都沒有：不顯示按鈕
+
+class RetireResult(BaseModel):       # 4.5 退賽的結果
+    match_id: UUID                # 被改動的場次（退賽隊第一場）
+    replacement_team_id: UUID | None   # 接手位置的候補隊；沒有候補為 null（對手輪空晉級）
 ```
 
 ### HTTP API（D 在 4.1 提供，A 的 4.6、5.8 使用）
@@ -207,6 +215,8 @@ class PublicBracket(BaseModel):
 | `POST /api/v1/tournaments/{tournament_id}/matches/{match_id}/submit` | 記分者 | 200 `ScoreEntryState`（5.4）；寫 `outcome=played`、勝隊、送出者與時間、`appeal_deadline`＝現在＋申訴時限，轉為申訴期並發 `MatchResultSubmitted`；不寫 `confirmed_at`、勝隊不晉級（5.5 申訴期滿才確認並推進） |
 | `GET /api/v1/me/referee/matches` | 登入者 | `list[RefereeTournamentMatches]`（4.4，S13）；只列 `referee_account_id` 為登入者、狀態不是 `voided` 的場次（含已結束）；沒有指派（或不是裁判）回 `[]`；所屬賽事為 `cancelled` 的場次不列出（取消賽事不會把場次改成 `voided`；`finished` 仍列出）。排序：組內依 `scheduled_at`、再依 `code`；各賽事依組內最早的 `scheduled_at`、再依賽事名稱；未登入 401。收回、改派後該場不再出現 |
 | `GET /api/v1/me/next-matches` | 登入者 | `list[NextMatch]`（5.1 補遺，S12）；只讀、不 commit。經 `registration_port.list_drawn_teams_of_account` 取登入者所屬、報名狀態為 `drawn` 的隊伍，每隊最多一場：該隊出現在 `team_a_id`／`team_b_id`、狀態不是 `confirmed`／`voided` 的場次中輪次最小的一場（同輪季軍賽在後、再依 `slot_no`）；沒有這種場次（已淘汰、賽事已結束）不回。所屬賽事為 `cancelled` 的不列出；賽事 `finished` 後已沒有未定案的場次，所以也不回（與 S13 不同，S13 仍列出已結束賽事）。順序沿用 registration `list_my_teams`（新加入的隊伍在前）；同一場有登入者的兩支隊伍時各回一筆。沒有已參賽隊伍回 `[]`；未登入 401；registration 沒有 `list_my_teams` 時 503 `REGISTRATION_UNAVAILABLE` |
+| `GET /api/v1/teams/{team_id}/retirement` | 登入者（已驗證 Email、該隊隊員） | `RetirementStatus {retirable, reason}`（4.5，S17 退賽按鈕）；只讀、不鎖、不 commit。`retirable=false` 且 `reason` 有值（只有「對手確定後才能退賽。」：輪空隊伍對手未定又沒有候補）時 S17 顯示停用的按鈕與原因，沒有 `reason` 時不顯示按鈕；非隊長、尚未抽籤、報名不是已參賽、賽事不在公布／進行中、已有比賽結果、第一場已開始、已有隊伍報到都是 `retirable=false`。隊伍不存在 404 `TEAM_NOT_FOUND`、非隊員 403 `TEAM_MEMBER_REQUIRED`「只有隊員可以操作這支隊伍。」 |
+| `POST /api/v1/teams/{team_id}/retirement` | 登入者（已驗證 Email、該隊隊長） | 200 `RetireResult {match_id, replacement_team_id}`（4.5）；請求不帶內容。先 `lock_tournament`、再依 id 遞增鎖對戰表全部場次，鎖內重新判斷；報名轉 `retired`（操作者為隊長）、候補第 1 位轉 `drawn` 並接手同一位置，沒有候補（`replacement_team_id=null`）則移出退賽隊、該場 `walkover` 確認、對手晉級。router commit。不加 `PUBLIC_WRITE_ROUTES` |
 | `PUT /api/v1/tournaments/{tournament_id}/matches/{match_id}/referee` | 該賽事主辦方 | 200 `MatchRead`（4.4）；body `RefereeAssignIn`；指派或改派 |
 | `DELETE /api/v1/tournaments/{tournament_id}/matches/{match_id}/referee` | 該賽事主辦方 | 200 `MatchRead`（4.4）；收回後由主辦方代登，已登錄的局保留 |
 
@@ -214,6 +224,8 @@ class PublicBracket(BaseModel):
 
 
 指派／收回裁判的錯誤碼（4.4，依檢查順序）：`Organizer` 依賴（401、403 `ORGANIZER_REQUIRED`）→ 404 `TOURNAMENT_NOT_FOUND`／`MATCH_NOT_FOUND` → `lock_tournament`、`lock_match` → 403 `TOURNAMENT_OWNER_REQUIRED` → 409 `TOURNAMENT_NOT_ASSIGNABLE`（賽事不是 published、ongoing）→ 409 `MATCH_REFEREE_LOCKED`（場次不是 scheduled、live）→ 指派給目前同一人、收回沒有裁判的場次直接回傳（不寫紀錄、不發事件）→ 409 `NOT_TOURNAMENT_REFEREE`（含主辦方本人）→ 409 `REFEREE_IS_TEAM_MEMBER`（已確定的隊伍中有隊員；待定的一方不檢查，經 `registration_port.is_member`）。成功寫 `match.referee_assigned`（改派也是）、`match.referee_unassigned`，`before`／`after` 為 `{referee_account_id}`；指派發 `RefereeAssigned`，收回發 `RefereeUnassigned`，改派兩個都發。`advance` 填位後（勝隊進下一場、準決賽敗隊進季軍賽）若指派的裁判是新填入隊伍的隊員，清空裁判、寫 `match.referee_unassigned`（操作者為系統）、發 `RefereeUnassigned`。**其他會改變場次隊伍的流程（例如 6.2 重新比賽後的更正、6.5 取消資格遞補）也必須重新檢查裁判衝突**，做法與 `advance` 相同；需要時由 competition 新增公開函式，不要在呼叫端自己判斷（`advance` 已實作；6.5 頂替後呼叫公開函式 `unassign_referee_if_member`，見下方〈公開函式〉）。6.2 的路徑：更正結果經 `confirm_match` → `advance` 填位時已檢查，不需要另外呼叫；重新比賽（`replay_match`）不更換隊伍、保留原裁判，所以不需要重新檢查。任何拒絕都不改資料、紀錄與事件。其他回應：未登入 401；`account_id` 缺漏或不是 UUID 格式 422；registration 沒有提供 `is_member` 時 503 `REGISTRATION_UNAVAILABLE`（影響 PUT、S30 列表與 `advance`／確認場次的衝突檢查）。改派不動已登錄的局，記分者為「目前的裁判」，所以新裁判可以修改、刪除這些局並送出。
+
+退賽的錯誤碼（4.5，依檢查順序）：`VerifiedAccount` 依賴（401、403 未驗證 Email）→ 404 `TEAM_NOT_FOUND` → `lock_tournament` → 403 `TEAM_MEMBER_REQUIRED`（非隊員）→ 403 `TEAM_CAPTAIN_REQUIRED`（非隊長）→ 409 `TEAM_NOT_RETIRABLE`，訊息依原因：「尚未抽籤，無法退賽。」「賽事目前不能退賽。」（賽事不是 `published`、`ongoing`）、「只有已參賽的隊伍可以退賽。」（報名不是 `drawn`）、「隊伍已有比賽結果，無法退賽。」（有任何 `confirmed` 場次）、「比賽已經開始，無法退賽。」（唯一未結束的場次不是 `scheduled`）、「已有隊伍報到，無法退賽。」、「這支隊伍不在對戰表上，無法退賽。」「找不到隊伍待開打的場次，無法退賽。」「對手確定後才能退賽。」（輪空隊伍對手未定又沒有候補）。任何拒絕都不改資料、不寫紀錄、不發事件。
 
 抽籤狀態的原因代碼（4.1 S27，依檢查順序）與抽籤 API 錯誤碼一一對應：`already_drawn`→`BRACKET_ALREADY_DRAWN`、`not_drawable`→`TOURNAMENT_NOT_DRAWABLE`、`start_passed`→`TOURNAMENT_START_PASSED`、`not_enough_teams`→`NOT_ENOUGH_TEAMS`；預估只是當下的結果，抽籤時後端仍會再檢查一次（期間有人變動時回 409 `NOT_ENOUGH_TEAMS`）。
 
@@ -232,7 +244,7 @@ class PublicBracket(BaseModel):
 | `start_forfeit_clock(session, *, match) -> None` | 同上 | 唯一設定 `forfeit_deadline` 的入口 | 4.1 |
 | `list_forfeit_due(session, *, now) -> list[UUID]` | A（5.2 worker） | 待開打、`forfeit_deadline <= now`、且**不是兩隊都已報到**的場次 id，依期限排序（使用者 2026-11-01 決定）；只有一隊報到或沒人報到的場次由 5.2 判棄權 | 5.1 |
 | `list_check_ins(session, *, match_id) -> list[CheckInRead]` | A（5.2） | `CheckInRead {match_id, team_id, at}`，依報到時間排序 | 5.1 |
-| `check_in(session, *, tournament_id, match_id, account_id) -> CheckInRead`、`get_check_in_status(...) -> CheckInStatus` | router | 報到與狀態查詢；`start_due_tournament(session) -> bool` 給 worker | 5.1 |
+| `check_in(session, *, tournament_id, match_id, account_id) -> CheckInRead`、`get_check_in_status(...) -> CheckInStatus` | router | 報到與狀態查詢（4.5 起 `check_in`、比分寫入 `_locked_for_scoring`、結算截圖 `upload_result_screenshot` 都先 `lock_tournament` 再 `lock_match`，與退賽的鎖序一致，避免寫操作紀錄的共享鎖造成死結）；`start_due_tournament(session) -> bool` 給 worker | 5.1 |
 | `confirm_match(session, *, match, outcome: MatchOutcome, winner_id: UUID \| None, actor_id: UUID \| None) -> None` | A（5.2）、B（6.2） | 呼叫端先 `lock_tournament` 再 `lock_match` 取得 `match`（AD-6；函式開頭也會鎖賽事）；只接受 `live`、`appeal_window`、`appealed` 的場次；寫入結果、轉為已確認、寫 `confirmed_at`，接著呼叫 `advance`。`actor_id=None` 表示系統。`scheduled`、`confirmed`、`voided` 拋 `MATCH_INVALID_TRANSITION` 409，不改任何資料（待開打直接確認只走輪空：`confirm_walkover` 與 `advance` 內的連鎖輪空；5.2 判棄權是 scheduled → appeal_window，不經 `confirm_match`）（5.5 由 `actor` 改名 `actor_id`） | 5.5 |
 | `advance(session, *, match) -> None` | B（6.2 更正後、6.5） | `match` 必須已確認（否則 `ValueError`）。先鎖賽事、再依 id 遞增鎖住整個對戰表的場次；勝隊進下一場、準決賽敗隊進季軍賽；對手確定不會有隊伍時自動 walkover，季軍賽必要時轉為已取消；兩隊湊齊時起算棄權期限並發 `MatchOpponentsDecided`；決賽與季軍賽都定案時賽事轉為 `finished`（`published` 先轉 `ongoing`）並記 `tournament.podium`。後續變更的操作者為系統；重複呼叫沒有副作用。呼叫前對場次的修改必須已 flush | 5.5 |
 | `confirm_walkover(session, *, match) -> None` | B（6.5） | 呼叫端先 `lock_tournament` 再 `lock_match` 取得 `match`（AD-6；函式開頭也會鎖賽事）；一方確定不會有隊伍時以 walkover 確認並推進（操作者為系統）；勝隊為場上唯一的隊伍，兩方都沒有時無勝隊；兩隊都在時拋 `MATCH_INVALID_TRANSITION` 409 | 5.5 |
@@ -248,6 +260,10 @@ class PublicBracket(BaseModel):
 | `auto_confirm_expired(session) -> bool` | worker（`confirm_expired_appeals`） | 確認一場申訴期、`appeal_deadline <= now` 的場次（沿用已寫入的 outcome、勝隊，操作者為系統）並推進；略過已取消或已結束賽事的場次；回傳是否找到候選 | 5.5 |
 | `record_game(session, *, tournament_id, match_id, account_id, game_no, data: GameScoreIn) -> ScoreEntryState`、`delete_game(..., game_no)`、`submit_result(...)`、`get_score_entry(...)` | router | 比分登錄、刪除最後一局、送出系列結果與 S4 讀取；規則一律交給 `scoring.py` | 5.3、5.4 |
 | `get_podium(session, *, tournament_id) -> PublicPodium \| None` | A（5.8、7.1） | 名次；尚未抽籤或賽事不是 `finished` 回 None | 5.5 |
+| `retire_team(session, *, team_id, account_id) -> RetireResult` | router（4.5） | 隊長在抽籤後退賽；規則、鎖的順序（`lock_tournament` → `lock_bracket_matches`）與錯誤碼見上方〈退賽的錯誤碼〉與 `competition/retirement.py`。操作紀錄沿用既有動作：報名 `registration.status_changed`（退賽、已參賽）、場次 `match.teams_changed`（`after.retired_team_id`，操作者為隊長）、沒有候補時 `match.confirmed`（`walkover`，操作者為系統）；不新增動作代碼。事件：有候補發 `BracketBackfilled`（兩隊確定時另發 `MatchOpponentsDecided`），沒有候補發 `OpponentRetired`（加上 walkover 確認的 `MatchResultConfirmed`）。不 commit | 4.5 |
+| `get_retirement_status(session, *, team_id, account_id) -> RetirementStatus` | router（4.5） | S17 退賽按鈕的只讀判斷，與 `retire_team` 的鎖內判斷共用同一套檢查 | 4.5 |
+
+**4.5 對 6.5 `service.disqualify` 的調整（D 寫、請 B 審查）**：`service.disqualify` 本體改為呼叫 `competition/retirement.py` 的 `disqualify`。隊伍「沒有已確認場次、唯一未結束的場次為 `scheduled`」時改走遞補：有候補就由候補第 1 位接手位置（`DisqualifyResult.replacement_team_id` 為遞補隊、`affected_match_ids` 為該場；遞補流程同退賽，含刪除被取消隊伍的報到，發 `BracketBackfilled`）；沒有候補維持 6.5 現狀（以 `disqualified` 判對手獲勝並晉級）；對手未定且沒有候補維持 409 `DISQUALIFY_OPPONENT_PENDING`。其他情況（抽籤前、第一場已開打、已贏過、不在對戰表、賽事已結束或已取消）一律照舊交給 `disqualification.disqualify`，`disqualification.py` 沒有修改。
 
 申訴相關的 `mark_appealed`、`uphold_result`、`correct_result`、`replay_match`：設計文件放在 MatchService，epic 6 由 disputes 呼叫。**這四個與 6.5 的 `disqualify` 都由 B 寫在 competition 新增的檔案（`competition/appeals.py`、`competition/disqualification.py`），`service.py` 只新增公開函式，不改 D 的既有函式，D 審查。**（2026-11-09 使用者決定，取代 2026-11-08 改由 D 實作的協議；介面見 [disputes.md](disputes.md)〈三〉）
 
@@ -264,6 +280,8 @@ class PublicBracket(BaseModel):
 | `MatchResultConfirmed` | `match_id`, `winner_id`（雙方棄權、無隊伍的輪空為 null） | 5.5 每場確認（含輪空確認） |
 | `MatchOpponentsDecided` | `match_id` | 5.5 晉級填位後該場兩隊都確定（通知兩隊隊長下一場對手） |
 | `TeamCheckedIn` | `match_id`, `team_id`, `both_checked_in` | 5.1 一隊報到成功；目前沒有消費者（通知在之後的 Story） |
+| `BracketBackfilled` | `match_id`, `team_id`（遞補隊）, `replaced_team_id` | 4.5 候補遞補進入對戰表（退賽、6.5 取消資格共用）；通知遞補隊全員 |
+| `OpponentRetired` | `match_id`, `winner_id` | 4.5 退賽且沒有候補，對手 `winner_id` 以輪空晉級；通知對手隊長 |
 
 ## 二、competition 需要的上游介面（提議，請 B、C 確認）
 
@@ -297,6 +315,8 @@ class PublicBracket(BaseModel):
 | `list_teams_by_status(session, *, tournament_id, statuses) -> list[TeamSummary]` | 6.5 公開對戰樹的「取消資格」 | 已有（6.4 新增）；經 `registration_port.list_disqualified_team_ids(session, *, tournament_id) -> set[UUID]`（`statuses=[disqualified]`，只取 id）一次查該賽事所有已取消資格的隊伍；凡經 `_public_matches` 組出的場次（公開對戰表、公開單場、S12、S13、S30）的 `PublicTeamRef.disqualified` 由此判斷，只有 `get_podium` 一律 `false`；缺函式回 503 `REGISTRATION_UNAVAILABLE` |
 
 `list_my_teams(session, *, account_id) -> list[MyTeamCard]`（C 在 S12 已提供）：5.1 補遺 S12 下一場經 `registration_port.list_drawn_teams_of_account(session, *, account_id) -> list[DrawnTeamRef]` 呼叫，只讀 `team_id`、`tournament_id`、`registration_status`，在 port 內過濾 `drawn`，回傳 `DrawnTeamRef {team_id, tournament_id}`；不改 registration 的 service、models，registration 不呼叫 competition（S12 前端組合兩支 API）。
+
+**4.5 退賽與遞補（registration 新增的公開函式，經 `registration_port`）**：`retire_registration(session, *, team_id, actor_id)`（registration 服務回 `RegistrationRead`，`registration_port` 轉接回傳 `None`；鎖賽事後 `drawn` → `retired`，其他狀態 409 `REGISTRATION_INVALID_TRANSITION`）、`backfill_drawn_from_waitlist(session, *, tournament_id) -> UUID | None`（鎖賽事；抽籤後候補第 1 位轉 `drawn` 並寫 `backfilled_at`，順位沿用 `_waitlist_order`、每校正取加已參賽不超過 2 隊，不看名額；自訂模式回 `None`，3.10 再補規則）、`has_backfill_candidate(session, *, tournament_id, leaving_team_id) -> bool`（只讀；`leaving_team_id` 退出後有沒有候補，退賽與取消資格預先判斷對手未定時能否遞補用）；port 另有 `get_team_tournament_id`（經 `get_team`）。C 的既有函式與 `_TRANSITIONS` 沒有修改。`registration_port.RegistrationState` 新增 `status`。
 
 上表 4 個 ★ 抽籤函式已由 C 在 Story 3.6 提供，名稱與關鍵字參數照上表：`finalize_for_draw` 在鎖內依序做優先期結算（優先期還沒結束也立即結算）、補做優先期後送出的報名（先搶期）、截止補位，操作者為傳入的 `actor_id`，重複呼叫結果不變，賽事不是開放報名或不是校園賽時不做任何事；`list_accepted_teams` 依隊伍 id 排序；`mark_drawn` 不發事件；`get_team_names` 不看賽事與報名狀態，不存在的 id 不出現。
 

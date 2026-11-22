@@ -24,6 +24,7 @@ from app.modules.competition.models import (
     MatchStatus,
 )
 from app.modules.identity.models import Account
+from app.modules.tournaments import service as tournaments_service
 from app.modules.tournaments.models import ScoreType, Tournament, TournamentStatus
 from app.worker import jobs, run_once
 from tests.competition.conftest import FakeRegistration, FrozenClockLike, draw_with
@@ -1122,3 +1123,36 @@ def test_record_submit_then_worker_confirms_and_advances(
     assert match.outcome == "played"
     next_match = _match(session, setup, setup.next_code())
     assert setup.team("a") in (next_match.team_a_id, next_match.team_b_id)
+
+
+def _record_lock_order(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """記錄 `lock_tournament`、`lock_match` 的呼叫順序（AD-6）。
+
+    測試的 session 共用同一條連線，無法從另一條連線觀察列鎖，所以改為記錄呼叫。
+    """
+    calls: list[str] = []
+    real_tournament = tournaments_service.lock_tournament
+    real_match = service.lock_match
+
+    def lock_tournament(session: Session, *, tournament_id: uuid.UUID) -> Any:
+        calls.append("lock_tournament")
+        return real_tournament(session, tournament_id=tournament_id)
+
+    def lock_match(session: Session, *, match_id: uuid.UUID) -> Any:
+        calls.append("lock_match")
+        return real_match(session, match_id=match_id)
+
+    monkeypatch.setattr(tournaments_service, "lock_tournament", lock_tournament)
+    monkeypatch.setattr(service, "lock_match", lock_match)
+    return calls
+
+
+def test_record_game_locks_tournament_before_match(
+    client: TestClient, setup: Setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _record_lock_order(monkeypatch)
+
+    response = _put(client, setup, 1, {"winner_side": "a"})
+
+    assert response.status_code == 200, response.text
+    assert calls[:2] == ["lock_tournament", "lock_match"]
