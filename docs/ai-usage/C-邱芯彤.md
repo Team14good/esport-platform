@@ -611,3 +611,21 @@
   - 子代理誠實回報：撤回對截止結算的併發測試抓不到「撤回不加鎖」的錯誤實作，只有撤回對抽籤那組抓得到。
 - 成熟度：L4（組員審查找出 AI 審查漏掉的問題，AI 查證後依人的決定修正，並用「拿掉修正測試會失敗」驗證）
 - 證據：PR #105（D 的審查）；spec-3-7-withdraw-registration.md（Implementation Notes「PR #105 組員審查」）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜專案管理與流程／合併 main 與衝突處理｜Story 3.7 PR #105 同步 main
+
+- Story／範圍：3.7（PR #105）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：使用者看到 PR 顯示需要更新，AI 查出 main 已合併 #102、#104 而 PR 有衝突，依 CLAUDE.md 用 `git merge origin/main`（不 rebase、不 force push）同步。
+- AI 產出：
+  - 解決 2 個衝突，兩邊的修改都保留：`contracts/tournaments.md`（#104 拿掉已完成的 `list_audit_logs`、本份更新提高名額說明）、`test_rules.py`（#102 改了 `MatchForfeited` 的 import 位置、本份加 `RegistrationBackfilled`）。
+  - 依規則用 `scripts/generate-client.sh` 重新產生 `frontend/src/client`，不手動合併；結果與自動合併相同。
+  - 補 1 處合併後才出現的缺口：S34 操作紀錄名稱對照補上 `tournament.capacity_changed`「提高名額」。
+- 人做了什麼：發現 PR 需要更新並請 AI 處理；決定合併時機。
+- 驗證：
+  - 合併後 Alembic 仍為單一 head（`a7c3e9f1b5d8`）。
+  - 後端 `scripts/test.sh` 2598 passed（覆蓋率 97%）、`lint.sh` 通過；前端 vitest 75 檔 1084 passed，Biome、tsc 通過。
+- 問題與修正：
+  - 本份新增的操作紀錄動作 `tournament.capacity_changed` 沒有繁中名稱。git 合併沒有衝突，是 #104 新增的檢查測試 `test_every_tournament_action_has_a_label` 掃描所有 `audit.record` 後失敗才發現；AI 依錯誤訊息同時補上前端對照表與測試清單。
+- 成熟度：L4（AI 依專案的合併規則同步、重新產生 client，並靠組員寫的自動檢查抓到跨 Story 的缺口，全部測試驗證後才推送）
+- 證據：PR #105；merge commit 871f7db（前一筆「PR #105 審查回應」的修正為 commit 8a38e16，前面幾筆寫「尚未 commit」的 Story 3.7 紀錄為 commit e7b5b17）
