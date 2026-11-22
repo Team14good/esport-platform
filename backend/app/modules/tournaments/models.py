@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from app.core import clock
+from app.core.events import Event
 
 # S34 操作紀錄每頁筆數；與其他分頁 API 相同
 PAGE_SIZE = 20
@@ -536,6 +537,15 @@ class RefereeRead(BaseModel):
     account_id: uuid.UUID
     display_name: str
     accepted_at: datetime
+
+
+# ---------------------------------------------------------------- 事件
+
+
+class TournamentCancelled(Event):
+    """主辦方取消了賽事（2.6）；收件規則由 notifications 決定（3.9 登錄）。"""
+
+    tournament_id: uuid.UUID
 
 
 # ---------------------------------------------------------------- 操作紀錄（Story 2.8）

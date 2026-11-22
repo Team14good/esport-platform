@@ -13,6 +13,7 @@ import { drawStatusQueryOptions } from "@/features/competition/draw-queries"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { OpenDisputesPanel } from "@/features/disputes/OpenDisputesPanel"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
+import { CancelTournamentButton } from "./CancelTournamentButton"
 import { tournamentNav } from "./organizer-nav"
 import {
   isTournamentForbidden,
@@ -251,6 +252,8 @@ export function OrganizerTournamentOverview({
     <>
       <OrganizerTournamentSummary tournament={tournament.data} />
       <DrawButton tournament={tournament.data} />
+      {/* 已結束、已取消時不顯示；已取消時 S27 沒有任何動作（抽籤、待處理清單也都不顯示） */}
+      <CancelTournamentButton tournament={tournament.data} />
       {/* 待處理清單從開放報名起顯示（檢舉在報名期間就能提出） */}
       {DISPUTE_STATUSES.has(tournament.data.status) && (
         <OpenDisputesPanel tournamentId={tournament.data.id} />

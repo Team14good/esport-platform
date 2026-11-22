@@ -3598,6 +3598,38 @@ export type tournamentsReadMyTournamentResponses = {
 export type tournamentsReadMyTournamentResponse =
   tournamentsReadMyTournamentResponses[keyof tournamentsReadMyTournamentResponses]
 
+export type tournamentsCancelMyTournamentData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/cancel"
+}
+
+export type tournamentsCancelMyTournamentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsCancelMyTournamentError =
+  tournamentsCancelMyTournamentErrors[keyof tournamentsCancelMyTournamentErrors]
+
+export type tournamentsCancelMyTournamentResponses = {
+  /**
+   * Successful Response
+   */
+  200: TournamentRead
+}
+
+export type tournamentsCancelMyTournamentResponse =
+  tournamentsCancelMyTournamentResponses[keyof tournamentsCancelMyTournamentResponses]
+
 export type tournamentsReadRefereeInvitationData = {
   body?: never
   path: {
