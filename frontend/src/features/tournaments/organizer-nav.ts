@@ -5,6 +5,7 @@ import {
   FlagIcon,
   GavelIcon,
   LayoutDashboardIcon,
+  ScrollTextIcon,
   TrophyIcon,
   UserCheckIcon,
 } from "lucide-react"
@@ -55,6 +56,11 @@ export function tournamentNav(tournamentId: string): BackofficeNavItem[] {
       to: `/organizer/tournaments/${id}/reports` as LinkOptions["to"],
       label: "檢舉",
       icon: FlagIcon,
+    },
+    {
+      to: `/organizer/tournaments/${id}/audit-log` as LinkOptions["to"],
+      label: "操作紀錄",
+      icon: ScrollTextIcon,
     },
   ]
 }

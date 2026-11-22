@@ -200,6 +200,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
   summary: （低）FR-37「裁判指派因晉級衝突被取消時另通知主辦方」沒有做：`RefereeUnassigned` 沒有區分「晉級衝突自動收回」與「主辦方收回、改派」，notifications 無從判斷，目前只通知被取消的裁判。
   evidence: Story 1.6 Decisions。修法：competition 在 `RefereeUnassigned` 加一個原因欄位（例如 `reason: "conflict" | "organizer"`，5.5 `unassign_referee_if_member` 發 `conflict`），notifications 的 `_referee_unassigned` 在 `conflict` 時另加主辦方一份草稿（link `/organizer/tournaments/{tid}/matches`）。
+
+## Deferred from: spec-2-8-organizer-audit-log.md (2026-11-21)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`
+  summary: （低）S34 操作紀錄的分頁在 service 切片：`list_audit_log` 每次都經 `core.audit.list_for_tournament()` 讀出該賽事的全部紀錄，再反轉、取一頁；一場 64 隊賽事可達上千筆，每換一頁都要讀全部。
+  evidence: Story 2.8 Decisions（AC 指定用 `list_for_tournament()`，不改 `core/audit.py` 既有函式）。修法：在 `core/audit.py` 新增一個資料庫層分頁的函式（例如 `page_for_tournament(session, tournament_id, *, offset, limit)` 回傳該頁與總數，`ORDER BY at DESC, seq DESC`，可用既有索引 `ix_audit_log_tournament_id_at_seq`），`list_audit_log` 改呼叫它。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`
+  summary: （低）S34 的變更內容照原始資料顯示：欄位名稱是英文代碼（如 `registration_end`、`rank_tiers`），id 是 UUID（如 `game_id`、`organizer_id`），時間是 UTC ISO 字串；主辦方不一定看得懂。
+  evidence: Story 2.8 Decisions。翻譯欄位名稱、把 id 換成名稱需要各模組提供對照（各模組寫紀錄的欄位不同），可在前端 `features/tournaments/audit-log.ts` 依 `entity_type` 加欄位名稱對照表，id 換名稱則需後端各模組提供批次查名稱的公開函式。
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
   summary: （中）一般通知事件之間仍沒有重試上限：某則事件的 resolver 每次都拋非預期例外（程式錯誤、DataError）時，`dispatch_outbox` 每輪回滾、停在這則，之後的一般通知全部延後；驗證信與重設信已改為優先處理，不受影響。
   evidence: 2026-11-21 OG-Matcha 在 #100 的審查第 1 點；followup 只做了 token 事件優先。修法：`outbox_event` 加 `attempts`／`last_error`（需遷移，`core/events.py`），失敗時在獨立交易裡累加，超過上限標為 dead-letter 並寫 log；或改成略過時記錄到操作紀錄。
