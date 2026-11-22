@@ -58,9 +58,6 @@
   summary: 4.3 第二階段的改時間 service 呼叫 `reschedule_window`／`check_reschedule` 時，準決賽的 `next_match_at` 要傳決賽與季軍賽中較早的那一場。
   evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-policy.md`
-  summary: `allocation.py` 沒有「優先期代表隊退出時，由同校平均段位積分次高的隊伍遞補」的對象函式（FR-17）。
-  evidence: 2026-11-01 Story 3.4 第一階段 Code Review（Blind Hunter）。只在代表隊撤回或被退回時觸發（3.7、3.8 期中擱置），期中不會發生；做 3.7 或 3.8 時在本模組新增，並讓先搶期名額釋出時的遞補先處理這個情況（medium）。
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-referee-score-backend.md`
   summary: （未驗證，若為真屬 medium）比分寫入只 `lock_match`、讀賽事狀態不加鎖；2.6 取消賽事若不鎖場次，取消與登錄同時發生時，比分可能寫進已取消的賽事。
   evidence: 2026-11-01 5.3 第二階段審查（Edge Case Hunter）。2.6 尚未實作無法重現；2.6 實作時取消流程要依 AD-6 鎖賽事再鎖場次，或比分寫入改為先 `lock_tournament`。
@@ -115,9 +112,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-1-tournaments-demo-step.md`
   summary: （低）示範賽事的時間在第一次建立時固定（開賽＝當時＋7 天）；保留資料庫、超過 7 天後再次啟動時，tournaments 步驟依「主辦方＋名稱」沿用這場已過開賽時間的賽事，competition 步驟的抽籤會因 `TOURNAMENT_START_PASSED` 一直略過。
   evidence: 2026-11-04 Story 7.1 tournaments 步驟第一輪審查（Blind Hunter、Edge Case Hunter）。凍結區塊規定已存在就沿用、不覆寫；Demo 前用 `docker compose down -v` 清掉資料庫即可。要自動處理時，需由人決定：過期就另建一場（會有兩場同名賽事）或改寫既有賽事的時間（違反「不覆寫」）。
-- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-allocation-backfill.md`
-  summary: （中）先搶期釋出的是優先期代表隊（期中由 6.5 抽籤前取消資格觸發）時，`backfill_vacancies` 依先搶期順位把名額給別校，沒有依 FR-17「由同校平均段位積分次高的隊伍遞補」。
-  evidence: 2026-11-04 PR #28 審查修正的 Code Review（Blind Hunter）。3.4 第一階段的 deferred 項目寫「代表隊退出只在撤回、退回時觸發，期中不會發生」，但期中 6.5 可在先搶期取消優先期代表隊的資格，之後分配時就會走到這條路；同校候補的 `representative_backfill` 也會因代表隊不再是正取而變成 False。修正需在本模組新增同校遞補規則（需確認 `priority_schools` 中哪一隊是代表隊），並讓 `backfill_vacancies` 先處理。
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-s30-matches-page.md`
   summary: 主辦方賽事後台側欄在子頁（例如 S30 `/organizer/tournaments/{id}/matches`）時，「總覽」（`/organizer/tournaments/{id}`）也顯示為目前位置：`BackofficeLayout` 的 `Link` 沒設 `activeOptions`，以前綴比對；「我的賽事」（`/organizer`）在所有賽事頁也同樣亮起。
   evidence: 2026-11-04 S30 實作時發現；B 的 S31 裁判頁也會遇到。修法需要改 B 的 `components/layout/BackofficeLayout.tsx`（例如 `BackofficeNavItem` 加選填的 `exact`，傳給 `activeOptions`），S30 spec 禁止改 B 的元件，交給 B 決定。
@@ -208,3 +202,19 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-6-cancel-tournament.md`
   summary: （未驗證，若為真屬 medium）賽事取消後，側欄的場次管理（S30）、裁判（S31）、申訴（S32）、檢舉（S33）頁可能仍顯示可操作的按鈕；確認對話框寫「賽事資訊改為唯讀」，2.6 的驗收條件只要求 S27 唯讀。
   evidence: 2026-11-22 Story 2.6 審查（Blind Hunter）。後端已確認裁判邀請（`ensure_accepting_referees`）與申訴處理（`disputes/service.py` 拒絕已取消）會擋下；改場次時間是否擋下未確認。要確認 competition 的改時間 API 對已取消賽事的處理，並決定各頁是否隱藏動作。
+## Deferred from: spec-3-8-review-and-reject-registration.md (2026-11-22)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-review-and-reject-registration.md`
+  summary: （低）3.7 撤回在「優先期已過、worker 還沒結算」時沒有先結算：`withdraw_registration` 直接撤回再 `_backfill_released_locked`，沒有結算紀錄就不遞補；撤回的若是優先期內送出的 `pending`，之後 worker 結算時該校會被當成優先期沒有報名（`priority_school_ids` 不含該校）。3.8 的退回已比照 `submit_registration` 先結算。
+  evidence: Story 3.8 spec 審查第 8 點。修法：`withdraw_registration` 在鎖內、撤回前比照 `reject_registration`，校園賽且 `now > priority_end` 時先呼叫 `settle_priority_window`（已結算時不做任何事），並補「優先期已過、尚未結算時撤回」的測試。
+## Deferred from: spec-2-8-organizer-audit-log.md (2026-11-21)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`
+  summary: （低）S34 操作紀錄的分頁在 service 切片：`list_audit_log` 每次都經 `core.audit.list_for_tournament()` 讀出該賽事的全部紀錄，再反轉、取一頁；一場 64 隊賽事可達上千筆，每換一頁都要讀全部。
+  evidence: Story 2.8 Decisions（AC 指定用 `list_for_tournament()`，不改 `core/audit.py` 既有函式）。修法：在 `core/audit.py` 新增一個資料庫層分頁的函式（例如 `page_for_tournament(session, tournament_id, *, offset, limit)` 回傳該頁與總數，`ORDER BY at DESC, seq DESC`，可用既有索引 `ix_audit_log_tournament_id_at_seq`），`list_audit_log` 改呼叫它。
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-organizer-audit-log.md`
+  summary: （低）S34 的變更內容照原始資料顯示：欄位名稱是英文代碼（如 `registration_end`、`rank_tiers`），id 是 UUID（如 `game_id`、`organizer_id`），時間是 UTC ISO 字串；主辦方不一定看得懂。
+  evidence: Story 2.8 Decisions。翻譯欄位名稱、把 id 換成名稱需要各模組提供對照（各模組寫紀錄的欄位不同），可在前端 `features/tournaments/audit-log.ts` 依 `entity_type` 加欄位名稱對照表，id 換名稱則需後端各模組提供批次查名稱的公開函式。
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
+  summary: （中）一般通知事件之間仍沒有重試上限：某則事件的 resolver 每次都拋非預期例外（程式錯誤、DataError）時，`dispatch_outbox` 每輪回滾、停在這則，之後的一般通知全部延後；驗證信與重設信已改為優先處理，不受影響。
+  evidence: 2026-11-21 OG-Matcha 在 #100 的審查第 1 點；followup 只做了 token 事件優先。修法：`outbox_event` 加 `attempts`／`last_error`（需遷移，`core/events.py`），失敗時在獨立交易裡累加，超過上限標為 dead-letter 並寫 log；或改成略過時記錄到操作紀錄。

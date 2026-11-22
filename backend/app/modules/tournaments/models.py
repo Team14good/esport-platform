@@ -15,6 +15,11 @@ from sqlmodel import Field, SQLModel
 from app.core import clock
 from app.core.events import Event
 
+# S34 操作紀錄每頁筆數；與其他分頁 API 相同
+PAGE_SIZE = 20
+# 與 identity 的分頁上限相同；超過回 422
+MAX_PAGE = 100_000
+
 
 class ScoreType(StrEnum):
     """比分型態（AD-18）。"""
@@ -498,3 +503,34 @@ class TournamentCancelled(Event):
     """主辦方取消了賽事（2.6）；收件規則由 notifications 決定（3.9 登錄）。"""
 
     tournament_id: uuid.UUID
+
+
+# ---------------------------------------------------------------- 操作紀錄（Story 2.8）
+
+
+class AuditLogEntry(BaseModel):
+    """S34 的一筆操作紀錄；變更內容照原始資料，不翻譯欄位名稱與 id。"""
+
+    id: uuid.UUID
+    at: datetime
+    # None 代表 system（worker 自動執行），畫面顯示「系統自動」
+    actor_id: uuid.UUID | None
+    # system 或帳號已不存在時為 None
+    actor_display_name: str | None
+    action: str
+    entity_type: str
+    entity_id: uuid.UUID
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None
+
+
+class AuditLogPage(BaseModel):
+    """操作紀錄的分頁結果（格式同 `OrganizerApplicationPage`）。
+
+    `page` 超過總頁數時 `items` 為空、`total` 照實。
+    """
+
+    items: list[AuditLogEntry]
+    total: int
+    page: int
+    page_size: int

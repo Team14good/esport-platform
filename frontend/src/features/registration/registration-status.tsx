@@ -44,6 +44,10 @@ type WaitlistReason = NonNullable<WaitlistInfo["waitlist_reason"]>
 type WaitlistPhase = NonNullable<WaitlistInfo["waitlist_phase"]>
 
 export const WAITLIST_UNRANKED_LABEL = "候補・目前不在遞補順序中"
+/** 主辦方退回的原因（Story 3.8）：S17 標頭、S12 卡片、S29 都顯示，重新送出後不再回傳。 */
+export const REJECT_REASON_PREFIX = "退回原因："
+/** 名額釋出後由候補遞補為正取（Story 3.7）；抽籤後改顯示「已參賽」。 */
+export const BACKFILLED_LABEL = "已遞補為正取"
 
 /** 「候補第 N 位」（EXPERIENCE.md〈固定介面字串〉）。 */
 export function waitlistPositionLabel(position: number): string {
@@ -64,6 +68,12 @@ export const WAITLIST_REASON_MESSAGES: Record<WaitlistReason, string> = {
 export const REPRESENTATIVE_BACKFILL_MESSAGE =
   "本校代表隊退出時，由本校平均段位積分次高的隊伍遞補。"
 
+/**
+ * 有順位的同校遞補（Story 3.8，D 在 PR #105 的決定）：本校代表隊已退出、本校目前沒有正取，
+ * 這隊是本校平均段位積分最高的候補，排在一般先搶期順位之前；取代先搶期的規則說明。
+ */
+export const DEPARTED_REPRESENTATIVE_MESSAGE = "本校代表隊已退出，由本校遞補"
+
 /** 當下階段的遞補規則說明（EXPERIENCE.md〈固定介面字串〉，Story 3.4 決定）。 */
 export const WAITLIST_PHASE_RULES: Record<WaitlistPhase, string> = {
   first_come: "先搶期由優先期沒有報名、目前也沒有正取的學校，依送出先後遞補。",
@@ -72,12 +82,15 @@ export const WAITLIST_PHASE_RULES: Record<WaitlistPhase, string> = {
 
 /**
  * 徽章文字：候補時依順位顯示「候補第 N 位」或「候補・目前不在遞補順序中」；
+ * 由候補遞補的正取（`backfilled`）顯示「已遞補為正取」；
  * 沒有候補資訊（`waitlist` 未提供或階段為 null）時用狀態名。
  */
 export function registrationStatusLabel(
   status: RegistrationStatus,
   waitlist?: WaitlistInfo,
+  backfilled = false,
 ): string {
+  if (status === "accepted" && backfilled) return BACKFILLED_LABEL
   if (status !== "waitlisted" || !waitlist?.waitlist_phase) {
     return REGISTRATION_STATUS_LABELS[status]
   }
@@ -88,7 +101,8 @@ export function registrationStatusLabel(
 
 /**
  * 候補徽章下方的說明（`muted`）：沒有順位時的原因（＋代表隊遞補的補充），
- * 以及當下階段的遞補規則說明。不是候補或沒有候補資訊時不顯示。
+ * 以及當下階段的遞補規則說明；有順位且為同校遞補（`representative_backfill`）時改寫
+ * 「本校代表隊已退出，由本校遞補」。不是候補或沒有候補資訊時不顯示。
  */
 export function WaitlistDetails({
   status,
@@ -108,7 +122,11 @@ export function WaitlistDetails({
       lines.push(REPRESENTATIVE_BACKFILL_MESSAGE)
     }
   }
-  lines.push(WAITLIST_PHASE_RULES[phase])
+  if (waitlist.waitlist_position !== null && waitlist.representative_backfill) {
+    lines.push(DEPARTED_REPRESENTATIVE_MESSAGE)
+  } else {
+    lines.push(WAITLIST_PHASE_RULES[phase])
+  }
   // 用 span：S12 的卡片整張是連結（行內內容），不能放 div、p
   return (
     <span
@@ -125,14 +143,19 @@ export function WaitlistDetails({
   )
 }
 
-/** 報名狀態徽章：永遠帶文字，顏色只是輔助；不可點擊。候補時傳入 `waitlist` 顯示順位。 */
+/**
+ * 報名狀態徽章：永遠帶文字，顏色只是輔助；不可點擊。候補時傳入 `waitlist` 顯示順位；
+ * `backfilled` 為 true 的正取顯示「已遞補為正取」。
+ */
 export function RegistrationStatusBadge({
   status,
   waitlist,
+  backfilled = false,
   className,
 }: {
   status: RegistrationStatus
   waitlist?: WaitlistInfo
+  backfilled?: boolean
   className?: string
 }) {
   return (
@@ -144,7 +167,7 @@ export function RegistrationStatusBadge({
         className,
       )}
     >
-      {registrationStatusLabel(status, waitlist)}
+      {registrationStatusLabel(status, waitlist, backfilled)}
     </span>
   )
 }

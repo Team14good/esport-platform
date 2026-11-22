@@ -23,7 +23,7 @@ import {
 import { TournamentTabs } from "@/features/tournaments/TournamentTabs"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { BracketPending } from "./BracketPending"
-import { BracketTree } from "./BracketTree"
+import { BracketExplorer } from "./BracketTeamSearch"
 import { fetchPublicBracket, publicBracketQueryKey } from "./bracket-queries"
 import { connectionLostText } from "./ConnectionLostBanner"
 import { matchPath } from "./match-source"
@@ -137,7 +137,7 @@ function BracketSection({ tournament, onCountdownExpire }: TournamentProps) {
         {bracket ? (
           <div className="flex min-w-0 flex-col gap-6">
             <TournamentPodium bracket={bracket} />
-            <BracketTree
+            <BracketExplorer
               bracket={bracket}
               changedMatchIds={changedMatchIds}
               matchHref={(matchId) => matchPath(tournament.id, matchId)}

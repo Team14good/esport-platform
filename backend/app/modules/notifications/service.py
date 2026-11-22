@@ -34,7 +34,7 @@ from app.modules.notifications.models import (
     NotificationRead,
     UnreadCount,
 )
-from app.modules.notifications.registry import NotificationDraft
+from app.modules.notifications.registry import NotificationDraft, RecipientsNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,8 @@ _ACCOUNT_TOKEN_EVENTS: dict[
     VERIFICATION_EMAIL_REQUESTED: VerificationEmailRequested,
     PASSWORD_RESET_REQUESTED: PasswordResetRequested,
 }
+# worker 優先分派的事件類型（見 `app.worker.jobs.dispatch_outbox`）
+ACCOUNT_TOKEN_EVENT_TYPES: frozenset[str] = frozenset(_ACCOUNT_TOKEN_EVENTS)
 # 第 5 次寄送失敗後標為 failed，不再重試
 MAX_EMAIL_ATTEMPTS = 5
 # 失敗後的重試間隔：1、2、4、8 分鐘
@@ -81,8 +83,10 @@ def dispatch_event(session: Session, event: OutboxEvent) -> None:
         return
     try:
         drafts = rule.resolver(session, rule_payload)
-    except BusinessError, LookupError:
-        # 實體已不存在：重試也不會成功，記錄後略過，免得卡住後面的事件
+    except BusinessError, RecipientsNotFound:
+        # 實體已不存在：重試也不會成功，記錄後略過，免得卡住後面的事件。
+        # 不接 LookupError：KeyError、IndexError 這類程式錯誤要往外拋、回滾重試，
+        # 不能當成「查不到」把事件標為已處理
         logger.exception(
             "Recipients of %s event %s not found; skipped", event.type, event.id
         )

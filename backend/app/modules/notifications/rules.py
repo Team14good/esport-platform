@@ -2,7 +2,7 @@
 
 每個 resolver 只經各模組 `service.py` 的公開函式查詢收件人，回傳每人一份
 `NotificationDraft`。查不到實體時各模組的 service 會拋 `BusinessError`（404），
-由 `service.dispatch_event` 記錄後略過。
+resolver 自己判斷查不到時拋 `RecipientsNotFound`，都由 `service.dispatch_event` 記錄後略過。
 
 匯入本模組即完成登錄（`notifications.service` 匯入時就會載入）。
 不在這裡登錄的：`MatchResultSubmitted`、`MatchResultConfirmed`、`TeamCheckedIn`
@@ -42,9 +42,18 @@ from app.modules.identity.models import (
     OrganizerApplicationRejected,
     OrganizerApplicationSubmitted,
 )
-from app.modules.notifications.registry import NotificationDraft, register
+from app.modules.notifications.registry import (
+    NotificationDraft,
+    RecipientsNotFound,
+    register,
+)
 from app.modules.registration import service as registration_service
-from app.modules.registration.models import RegistrationAllocated, RegistrationStatus
+from app.modules.registration.models import (
+    RegistrationAllocated,
+    RegistrationBackfilled,
+    RegistrationRejected,
+    RegistrationStatus,
+)
 from app.modules.tournaments import service as tournaments_service
 
 _TAIPEI = ZoneInfo("Asia/Taipei")
@@ -176,7 +185,9 @@ def _bracket_drawn(session: Session, event: BracketDrawn) -> list[NotificationDr
         session, tournament_id=event.tournament_id
     )
     if bracket is None:
-        raise LookupError(f"bracket of tournament {event.tournament_id} not found")
+        raise RecipientsNotFound(
+            f"bracket of tournament {event.tournament_id} not found"
+        )
     team_ids = dict.fromkeys(
         team_id for match in bracket.matches for team_id in _match_team_ids(match)
     )
@@ -389,3 +400,57 @@ register(AppealFiled, _appeal_filed)
 register(AppealResolved, _appeal_resolved)
 register(ReportFiled, _report_filed)
 register(ReportResolved, _report_resolved)
+
+
+# ---------------------------------------------------------------- 遞補（3.7）
+
+
+def _registration_backfilled(
+    session: Session, event: RegistrationBackfilled
+) -> list[NotificationDraft]:
+    team = registration_service.get_team(session, team_id=event.team_id)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=event.tournament_id
+    )
+    return _drafts(
+        _member_ids(session, team.id),
+        title="報名結果：已遞補為正取",
+        body=f"「{team.name}」在「{tournament.name}」已由候補遞補為正取。",
+        link=f"/teams/{team.id}",
+    )
+
+
+register(RegistrationBackfilled, _registration_backfilled)
+
+
+# ---------------------------------------------------------------- 退回（3.8）
+
+_SENTENCE_END = "。．.！？!?"
+
+
+def _registration_rejected(
+    session: Session, event: RegistrationRejected
+) -> list[NotificationDraft]:
+    team = registration_service.get_team(session, team_id=event.team_id)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=event.tournament_id
+    )
+    # 原因以句末標點結尾時不再重複「。」；只有標點時沿用原字串（PR #107 審查）
+    reason = event.reason.rstrip(_SENTENCE_END) or event.reason
+    next_step = (
+        "請在報名截止前修正後重新送出。"
+        if event.can_resubmit
+        else "報名已截止，無法重新送出。"
+    )
+    return _drafts(
+        _member_ids(session, team.id),
+        title="報名結果：退回",
+        body=(
+            f"「{team.name}」在「{tournament.name}」的報名被主辦方退回，"
+            f"原因：{reason}。{next_step}"
+        ),
+        link=f"/teams/{team.id}",
+    )
+
+
+register(RegistrationRejected, _registration_rejected)

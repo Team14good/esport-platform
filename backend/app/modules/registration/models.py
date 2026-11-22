@@ -14,6 +14,7 @@ from sqlalchemy import (
     Index,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
     text,
@@ -23,7 +24,7 @@ from sqlmodel import Field, SQLModel
 
 from app.core import clock
 from app.core.events import Event
-from app.modules.tournaments.models import RankTierRead
+from app.modules.tournaments.models import CapacityField, RankTierRead
 
 
 class MemberRole(StrEnum):
@@ -53,6 +54,8 @@ GAME_ACCOUNT_ID_MAX_LENGTH = 50
 RANK_TIER_MAX_LENGTH = 50
 RANK_SCREENSHOT_KEY_MAX_LENGTH = 64
 RANK_SCREENSHOT_NAME_MAX_LENGTH = 100
+# 退回原因上限（Story 3.8，與 identity 的 `REJECT_REASON_MAX_LENGTH` 相同）
+REJECT_REASON_MAX_LENGTH = 200
 
 
 # ---------------------------------------------------------------- 資料表
@@ -121,7 +124,8 @@ class Registration(SQLModel, table=True):
     """報名：建立隊伍時同時產生（組隊中）；狀態只能經 `service.mark_status()` 修改。
 
     送出時的快照（Story 3.3）：學校、全隊（含替補）平均段位積分、送出時間；組隊中為
-    null，送出後不再變動（分配只看快照，AD-12）。
+    null，送出後到下一次送出之間不變動（分配只看快照，AD-12）。被主辦方退回（Story 3.8）
+    後名單解鎖，隊長重新送出時三個快照一起重寫。
     """
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -135,6 +139,19 @@ class Registration(SQLModel, table=True):
     # 段位積分上限是 PostgreSQL integer 上限，numeric(6,2) 會溢位
     avg_rank_score: Decimal | None = Field(default=None, sa_type=Numeric(12, 2))
     submitted_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    # Story 3.7：名額釋出後由候補遞補為正取的時間（撤回、提高名額、代表隊的同校遞補）；
+    # 其他方式成為正取（優先期結算、先搶期、截止補位）為 null
+    backfilled_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+    # Story 3.7：優先期代表隊（結算時正取的隊伍，以及同校遞補上來的隊伍）。結算紀錄只存
+    # 學校，分不出「代表隊離開的學校」與「代表隊超過名額、整校都是候補的學校」，所以記在報名上
+    is_representative: bool = Field(
+        default=False, sa_column_kwargs={"server_default": "false"}
+    )
+    # Story 3.8：主辦方退回的原因與時間；重新送出後保留（只在 `rejected` 時回傳給隊伍）
+    reject_reason: str | None = Field(default=None, sa_type=Text)
+    rejected_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
 class PriorityWindowSettlement(SQLModel, table=True):
@@ -165,6 +182,30 @@ class RegistrationAllocated(Event):
     status: RegistrationStatus
 
 
+class RegistrationBackfilled(Event):
+    """名額釋出後候補已遞補為正取（Story 3.7：撤回、提高名額、代表隊的同校遞補）。
+
+    遞補時只發這個事件，不發 `RegistrationAllocated`。
+    """
+
+    registration_id: uuid.UUID
+    team_id: uuid.UUID
+    tournament_id: uuid.UUID
+
+
+class RegistrationRejected(Event):
+    """主辦方退回報名（Story 3.8）。`can_resubmit`：退回當下仍在報名期間（賽事開放且
+    未過截止時間），隊伍可在報名截止前修正後重新送出。退回時只發這個事件，不發
+    `RegistrationAllocated`（優先期已過未結算時先結算，被退回的這隊也不發）。
+    """
+
+    registration_id: uuid.UUID
+    team_id: uuid.UUID
+    tournament_id: uuid.UUID
+    reason: str
+    can_resubmit: bool
+
+
 # ---------------------------------------------------------------- API schema
 
 
@@ -187,6 +228,22 @@ def _validate_team_name(value: str) -> str:
 
 TeamNameField = Annotated[
     str, BeforeValidator(_require_str), AfterValidator(_validate_team_name)
+]
+
+
+def _validate_reject_reason(value: str) -> str:
+    reason = value.strip()
+    if not reason:
+        raise PydanticCustomError("reject_reason_required", "請輸入退回原因")
+    if len(reason) > REJECT_REASON_MAX_LENGTH:
+        raise PydanticCustomError(
+            "reject_reason_too_long", f"退回原因最多 {REJECT_REASON_MAX_LENGTH} 個字"
+        )
+    return reason
+
+
+RejectReasonField = Annotated[
+    str, BeforeValidator(_require_str), AfterValidator(_validate_reject_reason)
 ]
 
 # 邀請連結的狀態：可加入、隊伍已滿、報名已截止（不在報名期間）、名單已鎖定（報名已送出）
@@ -280,15 +337,24 @@ class TeamDetail(WaitlistFields):
     # 已填段位成員（含替補）的平均段位積分，取到小數第二位；沒有人填時為 null
     avg_rank_score: float | None
     rank_filled_count: int
-    # 報名期間（賽事開放且早於截止時間）且報名仍是組隊中時，隊員才能修改自己的參賽資料
+    # 報名期間（賽事開放且早於截止時間）且名單未鎖定（組隊中或被退回）時，隊員才能修改
+    # 自己的參賽資料
     profile_editable: bool
-    # 不能送出報名的原因（固定順序）；只在組隊中計算，其他狀態為空
+    # 不能送出報名的原因（固定順序）；只在名單未鎖定（組隊中或被退回）時計算，其他狀態為空
     submit_blockers: list[SubmitBlocker]
     priority_end: datetime
     registration_end: datetime
     # 送出報名的時間：由 `submit_registration` 寫入；組隊中、或不經送出而離開組隊中
     # 的報名（例如撤回）為 null
     submitted_at: datetime | None
+    # 名額釋出後由候補遞補為正取（Story 3.7）：正取且有遞補時間；抽籤後（已參賽）為 false。
+    # 有預設值：其他模組自行建立的 TeamDetail／MyTeamCard（測試替身）不必跟著改
+    backfilled: bool = False
+    # 目前檢視者能退賽（Story 3.7）：檢視者是隊長、報名為已送出・待分配／正取／候補，
+    # 且賽事為開放報名或報名截止（抽籤前）
+    withdrawable: bool = False
+    # 主辦方退回的原因（Story 3.8）：只在 `rejected` 時有值，重新送出後為 null
+    reject_reason: str | None = None
 
 
 class TeamInvitePreview(BaseModel):
@@ -313,6 +379,69 @@ class MyTeamCard(WaitlistFields):
     tournament_name: str
     game_name: str
     registration_status: RegistrationStatus
+    # 與 `TeamDetail` 同義（Story 3.7、3.8）
+    backfilled: bool = False
+    withdrawable: bool = False
+    reject_reason: str | None = None
+
+
+class RegistrationRejection(BaseModel):
+    """主辦方退回報名（Story 3.8）：原因去除前後空白後必填，最多 200 字。"""
+
+    reason: RejectReasonField
+
+
+class OrganizerRegistrationMember(BaseModel):
+    """S29 報名清單的隊員（隊長在前，再依加入順序）。
+
+    不含截圖原始檔名（只回給本人）與截圖鍵值；`rank_screenshot_version` 由鍵值雜湊而來，
+    換截圖就會改變，只供前端當快取鍵；沒有截圖時為 null。
+    """
+
+    account_id: uuid.UUID
+    display_name: str
+    role: MemberRole
+    game_account_id: str | None
+    rank_tier: str | None
+    has_rank_screenshot: bool
+    rank_screenshot_version: str | None
+
+
+class OrganizerRegistration(WaitlistFields):
+    """S29 報名清單的一列（Story 3.8）：送出過的報名，分配結果與候補順位與 S17 相同。
+
+    `avg_rank_score` 是送出時的快照；`rejectable`：報名為已送出・待分配／正取／候補，
+    且賽事為開放報名或報名截止；`reject_reason` 只在 `rejected` 時有值。
+    """
+
+    registration_id: uuid.UUID
+    team_id: uuid.UUID
+    team_name: str
+    status: RegistrationStatus
+    submitted_at: datetime
+    avg_rank_score: float
+    backfilled: bool
+    rejectable: bool
+    reject_reason: str | None
+    members: list[OrganizerRegistrationMember]
+
+
+class OrganizerRegistrationPage(BaseModel):
+    """S29 報名清單的分頁結果（格式同 `OrganizerApplicationPage`）。
+
+    `page` 超過總頁數時 `items` 為空、`total` 照實。
+    """
+
+    items: list[OrganizerRegistration]
+    total: int
+    page: int
+    page_size: int
+
+
+class CapacityUpdate(BaseModel):
+    """提高名額（Story 3.7，FR-9）；只能比目前的名額大。"""
+
+    capacity: CapacityField
 
 
 class TeamMemberRole(BaseModel):
@@ -340,8 +469,8 @@ class RegistrationRead(BaseModel):
     """給其他模組使用的報名資料。
 
     `school_id`、`avg_rank_score`、`submitted_at` 是送出時的快照，由 `submit_registration`
-    寫入；組隊中為 None。不經送出而離開組隊中的報名（例如組隊中撤回、退回後回到組隊中）
-    可能沒有快照，使用前要檢查。
+    寫入；組隊中為 None。不經送出而離開組隊中的報名（例如組隊中撤回）可能沒有快照，
+    使用前要檢查；被退回（Story 3.8）的報名保留上一次送出時的快照。
     """
 
     id: uuid.UUID

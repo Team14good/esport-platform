@@ -518,3 +518,217 @@
   - 開分支時，AI 用的 main 是舊的，查 git log 才發現，重新 fetch 後把分支重建在最新的 main 上。
 - 成熟度：L4（組員審查，AI 依流程實作並用「拿掉鎖」驗證測試有效，加上審查與自動測試）
 - 證據：PR #64（D 的審查與留言）；_bmad-output/implementation-artifacts/spec-6-4-followup-review.md；spec-6-4-file-report.md（Review Triage Log #24～#26）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜需求／spec 撰寫與審查｜Story 3.7 抽籤前撤回報名與提高名額遞補
+
+- Story／範圍：3.7（分支 story/3-7，尚未開 PR）；含 FR-9 `raise_capacity`
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（規劃階段）＋ 子代理
+- 怎麼用：
+  - AI 讀期末分工與 epics，派 3 個子代理平行調查後端分配、前端 S17／S12 與介面字串、通知中心與契約，整理成 spec。
+  - 使用者選「審查 spec」後，AI 另派 1 個沒參與規劃的子代理，對照 epics、PRD、UX 與程式獨立審查。
+- AI 產出：spec `spec-3-7-withdraw-registration.md`，包含：
+  - I/O 矩陣 14 列、Tasks 10 項。
+  - 規劃與審查後共 9 條 Decisions。
+  - 審查的 Review Triage Log 11 列。
+- 人做了什麼：
+  - 決定撤回與 `raise_capacity` 同一份 spec。
+  - 決定退賽對話框文案、「已遞補為正取」的涵蓋範圍、新增專屬遞補通知、保留超過 1,600 tokens 的完整 spec。
+  - 決定把同校遞補也接到 6.5 取消資格後的先搶期分配。
+  - 同意依審查修改凍結區的 5 點，最後核准 spec 並停在實作前。
+- 驗證：
+  - 獨立審查提出 11 項：high 2、medium 4、low 4，另 1 項確認架構與併發沒有問題。
+  - AI 修 spec 前讀原始碼抽查其中 4 項（`allocation.py:297` 空位算法、`service.py:386` `_current_phase`、deferred-work 第 119-120 行、tournaments 的 `_field_error` 回 422），都成立。
+  - 11 項全部處理，記在 Review Triage Log。
+- 問題與修正：
+  - AI 初稿的 I/O 矩陣「截止後撤回」一列，沿用 epics 3.6 的 E/F/G/H 範例，寫成「W 校撤回 1 隊後只有 F 遞補」。但那個狀態的正取只有 3 隊、名額 5。照 `backfill_vacancies` 的「空位＝名額−正取數」，F、G、H 會全部遞補，而且 `closed` 時截止補位早已補滿，這個狀態根本不會出現。獨立審查實際推算才抓到，改成撤回前名額已滿。
+  - AI 初稿用「賽事是 `open` 還是 `closed`」判斷先搶期或截止後，沒注意到畫面的候補順位用 `_current_phase`，只要過了截止時間就算截止後。worker 延遲轉狀態的期間，實際遞補的隊伍會和畫面顯示的候補第 1 位不同。審查指出後改用 `_current_phase`。
+  - AI 初稿把同校遞補和一般遞補寫成二選一，可能留下 6.5 不遞補時累積的空位；錯誤碼寫「422 或 409」沒有定案；打算刪除一項本份處理不到的 deferred 項目；漏了 epics 明定的 `waitlist_order` 兩階段單元測試。都由審查抓到後修正。
+  - 使用者決定接上 6.5 的同校遞補後，AI 發現只看「優先期學校沒有正取」會誤判代表隊超過名額、整校都在候補的學校，所以改在結算時記錄 `is_representative`，寫進 Design Notes。
+- 成熟度：L4（固定流程：子代理平行調查 → 寫 spec → 獨立子代理審查 → AI 抽查原始碼驗證審查結果；人只在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-7-withdraw-registration.md（Decisions、Review Triage Log、Design Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜程式＋測試／程式生成與審查｜Story 3.7 抽籤前撤回報名與提高名額遞補（實作）
+
+- Story／範圍：3.7（分支 story/3-7，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作、審查階段）＋ 子代理
+- 怎麼用：
+  - 主代理把核准的 spec 交給 1 個實作子代理（只給 spec 路徑），完成後主代理自己讀整份差異核對 Tasks，並重跑相關測試確認 I/O 矩陣每一列都有測試且通過。
+  - 再同時派 3 個互不相通的審查子代理（Blind Hunter 只看差異、Edge Case Hunter 追邊界、Verification Gap 找沒被測到的行為），主代理逐條讀程式核實後分類，小修正交回原實作子代理。
+- AI 產出：
+  - 後端：撤回 `withdraw_registration`、提高名額 `raise_capacity`、同校遞補純函式 `representative_backfill`、Alembic 遷移 1 支、2 個 API、tournaments 新增公開函式 `raise_tournament_capacity`、notifications 新增遞補通知規則。
+  - 前端：`useWithdrawRegistration.ts`、S17「退賽」按鈕與確認框、S17／S12「已遞補為正取」徽章，重新產生 client。
+  - 測試：新增 `test_withdraw_registration.py`、`test_raise_capacity.py`，另在 `test_allocation.py`、`test_rules.py`、`test_settlement_concurrency.py`、`team-pages.test.tsx` 補測試。
+- 人做了什麼：spec 階段已做完決策；實作子代理自行決定的 5 點（退賽 Toast 用「已撤回報名」、錯誤訊息文字、遞補的操作者記為系統、`backfilled`／`withdrawable` 不放進 `WaitlistFields`、兩欄位預設 False）待使用者確認。
+- 驗證：
+  - 後端 `scripts/test.sh` 2577 passed，覆蓋率 97%；`scripts/lint.sh` 通過。
+  - 前端 vitest 74 檔 1068 passed；Biome、`tsc --noEmit` 通過。Playwright e2e 沒有執行。
+  - 實作子代理回報：把遞補階段寫死成先搶期並拿掉同校遞補後，`test_withdraw_registration.py` 有 4 個測試失敗，證明測試抓得到錯（主代理沒有重做這個實驗）。
+  - 3 層審查合併後 18 項：修正 2、延後 1、駁回 15（駁回理由逐項記在 Review Triage Log）。
+- 問題與修正：
+  - 實作允許賽事「尚未開放」時提高名額，卻沒有測試；把這個狀態拿掉測試仍全綠。Verification Gap 實際推演後抓到，補上測試。
+  - 前端撤回被伺服器拒絕（409）時只重新取得 S17，S12 卡片仍顯示舊狀態。Edge Case Hunter 與 Blind Hunter 都抓到，`onError` 補上讓 S12 失效。
+  - 依 spec 刪除 deferred 項目時，舊項目的 evidence 裡還記著一個顯示問題（代表隊被取消資格後，同校候補仍顯示「不在遞補順序中」，下次送出卻先遞補它），刪除後就沒人追蹤。兩個審查者抓到，因修正要改 `allocation.py` 既有函式（spec 禁止），改記成新的 deferred 項目。
+  - 主代理在 Git Bash 用 `python` 改檔，兩次都沒改到（改 `sprint-status.yaml`、新增 deferred 項目），而且沒有檢查結束碼。用 `grep`／`git diff --stat` 檢查才發現沒寫進去，改用編輯工具重寫。主代理一開始誤判是 heredoc 的中文編碼問題；之後檢查換行時看到結束碼 49，才確認真正原因是這台機器 Git Bash 的 `python` 是 Windows 的佔位程式，根本沒有執行（可用 `uv run --no-project python`）。
+- 成熟度：L4（實作子代理依 spec 產出，主代理核對差異、3 個獨立審查子代理、全部測試與 lint 自動驗證；人只在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-7-withdraw-registration.md（Implementation Notes、Review Triage Log R1～R18）；deferred-work.md「Deferred from: spec-3-7-withdraw-registration.md」；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜測試／E2E 與收尾確認｜Story 3.7 抽籤前撤回報名與提高名額遞補（收尾）
+
+- Story／範圍：3.7（分支 story/3-7，尚未開 PR）
+- 工具：Claude Code（Opus 5.5）＋ 子代理
+- 怎麼用：使用者列出 7 項收尾確認（操作紀錄追溯、欄位缺省、撤回後的入隊限制、撤回通知、同校遞補是否合 spec、deferred 交接、Playwright E2E）。主代理查需求文件與程式逐項確認；Story 3.7 原本沒有 E2E，派 1 個子代理新增並執行。
+- AI 產出：
+  - E2E：`registration-withdraw.spec.ts`（3 個測試：退賽確認與成功撤回、拒絕撤回、先搶期遞補顯示）與 `support/withdraw.ts`。
+  - 後端測試補 2 處斷言：遞補的操作紀錄（操作者為系統）緊接在隊長撤回、主辦方改名額那筆之後。
+  - 前端修正 1 個 bug（`SubmitRegistrationSection.tsx`），單元測試的拒絕案例改寫。
+- 人做了什麼：原則上接受實作自行決定的 5 項；決定收尾範圍（只做必要修正與針對性測試，不重跑完整審查、不 commit）。
+- 驗證：
+  - E2E `--grep @story-3.7`：desktop、mobile-375 共 6 passed。
+  - 前端 vitest 74 檔 1068 passed，Biome、tsc 通過；相關後端測試 32 passed。
+  - 拿掉前端修正時，改寫後的單元測試會失敗（主代理在容器內實際驗證）。
+- 問題與修正：
+  - 撤回被拒（409）時錯誤訊息只閃一下就跟著確認框消失：`onError` 重新取得隊伍後 `withdrawable` 變 false，整個確認框被卸載。實作、單元測試與 3 層程式審查都沒抓到，因為單元測試 mock 的重新取得不會改變 `withdrawable`；E2E 對真的後端才重現。改成確認框開著時保持掛載。
+  - 修正後主代理寫的單元測試與 E2E 斷言各失敗一次：對話框開著時背景是 aria-hidden，查不到頁面標題。看錯誤內容後改成先檢查對話框、關閉後再檢查頁面。
+  - 本機 e2e image 太舊，缺 `psql`，第一次全部失敗（`spawn psql ENOENT`），子代理重 build 後解決。
+- 成熟度：L4（子代理寫 E2E 對真的服務執行並抓到 bug，主代理修正並用「拿掉修正測試會失敗」驗證測試有效；人只決定範圍）
+- 證據：spec-3-7-withdraw-registration.md（Implementation Notes「收尾確認」）；frontend/tests/e2e/registration-withdraw.spec.ts；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜程式＋測試／依組員審查修正｜Story 3.7 PR #105 審查回應
+
+- Story／範圍：3.7（PR #105）
+- 工具：Claude Code（Opus 5.5）＋ 子代理
+- 怎麼用：D 核准 PR 並提 4 點（不擋合併）。主代理讀程式逐點查證後整理成表給使用者；使用者決定修第 2、3 點、補第 4 點，主代理把要求交回原實作子代理，完成後自己看差異並跑完整後端測試。
+- AI 產出：
+  - `service.py` 改 2 處：`raise_capacity` 鎖之前先檢查主辦方；`_first_come_locked` 只在先搶期做同校遞補。
+  - 新增 4 個測試：鎖被占用時非主辦方立即得到 403、截止結算不做同校遞補、撤回對截止結算的真實併發、撤回對抽籤的真實併發。
+- 人做了什麼：D 審查並核准；使用者決定修正範圍（第 1 點遷移衝突留到合併時由後合併的一方處理）。
+- 驗證：
+  - 後端 `scripts/test.sh` 2581 passed，覆蓋率 97%；`lint.sh` 通過。
+  - 子代理回報：拿掉第 2 點修正時新測試得到 `LockNotAvailable`、拿掉第 3 點修正時新測試失敗；把撤回改成不加鎖時，撤回對抽籤的併發測試 5 次都失敗（主代理沒有重做這些實驗）。
+- 問題與修正：
+  - AI 實作的 `raise_capacity` 先拿 FOR UPDATE 鎖才檢查權限，任何已驗證帳號都能讓抽籤、送出排隊等鎖；3 層 AI 程式審查沒有抓到，組員 D 對照 competition `get_draw_status` 的寫法才發現。
+  - 同校遞補接到 `_first_come_locked` 時，AI 沒注意到截止結算與截止後抽籤也會呼叫它，可能在截止後套用先搶期規則；同樣由 D 讀呼叫端發現，改成只在先搶期執行。
+  - 子代理誠實回報：撤回對截止結算的併發測試抓不到「撤回不加鎖」的錯誤實作，只有撤回對抽籤那組抓得到。
+- 成熟度：L4（組員審查找出 AI 審查漏掉的問題，AI 查證後依人的決定修正，並用「拿掉修正測試會失敗」驗證）
+- 證據：PR #105（D 的審查）；spec-3-7-withdraw-registration.md（Implementation Notes「PR #105 組員審查」）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜專案管理與流程／合併 main 與衝突處理｜Story 3.7 PR #105 同步 main
+
+- Story／範圍：3.7（PR #105）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：使用者看到 PR 顯示需要更新，AI 查出 main 已合併 #102、#104 而 PR 有衝突，依 CLAUDE.md 用 `git merge origin/main`（不 rebase、不 force push）同步。
+- AI 產出：
+  - 解決 2 個衝突，兩邊的修改都保留：`contracts/tournaments.md`（#104 拿掉已完成的 `list_audit_logs`、本份更新提高名額說明）、`test_rules.py`（#102 改了 `MatchForfeited` 的 import 位置、本份加 `RegistrationBackfilled`）。
+  - 依規則用 `scripts/generate-client.sh` 重新產生 `frontend/src/client`，不手動合併；結果與自動合併相同。
+  - 補 1 處合併後才出現的缺口：S34 操作紀錄名稱對照補上 `tournament.capacity_changed`「提高名額」。
+- 人做了什麼：發現 PR 需要更新並請 AI 處理；決定合併時機。
+- 驗證：
+  - 合併後 Alembic 仍為單一 head（`a7c3e9f1b5d8`）。
+  - 後端 `scripts/test.sh` 2598 passed（覆蓋率 97%）、`lint.sh` 通過；前端 vitest 75 檔 1084 passed，Biome、tsc 通過。
+- 問題與修正：
+  - 本份新增的操作紀錄動作 `tournament.capacity_changed` 沒有繁中名稱。git 合併沒有衝突，是 #104 新增的檢查測試 `test_every_tournament_action_has_a_label` 掃描所有 `audit.record` 後失敗才發現；AI 依錯誤訊息同時補上前端對照表與測試清單。
+- 成熟度：L4（AI 依專案的合併規則同步、重新產生 client，並靠組員寫的自動檢查抓到跨 Story 的缺口，全部測試驗證後才推送）
+- 證據：PR #105；merge commit 871f7db（前一筆「PR #105 審查回應」的修正為 commit 8a38e16，前面幾筆寫「尚未 commit」的 Story 3.7 紀錄為 commit e7b5b17）
+
+### 2026-11-22｜需求／spec 撰寫與審查｜Story 3.8 主辦方檢視段位截圖與退回報名
+
+- Story／範圍：3.8（分支 story/3-8，尚未實作）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（規劃階段）＋ 子代理
+- 怎麼用：
+  - AI 派 3 個子代理平行調查後端（狀態機、截圖儲存、授權下載範本）、前端（後台、DataTable、ConfirmDialog、授權圖片）、需求與 UX 文件，整理成 spec 草稿與 7 個待決問題。
+  - 規劃期間 D 在 PR #105 留言，請本份一起修 3.7 留下的順位不一致；AI 把它加成待決問題。
+  - 使用者選「審查 spec」後，AI 另派 1 個沒參與規劃的子代理，對照 epics、PRD、UX、期中文件與程式獨立審查。
+- AI 產出：spec `spec-3-8-review-and-reject-registration.md`，包含：
+  - I/O 矩陣 19 列、Tasks 15 項、Decisions 10 條。
+  - 審查的 Review Triage Log 19 列。
+- 人做了什麼：
+  - 回答 11 個問題：退回時機（抽籤前都可）、對話框與通知文字（含截止後的另一套）、S29 範圍與篩選、退回原因的顯示（S17、S12）、接受 D 的順位修正請求、被退回的代表隊重送後保留身分、保留完整 spec。
+  - 詢問「第 1 題是什麼意思、哪個照原本規劃」，AI 查期中文件與 FR-17、FR-18 後說明。
+  - 核准 spec 並停在實作前。
+- 驗證：
+  - 獨立審查提出 19 項：high 1、medium 6、low 12。
+  - AI 抽查 PRD FR-17（prd.md:353「不計入順位」）、`allocation.py` 的 `WaitlistEntry` docstring、前端 `WaitlistDetails`、PR #106 的檔案清單，都成立。
+  - 19 項全部處理，記在 Review Triage Log：使用者決定 4 項（#2、#3、#5、#9），其餘由 AI 修 spec；另新增 2 項 deferred（3.7 撤回未先結算、先搶期同校遞補的時機）。
+- 問題與修正：
+  - AI 草稿的三個主辦方 API 路徑把賽事 id 與報名 id 分開帶，卻沒要求檢查報名屬於該賽事，A 賽事主辦方可以退回或下載 B 賽事的報名與截圖（high）。獨立審查對照 `disqualify_registration` 從報名反查賽事的寫法才抓到。
+  - AI 同時定了「截止後也能退回、不能重送」和「對話框、通知寫可在截止前重送」，兩條 Decisions 互相矛盾；審查抓到後由使用者決定兩套文字。
+  - AI 把 D 的順位修正寫進 spec 時，沒發現 PRD FR-17 明寫同校遞補「不計入順位」，而且前端只在沒有順位時才顯示代表隊說明，照做會讓畫面說明自相矛盾；審查查到後由使用者決定採 D 的做法並改說明文字。
+  - AI 判斷 D 的留言前提（「3.8 的退回也是不立即遞補的路徑」）與 spec 設計不同（退回會立即遞補），寫進待決問題提醒使用者回覆 D 時說明。
+  - AI 原本用「以字元數估算」說 spec 約 4,000 tokens，重新計算後是 4,700，審查修正後約 7,000，已在 Decisions 更新。
+- 成熟度：L4（子代理平行調查 → 寫 spec → 獨立子代理審查 → AI 抽查原始碼驗證審查結果；人只在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-8-review-and-reject-registration.md（Decisions、Review Triage Log）；PR #105 D 的留言；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜程式／程式生成｜Story 3.8 主辦方檢視段位截圖與退回報名（實作）
+
+- Story／範圍：3.8（分支 story/3-8）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作階段）＋ 子代理
+- 怎麼用：主代理記錄 baseline 後，把核准的 spec 整份交給 1 個沒有對話脈絡的實作子代理（spec 是唯一依據）；子代理完成後，主代理自己讀 baseline 以來的 diff，逐項核對 Tasks 與 I/O 矩陣，不採信子代理的回報。
+- AI 產出：
+  - 後端：`reject_registration`、主辦方報名清單、段位截圖授權下載 3 個 API；「名單未鎖定」判斷集中成 1 個函式，套用 6 處；退出學校共用函式；`allocation.waitlist_order` 順位修正（D 的決定）；1 支 Alembic 遷移；退回通知規則。
+  - 前端：S29 報名清單頁、段位截圖檢視器（桌機 Dialog、手機 Sheet）、退回確認對話框；S17、S12 顯示退回原因並可重送；重新產生 client 與 routeTree。
+  - 測試：新增 `test_reject_registration.py`、`test_organizer_registrations.py`、`organizer-registrations.test.tsx`、E2E `registration-reject.spec.ts`；併發測試新增退回對送出、退回對抽籤 2 個。
+- 人做了什麼：中途詢問進度與剩餘時間；子代理自行決定的 4 點（截圖版本用鍵值雜湊、非隊員錯誤碼、`can_resubmit` 時間差、介面文字）待使用者確認。
+- 驗證：
+  - 子代理第一輪全套：後端 2642 passed，前端 vitest 1138 passed，E2E `@story-3.8` 2 passed。
+  - 主代理重建容器後自己重跑：registration、notifications 等相關後端測試 546 passed（包含子代理最後補上、沒進全套的 2 個測試），前端相關 3 檔 123 passed；I/O 矩陣 19 列都有對應測試並確認有執行。
+- 問題與修正：
+  - 子代理第一輪全套有 1 個既有測試失敗（`test_teams.py` 以 `==` 比對整個回應，回應多了 `reject_reason`），修正後寫進 Implementation Notes。
+  - 子代理誠實回報：退回對送出的併發測試抓不到「退回不加鎖」的錯誤實作，只有退回對抽籤那組抓得到（3 次都失敗）。
+- 成熟度：L4（spec 交給無脈絡子代理實作，主代理以 diff 與實際測試結果核對，不採信回報）
+- 證據：_bmad-output/implementation-artifacts/spec-3-8-review-and-reject-registration.md（Implementation Notes）；baseline 6f78368；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜測試／程式審查與驗證｜Story 3.8 主辦方檢視段位截圖與退回報名（審查）
+
+- Story／範圍：3.8（分支 story/3-8）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（審查階段）＋ 3 個審查子代理
+- 怎麼用：主代理同時派 3 個互不知情的審查子代理（只看 diff 的 blind、對照 spec 的 edge-case、找測試缺口的 verification-gap），收齊後逐條讀程式查證、判定嚴重度，再把要修的交回原實作子代理。
+- AI 產出：審查共 19 條，合併重複後記成 Review Triage Log 17 列（R1–R17）；修正 4 項：
+  - S29 分頁與「頁碼超出以 replace 導回最後一頁」新增 2 個前端測試。
+  - 還原被改格式的既有測試 `test_allocation.py`。
+  - 檢視器「n／N」加 `aria-live`。
+  - 退回原因以「。」結尾時通知變成「。。」，改為串接前去掉句末標點，加 1 個測試。
+- 人做了什麼：待使用者確認 2 項依 spec 字面處理、未修正的發現（見〈問題與修正〉）。
+- 驗證：修正後主代理重跑 spec 的 Verification：後端 `lint.sh` 通過、`test.sh` 2645 passed（覆蓋率 97%）；前端 Biome、tsc 通過，vitest 78 檔 1140 passed；E2E `@story-3.8` desktop、mobile-375 共 2 passed。
+- 問題與修正：
+  - 實作子代理把既有測試改了格式，卻在 Implementation Notes 寫「既有 `test_allocation.py` 沒有改」；blind 審查比對 diff 才抓到，已還原。
+  - verification-gap 審查發現 S29 的分頁導回邏輯完全沒被測到（mock 永遠回單頁），其他分頁頁面都有這個測試；已補。
+  - 主代理查證後否決部分發現：例如「S29 只處理 403、沒有 404 頁」為誤報（上層 layout 會處理，與其他後台頁相同）。
+  - 已查證屬實、但依 spec 字面未修的 2 項，留給使用者決定：優先期已過未結算時退回，被退回的隊伍會同時收到「正取」與「退回」通知；報名截止到賽事轉為截止之間（約 1 分鐘）退回，通知寫「可重送」，實際重送會被拒絕。
+- 成熟度：L4（多個獨立審查者 → 主代理查證分類 → 修正 → 完整測試與 E2E 驗證，人只在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-8-review-and-reject-registration.md（Review Triage Log R1–R17）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜程式／依審查結果修正｜Story 3.8 退回通知與「可重送」判斷
+
+- Story／範圍：3.8（分支 story/3-8）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：使用者看過審查結果後，決定修正 AI 查證屬實、但原本依 spec 字面未修的 2 項，並同意實作時自行決定的 3 項；主代理直接修改並把決定寫進 spec 的 Decisions。
+- AI 產出：
+  - 後端：`_settle_locked` 新增 `silent_ids`、`_allocate` 新增 `publish`，退回前的結算不對被退回的隊伍發正取事件；`can_resubmit` 改用 `_in_registration_period`。
+  - 前端：退回對話框的內文同時看賽事狀態與截止時間；賽事資料未載入時顯示不可重送的文字。
+  - 測試：新增後端 1 個、前端 1 個測試，補 1 個既有 3.8 測試的事件斷言。
+- 人做了什麼：決定兩項都要修、同意三項實作決定。
+- 驗證：後端 `lint.sh` 通過、`test.sh` 2646 passed（覆蓋率 97%）；前端 Biome、tsc 通過，vitest 1141 passed；E2E `@story-3.8` 2 passed。
+- 問題與修正：
+  - AI 第一次修正時把結算條件換成既有的 `_priority_window_due`（`priority_end <= now`），沒注意原本退回與送出都用 `now > priority_end`，剛好在優先期結束那一刻退回會多做一次結算；跑 3.8 相關測試時 2 個失敗才發現，改回原本的邊界條件。
+  - 第一次修正後 `ruff format --check` 不通過（呼叫可以排成一行），用容器內的 ruff 格式化。
+- 成熟度：L3（人依審查結果做決策，AI 依決定修改並以完整測試驗證）
+- 證據：_bmad-output/implementation-artifacts/spec-3-8-review-and-reject-registration.md（Decisions「程式碼審查後」、Review Triage Log R2–R4）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜程式／依組員審查修正｜Story 3.8 PR #107 審查回應
+
+- Story／範圍：3.8（PR #107）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：D 核准 PR #107 並提 4 點建議（不擋合併）；AI 讀程式確認後整理給使用者，使用者決定全部修正，AI 直接修改並跑完整測試。
+- AI 產出：
+  - `_first_come_locked` 在先搶期判定每筆之後再做一次同校遞補，被退回的代表隊重送時有空位就當下遞補；刪除 deferred-work 的對應項目。
+  - 退回通知：原因只有標點時沿用原字串。
+  - 退回的操作紀錄改在結算前記下原本的狀態。
+  - 新增 4 個測試：代表隊重送時當下遞補、只填標點的通知內文、退回與撤回同一筆的真實併發；並在 1 個既有 3.8 測試補操作紀錄的斷言。
+- 人做了什麼：D 審查並核准；使用者決定 4 項全部在本 PR 修正。
+- 驗證：後端 `lint.sh` 通過、`test.sh` 2649 passed（覆蓋率 97%）；E2E `@story-3.8|@story-3.7` 8 passed。
+- 問題與修正：
+  - 第 1 點：同校遞補只在判定前執行，被退回的代表隊重送時，畫面顯示「候補第 1 位」但空位沒補。這是 spec 審查時就記進 deferred-work 的已知缺口，AI 當時判斷可延後，D 審查時建議直接修。
+  - 第 2 點「原因：。」是 AI 在前一輪修「。。」時加的 `rstrip` 帶進來的新問題；AI 自己的 3 層審查和測試都沒想到原因只有標點的情況，由 D 發現。
+  - 第 3 點：AI 把「先結算」插在記錄原本狀態之前，操作紀錄的「退回前狀態」因此記成結算後的值，由 D 讀程式發現。
+- 成熟度：L4（組員審查找出 AI 審查漏掉的問題，AI 查證並依人的決定修正，以完整測試與 E2E 驗證）
+- 證據：PR #107（D 的審查）；spec-3-8-review-and-reject-registration.md（Implementation Notes「PR #107 組員審查」）；commit 見本次推送

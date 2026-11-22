@@ -218,6 +218,16 @@ def set_tournament_status(
     return tournament
 
 
+def set_tournament_capacity(
+    session: Session, tournament: Tournament, capacity: int, at: datetime
+) -> Tournament:
+    tournament.capacity = capacity
+    tournament.updated_at = at
+    session.add(tournament)
+    session.flush()
+    return tournament
+
+
 # ---------------------------------------------------------------- 裁判
 
 

@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query"
 import { createMemoryHistory, createRouter } from "@tanstack/react-router"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -14,6 +15,7 @@ import {
   type TeamInvitePreview,
   type TeamMemberRead,
 } from "@/client"
+import { myTeamsQueryOptions } from "@/features/registration/queries"
 import { routeTree } from "@/routeTree.gen"
 import { ACCOUNT, BROWSE, renderApp, signInAs } from "./auth-fixtures"
 import { httpError } from "./helpers"
@@ -115,6 +117,8 @@ const TEAM: TeamDetail = {
   waitlist_reason: null,
   representative_backfill: null,
   waitlist_phase: null,
+  backfilled: false,
+  withdrawable: false,
 }
 
 /** 不是候補時，候補資訊全為 null。 */
@@ -631,6 +635,8 @@ const DRAWN_CARD: MyTeamCard = {
   game_name: "特戰英豪",
   registration_status: "drawn",
   ...NO_WAITLIST,
+  backfilled: false,
+  withdrawable: false,
 }
 
 const NEXT_MATCH: NextMatch = {
@@ -670,6 +676,8 @@ describe("我的隊伍（S12）", () => {
         game_name: "特戰英豪",
         registration_status: "forming",
         ...NO_WAITLIST,
+        backfilled: false,
+        withdrawable: false,
       },
     ]
     vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
@@ -1326,6 +1334,8 @@ describe("名額分配結果（S17、S12）", () => {
         waitlist_reason: "SCHOOL_NOT_ELIGIBLE",
         representative_backfill: true,
         waitlist_phase: "first_come",
+        backfilled: false,
+        withdrawable: false,
       },
       {
         ...base,
@@ -1336,6 +1346,8 @@ describe("名額分配結果（S17、S12）", () => {
         waitlist_reason: null,
         representative_backfill: false,
         waitlist_phase: "first_come",
+        backfilled: false,
+        withdrawable: false,
       },
       {
         ...base,
@@ -1343,6 +1355,8 @@ describe("名額分配結果（S17、S12）", () => {
         team_name: "午茶隊",
         registration_status: "accepted",
         ...NO_WAITLIST,
+        backfilled: false,
+        withdrawable: false,
       },
     ]
     vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
@@ -1374,5 +1388,340 @@ describe("名額分配結果（S17、S12）", () => {
     const accepted = screen.getByRole("link", { name: /午茶隊/ })
     expect(within(accepted).getByText("正取")).toBeInTheDocument()
     expect(accepted.querySelector("[data-slot=waitlist-details]")).toBeNull()
+  })
+})
+
+describe("退賽與遞補（Story 3.7，S17、S12）", () => {
+  type WithdrawResult = Awaited<
+    ReturnType<typeof RegistrationService.withdrawRegistration>
+  >
+  const inMs = (ms: number) => new Date(Date.now() + ms).toISOString()
+  // 目前帳號是 acc-1（auth-fixtures 的 ACCOUNT），在這裡是隊長
+  const ACCEPTED: TeamDetail = {
+    ...TEAM,
+    my_role: "captain",
+    registration_status: "accepted",
+    invite_status: "locked",
+    profile_editable: false,
+    submitted_at: "2026-11-03T10:00:00Z",
+    priority_end: inMs(-60 * 60 * 1000),
+    registration_end: inMs(3 * 24 * 60 * 60 * 1000),
+    withdrawable: true,
+  }
+  const CARD: MyTeamCard = {
+    team_id: "team-1",
+    team_name: "夜貓隊",
+    tournament_id: "tour-1",
+    tournament_name: "政大校園盃",
+    game_name: "特戰英豪",
+    registration_status: "accepted",
+    ...NO_WAITLIST,
+    backfilled: false,
+    withdrawable: true,
+  }
+
+  it("隊長按「退賽」並確認：報名變「撤回」、按鈕消失、Toast，S12 重新取得", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    signInAs()
+    mockReadTeam(ACCEPTED)
+    const listMyTeams = vi
+      .spyOn(RegistrationService, "listMyTeams")
+      .mockResolvedValue({ data: [CARD] } as MyTeamsResult)
+    const withdrawn: TeamDetail = {
+      ...ACCEPTED,
+      registration_status: "withdrawn",
+      withdrawable: false,
+    }
+    const withdraw = vi
+      .spyOn(RegistrationService, "withdrawRegistration")
+      .mockResolvedValue({ data: withdrawn } as WithdrawResult)
+    const router = renderApp("/me/teams")
+    await screen.findByRole("link", { name: /夜貓隊/ })
+    expect(listMyTeams).toHaveBeenCalledTimes(1)
+    await router.navigate({
+      to: "/teams/$teamId",
+      params: { teamId: "team-1" },
+    })
+
+    await user.click(await screen.findByRole("button", { name: "退賽" }))
+    const dialog = await screen.findByRole("alertdialog")
+    expect(dialog).toHaveAccessibleName("退賽")
+    expect(dialog).toHaveAccessibleDescription(
+      "退賽後這支隊伍的報名會撤回，無法恢復。若隊伍是正取，名額會由候補遞補。",
+    )
+    const confirm = within(dialog).getByRole("button", { name: "退賽" })
+    expect(confirm.className).toContain("destructive")
+    await user.click(confirm)
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(withdraw).toHaveBeenCalledWith({ path: { team_id: "team-1" } })
+    expect(success).toHaveBeenCalledWith("已撤回報名", expect.anything())
+    const header = screen
+      .getByRole("heading", { level: 1, name: "夜貓隊" })
+      .closest("header") as HTMLElement
+    expect(within(header).getByText("撤回")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "退賽" })).toBeNull()
+
+    listMyTeams.mockResolvedValue({
+      data: [
+        { ...CARD, registration_status: "withdrawn", withdrawable: false },
+      ],
+    } as MyTeamsResult)
+    await router.navigate({ to: "/me/teams" })
+    const card = await screen.findByRole("link", { name: /夜貓隊/ })
+    expect(await within(card).findByText("撤回")).toBeInTheDocument()
+  })
+
+  it("伺服器拒絕時在對話框內顯示原因，並重新取得隊伍與 S12", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    const readTeam = mockReadTeam(ACCEPTED)
+    // 重新取得時報名已被撤回：按鈕要等關閉對話框後才消失（E2E 抓到對話框連同原因一起卸載）
+    readTeam.mockResolvedValueOnce({ data: ACCEPTED } as ReadTeamResult)
+    readTeam.mockResolvedValue({
+      data: {
+        ...ACCEPTED,
+        registration_status: "withdrawn",
+        withdrawable: false,
+      },
+    } as ReadTeamResult)
+    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries")
+    vi.spyOn(RegistrationService, "withdrawRegistration").mockRejectedValue(
+      httpError(409, {
+        detail: {
+          code: "REGISTRATION_NOT_WITHDRAWABLE",
+          message: "這支隊伍的報名目前不能撤回。",
+        },
+      }),
+    )
+    renderApp("/teams/team-1")
+
+    await user.click(await screen.findByRole("button", { name: "退賽" }))
+    const dialog = await screen.findByRole("alertdialog")
+    await user.click(within(dialog).getByRole("button", { name: "退賽" }))
+
+    expect(
+      await within(dialog).findByText("這支隊伍的報名目前不能撤回。"),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(readTeam).toHaveBeenCalledTimes(2))
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: myTeamsQueryOptions().queryKey,
+    })
+    // 對話框開著時背景為 aria-hidden
+    const header = screen
+      .getByRole("heading", { level: 1, name: "夜貓隊", hidden: true })
+      .closest("header") as HTMLElement
+    expect(await within(header).findByText("撤回")).toBeInTheDocument()
+    expect(
+      within(screen.getByRole("alertdialog")).getByText(
+        "這支隊伍的報名目前不能撤回。",
+      ),
+    ).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole("button", { name: "取消" }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(screen.queryByRole("button", { name: "退賽" })).toBeNull()
+  })
+
+  it.each([
+    ["隊員", { my_role: "player" as const, withdrawable: false }],
+    ["抽籤後", { registration_status: "drawn" as const, withdrawable: false }],
+  ])("%s：沒有「退賽」按鈕", async (_label, overrides) => {
+    signInAs()
+    mockReadTeam({ ...ACCEPTED, ...overrides })
+    renderApp("/teams/team-1")
+
+    await screen.findByRole("heading", { level: 1, name: "夜貓隊" })
+    expect(screen.queryByRole("button", { name: "退賽" })).toBeNull()
+  })
+
+  it("候補的隊長也能退賽", async () => {
+    signInAs()
+    mockReadTeam({
+      ...ACCEPTED,
+      registration_status: "waitlisted",
+      waitlist_position: 1,
+      waitlist_phase: "first_come",
+    })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByRole("button", { name: "退賽" })).toBeEnabled()
+  })
+
+  it("S17 被遞補的隊伍：徽章「已遞補為正取」", async () => {
+    signInAs()
+    mockReadTeam({ ...ACCEPTED, backfilled: true })
+    renderApp("/teams/team-1")
+
+    const header = (
+      await screen.findByRole("heading", { level: 1, name: "夜貓隊" })
+    ).closest("header") as HTMLElement
+    expect(within(header).getByText("已遞補為正取")).toBeInTheDocument()
+    expect(within(header).queryByText("正取")).toBeNull()
+  })
+
+  it("S17 被遞補的隊伍抽籤後：改顯示「已參賽」", async () => {
+    signInAs()
+    mockReadTeam({
+      ...ACCEPTED,
+      registration_status: "drawn",
+      backfilled: false,
+      withdrawable: false,
+    })
+    renderApp("/teams/team-1")
+    const drawnHeader = (
+      await screen.findByRole("heading", { level: 1, name: "夜貓隊" })
+    ).closest("header") as HTMLElement
+    expect(within(drawnHeader).getByText("已參賽")).toBeInTheDocument()
+    expect(screen.queryByText("已遞補為正取")).toBeNull()
+  })
+
+  it("S12 卡片：被遞補的隊伍顯示「已遞補為正取」", async () => {
+    signInAs()
+    vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
+      data: [
+        { ...CARD, backfilled: true },
+        { ...CARD, team_id: "team-2", team_name: "晨鳥隊" },
+      ],
+    } as MyTeamsResult)
+    renderApp("/me/teams")
+
+    const backfilled = await screen.findByRole("link", { name: /夜貓隊/ })
+    expect(within(backfilled).getByText("已遞補為正取")).toBeInTheDocument()
+    const normal = screen.getByRole("link", { name: /晨鳥隊/ })
+    expect(within(normal).getByText("正取")).toBeInTheDocument()
+  })
+})
+
+describe("退回與重送（Story 3.8，S17、S12）", () => {
+  type SubmitResult = Awaited<
+    ReturnType<typeof RegistrationService.submitRegistration>
+  >
+  const REASON = "段位截圖與申報段位不符"
+  // 目前帳號是 acc-1（auth-fixtures 的 ACCOUNT），在這裡是隊長
+  const REJECTED: TeamDetail = {
+    ...TEAM,
+    my_role: "captain",
+    registration_status: "rejected",
+    members: [
+      filled("acc-1", "阿哲", "鑽石", 30, "captain", "rank.png"),
+      filled("acc-2", "小芸", "鑽石", 30),
+      filled("acc-3", "阿凱", "黃金", 10),
+      filled("acc-4", "小晴", "黃金", 10),
+      filled("acc-5", "阿宏", "黃金", 10),
+    ],
+    avg_rank_score: 18,
+    rank_filled_count: 5,
+    invite_status: "active",
+    profile_editable: true,
+    submitted_at: "2026-11-03T10:00:00Z",
+    reject_reason: REASON,
+  }
+
+  it("S17 被退回：徽章「退回」與原因；名單解鎖、隊長可重新送出", async () => {
+    signInAs()
+    mockReadTeam(REJECTED)
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("退回")).toBeInTheDocument()
+    expect(screen.getByText(`退回原因：${REASON}`)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "送出報名" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "複製連結" })).toBeEnabled()
+    expect(screen.queryByRole("button", { name: "退賽" })).toBeNull()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("button", { name: "填寫我的資料" }))
+    const profile = await screen.findByTestId("player-profile-dialog")
+    expect(within(profile).getByLabelText("遊戲 ID")).toBeEnabled()
+  })
+
+  it("S17 被退回、報名已截止：「送出報名」停用並寫出「已截止」", async () => {
+    signInAs()
+    mockReadTeam({
+      ...REJECTED,
+      invite_status: "closed",
+      profile_editable: false,
+      submit_blockers: [{ code: "REGISTRATION_CLOSED", message: "已截止" }],
+      registration_end: "2020-01-01T00:00:00Z",
+    })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText(`退回原因：${REASON}`)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "送出報名" })).toBeDisabled()
+  })
+
+  it("修正後重新送出：徽章更新，原因不再顯示", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    mockReadTeam(REJECTED)
+    const submit = vi
+      .spyOn(RegistrationService, "submitRegistration")
+      .mockResolvedValue({
+        data: {
+          ...REJECTED,
+          registration_status: "pending",
+          invite_status: "locked",
+          profile_editable: false,
+          reject_reason: null,
+        },
+      } as SubmitResult)
+    renderApp("/teams/team-1")
+
+    await user.click(await screen.findByRole("button", { name: "送出報名" }))
+    const dialog = await screen.findByRole("alertdialog")
+    await user.click(within(dialog).getByRole("button", { name: "送出報名" }))
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(submit).toHaveBeenCalledWith({ path: { team_id: "team-1" } })
+    expect(screen.getByText("已送出・待分配")).toBeInTheDocument()
+    expect(screen.queryByText(`退回原因：${REASON}`)).toBeNull()
+  })
+
+  it("S12 卡片：被退回的隊伍顯示「退回」與原因（過長截斷）", async () => {
+    signInAs()
+    vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
+      data: [
+        {
+          team_id: "team-1",
+          team_name: "夜貓隊",
+          tournament_id: "tour-1",
+          tournament_name: "政大校園盃",
+          game_name: "特戰英豪",
+          registration_status: "rejected",
+          ...NO_WAITLIST,
+          backfilled: false,
+          withdrawable: false,
+          reject_reason: REASON,
+        },
+      ],
+    } as MyTeamsResult)
+    renderApp("/me/teams")
+
+    const card = await screen.findByRole("link", { name: /夜貓隊/ })
+    expect(within(card).getByText("退回")).toBeInTheDocument()
+    const reason = within(card).getByText(`退回原因：${REASON}`)
+    expect(reason.tagName).toBe("SPAN")
+    expect(reason).toHaveClass("truncate")
+  })
+
+  it("S17 同校遞補的候補：「候補第 1 位」＋「本校代表隊已退出，由本校遞補」，取代先搶期規則", async () => {
+    signInAs()
+    mockReadTeam({
+      ...TEAM,
+      registration_status: "waitlisted",
+      invite_status: "locked",
+      profile_editable: false,
+      submitted_at: "2026-11-03T10:00:00Z",
+      waitlist_position: 1,
+      waitlist_reason: null,
+      representative_backfill: true,
+      waitlist_phase: "first_come",
+    })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("候補第 1 位")).toBeInTheDocument()
+    const line = screen.getByText("本校代表隊已退出，由本校遞補")
+    expect(waitlistLines(line)).toEqual(["本校代表隊已退出，由本校遞補"])
   })
 })

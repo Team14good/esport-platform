@@ -3,6 +3,7 @@
 // 但仍佔一格，所以第二輪以後每張卡都對齊兩個來源位置的正中間。
 
 import type { PublicBracket, PublicMatch } from "@/client"
+import type { BracketSide } from "./match-status"
 
 export const BRACKET_COLUMN_WIDTH = 200
 export const BRACKET_CONNECTOR_WIDTH = 28
@@ -58,6 +59,35 @@ function centerY(roundNo: number, position: number): number {
     BRACKET_CARD_HEIGHT / 2 +
     SLOT_PITCH * (span * position + (span - 1) / 2)
   )
+}
+
+/**
+ * 單邊連接線的 SVG path：從第 childRoundNo 輪卡片右緣的 childY，折到下一輪卡片左緣的 parentY。
+ * 對戰樹的輪空半邊與隊伍搜尋的晉級路徑（4.7）共用。
+ */
+export function bracketConnectorPath(
+  childRoundNo: number,
+  childY: number,
+  parentY: number,
+): string {
+  const from = columnX(childRoundNo) + BRACKET_COLUMN_WIDTH
+  const mid = from + BRACKET_CONNECTOR_WIDTH / 2
+  const to = from + BRACKET_CONNECTOR_WIDTH
+  return `M${from} ${childY} H${mid} V${parentY} H${to}`
+}
+
+/** 第 roundNo 輪欄的左緣 x（相對於畫布） */
+export function bracketColumnX(roundNo: number): number {
+  return columnX(roundNo)
+}
+
+/** 卡片內某一方隊伍列的中心 y：上外框 1px＋列高的一半；B 方再加 A 方列高與 1px 分隔 */
+export function bracketTeamRowCenterY(
+  cardY: number,
+  side: BracketSide,
+): number {
+  const top = side === "a" ? 1 : 1 + BRACKET_ROW_HEIGHT + 1
+  return cardY + top + BRACKET_ROW_HEIGHT / 2
 }
 
 export function bracketCanvasWidth(rounds: number): number {
@@ -134,7 +164,7 @@ export function layoutBracket(bracket: PublicBracket): BracketLayout {
     } else if (childYs.length === 1) {
       connectors.push({
         id: match.id,
-        d: `M${from} ${childYs[0]} H${mid} V${parentY} H${to}`,
+        d: bracketConnectorPath(match.round_no - 1, childYs[0], parentY),
       })
     }
   }

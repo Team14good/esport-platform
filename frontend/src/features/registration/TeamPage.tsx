@@ -13,7 +13,11 @@ import {
 } from "./PlayerProfileDialog"
 import { teamInviteUrl, teamQueryOptions } from "./queries"
 import { RosterList } from "./RosterList"
-import { RegistrationStatusBadge, WaitlistDetails } from "./registration-status"
+import {
+  REJECT_REASON_PREFIX,
+  RegistrationStatusBadge,
+  WaitlistDetails,
+} from "./registration-status"
 import { SubmitRegistrationSection } from "./SubmitRegistrationSection"
 import { useUpdatePlayerProfile } from "./useUpdatePlayerProfile"
 
@@ -97,9 +101,19 @@ export function TeamPage({
           <RegistrationStatusBadge
             status={data.registration_status}
             waitlist={data}
+            backfilled={data.backfilled}
           />
         </div>
         <WaitlistDetails status={data.registration_status} waitlist={data} />
+        {data.reject_reason && (
+          <p
+            data-slot="reject-reason"
+            className="break-words text-body text-muted-foreground"
+          >
+            {REJECT_REASON_PREFIX}
+            {data.reject_reason}
+          </p>
+        )}
         {renderStatusExtra?.(data)}
       </header>
       <section
