@@ -195,6 +195,13 @@
   summary: （低）FR-37「裁判指派因晉級衝突被取消時另通知主辦方」沒有做：`RefereeUnassigned` 沒有區分「晉級衝突自動收回」與「主辦方收回、改派」，notifications 無從判斷，目前只通知被取消的裁判。
   evidence: Story 1.6 Decisions。修法：competition 在 `RefereeUnassigned` 加一個原因欄位（例如 `reason: "conflict" | "organizer"`，5.5 `unassign_referee_if_member` 發 `conflict`），notifications 的 `_referee_unassigned` 在 `conflict` 時另加主辦方一份草稿（link `/organizer/tournaments/{tid}/matches`）。
 
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-6-cancel-tournament.md`
+  summary: 3.9 第 2 部分登錄 `TournamentCancelled` 收件規則前取消的賽事，事件已被 notifications 標為已處理（找不到規則只記 log），3.9 上線後不會補發通知；3.9 第 2 部分要決定是否補發這段期間已取消賽事的通知。
+  evidence: 2026-11-22 Story 2.6 審查（Edge Case Hunter、Blind Hunter），已對照 `notifications/service.py` `dispatch_event` 確認；使用者決定 2.6 不改程式，因為 3.9 合併前只有本機與示範環境會取消賽事。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-6-cancel-tournament.md`
+  summary: （未驗證，若為真屬 medium）賽事取消後，側欄的場次管理（S30）、裁判（S31）、申訴（S32）、檢舉（S33）頁可能仍顯示可操作的按鈕；確認對話框寫「賽事資訊改為唯讀」，2.6 的驗收條件只要求 S27 唯讀。
+  evidence: 2026-11-22 Story 2.6 審查（Blind Hunter）。後端已確認裁判邀請（`ensure_accepting_referees`）與申訴處理（`disputes/service.py` 拒絕已取消）會擋下；改場次時間是否擋下未確認。要確認 competition 的改時間 API 對已取消賽事的處理，並決定各頁是否隱藏動作。
 ## Deferred from: spec-3-8-review-and-reject-registration.md (2026-11-22)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-8-review-and-reject-registration.md`

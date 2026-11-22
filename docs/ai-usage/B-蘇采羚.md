@@ -767,3 +767,52 @@
   - AI 在留言裡用「Demo 時看得到」當理由，根據的是 A 的 M4，但期中不一定有 Demo；我指正後，小標題改成「與程式不一致、建議期中前處理的」
 - 成熟度：L3（多個代理平行審查、主代理抽查，人決定處理方式；沒有測試或 CI 自動驗證，所以不到 L4）
 - 證據：PR #89 的留言、issue #88
+
+### 2026-11-21｜設計／細部設計｜Story 2.6 取消賽事的 spec
+
+- Story／範圍：2.6（期末，分支 `story/2-6-cancel-tournament`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，另派 1 個唯讀子代理調查 7 個面向（tournaments、事件與通知、worker、registration／competition、前端、測試、Alembic head）
+- 怎麼用：請 AI 開始做 2.6；AI 依 epics.md 原版驗收條件、PRD FR-10、deferred-work 與子代理的調查寫 spec
+- AI 產出：`spec-2-6-cancel-tournament.md`（I/O Matrix 8 列、7 個 Tasks）；提出 2 個要人決定的問題
+- 人做了什麼：
+  - 決定不改 D、A 既有的 worker 工作，改以測試證明三個工作都略過已取消賽事（偏離 AC 字面「同一個函式」）
+  - 決定通知規則照 epics.md 留給 A 的 3.9
+  - spec 約 2,800 tokens，決定不拆；核准 Checkpoint 1
+- 驗證：AI 用 git 判斷 epic-2 context 沒有過期；確認 S1 徽章、S2 banner、狀態轉換表已存在，縮小範圍
+- 問題與修正：AI 發現文件互相矛盾：`notifications/rules.py` 註解寫「2.6 自己登錄」，epics.md 與 CONTRIBUTING 7.2 卻把取消通知放在 3.9；AI 列成問題讓人決定，沒有自己選一邊
+- 成熟度：L3（AI 依既有規格調查並寫 spec，人做決策並核准）
+- 證據：`_bmad-output/implementation-artifacts/spec-2-6-cancel-tournament.md` 的 Decisions；commit：未記錄（尚未 commit）
+
+### 2026-11-22｜程式／程式生成｜Story 2.6 取消賽事的實作
+
+- Story／範圍：2.6（分支 `story/2-6-cancel-tournament`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，實作交給只拿 spec 的子代理
+- 怎麼用：子代理依 spec 實作；主代理讀完整 diff 核對 Tasks 與驗收條件，用一次性容器重跑 I/O Matrix 的測試（21 passed）
+- AI 產出：
+  - 後端：事件 `TournamentCancelled`、`cancel_tournament`、`POST /organizer/tournaments/{id}/cancel`；沒有 schema 變更
+  - 前端：S27「取消賽事」按鈕與確認對話框、`useCancelTournament`；`ConfirmDialog` 新增選填的關閉鈕文字（審查後）
+  - 測試：取消 API 15 個、worker 略過已取消 3 個、S27 前端 11 個以上；contracts 更新
+- 人做了什麼：核准 spec；同意把本機開發資料庫降回 1.6 的版本以便手動檢查
+- 驗證：主代理在瀏覽器（375 px）走過取消流程：對話框沒有橫向捲軸、取消後 S27 沒有動作、S2 顯示「此賽事已取消」
+- 問題與修正：
+  - 子代理第一次全套測試有 1 個失敗：新測試檔沒有登錄到 `traceability.yaml`，補上後通過
+  - 本機開發資料庫停在另一個分支（2.3）的遷移版本，backend 起不來；子代理沒有自己動資料庫，回報後由人決定處理方式
+- 成熟度：L4（spec → 子代理實作 → 主代理核對 diff、測試與瀏覽器，人只在 checkpoint 決策）
+- 證據：`spec-2-6-cancel-tournament.md` 的 Implementation Notes；commit：未記錄（尚未 commit）
+
+### 2026-11-22｜測試／程式審查與測試個案｜Story 2.6 的三層審查與修補
+
+- Story／範圍：2.6（分支 `story/2-6-cancel-tournament`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build 的審查步驟（Blind Hunter、Edge Case Hunter、Verification Gap 三個子代理平行審查）
+- 怎麼用：三個審查者只拿 diff（Edge Case Hunter 另可讀 spec），主代理對照程式驗證、分類；2 筆屬 intent_gap 交給人決定，其餘修補交回實作子代理
+- AI 產出：15 筆發現；2 筆 intent_gap、3 筆 patch、1 筆延後（deferred-work）、9 筆不處理；另新增 1 筆 deferred-work 給 3.9
+- 人做了什麼：
+  - 決定接受「3.9 前取消的賽事通知會遺失」，不改程式，交給 3.9 第 2 部分決定是否補發
+  - 決定確認對話框的關閉鈕改為「保留賽事」
+- 驗證：修補後主代理重跑完整驗證：後端 `scripts/test.sh` 2550 passed、lint 通過；前端 build、typecheck、biome、`test:unit`（74 檔、1072 passed）通過
+- 問題與修正：
+  - 審查發現 spec 的決定有個沒想到的後果：notifications 對沒有規則的事件只記 log 就標為已處理，所以 3.9 上線前取消的賽事永遠不會發通知，但確認對話框寫「會收到通知」。主代理對照 `notifications/service.py` 確認屬實後交給人決定
+  - 審查發現對話框的關閉鈕「取消」和「取消賽事」並列容易混淆，也不符合「動詞＋名詞」規則
+  - 審查發現取消後讓公開查詢失效的程式沒有測試守住，補了測試；「哪些狀態不能取消」重複定義，改由狀態轉換表判斷
+- 成熟度：L4（三個審查者平行審查，主代理驗證分類，人決定 intent_gap，完整測試自動驗證）
+- 證據：`spec-2-6-cancel-tournament.md` 的 Review Triage Log、Spec Change Log；commit：未記錄（尚未 commit）
