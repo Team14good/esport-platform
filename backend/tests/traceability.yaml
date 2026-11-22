@@ -297,6 +297,10 @@ registration/test_player_profile_api.py:
   layer: integration
   stories: ["3.2"]
   frs: [FR-12]
+registration/test_public_accepted_teams.py:
+  layer: integration
+  stories: ["3.9"]
+  frs: [FR-34]
 registration/test_raise_capacity.py:
   layer: integration
   stories: ["3.7"]

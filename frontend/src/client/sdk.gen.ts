@@ -172,6 +172,9 @@ import type {
   registrationJoinTeamData,
   registrationJoinTeamErrors,
   registrationJoinTeamResponses,
+  registrationListAcceptedTeamsData,
+  registrationListAcceptedTeamsErrors,
+  registrationListAcceptedTeamsResponses,
   registrationListMyTeamsData,
   registrationListMyTeamsResponses,
   registrationListOrganizerRegistrationsData,
@@ -1080,6 +1083,27 @@ export class RegistrationService {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * List Accepted Teams
+   *
+   * S2「正取隊伍」的公開名單（不需登入）：只有隊伍 id 與隊名。
+   *
+   * 校園賽優先期結束前不公布，回 `announce_at`（優先期結束時間）與空的 `teams`。
+   */
+  public static listAcceptedTeams<ThrowOnError extends boolean = true>(
+    options: Options<registrationListAcceptedTeamsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      registrationListAcceptedTeamsResponses,
+      registrationListAcceptedTeamsErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/tournaments/{tournament_id}/accepted-teams",
+      ...options,
     })
   }
 

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { ReportTeamEntry } from "@/features/disputes/ReportTeamEntry"
 import { useIsSignedIn } from "@/features/identity/auth"
+import { AcceptedCount } from "@/features/registration/AcceptedCount"
 import { CreateTeamEntry } from "@/features/registration/CreateTeamEntry"
 import { formatInterval, formatRegistrationPeriod } from "./status"
 import { TournamentStatusBadge } from "./TournamentStatusBadge"
@@ -76,6 +77,10 @@ function StatusPanel({
             deadline={tournament.registration_end}
             variant={registrationEndVariant}
             onExpire={onCountdownExpire}
+          />
+          <AcceptedCount
+            tournamentId={tournament.id}
+            capacity={tournament.capacity}
           />
           <CreateTeamEntry tournamentId={tournament.id} />
         </div>
