@@ -781,6 +781,42 @@ def test_parallel_reject_and_submit_never_exceed_capacity(
         world.cleanup()
 
 
+def test_parallel_reject_and_withdraw_same_registration(
+    frozen_clock: FrozenClock,
+) -> None:
+    """報名截止（`closed`）後，主辦方退回正取 A 與 A 的隊長撤回同時發生（PR #107 審查）。
+
+    依鎖序只有一方成功：先退回則撤回得 409 `REGISTRATION_NOT_WITHDRAWABLE`；先撤回則退回
+    得 409 `REGISTRATION_NOT_REJECTABLE`。兩種順序都只釋出一個名額，C 遞補一次。
+    """
+    world = _WithdrawWorld(frozen_clock, TournamentStatus.CLOSED)
+    try:
+        outcomes = _race([_reject_action(world), world.withdraw])
+
+        assert sorted(outcomes.values()) in (
+            ["REGISTRATION_NOT_WITHDRAWABLE", "ok"],
+            ["REGISTRATION_NOT_REJECTABLE", "ok"],
+        ), outcomes
+        expected_a = (
+            RegistrationStatus.REJECTED
+            if outcomes[0] == "ok"
+            else RegistrationStatus.WITHDRAWN
+        )
+        with Session(engine) as check:
+            assert world.statuses(check) == [
+                expected_a,
+                RegistrationStatus.ACCEPTED,
+                RegistrationStatus.ACCEPTED,
+            ]
+            types = [e.type for e in world.new_events(check)]
+            assert types.count("RegistrationBackfilled") == 1
+            assert types.count("RegistrationRejected") == (
+                1 if outcomes[0] == "ok" else 0
+            )
+    finally:
+        world.cleanup()
+
+
 def test_parallel_reject_and_draw(frozen_clock: FrozenClock) -> None:
     """報名截止（`closed`）後主辦方退回正取 A 與抽籤同時執行。
 

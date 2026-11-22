@@ -244,6 +244,9 @@ def test_reject_after_priority_end_settles_first(
     assert _status(session, q1) == S.ACCEPTED
     assert _status(session, p2) == S.ACCEPTED
     assert _backfilled_ids(session, tournament) == {str(p2.id)}
+    # 操作紀錄的 before 是主辦方按退回時的狀態（結算前的 pending，PR #107 審查）
+    [log] = _logs(session, tournament, "registration.rejected")
+    assert log.before == {"status": "pending"}
     # 結算照常發其他隊伍的分配事件；被退回的 A 只收到退回通知（不發正取事件）
     allocated = [
         e["registration_id"]
@@ -580,6 +583,46 @@ def test_rejected_representative_resubmits_and_is_backfilled_by_same_school(
     assert _status(session, rep) == S.ACCEPTED
     assert _status(session, x) == S.WAITLISTED
     assert str(rep.id) in _backfilled_ids(session, tournament)
+
+
+def test_rejected_representative_resubmits_into_vacancy_is_backfilled_on_the_spot(
+    client: TestClient, session: Session, frozen_clock: FrozenClock
+) -> None:
+    """P 校代表隊被退回、沒有任何候補，空位保留；P 修正後重送 → 當下由本校遞補為正取
+    （判定為候補後再做同校遞補，不必等下一次送出或釋出，PR #107 審查）。"""
+    tournament = _tournament(session, frozen_clock, capacity=2)
+    school_p, school_q = _school(session), _school(session)
+    _settled(session, tournament, [school_p, school_q])
+    team_p, captain_p, rep = _team(
+        client,
+        session,
+        tournament,
+        school_p,
+        S.ACCEPTED,
+        submitted_at=_in_window(tournament, 10),
+        representative=True,
+    )
+    _preset(
+        session,
+        tournament,
+        school_q,
+        S.ACCEPTED,
+        submitted_at=_in_window(tournament, 11),
+    )
+    frozen_clock.advance(SUBMIT_AFTER)
+    _reject_ok(client, session, tournament, rep)
+    assert _accepted_count(session, tournament) == 1
+
+    body = _submit_ok(client, captain_p, team_p)
+
+    assert body["registration_status"] == "accepted"
+    assert body["backfilled"] is True
+    assert body["waitlist_position"] is None
+    assert _accepted_count(session, tournament) == 2
+    assert _backfilled_ids(session, tournament) == {str(rep.id)}
+    session.expire_all()
+    found = session.get(Registration, rep.id)
+    assert found is not None and found.is_representative is True
 
 
 def test_reject_waitlisted_does_not_backfill_and_updates_positions(

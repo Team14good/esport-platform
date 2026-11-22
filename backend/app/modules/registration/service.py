@@ -1133,6 +1133,8 @@ def _first_come_locked(
     本函式，那時已是截止後，不套用先搶期的同校遞補），再讓當下有順位的候補依
     `backfill_vacancies` 遞補為正取，最後以 `decide_first_come` 判定這一筆；前一筆剛正取
     的隊伍因此會算進學校資格與名額。`priority_schools` 取自結算紀錄（沒有紀錄時為空集合）。
+    先搶期判定完這一筆後再做一次同校遞補（Story 3.8，PR #107 審查）：被退回的代表隊重送時
+    判定前仍是 `pending`、不在遞補候選內，判定為候補後若有空位才能當下由本校遞補。
     """
     priority_schools = _priority_schools(session, tournament.id)
     pending = sorted(
@@ -1163,6 +1165,8 @@ def _first_come_locked(
             capacity=tournament.capacity,
         )
         _allocate(session, registration, status, actor_id)
+        if first_come:
+            _representative_backfill_locked(session, tournament)
 
 
 _HOLDING_STATUSES = frozenset({RegistrationStatus.ACCEPTED, RegistrationStatus.DRAWN})
@@ -1622,6 +1626,8 @@ def reject_registration(
     session.refresh(registration)
     if not _can_withdraw(tournament, registration):
         raise _registration_not_rejectable()
+    # 操作紀錄的 before 是主辦方按退回時的狀態（先結算時取結算前，PR #107 審查）
+    previous = registration.status
     if (
         tournament.mode == TournamentMode.CAMPUS
         and tournament.status == TournamentStatus.OPEN
@@ -1632,7 +1638,6 @@ def reject_registration(
         # 結算改的是同一個報名物件（identity map）；被退回的這隊不發分配事件，
         # 只收到退回通知（Decisions：退回時不發 `RegistrationAllocated`）
         _settle_locked(session, tournament, actor_id=None, silent_ids={registration.id})
-    previous = registration.status
     registration.reject_reason = reason
     registration.rejected_at = clock.now()
     mark_status(

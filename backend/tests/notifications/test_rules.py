@@ -339,6 +339,30 @@ def test_registration_rejected_reason_ending_with_period_is_not_doubled(
     }
 
 
+def test_registration_rejected_reason_of_only_punctuation_is_kept(
+    client: TestClient, session: Session
+) -> None:
+    """原因只有句末標點時沿用原字串，不會變成「原因：。」（PR #107 審查）。"""
+    w = _world(client, session, count=1)
+    team = w.teams[0]
+
+    notifications = _publish(
+        session,
+        RegistrationRejected(
+            registration_id=uuid.uuid4(),
+            team_id=team.id,
+            tournament_id=w.tid,
+            reason="？",
+            can_resubmit=False,
+        ),
+    )
+
+    assert {n.body for n in notifications.values()} == {
+        f"「隊伍0」在「{w.tournament.name}」的報名被主辦方退回，"
+        "原因：？。報名已截止，無法重新送出。"
+    }
+
+
 def test_bracket_drawn_notifies_members_of_every_team_on_the_bracket(
     client: TestClient, session: Session
 ) -> None:

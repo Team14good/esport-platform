@@ -435,8 +435,8 @@ def _registration_rejected(
     tournament = tournaments_service.get_tournament(
         session, tournament_id=event.tournament_id
     )
-    # 原因以句末標點結尾時不再重複「。」
-    reason = event.reason.rstrip(_SENTENCE_END)
+    # 原因以句末標點結尾時不再重複「。」；只有標點時沿用原字串（PR #107 審查）
+    reason = event.reason.rstrip(_SENTENCE_END) or event.reason
     next_step = (
         "請在報名截止前修正後重新送出。"
         if event.can_resubmit

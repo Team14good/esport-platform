@@ -167,6 +167,12 @@ context:
   - 併發：把 `reject_registration` 改成不加鎖、不 refresh 時，`test_parallel_reject_and_draw` 3 次都失敗；`test_parallel_reject_and_submit_never_exceed_capacity` 抓不到這個錯誤實作（與 3.7 撤回對送出的情況相同，兩種順序的確定性測試在 `test_reject_registration.py`）。
 
 - 審查修正後重新驗證（2026-11-22，主流程）：後端 `lint.sh` 通過、`test.sh` 2645 passed（覆蓋率 97%）；前端 Biome、`tsc --noEmit` 通過，vitest 78 檔 1140 passed；E2E `@story-3.8` desktop、mobile-375 共 2 passed。
+- PR #107 組員審查（D 核准並提 4 點建議，使用者決定全部修正，2026-11-22）：
+  - `_first_come_locked` 在先搶期判定每筆之後再做一次 `_representative_backfill_locked`：被退回的代表隊（或代表隊已退出學校的隊伍）送出時有空位就當下由本校遞補；刪除 deferred-work 對應項目（spec 審查第 18 點）。測試 `test_rejected_representative_resubmits_into_vacancy_is_backfilled_on_the_spot`。
+  - 退回通知：原因只有句末標點時沿用原字串（不會變成「原因：。」）。測試 `test_registration_rejected_reason_of_only_punctuation_is_kept`。
+  - `registration.rejected` 操作紀錄的 before 改在結算前取（主辦方按退回時的狀態）；`test_reject_after_priority_end_settles_first` 補斷言。
+  - 併發測試新增 `test_parallel_reject_and_withdraw_same_registration`（一方成功、一方 409，C 只遞補一次）。
+  - 驗證：後端 `lint.sh` 通過、`test.sh` 2649 passed（覆蓋率 97%）；E2E `@story-3.8|@story-3.7` 8 passed；前端沒有改動。
 - 使用者決定修正 R2、R3 後重新驗證（2026-11-22，主流程）：後端 `lint.sh` 通過、`test.sh` 2646 passed（覆蓋率 97%）；前端 Biome、`tsc --noEmit` 通過，vitest 78 檔 1141 passed；E2E `@story-3.8` 2 passed。新增測試：`test_reject_after_registration_end_before_close_cannot_resubmit`、前端「截止時間已過、賽事仍為開放報名：不可重送的內文」；`test_reject_after_priority_end_settles_first` 補「被退回的隊伍沒有分配事件」的斷言。
 
 ## Spec Change Log

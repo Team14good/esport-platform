@@ -713,3 +713,22 @@
   - 第一次修正後 `ruff format --check` 不通過（呼叫可以排成一行），用容器內的 ruff 格式化。
 - 成熟度：L3（人依審查結果做決策，AI 依決定修改並以完整測試驗證）
 - 證據：_bmad-output/implementation-artifacts/spec-3-8-review-and-reject-registration.md（Decisions「程式碼審查後」、Review Triage Log R2–R4）；commit 未記錄（尚未 commit）
+
+### 2026-11-22｜程式／依組員審查修正｜Story 3.8 PR #107 審查回應
+
+- Story／範圍：3.8（PR #107）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：D 核准 PR #107 並提 4 點建議（不擋合併）；AI 讀程式確認後整理給使用者，使用者決定全部修正，AI 直接修改並跑完整測試。
+- AI 產出：
+  - `_first_come_locked` 在先搶期判定每筆之後再做一次同校遞補，被退回的代表隊重送時有空位就當下遞補；刪除 deferred-work 的對應項目。
+  - 退回通知：原因只有標點時沿用原字串。
+  - 退回的操作紀錄改在結算前記下原本的狀態。
+  - 新增 4 個測試：代表隊重送時當下遞補、只填標點的通知內文、退回與撤回同一筆的真實併發；並在 1 個既有 3.8 測試補操作紀錄的斷言。
+- 人做了什麼：D 審查並核准；使用者決定 4 項全部在本 PR 修正。
+- 驗證：後端 `lint.sh` 通過、`test.sh` 2649 passed（覆蓋率 97%）；E2E `@story-3.8|@story-3.7` 8 passed。
+- 問題與修正：
+  - 第 1 點：同校遞補只在判定前執行，被退回的代表隊重送時，畫面顯示「候補第 1 位」但空位沒補。這是 spec 審查時就記進 deferred-work 的已知缺口，AI 當時判斷可延後，D 審查時建議直接修。
+  - 第 2 點「原因：。」是 AI 在前一輪修「。。」時加的 `rstrip` 帶進來的新問題；AI 自己的 3 層審查和測試都沒想到原因只有標點的情況，由 D 發現。
+  - 第 3 點：AI 把「先結算」插在記錄原本狀態之前，操作紀錄的「退回前狀態」因此記成結算後的值，由 D 讀程式發現。
+- 成熟度：L4（組員審查找出 AI 審查漏掉的問題，AI 查證並依人的決定修正，以完整測試與 E2E 驗證）
+- 證據：PR #107（D 的審查）；spec-3-8-review-and-reject-registration.md（Implementation Notes「PR #107 組員審查」）；commit 見本次推送
