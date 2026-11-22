@@ -1,7 +1,7 @@
 // UJ-4（期中版）：觀眾不登入瀏覽對戰樹與場次頁。
 // 前兩個測試以 page.route 回傳假對戰樹（support/match-api.ts，32 隊「進行中」），只驗證前端流程與版面，
-// 跑得快；最後一個測試走真 API：測試內建立並抽籤一場 8 隊賽事（support/drawn.ts），觀眾從 S2「對戰表」
-// 分頁進 S3、S4 再返回。假資料版與真 API 版並存。
+// 跑得快；最後一個測試走真 API：測試內建立並抽籤一場 8 隊賽事（support/drawn.ts），觀眾在 S2「正取隊伍」
+// 分頁看到所有隊伍（3.9），再從「對戰表」分頁進 S3、S4 再返回。假資料版與真 API 版並存。
 import { identitySwitcher } from "./support/accounts"
 import { fetchBracket, playableMatches } from "./support/bulk"
 import { setUpDrawnTournament } from "./support/drawn"
@@ -100,12 +100,21 @@ test("未登入的觀眾在 S3 對戰表點場次卡進入場次頁，再回到�
   })
 })
 
-test("真 API：未登入的觀眾從 S2 對戰表分頁進入 S3，點場次卡進 S4，再回到 S3", {
-  tag: ["@story-4.6", "@story-5.8", "@story-7.2", "@FR-35", "@FR-36", "@NFR-7"],
+test("真 API：未登入的觀眾在 S2 正取隊伍分頁看到所有隊伍，從對戰表分頁進入 S3，點場次卡進 S4，再回到 S3", {
+  tag: [
+    "@story-3.9",
+    "@story-4.6",
+    "@story-5.8",
+    "@story-7.2",
+    "@FR-34",
+    "@FR-35",
+    "@FR-36",
+    "@NFR-7",
+  ],
 }, async ({ newRoleContext }) => {
   // 建立賽事、8 隊報名並等 worker 分配（優先期結束後的輪詢最久約 90 秒）
   test.setTimeout(15 * 60_000)
-  const { tournamentId } = await setUpDrawnTournament(
+  const { tournamentId, teams } = await setUpDrawnTournament(
     FICTIONAL_GAME,
     newRoleContext,
   )
@@ -114,8 +123,24 @@ test("真 API：未登入的觀眾從 S2 對戰表分頁進入 S3，點場次卡
   const spectator = await (await newRoleContext("觀眾（真 API）")).newPage()
   const tree = spectator.locator(BRACKET_TREE_SELECTOR)
 
-  await test.step("開啟 S2，切到「對戰表」分頁看到 S3", async () => {
+  await test.step("抽籤後在 S2「正取隊伍」分頁看到所有隊伍，沒有「檢舉」", async () => {
     await spectator.goto(`/tournaments/${tournamentId}`)
+    await spectator.getByRole("tab", { name: "正取隊伍" }).click()
+    await expect(spectator).toHaveURL(
+      new RegExp(`/tournaments/${tournamentId}/teams$`),
+    )
+    const items = spectator.locator("[data-slot=accepted-teams] > li")
+    await expect(items).toHaveCount(teams.length)
+    // 依隊名排序（與後端 Python 的字串排序一致：以 code point 比較）
+    const names = teams
+      .map((team) => team.name)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    await expect(items).toHaveText(names)
+    await expect(spectator.getByRole("button", { name: "檢舉" })).toHaveCount(0)
+    await expectNoHorizontalScroll(spectator)
+  })
+
+  await test.step("切到「對戰表」分頁看到 S3", async () => {
     await spectator.getByRole("tab", { name: "對戰表" }).click()
     await expect(spectator).toHaveURL(new RegExp(`${bracketPath}$`))
     await expect(tree).toBeVisible()

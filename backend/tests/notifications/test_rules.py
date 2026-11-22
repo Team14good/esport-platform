@@ -18,10 +18,12 @@ from app.core.events import Event, OutboxEvent
 from app.modules.competition import service as competition_service
 from app.modules.competition.models import (
     AutoDrawSkipped,
+    BracketBackfilled,
     Match,
     MatchOpponentsDecided,
     MatchOutcome,
     MatchRescheduled,
+    OpponentRetired,
     RefereeAssigned,
     RefereeUnassigned,
 )
@@ -571,6 +573,51 @@ def test_report_filed_and_resolved_notify_organizer_then_both_teams(
         assert to_teams[account_id].link == f"/teams/{reporter.id}"
     for account_id in reported.members:
         assert to_teams[account_id].link == f"/teams/{reported.id}"
+
+
+# ---------------------------------------------------------------- 抽籤後退賽與遞補（4.5）
+
+
+def test_bracket_backfilled_notifies_the_whole_replacement_team(
+    client: TestClient, session: Session
+) -> None:
+    w = _drawn(client, session)
+    match = _first_match(session, w)
+    replacement, replaced = w.teams[0], w.teams[1]
+
+    notifications = _publish(
+        session,
+        BracketBackfilled(
+            match_id=match.id, team_id=replacement.id, replaced_team_id=replaced.id
+        ),
+    )
+
+    assert set(notifications) == replacement.members
+    assert _links(notifications) == {f"/tournaments/{w.tid}/matches/{match.id}"}
+    assert {(n.title, n.body) for n in notifications.values()} == {
+        (
+            "已遞補進入對戰表",
+            f"「隊伍0」已由候補遞補，接手「{w.tournament.name}」{match.code} 的位置。",
+        )
+    }
+
+
+def test_opponent_retired_notifies_only_the_winning_captain(
+    client: TestClient, session: Session
+) -> None:
+    w = _drawn(client, session)
+    match = _first_match(session, w)
+    winner = w.teams[2]
+
+    notifications = _publish(
+        session, OpponentRetired(match_id=match.id, winner_id=winner.id)
+    )
+
+    assert set(notifications) == {winner.captain.id}
+    assert _links(notifications) == {f"/tournaments/{w.tid}/matches/{match.id}"}
+    assert {(n.title, n.body) for n in notifications.values()} == {
+        ("對手退賽", f"{match.code} 的對手已退賽，你們以輪空晉級。")
+    }
 
 
 # ---------------------------------------------------------------- 隊員異動與解散（3.11）

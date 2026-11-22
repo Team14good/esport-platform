@@ -27,6 +27,7 @@ from app.modules.competition.models import (
     ResultScreenshot,
 )
 from app.modules.identity.models import Account
+from app.modules.tournaments import service as tournaments_service
 from app.worker import jobs, run_once
 from tests.competition.conftest import FrozenClockLike
 from tests.competition.test_score_entry import (  # noqa: F401  (fixture)
@@ -611,3 +612,28 @@ def test_disqualified_after_submission_hides_the_screenshot_and_blocks_upload(
         rejected = _upload(client, scene, scene.captain(side))
         assert rejected.status_code == 409
         assert _code(rejected) == "RESULT_NOT_SUBMITTED"
+
+
+def test_upload_locks_tournament_before_match(
+    client: TestClient, scene: Scene, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _submit(client, scene)
+    calls: list[str] = []
+    real_tournament = tournaments_service.lock_tournament
+    real_match = service.lock_match
+
+    def lock_tournament(session: Session, *, tournament_id: uuid.UUID) -> Any:
+        calls.append("lock_tournament")
+        return real_tournament(session, tournament_id=tournament_id)
+
+    def lock_match(session: Session, *, match_id: uuid.UUID) -> Any:
+        calls.append("lock_match")
+        return real_match(session, match_id=match_id)
+
+    monkeypatch.setattr(tournaments_service, "lock_tournament", lock_tournament)
+    monkeypatch.setattr(service, "lock_match", lock_match)
+
+    response = _upload(client, scene, scene.captain("a"))
+
+    assert response.status_code == 200, response.text
+    assert calls[:2] == ["lock_tournament", "lock_match"]

@@ -960,3 +960,38 @@ def test_start_uses_earliest_match_time(
     frozen_clock.set(datetime(2026, 10, 27, 12, 30, tzinfo=UTC))
     assert service.start_due_tournament(session) is True
     assert _tournament_status(session, setup.tournament_id) == TournamentStatus.ONGOING
+
+
+def _record_lock_order(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """記錄 `lock_tournament`、`lock_match` 的呼叫順序（AD-6）。
+
+    測試的 session 共用同一條連線，無法從另一條連線觀察列鎖，所以改為記錄呼叫。
+    """
+    calls: list[str] = []
+    real_tournament = tournaments_service.lock_tournament
+    real_match = service.lock_match
+
+    def lock_tournament(session: Session, *, tournament_id: uuid.UUID) -> Any:
+        calls.append("lock_tournament")
+        return real_tournament(session, tournament_id=tournament_id)
+
+    def lock_match(session: Session, *, match_id: uuid.UUID) -> Any:
+        calls.append("lock_match")
+        return real_match(session, match_id=match_id)
+
+    monkeypatch.setattr(tournaments_service, "lock_tournament", lock_tournament)
+    monkeypatch.setattr(service, "lock_match", lock_match)
+    return calls
+
+
+def test_check_in_locks_tournament_before_match(
+    client: TestClient,
+    setup: Setup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 寫操作紀錄會對賽事列取共享鎖：只鎖場次會與先鎖賽事的退賽互等而死結
+    calls = _record_lock_order(monkeypatch)
+
+    client.post(setup.url(), headers=_headers(client, setup.captain_of("a")))
+
+    assert calls[:2] == ["lock_tournament", "lock_match"]

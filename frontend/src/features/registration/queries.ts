@@ -31,3 +31,18 @@ export function teamInviteUrl(token: string | null): string {
   if (token === null) return ""
   return `${window.location.origin}/join/${encodeURIComponent(token)}`
 }
+
+/**
+ * S2「正取隊伍」的公開名單（不需登入，Story 3.9）。校園賽優先期內 `announce_at`
+ * 為優先期結束時間、`teams` 為空。
+ */
+export const publicAcceptedTeamsQueryOptions = (tournamentId: string) =>
+  queryOptions({
+    queryKey: [...REGISTRATION_QUERY_KEY, "accepted-teams", tournamentId],
+    queryFn: async () =>
+      (
+        await RegistrationService.listAcceptedTeams({
+          path: { tournament_id: tournamentId },
+        })
+      ).data,
+  })
