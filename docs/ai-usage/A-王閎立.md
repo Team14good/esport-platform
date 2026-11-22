@@ -1064,3 +1064,39 @@
 - 問題與修正：前一輪 followup 的 AI 在改寫 except 註解時留下多餘空行，`ruff format` 不會移除註解後的空行所以沒被自動檢查抓到，是 D 人工審查發現
 - 成熟度：L4（人審查提出問題，AI 驗證並修正）
 - 證據：commit 606ecf5；PR #102 的審查留言
+
+### 2026-11-22｜需求／驗收條件｜Story 3.9 公開正取名單（第 1 部分）spec
+
+- Story／範圍：3.9 第 1 部分（分支 `story/3-9-public-accepted-teams`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot story_spec 任務；相依的 Story 2.6（取消賽事）還沒完成，指示 AI 逐條檢查驗收條件，只做不需要 2.6 的部分
+- AI 產出：`spec-3-9-public-accepted-teams.md`：3 條驗收條件中，正取隊伍分頁、總覽已正取數、校園賽優先期內不公布 3 項放第 1 部分；取消賽事通知整條移到「第 2 部分（等 Story 2.6）」，寫明缺 `TournamentCancelled` 事件、之後接在 `notifications/rules.py`。I/O 矩陣 17 列；Decisions 9 則（列入名單的狀態、優先期判斷放後端、空狀態文案、每列「檢舉」不改 C 的 `ReportTeamDialog` 等）
+- 人做了什麼：無人值守執行；Decisions 會在 PR「給審查者」列出，由組員提出異議
+- 驗證：spec 經 READY FOR DEVELOPMENT 自我檢查；epic 3 context 以 git 判斷仍有效，沒有重新產生
+- 問題與修正：無
+- 成熟度：L3（AI 依 epic context、前一個 Story spec 與 UX 文件產出 spec，等組員審查決策）
+- 證據：commit 0b8355e；`_bmad-output/implementation-artifacts/spec-3-9-public-accepted-teams.md`
+
+### 2026-11-22｜程式／程式生成｜Story 3.9 正取隊伍分頁、公開 API 與總覽已正取數
+
+- Story／範圍：3.9 第 1 部分（分支 `story/3-9-public-accepted-teams`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：主流程把 spec 交給沒有對話脈絡的實作子代理，回來後讀 diff 核對
+- AI 產出：registration 新增公開函式 `list_public_accepted_teams` 與 `GET /tournaments/{id}/accepted-teams`（不需登入）；前端新增 `AcceptedTeamsPage.tsx`、`AcceptedCount.tsx`、`disputes/AcceptedTeamReportAction.tsx`、路由 `teams.tsx`；B 的 `TournamentTabs.tsx` 加一個分頁、`TournamentOverview.tsx` 加一個掛載點；重新產生 client 與 `routeTree.gen.ts`。沒有新遷移
+- 人做了什麼：無人值守執行
+- 驗證：後端 `scripts/test.sh` 2559 passed（覆蓋率 97%）、`scripts/lint.sh` 通過；前端 build、typecheck、biome 通過
+- 問題與修正：實作子代理讓 `TournamentOverview.tsx` 從 `AcceptedTeamsPage.tsx` import `AcceptedCount`，而分頁又經 `TournamentPage` import 回總覽，形成循環 import；建置與測試都沒擋下，是主流程讀 diff 時發現，拆成獨立的 `AcceptedCount.tsx`
+- 成熟度：L4（spec → 子代理實作 → 主流程讀 diff 修正 → CI 檢查全跑）
+- 證據：commit 24d43b5、b327171
+
+### 2026-11-22｜測試／測試個案產生｜Story 3.9 矩陣測試與 e2e
+
+- Story／範圍：3.9 第 1 部分（分支 `story/3-9-public-accepted-teams`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：依 spec 的 I/O 矩陣產生測試，主流程逐列對照測試名稱稽核覆蓋
+- AI 產出：`backend/tests/registration/test_public_accepted_teams.py`（14 例，含優先期結束那一刻、自訂模式、回應只有三個欄位）；`frontend/tests/unit/accepted-teams.test.tsx`（22 例）；假資料 e2e `accepted-teams.spec.ts`（desktop、mobile-375 共 4 例）；真 API 的 `spectator.spec.ts` 加「抽籤後觀眾在正取隊伍分頁看到所有隊伍」一步；`traceability.yaml` 加一列
+- 人做了什麼：無人值守執行
+- 驗證：矩陣 17 列都有對應測試且通過；前端單元測試 76 個檔、1098 個通過；`accepted-teams.spec.ts` 4 passed，375 px 沒有橫向捲動；子代理回報真 API 觀眾測試兩個 project 都通過（約 3.2 分鐘，主流程沒有重跑）
+- 問題與修正：主流程第一次跑全套後端測試時，同時執行 `docker compose --profile e2e run`，重建了 backend 容器，測試跑到 97% 中斷；判斷是執行方式錯誤，不碰 compose 重跑一次全過。2.8 的紀錄已記過同樣的教訓，這次仍重犯
+- 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑 e2e）
+- 證據：commit 24d43b5；上列測試檔
