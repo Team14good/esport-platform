@@ -118,10 +118,11 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `ensure_accepting_referees(tournament: TournamentRead) -> None` | tournaments 的裁判邀請（2.7）；其他模組需要時可呼叫 | 狀態為 `finished`、`cancelled` 時拋 `TOURNAMENT_NOT_ACCEPTING_REFEREES` 409；不碰資料庫 | 2.7 |
 | `find_due_registration_end_id(session) -> UUID \| None` | C（3.6 報名截止 worker 工作） | 一筆狀態為 `open`、`registration_end <= clock.now()` 的賽事 id，依報名截止時間、再依 id，最早到期的優先；不加鎖，呼叫端鎖住後要重新檢查。沒有任何報名的賽事也找得到（C 在 3.6 新增） | 3.6 |
 | `list_closed_tournament_ids(session) -> list[UUID]` | D（4.2 自動抽籤 worker 工作） | 狀態為 `closed`、`start_at > clock.now()` 的賽事 id，依報名截止時間、再依 id；不加鎖，呼叫端鎖住後要重新檢查（D 在 4.2 新增） | 4.2 |
+| `raise_tournament_capacity(session, *, tournament_id, capacity, actor_id) -> TournamentRead` | C（3.7 registration `raise_capacity`） | 提高名額，回傳改名額後的賽事；呼叫前要先 `lock_tournament`。狀態不是 `upcoming`、`open`、`closed` 時拋 `CAPACITY_NOT_EDITABLE` 409；新名額小於或等於目前名額時拋 `CAPACITY_NOT_INCREASED` 422（`loc=body.capacity`）。寫操作紀錄 `tournament.capacity_changed`（before／after 為名額）。不檢查權限、不做遞補：由呼叫端檢查主辦方，並在同一個鎖內讓候補遞補（C 在 3.7 新增） | 3.7 |
 
 三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
 
-期中不提供（擱置的 Story）：`update_tournament`、`cancel_tournament`（2.5、2.6）、`reset_invite_link`（3.10）。registration 的「提高名額」（FR-9）同樣到期末。
+期中不提供（擱置的 Story）：`update_tournament`、`cancel_tournament`（2.5、2.6）、`reset_invite_link`（3.10）。registration 的「提高名額」（FR-9）已由 C 在 3.7 完成：後端與 API（`POST /tournaments/{id}/capacity`，限主辦方）呼叫上表的 `raise_tournament_capacity` 後在同一個鎖內遞補；S28 的修改畫面留給 2.5。
 
 ## 三、狀態轉換
 

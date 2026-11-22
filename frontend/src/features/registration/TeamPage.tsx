@@ -97,6 +97,7 @@ export function TeamPage({
           <RegistrationStatusBadge
             status={data.registration_status}
             waitlist={data}
+            backfilled={data.backfilled}
           />
         </div>
         <WaitlistDetails status={data.registration_status} waitlist={data} />

@@ -12,6 +12,8 @@
 - `backfill_vacancies`：有空位時，當下階段有順位的候補依順位遞補（PR #28 審查）。
   期中抽籤前取消資格不立即遞補，空出的名額留給之後的分配；之後分配時（先搶期新送出、
   截止補位），呼叫端在同一個鎖裡先呼叫本函式讓候補遞補，再判定新送出的報名。
+- `representative_backfill`：先搶期優先期代表隊退出時，由同校平均段位積分次高的候補
+  遞補（FR-17，Story 3.7）；呼叫端在 `backfill_vacancies` 之前呼叫。
 
 所有函式的結果只由輸入決定，與輸入順序無關。名額或剩餘名額為負、報名 id 重複時拋
 `ValueError`（第二階段的 service 不會傳入，屬程式錯誤）。
@@ -301,3 +303,33 @@ def backfill_vacancies(
 
 def _positioned_ids(order: dict[UUID, WaitlistEntry]) -> tuple[UUID, ...]:
     return tuple(e.registration_id for e in order.values() if e.position is not None)
+
+
+def representative_backfill(
+    candidates: Iterable[Candidate],
+    *,
+    departed_schools: Collection[UUID],
+    capacity: int,
+) -> tuple[UUID, ...]:
+    """先搶期代表隊退出時的同校遞補（FR-17，Story 3.7）：應遞補的候補 id，依 `sort_key` 排列。
+
+    `departed_schools` 是優先期代表隊已退出（撤回、取消資格等）的學校，由呼叫端依報名的
+    代表隊標記算出。其中目前沒有正取（`accepted`、`drawn`）的學校，由該校 `sort_key`
+    第一名的候補遞補；目前已有正取的學校（例如已由同校遞補過）不再遞補。
+    遞補數不超過空位（`capacity` − 目前正取數，不足 0 時視為 0），超過時依 `sort_key`
+    取前面的。只處理同校遞補，呼叫端之後仍要以 `backfill_vacancies` 處理剩下的空位。
+    """
+    _check_non_negative("capacity", capacity)
+    items = _check_unique(candidates)
+    accepted = _accepted_per_school(items)
+    vacancies = max(capacity - accepted.total(), 0)
+    best: dict[UUID, Candidate] = {}
+    for c in sorted(items, key=sort_key):
+        if (
+            c.status == RegistrationStatus.WAITLISTED
+            and c.school_id in departed_schools
+            and accepted[c.school_id] == 0
+            and c.school_id not in best
+        ):
+            best[c.school_id] = c
+    return tuple(c.id for c in sorted(best.values(), key=sort_key)[:vacancies])

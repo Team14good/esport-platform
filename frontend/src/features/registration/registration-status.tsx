@@ -44,6 +44,8 @@ type WaitlistReason = NonNullable<WaitlistInfo["waitlist_reason"]>
 type WaitlistPhase = NonNullable<WaitlistInfo["waitlist_phase"]>
 
 export const WAITLIST_UNRANKED_LABEL = "候補・目前不在遞補順序中"
+/** 名額釋出後由候補遞補為正取（Story 3.7）；抽籤後改顯示「已參賽」。 */
+export const BACKFILLED_LABEL = "已遞補為正取"
 
 /** 「候補第 N 位」（EXPERIENCE.md〈固定介面字串〉）。 */
 export function waitlistPositionLabel(position: number): string {
@@ -72,12 +74,15 @@ export const WAITLIST_PHASE_RULES: Record<WaitlistPhase, string> = {
 
 /**
  * 徽章文字：候補時依順位顯示「候補第 N 位」或「候補・目前不在遞補順序中」；
+ * 由候補遞補的正取（`backfilled`）顯示「已遞補為正取」；
  * 沒有候補資訊（`waitlist` 未提供或階段為 null）時用狀態名。
  */
 export function registrationStatusLabel(
   status: RegistrationStatus,
   waitlist?: WaitlistInfo,
+  backfilled = false,
 ): string {
+  if (status === "accepted" && backfilled) return BACKFILLED_LABEL
   if (status !== "waitlisted" || !waitlist?.waitlist_phase) {
     return REGISTRATION_STATUS_LABELS[status]
   }
@@ -125,14 +130,19 @@ export function WaitlistDetails({
   )
 }
 
-/** 報名狀態徽章：永遠帶文字，顏色只是輔助；不可點擊。候補時傳入 `waitlist` 顯示順位。 */
+/**
+ * 報名狀態徽章：永遠帶文字，顏色只是輔助；不可點擊。候補時傳入 `waitlist` 顯示順位；
+ * `backfilled` 為 true 的正取顯示「已遞補為正取」。
+ */
 export function RegistrationStatusBadge({
   status,
   waitlist,
+  backfilled = false,
   className,
 }: {
   status: RegistrationStatus
   waitlist?: WaitlistInfo
+  backfilled?: boolean
   className?: string
 }) {
   return (
@@ -144,7 +154,7 @@ export function RegistrationStatusBadge({
         className,
       )}
     >
-      {registrationStatusLabel(status, waitlist)}
+      {registrationStatusLabel(status, waitlist, backfilled)}
     </span>
   )
 }

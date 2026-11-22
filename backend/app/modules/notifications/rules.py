@@ -48,7 +48,11 @@ from app.modules.notifications.registry import (
     register,
 )
 from app.modules.registration import service as registration_service
-from app.modules.registration.models import RegistrationAllocated, RegistrationStatus
+from app.modules.registration.models import (
+    RegistrationAllocated,
+    RegistrationBackfilled,
+    RegistrationStatus,
+)
 from app.modules.tournaments import service as tournaments_service
 
 _TAIPEI = ZoneInfo("Asia/Taipei")
@@ -395,3 +399,24 @@ register(AppealFiled, _appeal_filed)
 register(AppealResolved, _appeal_resolved)
 register(ReportFiled, _report_filed)
 register(ReportResolved, _report_resolved)
+
+
+# ---------------------------------------------------------------- 遞補（3.7）
+
+
+def _registration_backfilled(
+    session: Session, event: RegistrationBackfilled
+) -> list[NotificationDraft]:
+    team = registration_service.get_team(session, team_id=event.team_id)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=event.tournament_id
+    )
+    return _drafts(
+        _member_ids(session, team.id),
+        title="報名結果：已遞補為正取",
+        body=f"「{team.name}」在「{tournament.name}」已由候補遞補為正取。",
+        link=f"/teams/{team.id}",
+    )
+
+
+register(RegistrationBackfilled, _registration_backfilled)
