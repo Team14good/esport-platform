@@ -1338,6 +1338,41 @@ export type ProfileUpdate = {
 }
 
 /**
+ * PublicAcceptedTeam
+ *
+ * S2「正取隊伍」的一列（Story 3.9）：只有 id 與隊名，不含隊員與個資。
+ */
+export type PublicAcceptedTeam = {
+  /**
+   * Id
+   */
+  id: string
+  /**
+   * Name
+   */
+  name: string
+}
+
+/**
+ * PublicAcceptedTeams
+ *
+ * S2「正取隊伍」的公開名單（Story 3.9，不需登入）。
+ *
+ * 校園賽優先期內不公布：`announce_at` 為優先期結束時間、`teams` 為空；
+ * 已公布時 `announce_at` 為 None，`teams` 依 `(隊名, id)` 排序。
+ */
+export type PublicAcceptedTeams = {
+  /**
+   * Announce At
+   */
+  announce_at: string | null
+  /**
+   * Teams
+   */
+  teams: Array<PublicAcceptedTeam>
+}
+
+/**
  * PublicAppealResult
  *
  * 公開的申訴處理結果（S4）；不含申訴內容（AD-19）。未經申訴處理或重新比賽為 None。
@@ -3628,6 +3663,38 @@ export type registrationCreateTeamResponses = {
 
 export type registrationCreateTeamResponse =
   registrationCreateTeamResponses[keyof registrationCreateTeamResponses]
+
+export type registrationListAcceptedTeamsData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/tournaments/{tournament_id}/accepted-teams"
+}
+
+export type registrationListAcceptedTeamsErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationListAcceptedTeamsError =
+  registrationListAcceptedTeamsErrors[keyof registrationListAcceptedTeamsErrors]
+
+export type registrationListAcceptedTeamsResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicAcceptedTeams
+}
+
+export type registrationListAcceptedTeamsResponse =
+  registrationListAcceptedTeamsResponses[keyof registrationListAcceptedTeamsResponses]
 
 export type registrationReadTeamData = {
   body?: never

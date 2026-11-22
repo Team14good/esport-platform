@@ -111,21 +111,21 @@ Story 2.6（B，取消賽事）尚未完成：目前沒有取消賽事的 API、
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend/app/modules/registration/models.py` -- 新增 `PublicAcceptedTeam{id, name}`、`PublicAcceptedTeams{announce_at, teams}`
-- [ ] `backend/app/modules/registration/service.py` -- 新增 `list_public_accepted_teams`（規則見 Decisions 與 Boundaries）
-- [ ] `backend/app/modules/registration/router.py` -- 新增 `GET /tournaments/{tournament_id}/accepted-teams`
-- [ ] `backend/tests/registration/test_public_accepted_teams.py` -- I/O 矩陣後端各列（含優先期結束那一刻、自訂模式、回應欄位只有三個、未登入）；`backend/tests/traceability.yaml` 加一列（integration、`["3.9"]`、`[FR-34]`）
-- [ ] `frontend/src/client` -- `scripts/generate-client.sh` 重新產生
-- [ ] `frontend/src/features/registration/queries.ts` -- 新增 `publicAcceptedTeamsQueryOptions(tournamentId)`
-- [ ] `frontend/src/features/disputes/AcceptedTeamReportAction.tsx` -- 新檔：每列「檢舉」的資格判斷 hook 與按鈕／「已檢舉・處理中」，以及開 `ReportTeamDialog`（只傳該列一隊）
-- [ ] `frontend/src/features/registration/AcceptedTeamsPage.tsx` -- 新檔：「正取隊伍」分頁頁面（骨架、優先期空狀態與倒數、名單、空名單、錯誤）；匯出總覽用的 `AcceptedCount`
-- [ ] `frontend/src/routes/tournaments/$tournamentId/teams.tsx` -- 新路由；重新產生 `routeTree.gen.ts`
-- [ ] `frontend/src/features/tournaments/TournamentTabs.tsx` -- 白名單加「正取隊伍」；更新檔頭註解
-- [ ] `frontend/src/features/tournaments/TournamentOverview.tsx` -- `open` 分支加 `<AcceptedCount>` 掛載點
-- [ ] `frontend/tests/unit/accepted-teams.test.tsx` -- I/O 矩陣前端各列（分頁三種狀態、倒數歸零重抓、每列檢舉的顯示條件與只傳一隊、隊員不打 `reportable-teams`、總覽已正取數只在 `open`、分頁順序）
-- [ ] `frontend/tests/e2e/accepted-teams.spec.ts` -- 假資料：觀眾看名單、優先期內空狀態；desktop 與 mobile-375 無橫向捲動並截圖
-- [ ] `frontend/tests/e2e/spectator.spec.ts` -- 真 API 測試加一步：抽籤後觀眾在「正取隊伍」看到所有隊伍
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 3-9 維持 `in-progress`（第 1 部分）
+- [x] `backend/app/modules/registration/models.py` -- 新增 `PublicAcceptedTeam{id, name}`、`PublicAcceptedTeams{announce_at, teams}`
+- [x] `backend/app/modules/registration/service.py` -- 新增 `list_public_accepted_teams`（規則見 Decisions 與 Boundaries）
+- [x] `backend/app/modules/registration/router.py` -- 新增 `GET /tournaments/{tournament_id}/accepted-teams`
+- [x] `backend/tests/registration/test_public_accepted_teams.py` -- I/O 矩陣後端各列（含優先期結束那一刻、自訂模式、回應欄位只有三個、未登入）；`backend/tests/traceability.yaml` 加一列（integration、`["3.9"]`、`[FR-34]`）
+- [x] `frontend/src/client` -- `scripts/generate-client.sh` 重新產生
+- [x] `frontend/src/features/registration/queries.ts` -- 新增 `publicAcceptedTeamsQueryOptions(tournamentId)`
+- [x] `frontend/src/features/disputes/AcceptedTeamReportAction.tsx` -- 新檔：每列「檢舉」的資格判斷 hook 與按鈕／「已檢舉・處理中」，以及開 `ReportTeamDialog`（只傳該列一隊）
+- [x] `frontend/src/features/registration/AcceptedTeamsPage.tsx` -- 新檔：「正取隊伍」分頁頁面（骨架、優先期空狀態與倒數、名單、空名單、錯誤）；匯出總覽用的 `AcceptedCount`
+- [x] `frontend/src/routes/tournaments/$tournamentId/teams.tsx` -- 新路由；重新產生 `routeTree.gen.ts`
+- [x] `frontend/src/features/tournaments/TournamentTabs.tsx` -- 白名單加「正取隊伍」；更新檔頭註解
+- [x] `frontend/src/features/tournaments/TournamentOverview.tsx` -- `open` 分支加 `<AcceptedCount>` 掛載點
+- [x] `frontend/tests/unit/accepted-teams.test.tsx` -- I/O 矩陣前端各列（分頁三種狀態、倒數歸零重抓、每列檢舉的顯示條件與只傳一隊、隊員不打 `reportable-teams`、總覽已正取數只在 `open`、分頁順序）
+- [x] `frontend/tests/e2e/accepted-teams.spec.ts` -- 假資料：觀眾看名單、優先期內空狀態；desktop 與 mobile-375 無橫向捲動並截圖
+- [x] `frontend/tests/e2e/spectator.spec.ts` -- 真 API 測試加一步：抽籤後觀眾在「正取隊伍」看到所有隊伍
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 3-9 維持 `in-progress`（第 1 部分）
 
 **Acceptance Criteria:**
 - Given 已分配名額的賽事，when 未登入的觀眾開啟 S2「正取隊伍」，then 看到正取隊伍的隊名，回應與畫面都沒有學校、Email、遊戲 ID 等個資。
