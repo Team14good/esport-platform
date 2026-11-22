@@ -14,11 +14,13 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from app.core.errors import BusinessError
 from app.modules.competition import service
 from app.modules.competition.models import Match
 from app.modules.identity.models import Account, School
 from app.modules.registration import repository as registration_repository
 from app.modules.registration.models import RegistrationStatus as R
+from app.modules.tournaments import service as tournaments_service
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
 from tests.disputes.test_reports import _team
 from tests.registration.test_first_come_submission import _first_come, _preset
@@ -140,3 +142,52 @@ def test_disqualify_hands_the_slot_to_the_waitlisted_schoolmate(
     assert _status(session, w.x_waitlisted) == R.DRAWN
     assert _status(session, w.y_waitlisted) == R.WAITLISTED
     assert _holder(session, w, w.x_waitlisted) is not None
+
+
+# ---------------------------------------------------------------- 已取消的賽事（2.6）
+
+
+def test_cancelled_tournament_rejects_retirement(
+    client: TestClient, session: Session
+) -> None:
+    """用 2.6 真的 `cancel_tournament` 取消已抽籤的賽事後，退賽回 409、資料不變。"""
+    w = _world(client, session)
+    tournaments_service.cancel_tournament(
+        session, tournament_id=w.tournament.id, actor_id=w.organizer.id
+    )
+
+    status = service.get_retirement_status(
+        session, team_id=w.retiree, account_id=w.retiree_captain.id
+    )
+    with pytest.raises(BusinessError) as exc:
+        service.retire_team(session, team_id=w.retiree, account_id=w.retiree_captain.id)
+
+    assert status.retirable is False
+    assert exc.value.status_code == 409
+    assert exc.value.code == "TEAM_NOT_RETIRABLE"
+    assert _status(session, w.retiree) == R.DRAWN
+    assert _status(session, w.x_waitlisted) == R.WAITLISTED
+    assert _holder(session, w, w.retiree) is not None
+
+
+def test_cancelled_tournament_rejects_disqualify_without_backfill(
+    client: TestClient, session: Session
+) -> None:
+    """已取消的賽事取消資格交給 6.5 原本的檢查，回 409 `TOURNAMENT_CANCELLED`，不遞補。"""
+    w = _world(client, session)
+    tournaments_service.cancel_tournament(
+        session, tournament_id=w.tournament.id, actor_id=w.organizer.id
+    )
+
+    with pytest.raises(BusinessError) as exc:
+        service.disqualify(
+            session,
+            tournament_id=w.tournament.id,
+            team_id=w.retiree,
+            actor_id=w.organizer.id,
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.code == "TOURNAMENT_CANCELLED"
+    assert _status(session, w.retiree) == R.DRAWN
+    assert _status(session, w.x_waitlisted) == R.WAITLISTED

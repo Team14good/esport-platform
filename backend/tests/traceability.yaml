@@ -111,8 +111,8 @@ competition/test_retire_concurrency.py:
   frs: [FR-17, FR-37]
 competition/test_retire_real_registration.py:
   layer: integration
-  stories: ["4.5", "6.5"]
-  frs: [FR-17, FR-37]
+  stories: ["4.5", "6.5", "2.6"]
+  frs: [FR-17, FR-37, FR-10]
 competition/test_retire_team.py:
   layer: integration
   stories: ["4.5", "6.5"]
