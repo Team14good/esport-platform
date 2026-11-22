@@ -81,7 +81,7 @@ development_status:
   4-4-指派裁判到場次: done  # 負責：D；後端（#46）、S30 指派選單（#48）、S13 我執法的場次與身分切換器「裁判」（#51）
   4-5-抽籤後退賽與候補遞補: backlog  # 負責：D（期末）
   4-6-視覺化對戰樹: done  # 負責：A；第一階段（PR #13）、第二階段（S3，PR #33）完成
-  4-7-對戰樹隊伍搜尋與晉級路徑: review  # 負責：A（期末）
+  4-7-對戰樹隊伍搜尋與晉級路徑: done  # 負責：A（期末）
   epic-4-retrospective: optional
 
   epic-5: in-progress
