@@ -443,6 +443,7 @@ def test_due_prefilter_sql_error_skips_only_that_tournament(
         if tournament_id == failing.id:
             # 真的 SQL 錯誤：沒有 savepoint 時外層交易會進入 aborted
             _session.execute(text("SELECT 1 / 0"))
+            # 上一行一定拋錯；這行執行不到，只為了讓替身的回傳型別完整
             return original(_session, tournament_id=tournament_id)[:1]
         return original(_session, tournament_id=tournament_id)
 
