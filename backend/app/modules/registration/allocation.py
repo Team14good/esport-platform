@@ -1,7 +1,16 @@
-"""校園賽的名額分配規則 AllocationPolicy（純函式，不碰資料庫、不讀時鐘、
+"""名額分配規則 AllocationPolicy（純函式，不碰資料庫、不讀時鐘、
 只 import 標準函式庫與同模組的 `registration.models`）。
 
-規則來源：PRD FR-14～FR-17、epic-3-context〈分配規則〉〈候補順位〉。
+規則來源：PRD FR-14～FR-17、FR-39、epic-3-context〈分配規則〉〈候補順位〉。
+
+依賽事模式分支（AD-20）：Story 3.10 加入的模式差異（要不要檢查學校、目前階段、送出時
+怎麼判定、遞補前需不需要優先期結算、取消資格要不要遞補）都由本檔依 `AllocationMode`
+回答，service 只呼叫這些函式。service 裡 3.10 之前就有的模式判斷（優先期結算、報名截止、
+退回前結算、抽籤前分配、公開正取名單）維持原樣，不在本檔。
+
+- `checks_school`、`needs_settlement`、`backfills_on_disqualify`、`submit_allocation`、
+  `current_phase`：依模式回答的判斷。
+- `decide_custom`：自訂模式送出當下判定正取或候補（FR-39）。
 
 - `sort_key`：所有依平均段位積分排序的規則共用的排序鍵（FR-14）：
   積分高者優先 → 送出時間早者優先 → 報名 id 小者優先。
@@ -15,6 +24,10 @@
   截止補位），呼叫端在同一個鎖裡先呼叫本函式讓候補遞補，再判定新送出的報名。
 - `representative_backfill`：先搶期優先期代表隊退出時，由同校平均段位積分次高的候補
   遞補（FR-17，Story 3.7）；呼叫端在 `backfill_vacancies` 之前呼叫。
+
+自訂模式（Story 3.10）只有一個階段 `AllocationPhase.CUSTOM`：候補依送出時間（同時再依
+id）排序、全部有順位、沒有每校上限，`backfill_vacancies` 與 `waitlist_order` 傳入這個
+階段即可；自訂賽事的報名沒有學校快照（`school_id` 為 None）。
 
 所有函式的結果只由輸入決定，與輸入順序無關。名額或剩餘名額為負、報名 id 重複時拋
 `ValueError`（第二階段的 service 不會傳入，屬程式錯誤）。
@@ -39,11 +52,39 @@ SCHOOL_ACCEPTED_LIMIT = 2
 _ACCEPTED_STATUSES = frozenset({RegistrationStatus.ACCEPTED, RegistrationStatus.DRAWN})
 
 
+class AllocationMode(StrEnum):
+    """賽事模式（AD-20）：校園賽、自訂。
+
+    值與 tournaments 的 `TournamentMode` 相同（本檔不能 import tournaments），service 以
+    `AllocationMode(tournament.mode)` 轉換。
+    """
+
+    CAMPUS = "campus"
+    CUSTOM = "custom"
+
+
 class AllocationPhase(StrEnum):
-    """計算候補順位時的階段：先搶期、報名截止後（含抽籤後）。"""
+    """計算候補順位時的階段：校園賽的先搶期、報名截止後（含抽籤後），以及自訂模式。
+
+    自訂模式不分報名截止前後（含抽籤後）都是 `CUSTOM`。
+    """
 
     FIRST_COME = "first_come"
     AFTER_DEADLINE = "after_deadline"
+    CUSTOM = "custom"
+
+
+class SubmitAllocation(StrEnum):
+    """送出報名當下要做的分配（`submit_allocation`）。
+
+    - `DEFER`：維持 `pending`，等優先期結算（校園賽優先期內）。
+    - `FIRST_COME`：先結算優先期，再依送出順序做先搶期判定（校園賽先搶期，FR-15）。
+    - `IMMEDIATE`：名額有剩立即正取，否則候補（自訂模式，FR-39，`decide_custom`）。
+    """
+
+    DEFER = "defer"
+    FIRST_COME = "first_come"
+    IMMEDIATE = "immediate"
 
 
 class WaitlistReason(StrEnum):
@@ -72,10 +113,13 @@ REPRESENTATIVE_BACKFILL_MESSAGE = "本校代表隊退出時，由本校平均段
 
 @dataclass(frozen=True)
 class Candidate:
-    """報名快照：送出時凍結的學校、平均段位積分、送出時間，加上目前狀態。"""
+    """報名快照：送出時凍結的學校、平均段位積分、送出時間，加上目前狀態。
+
+    自訂模式不檢查學校，`school_id` 為 None（校園賽一定有值）。
+    """
 
     id: UUID
-    school_id: UUID
+    school_id: UUID | None
     avg_rank_score: Decimal
     submitted_at: datetime
     status: RegistrationStatus
@@ -129,7 +173,7 @@ def _check_non_negative(name: str, value: int) -> None:
         raise ValueError(f"{name} 不能為負：{value}")
 
 
-def _accepted_per_school(candidates: Iterable[Candidate]) -> Counter[UUID]:
+def _accepted_per_school(candidates: Iterable[Candidate]) -> Counter[UUID | None]:
     return Counter(c.school_id for c in candidates if c.status in _ACCEPTED_STATUSES)
 
 
@@ -152,7 +196,7 @@ def allocate_priority_window(
         ),
         key=sort_key,
     )
-    seen_schools: set[UUID] = set()
+    seen_schools: set[UUID | None] = set()
     accepted: list[UUID] = []
     waitlisted: list[UUID] = []
     for c in pending:
@@ -163,6 +207,75 @@ def allocate_priority_window(
         else:
             waitlisted.append(c.id)
     return PriorityAllocation(tuple(accepted), tuple(waitlisted))
+
+
+def checks_school(mode: AllocationMode) -> bool:
+    """送出報名（與 S17 的送出條件）要不要檢查隊員學校：校園賽要（FR-13），自訂不要（FR-39）。
+
+    不檢查學校時，送出時的學校快照一律為 None。
+    """
+    return mode == AllocationMode.CAMPUS
+
+
+def needs_settlement(mode: AllocationMode) -> bool:
+    """名額釋出後遞補前，是否要先有優先期結算紀錄。
+
+    校園賽要（優先期內不遞補，由結算分配）；自訂模式沒有優先期，釋出時立即遞補。
+    """
+    return mode == AllocationMode.CAMPUS
+
+
+def backfills_on_disqualify(mode: AllocationMode) -> bool:
+    """抽籤前取消資格空出的名額要不要立即遞補。
+
+    校園賽不立即遞補，留給之後的分配（先搶期送出、截止補位）；自訂模式沒有截止補位，
+    所以立即由最早送出的候補遞補（Story 3.10 Decisions）。呼叫端只在抽籤前（賽事開放
+    報名或報名截止）、被取消的報名原本是正取時才遞補。
+    """
+    return mode == AllocationMode.CUSTOM
+
+
+def submit_allocation(
+    mode: AllocationMode, *, after_priority_window: bool
+) -> SubmitAllocation:
+    """送出報名當下要做的分配（見 `SubmitAllocation`）。
+
+    `after_priority_window`：送出時間晚於優先期結束（校園賽才看）。
+    """
+    if mode == AllocationMode.CUSTOM:
+        return SubmitAllocation.IMMEDIATE
+    if after_priority_window:
+        return SubmitAllocation.FIRST_COME
+    return SubmitAllocation.DEFER
+
+
+def current_phase(mode: AllocationMode, *, before_deadline: bool) -> AllocationPhase:
+    """計算候補順位與遞補時的階段。
+
+    自訂模式一律 `CUSTOM`；校園賽在報名期間（`before_deadline`：賽事開放且早於報名截止）
+    為先搶期，其餘為報名截止後。
+    """
+    if mode == AllocationMode.CUSTOM:
+        return AllocationPhase.CUSTOM
+    if before_deadline:
+        return AllocationPhase.FIRST_COME
+    return AllocationPhase.AFTER_DEADLINE
+
+
+def decide_custom(
+    candidate: Candidate, *, candidates: Iterable[Candidate], capacity: int
+) -> RegistrationStatus:
+    """自訂模式送出當下的判定（FR-39）：正取數未達 `capacity` 時回 `accepted`，否則 `waitlisted`。
+
+    `candidates` 是該賽事目前的報名（可以包含 `candidate` 本身，會被略過）；不看學校。
+    呼叫端契約同 `decide_first_come`：先以 `backfill_vacancies`（`phase=CUSTOM`）讓有順位的
+    候補遞補，再判定新送出的報名，新送出的隊伍才不會插到候補前面。
+    """
+    _check_non_negative("capacity", capacity)
+    others = [c for c in _check_unique(candidates) if c.id != candidate.id]
+    if sum(1 for c in others if c.status in _ACCEPTED_STATUSES) < capacity:
+        return RegistrationStatus.ACCEPTED
+    return RegistrationStatus.WAITLISTED
 
 
 def decide_first_come(
@@ -212,8 +325,9 @@ def waitlist_order(
       之後只有「優先期沒有報名、目前也沒有正取」的學校有資格；每個有資格的學校只有
       最早送出的一隊有順位，依送出時間（同時再依 id）排序。
     - 報名截止後：所有候補依 `sort_key` 排入；排入後會使該校正取超過 2 隊的略過。
+    - 自訂模式：所有候補依送出時間（同時再依 id）排入，全部有順位，沒有每校上限。
 
-    `priority_schools`、`departed_schools` 在報名截止後不影響順位；`departed_schools`
+    `priority_schools`、`departed_schools` 在報名截止後與自訂模式不影響順位；`departed_schools`
     預設為空，結果與 Story 3.8 之前相同（`backfill_vacancies`、`fill_from_waitlist` 不傳）。
     """
     items = _check_unique(candidates)
@@ -221,17 +335,26 @@ def waitlist_order(
     waiting = [c for c in items if c.status == RegistrationStatus.WAITLISTED]
     if phase == AllocationPhase.FIRST_COME:
         return _first_come_order(waiting, accepted, priority_schools, departed_schools)
+    if phase == AllocationPhase.CUSTOM:
+        return _custom_order(waiting)
     return _after_deadline_order(waiting, accepted)
+
+
+def _custom_order(waiting: list[Candidate]) -> dict[UUID, WaitlistEntry]:
+    return {
+        c.id: WaitlistEntry(c.id, n, None)
+        for n, c in enumerate(sorted(waiting, key=_submit_key), start=1)
+    }
 
 
 def _first_come_order(
     waiting: list[Candidate],
-    accepted: Counter[UUID],
+    accepted: Counter[UUID | None],
     priority_schools: Collection[UUID],
     departed_schools: Collection[UUID],
 ) -> dict[UUID, WaitlistEntry]:
     # 代表隊已退出、目前沒有正取的學校：本校 sort_key 第一名排最前（同 representative_backfill）
-    representatives: dict[UUID, Candidate] = {}
+    representatives: dict[UUID | None, Candidate] = {}
     for c in sorted(waiting, key=sort_key):
         if (
             c.school_id in departed_schools
@@ -243,7 +366,7 @@ def _first_come_order(
     first_ids = {c.id for c in first}
     positioned: list[Candidate] = []
     skipped: list[WaitlistEntry] = []
-    seen_schools: set[UUID] = set()
+    seen_schools: set[UUID | None] = set()
     for c in sorted(waiting, key=_submit_key):
         if c.id in first_ids:
             continue
@@ -283,7 +406,7 @@ def _first_come_order(
 
 
 def _after_deadline_order(
-    waiting: list[Candidate], accepted: Counter[UUID]
+    waiting: list[Candidate], accepted: Counter[UUID | None]
 ) -> dict[UUID, WaitlistEntry]:
     counts = Counter(accepted)
     positioned: list[WaitlistEntry] = []
@@ -324,8 +447,8 @@ def backfill_vacancies(
 
     空位＝`capacity` − 目前正取數（`accepted`、`drawn`），不足 0 時視為 0；回傳當下
     階段 `waitlist_order` 有順位者的前「空位」名，不足時全部回傳，其餘空位保留。
-    先搶期每校只有一隊有順位，報名截止後的順位已計入每校上限，所以依順位一次遞補多隊
-    不會改變其他人的資格。報名截止後階段的結果與 `fill_from_waitlist(remaining=空位)`
+    先搶期每校只有一隊有順位，報名截止後的順位已計入每校上限，自訂模式沒有每校上限，
+    所以依順位一次遞補多隊不會改變其他人的資格。報名截止後階段的結果與 `fill_from_waitlist(remaining=空位)`
     相同。
     只在抽籤前使用；抽籤後的取消資格依 6.5 由對手輪空或頂替，不呼叫本函式。
     """
@@ -358,7 +481,7 @@ def representative_backfill(
     items = _check_unique(candidates)
     accepted = _accepted_per_school(items)
     vacancies = max(capacity - accepted.total(), 0)
-    best: dict[UUID, Candidate] = {}
+    best: dict[UUID | None, Candidate] = {}
     for c in sorted(items, key=sort_key):
         if (
             c.status == RegistrationStatus.WAITLISTED

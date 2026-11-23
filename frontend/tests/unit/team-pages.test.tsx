@@ -1286,6 +1286,25 @@ describe("名額分配結果（S17、S12）", () => {
     expect(screen.queryByText(UNRANKED_REASON)).toBeNull()
   })
 
+  it("S17 自訂賽事的候補（Story 3.10）：「候補第 N 位」＋自訂的遞補規則", async () => {
+    const CUSTOM_RULE = "自訂賽事依送出時間遞補，沒有每校隊數上限。"
+    signInAs()
+    mockReadTeam({
+      ...ALLOCATED,
+      registration_status: "waitlisted",
+      waitlist_position: 2,
+      waitlist_reason: null,
+      representative_backfill: false,
+      waitlist_phase: "custom",
+    })
+    renderApp("/teams/team-1")
+
+    expect(await screen.findByText("候補第 2 位")).toBeInTheDocument()
+    expect(waitlistLines(screen.getByText(CUSTOM_RULE))).toEqual([CUSTOM_RULE])
+    expect(screen.queryByText(FIRST_COME_RULE)).toBeNull()
+    expect(screen.queryByText(AFTER_DEADLINE_RULE)).toBeNull()
+  })
+
   it("S17 正取：「正取」與報名截止倒數", async () => {
     signInAs()
     mockReadTeam({

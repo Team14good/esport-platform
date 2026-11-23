@@ -851,7 +851,7 @@ def test_reject_after_registration_end_before_close_cannot_resubmit(
     assert _status(session, registration) == S.REJECTED
 
 
-def test_custom_mode_reject_does_not_backfill(
+def test_custom_mode_reject_backfills_earliest_waitlisted(
     client: TestClient, session: Session, frozen_clock: FrozenClock
 ) -> None:
     tournament = _tournament(session, frozen_clock, capacity=2)
@@ -882,10 +882,11 @@ def test_custom_mode_reject_does_not_backfill(
 
     _reject_ok(client, session, tournament, accepted)
 
+    # 自訂模式（Story 3.10）：不需優先期結算，最早送出的候補立即遞補
     assert _status(session, accepted) == S.REJECTED
-    assert _status(session, waiting) == S.WAITLISTED
+    assert _status(session, waiting) == S.ACCEPTED
     assert repository.get_settlement(session, tournament.id) is None
-    assert _events(session, tournament, "RegistrationBackfilled") == []
+    assert _backfilled_ids(session, tournament) == {str(waiting.id)}
 
 
 # ---------------------------------------------------------------- 退回後的名單與重送

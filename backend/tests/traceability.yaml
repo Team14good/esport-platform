@@ -109,6 +109,10 @@ competition/test_retire_concurrency.py:
   layer: integration
   stories: ["4.5", "6.5"]
   frs: [FR-17, FR-37]
+competition/test_custom_post_draw_backfill.py:
+  layer: integration
+  stories: ["3.10", "4.5", "6.5"]
+  frs: [FR-39, FR-17]
 competition/test_retire_real_registration.py:
   layer: integration
   stories: ["4.5", "6.5", "2.6"]
@@ -287,8 +291,8 @@ notifications/test_tournament_cancelled.py:
   frs: [FR-10]
 registration/test_allocation.py:
   layer: unit
-  stories: ["3.4", "3.5", "3.6", "3.7", "3.8"]
-  frs: [FR-14, FR-15, FR-16, FR-17]
+  stories: ["3.4", "3.5", "3.6", "3.7", "3.8", "3.10"]
+  frs: [FR-14, FR-15, FR-16, FR-17, FR-39]
 registration/test_disqualify_registration.py:
   layer: integration
   stories: ["6.5"]
@@ -297,14 +301,22 @@ registration/test_draw_functions.py:
   layer: integration
   stories: ["3.6"]
   frs: [FR-16, FR-19]
+registration/test_custom_concurrency.py:
+  layer: integration
+  stories: ["3.10"]
+  frs: [FR-39, NFR-1]
+registration/test_custom_mode.py:
+  layer: integration
+  stories: ["3.10", "3.7", "3.8", "4.5", "6.5"]
+  frs: [FR-39, FR-17, FR-18, FR-37, NFR-1]
 registration/test_first_come_concurrency.py:
   layer: integration
   stories: ["3.5"]
   frs: [FR-15, NFR-1]
 registration/test_first_come_submission.py:
   layer: integration
-  stories: ["3.5"]
-  frs: [FR-15, FR-16, FR-17]
+  stories: ["3.5", "3.10"]
+  frs: [FR-15, FR-16, FR-17, FR-39]
 registration/test_nfr1_registration_report.py:
   layer: integration
   stories: ["3.4", "7.3"]
@@ -331,16 +343,16 @@ registration/test_raise_capacity.py:
   frs: [FR-9, FR-17]
 registration/test_reject_registration.py:
   layer: integration
-  stories: ["3.8"]
-  frs: [FR-15, FR-17, FR-18, FR-37]
+  stories: ["3.8", "3.10"]
+  frs: [FR-15, FR-17, FR-18, FR-37, FR-39]
 registration/test_report_functions.py:
   layer: integration
   stories: ["6.4"]
   frs: [FR-32]
 registration/test_post_draw_backfill.py:
   layer: integration
-  stories: ["4.5"]
-  frs: [FR-17, FR-37]
+  stories: ["4.5", "3.10"]
+  frs: [FR-17, FR-37, FR-39]
 registration/test_roster_changes.py:
   layer: integration
   stories: ["3.11"]
