@@ -128,7 +128,9 @@ export function MatchCheckIn({ detail, refresh }: MatchCheckInProps) {
   const now = Date.now()
 
   const teamsPending = detail.team_a === null || detail.team_b === null
-  const isScheduled = detail.status === "scheduled"
+  // 賽事已取消時場次狀態不變但不會再開打：不顯示倒數與報到按鈕，兩隊報到紀錄照常顯示
+  const isScheduled =
+    detail.status === "scheduled" && detail.tournament_status !== "cancelled"
   const opensAt =
     checkIn?.opens_at ??
     new Date(Date.parse(detail.scheduled_at) - CHECK_IN_LEAD_MS).toISOString()

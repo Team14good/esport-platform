@@ -75,7 +75,7 @@ competition/test_mark_appealed.py:
   frs: [FR-30]
 competition/test_match_api.py:
   layer: integration
-  stories: ["5.8"]
+  stories: ["5.8", "2.6"]
   frs: [FR-36]
 competition/test_match_transitions.py:
   layer: integration
