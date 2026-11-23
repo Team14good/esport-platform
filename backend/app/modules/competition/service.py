@@ -474,9 +474,11 @@ def auto_draw(
     """報名截止的賽事由系統抽籤（操作者 `None`），與手動抽籤共用 `_create_bracket`。
 
     先鎖賽事（AD-6），鎖內重新檢查：不是報名截止、已有對戰表（手動抽籤先拿到鎖）、
-    開賽已過，或這次報名截止已判定過正取不足時，不做任何事回 `not_due`，所以重複
-    呼叫或與手動抽籤同時進行都只抽一次。正取不足 2 隊時不抽籤，寫一筆略過紀錄、
-    操作紀錄與 `AutoDrawSkipped` 事件（主辦方只會收到一次），賽事維持報名截止。
+    開賽已過時，不做任何事回 `not_due`，所以重複呼叫或與手動抽籤同時進行都只抽一次。
+    正取不足 2 隊時不抽籤：這次報名截止還沒有略過紀錄就寫一筆略過紀錄、操作紀錄與
+    `AutoDrawSkipped` 事件（主辦方只會收到一次）並回 `not_enough_teams`；已有紀錄就
+    回 `not_due`，賽事維持報名截止。略過紀錄只用來不重複發事件：之後提高名額讓正取
+    補足 2 隊，下一次呼叫照常抽籤。
     """
     tournament = tournaments_service.lock_tournament(
         session, tournament_id=tournament_id
@@ -485,17 +487,17 @@ def auto_draw(
         return "not_due"
     if _draw_blocked(session, tournament) is not None:
         return "not_due"
-    if (
-        repository.get_auto_draw_skip(
-            session, tournament_id, tournament.registration_end
-        )
-        is not None
-    ):
-        return "not_due"
     team_ids = registration_port.list_accepted_teams(
         session, tournament_id=tournament_id
     )
     if len(team_ids) < _MIN_DRAW_TEAMS:
+        if (
+            repository.get_auto_draw_skip(
+                session, tournament_id, tournament.registration_end
+            )
+            is not None
+        ):
+            return "not_due"
         skip = AutoDrawSkip(
             tournament_id=tournament_id,
             registration_end=tournament.registration_end,
@@ -530,22 +532,18 @@ def auto_draw_due(session: Session) -> bool:
     會再呼叫一次；沒有要處理的候選回傳 False。某一場拋錯時回滾那一場並記錄錯誤，改看
     下一個候選，不讓它卡住之後的賽事。
 
-    已判定正取不足的賽事先以不加鎖的讀取排除，不必每一輪都鎖住它們（鎖內仍會再查一次）。
+    已判定正取不足、且正取仍不足 2 隊的賽事先以不加鎖的讀取排除，不必每一輪都鎖住它們
+    （鎖內仍會再查一次）；正取補足後就不再排除，會照常抽籤。預先排除與抽籤在同一個
+    savepoint 內，拋錯（含 SQL 錯誤）只回滾並略過這一場。
     """
     for tournament_id in tournaments_service.list_closed_tournament_ids(session):
-        current = tournaments_service.get_tournament(
-            session, tournament_id=tournament_id
-        )
-        if (
-            repository.get_auto_draw_skip(
-                session, tournament_id, current.registration_end
-            )
-            is not None
-        ):
-            continue
+        outcome: AutoDrawOutcome
         try:
             with session.begin_nested():
-                outcome = auto_draw(session, tournament_id=tournament_id)
+                if _skipped_and_still_short(session, tournament_id):
+                    outcome = "not_due"
+                else:
+                    outcome = auto_draw(session, tournament_id=tournament_id)
         except Exception:
             logger.exception(
                 "Tournament %s failed to auto draw; skipped", tournament_id
@@ -554,6 +552,20 @@ def auto_draw_due(session: Session) -> bool:
         if outcome != "not_due":
             return True
     return False
+
+
+def _skipped_and_still_short(session: Session, tournament_id: uuid.UUID) -> bool:
+    """不加鎖的預先排除：這次報名截止已略過、且正取仍不足 2 隊（鎖內會再查一次）。"""
+    current = tournaments_service.get_tournament(session, tournament_id=tournament_id)
+    if (
+        repository.get_auto_draw_skip(session, tournament_id, current.registration_end)
+        is None
+    ):
+        return False
+    accepted = registration_port.list_accepted_teams(
+        session, tournament_id=tournament_id
+    )
+    return len(accepted) < _MIN_DRAW_TEAMS
 
 
 # ---------------------------------------------------------------- 查詢
@@ -1125,7 +1137,8 @@ def auto_confirm_expired(session: Session) -> bool:
 
     結果資料不自洽（例如完賽卻沒有勝隊，`progression` 拋 ValueError）的場次，退回
     savepoint、記錄日誌後排除，改處理下一場；否則它每一輪都會排在最前面、rollback，
-    讓所有賽事後面的場次都無法確認。
+    讓所有賽事後面的場次都無法確認。確認時拋其他例外的場次也同樣處理（本次呼叫排除，
+    下一次呼叫會再試）。
     """
     now = clock.now()
     ended_tournaments: set[uuid.UUID] = set()
@@ -1173,6 +1186,12 @@ def auto_confirm_expired(session: Session) -> bool:
             logger.exception(
                 "Match %s has an inconsistent result; auto-confirm skipped", match_id
             )
+            broken_matches.add(match_id)
+            continue
+        except Exception:
+            # 非預期的錯誤（例如 registration 暫時無法使用）也只略過這一場，
+            # 不讓它每一輪都排在最前面、擋住其他期滿的場次（同 auto_draw_due）
+            logger.exception("Match %s failed to auto-confirm; skipped", match_id)
             broken_matches.add(match_id)
             continue
         return True

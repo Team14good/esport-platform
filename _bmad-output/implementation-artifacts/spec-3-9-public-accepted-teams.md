@@ -1,8 +1,8 @@
 ---
-title: 'Story 3.9：公開正取名單與取消賽事通知（第 1 部分）'
+title: 'Story 3.9：公開正取名單與取消賽事通知'
 type: 'feature'
 created: '2026-11-22'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '41c2f4fb704d67620feb598c86f046b5ba4c96e6'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -34,6 +34,9 @@ deferred: []
   - 不改 C 的 `ReportTeamDialog`／`ReportTeamEntry`（CLAUDE.md：動到別人的模組只新增檔案或公開函式），所以對話框不會預先選好對象，使用者在只有一個選項的「檢舉對象」選一次。若 C 同意，之後可在 `ReportTeamDialog` 加選填的預設對象，PR 說明會列出。
   - 判斷隊長身分的查詢鏈在新檔案重寫一份（與 `ReportTeamEntry` 共用同樣的 query key，快取共用），不抽出共用 hook（抽出要改 C 的檔案）。
 - **分頁路由**：`/tournaments/$tournamentId/teams`，分頁值 `teams`、標籤「正取隊伍」，排在「對戰表」之後（`TournamentTabs.tsx` 註解已預留 3.9 在白名單加一項）。
+- **（第 2 部分，2026-11-23）取消賽事的收件人**：報名狀態為 `pending`、`accepted`、`waitlisted`、`drawn` 的隊伍所有成員（與 6.4 的四種狀態相同，也是 2.6 確認對話框「所有已報名隊伍的隊長與選手」的讀法）。`forming` 還沒送出；`rejected`、`withdrawn`、`retired`、`disqualified` 已離開賽事，不通知。2.6 取消時不改報名狀態，所以 worker 處理事件時查到的就是取消當下的狀態。
+- **（第 2 部分）通知文案**：標題「賽事已取消」，內文「「{賽事名}」已由主辦方取消，你的隊伍不會再進行比賽。」，link `/tournaments/{id}`（S2，已取消時顯示 destructive banner）。Email 沿用 1.6 的共用範本 `templates/email.html`（依站內通知的標題與內文組信），不另做範本。
+- **（第 2 部分）不補發 3.9 上線前取消的賽事**：deferred-work 中 2.6 留下的項目要 3.9 決定是否補發。不補發：那段期間只有本機與示範環境會取消賽事（2.6 的使用者決定），補發要把已處理的 outbox 事件重設回未處理，會讓示範環境的帳號事後收到過期通知。該 deferred 項目在本 Story 刪除。
 - **e2e**：新增假資料（`page.route`）的 `accepted-teams.spec.ts` 驗證分頁三種狀態與版面（desktop、mobile-375）；真 API 的觀眾測試（`spectator.spec.ts`）加一步「抽籤後觀眾在正取隊伍分頁看到所有隊伍」。deferred-work 第 180 行要求的是「完整賽事演練、分配後抽籤前」，本份只在觀眾測試補上抽籤後的檢查，該項不刪除。
 
 ## Boundaries & Constraints
@@ -80,15 +83,15 @@ deferred: []
 
 ## 第 2 部分（等 Story 2.6）
 
-Story 2.6（B，取消賽事）尚未完成：目前沒有取消賽事的 API、沒有 `TournamentCancelled` 事件類別，也就無法登錄收件規則。2.6 合併後接著做：
+2026-11-23 2.6 合併後完成（分支 `story/3-9-followup`）。原本的說明保留如下，各項已標上完成：
 
-- **驗收條件**：Given 有報名隊伍的賽事，when 主辦方取消賽事（`TournamentCancelled` 事件），then 所有已送出報名的隊伍，隊長與選手都收到站內通知與 Email（FR-10）。
-- **缺什麼**：2.6 在 `backend/app/modules/tournaments/models.py` 定義的 `TournamentCancelled(Event)`（至少要有 `tournament_id`）與發出它的取消流程。
-- **之後接在哪裡**：
-  - `backend/app/modules/notifications/rules.py`：仿照 `_registration_allocated`／`_bracket_drawn`，新增 `_tournament_cancelled` 並 `register(TournamentCancelled, ...)`；收件人是報名狀態為「已送出」的隊伍成員。
-  - 「已送出」的狀態集合要在 2.6 合併後確認（建議 `pending`、`accepted`、`waitlisted`、`drawn`，與 6.4 的四種狀態相同；`forming`、`rejected`、`withdrawn` 不通知）。隊伍用 registration 既有的 `list_teams_by_status`，成員用 rules.py 既有的 `_member_ids`。
-  - 通知文案（站內與 Email 範本 `notifications/templates/`）照 1.6 的格式，連結到 S2；測試放 `backend/tests/notifications/`，並在 `backend/tests/traceability.yaml` 標 `stories: ["3.9"]`、`frs: [FR-10]`。
-- 第 2 部分完成後，spec `status` 與 `sprint-status.yaml` 才改為完成。
+- [x] **驗收條件**：Given 有報名隊伍的賽事，when 主辦方取消賽事（`TournamentCancelled` 事件），then 所有已送出報名的隊伍，隊長與選手都收到站內通知與 Email（FR-10）。
+- [x] **缺什麼**：（2.6 已提供，`tournaments/models.py` 的 `TournamentCancelled(tournament_id)`）2.6 在 `backend/app/modules/tournaments/models.py` 定義的 `TournamentCancelled(Event)`（至少要有 `tournament_id`）與發出它的取消流程。
+- [x] **之後接在哪裡**：
+  - [x] `backend/app/modules/notifications/rules.py`：仿照 `_registration_allocated`／`_bracket_drawn`，新增 `_tournament_cancelled` 並 `register(TournamentCancelled, ...)`；收件人是報名狀態為「已送出」的隊伍成員。
+  - [x] 「已送出」的狀態集合要在 2.6 合併後確認（建議 `pending`、`accepted`、`waitlisted`、`drawn`，與 6.4 的四種狀態相同；`forming`、`rejected`、`withdrawn` 不通知）。隊伍用 registration 既有的 `list_teams_by_status`，成員用 rules.py 既有的 `_member_ids`。
+  - [x] 通知文案（站內與 Email 範本 `notifications/templates/`）照 1.6 的格式，連結到 S2；測試放 `backend/tests/notifications/`，並在 `backend/tests/traceability.yaml` 標 `stories: ["3.9"]`、`frs: [FR-10]`。
+- [x] 第 2 部分完成後，spec `status` 與 `sprint-status.yaml` 才改為完成。
 
 ## Code Map
 
@@ -126,11 +129,15 @@ Story 2.6（B，取消賽事）尚未完成：目前沒有取消賽事的 API、
 - [x] `frontend/tests/e2e/accepted-teams.spec.ts` -- 假資料：觀眾看名單、優先期內空狀態；desktop 與 mobile-375 無橫向捲動並截圖
 - [x] `frontend/tests/e2e/spectator.spec.ts` -- 真 API 測試加一步：抽籤後觀眾在「正取隊伍」看到所有隊伍
 - [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 3-9 維持 `in-progress`（第 1 部分）
+- [x] `backend/app/modules/notifications/rules.py` -- （第 2 部分）新增 `_tournament_cancelled` 並登錄 `TournamentCancelled`
+- [x] `backend/tests/notifications/test_tournament_cancelled.py` -- （第 2 部分）經 API 取消後站內與 Email 都送給三種狀態隊伍的成員、五種不通知的狀態、抽籤後取消、只有組隊中隊伍、賽事不存在；`traceability.yaml` 加一列（`["3.9"]`、`[FR-10]`）
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- （第 2 部分）3-9 改 `done`
 
 **Acceptance Criteria:**
 - Given 已分配名額的賽事，when 未登入的觀眾開啟 S2「正取隊伍」，then 看到正取隊伍的隊名，回應與畫面都沒有學校、Email、遊戲 ID 等個資。
 - Given 開放報名的賽事，when 開啟 S2 總覽，then 顯示「已正取 n／名額 隊」。
 - Given 校園賽、優先期尚未結束，when 開啟「正取隊伍」，then 顯示「優先期結束後公布正取隊伍。」與優先期結束倒數。
+- Given 有報名隊伍的賽事，when 主辦方取消賽事，then 已送出報名（待分配、正取、候補、已參賽）隊伍的隊長與選手都收到站內通知與 Email；組隊中、退回、撤回、退賽、取消資格的隊伍不收到。
 - Given 後端與前端，when 執行 `ci.yml` 的檢查，then 全部通過。
 
 ## Implementation Notes
@@ -139,6 +146,8 @@ Story 2.6（B，取消賽事）尚未完成：目前沒有取消賽事的 API、
 - 本機驗證、e2e 截圖與測試數記在 PR 說明的〈本機驗證〉。
 
 ## Spec Change Log
+
+- 2026-11-23 第 2 部分：2.6 合併後登錄 `TournamentCancelled` 收件規則；Decisions 新增三項（收件人、文案、不補發）；status 改 `done`。#106 審查建議（共用 hook）寫進 deferred-work。
 
 ## Review Triage Log
 
