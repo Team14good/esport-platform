@@ -26,7 +26,9 @@ export const teamInviteQueryOptions = (token: string) =>
   })
 
 /** S19 的邀請連結（完整網址）；S17 的 Invite link field 顯示這個。 */
-export function teamInviteUrl(token: string): string {
+export function teamInviteUrl(token: string | null): string {
+  // 已解散的隊伍（Story 3.11）沒有邀請 token
+  if (token === null) return ""
   return `${window.location.origin}/join/${encodeURIComponent(token)}`
 }
 

@@ -1725,3 +1725,421 @@ describe("退回與重送（Story 3.8，S17、S12）", () => {
     expect(waitlistLines(line)).toEqual(["本校代表隊已退出，由本校遞補"])
   })
 })
+
+describe("隊員異動與解散隊伍（Story 3.11，S17、S19）", () => {
+  type RemoveResult = Awaited<
+    ReturnType<typeof RegistrationService.removeTeamMember>
+  >
+  type TransferResult = Awaited<
+    ReturnType<typeof RegistrationService.transferTeamCaptain>
+  >
+  type LeaveResult = Awaited<ReturnType<typeof RegistrationService.leaveTeam>>
+  type DisbandResult = Awaited<
+    ReturnType<typeof RegistrationService.disbandTeam>
+  >
+
+  // 目前帳號是 acc-1（auth-fixtures 的 ACCOUNT）：在 TEAM 裡是隊長「阿哲」
+  const CAPTAIN_VIEW: TeamDetail = {
+    ...TEAM,
+    my_role: "captain",
+    roster_editable: true,
+  }
+  // 隊員檢視：acc-1 是一般隊員「小安」
+  const PLAYER_VIEW: TeamDetail = {
+    ...TEAM,
+    members: [member("acc-9", "阿哲", "captain"), member("acc-1", "小安")],
+    my_role: "player",
+    roster_editable: true,
+  }
+  const DISBANDED: TeamDetail = {
+    ...TEAM,
+    members: [member("acc-1", "阿哲", "captain"), member("acc-2", "小芸")].map(
+      (m) => ({ ...m, missing_fields: [] }),
+    ),
+    my_role: "captain",
+    registration_status: "withdrawn",
+    invite_token: null,
+    invite_status: "disbanded",
+    profile_editable: false,
+    roster_editable: false,
+    disbanded: true,
+  }
+
+  async function openMenu(
+    user: ReturnType<typeof userEvent.setup>,
+    name: string,
+  ) {
+    await user.click(
+      await screen.findByRole("button", { name: `${name}的操作` }),
+    )
+    return screen.findByRole("menu")
+  }
+
+  it("隊長：其他隊員那列有「轉讓隊長」「移除隊員」，自己那列只有停用的說明，名單下方有「解散隊伍」", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    mockReadTeam(CAPTAIN_VIEW)
+    renderApp("/teams/team-1")
+
+    const disband = await screen.findByRole("button", { name: "解散隊伍" })
+    expect(disband.className).toContain("text-destructive")
+    for (const name of ["小芸", "阿凱", "小晴"]) {
+      expect(
+        screen.getByRole("button", { name: `${name}的操作` }),
+      ).toBeInTheDocument()
+    }
+
+    const menu = await openMenu(user, "小芸")
+    const items = within(menu).getAllByRole("menuitem")
+    expect(items.map((item) => item.textContent)).toEqual([
+      "轉讓隊長",
+      "移除隊員",
+    ])
+    expect(items[1]).toHaveAttribute("data-variant", "destructive")
+    await user.keyboard("{Escape}")
+
+    const mine = await openMenu(user, "阿哲")
+    const [only] = within(mine).getAllByRole("menuitem")
+    expect(only).toHaveTextContent("先轉讓隊長才能退出")
+    expect(only).toHaveAttribute("aria-disabled", "true")
+  })
+
+  it("只剩隊長一人：自己那列顯示「隊伍只有你一人，要離開請解散隊伍」", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    mockReadTeam({
+      ...CAPTAIN_VIEW,
+      members: [member("acc-1", "阿哲", "captain")],
+    })
+    renderApp("/teams/team-1")
+
+    const menu = await openMenu(user, "阿哲")
+    const [only] = within(menu).getAllByRole("menuitem")
+    expect(only).toHaveTextContent("隊伍只有你一人，要離開請解散隊伍")
+    expect(only).toHaveAttribute("aria-disabled", "true")
+  })
+
+  it("隊員：只在自己那列有「退出隊伍」，沒有「解散隊伍」", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    mockReadTeam(PLAYER_VIEW)
+    renderApp("/teams/team-1")
+
+    const menu = await openMenu(user, "小安")
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["退出隊伍"])
+    expect(screen.queryByRole("button", { name: "阿哲的操作" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "解散隊伍" })).toBeNull()
+  })
+
+  it("名單已鎖定：沒有選單也沒有「解散隊伍」", async () => {
+    signInAs()
+    mockReadTeam({
+      ...CAPTAIN_VIEW,
+      registration_status: "pending",
+      invite_status: "locked",
+      roster_editable: false,
+    })
+    renderApp("/teams/team-1")
+
+    await screen.findByRole("heading", { level: 1, name: "夜貓隊" })
+    expect(screen.queryByRole("button", { name: /的操作$/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: "解散隊伍" })).toBeNull()
+  })
+
+  it("被主辦方退回後名單解鎖：選單與「解散隊伍」恢復顯示", async () => {
+    signInAs()
+    mockReadTeam({
+      ...CAPTAIN_VIEW,
+      registration_status: "rejected",
+      reject_reason: "段位截圖不符",
+      roster_editable: true,
+    })
+    renderApp("/teams/team-1")
+
+    expect(
+      await screen.findByRole("button", { name: "解散隊伍" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "小芸的操作" }),
+    ).toBeInTheDocument()
+  })
+
+  it("移除隊員：確認框寫後果、確認鈕 destructive；成功後名單更新並 Toast", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    signInAs()
+    mockReadTeam(CAPTAIN_VIEW)
+    const removed: TeamDetail = {
+      ...CAPTAIN_VIEW,
+      members: CAPTAIN_VIEW.members.filter((m) => m.account_id !== "acc-2"),
+    }
+    const remove = vi
+      .spyOn(RegistrationService, "removeTeamMember")
+      .mockResolvedValue({ data: removed } as RemoveResult)
+    renderApp("/teams/team-1")
+
+    const menu = await openMenu(user, "小芸")
+    await user.click(within(menu).getByRole("menuitem", { name: "移除隊員" }))
+    const dialog = await screen.findByRole("alertdialog")
+    expect(dialog).toHaveAccessibleName("移除隊員")
+    expect(dialog).toHaveAccessibleDescription(
+      "小芸會離開隊伍，參賽資料一併刪除；之後仍可經邀請連結重新加入。",
+    )
+    const confirm = within(dialog).getByRole("button", { name: "移除隊員" })
+    expect(confirm.className).toContain("destructive")
+    await user.click(confirm)
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(remove).toHaveBeenCalledWith({
+      path: { team_id: "team-1", account_id: "acc-2" },
+    })
+    expect(success).toHaveBeenCalledWith("已移除隊員", expect.anything())
+    const roster = screen.getByRole("list", { name: "隊伍名單" })
+    expect(within(roster).queryByText("小芸")).toBeNull()
+  })
+
+  it("轉讓隊長：確認後自己成為一般隊員，「解散隊伍」消失", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    signInAs()
+    mockReadTeam(CAPTAIN_VIEW)
+    const transferred: TeamDetail = {
+      ...CAPTAIN_VIEW,
+      my_role: "player",
+      members: [
+        member("acc-1", "阿哲"),
+        member("acc-2", "小芸", "captain"),
+        member("acc-3", "阿凱"),
+        member("acc-4", "小晴"),
+      ],
+    }
+    const transfer = vi
+      .spyOn(RegistrationService, "transferTeamCaptain")
+      .mockResolvedValue({ data: transferred } as TransferResult)
+    renderApp("/teams/team-1")
+
+    const menu = await openMenu(user, "小芸")
+    await user.click(within(menu).getByRole("menuitem", { name: "轉讓隊長" }))
+    const dialog = await screen.findByRole("alertdialog")
+    expect(dialog).toHaveAccessibleName("轉讓隊長")
+    expect(dialog).toHaveAccessibleDescription(
+      "轉讓後小芸成為隊長，你會成為一般隊員，不能再送出報名或管理隊員。",
+    )
+    const confirm = within(dialog).getByRole("button", { name: "轉讓隊長" })
+    expect(confirm.className).not.toContain("bg-destructive")
+    await user.click(confirm)
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(transfer).toHaveBeenCalledWith({
+      path: { team_id: "team-1" },
+      body: { account_id: "acc-2" },
+    })
+    expect(success).toHaveBeenCalledWith("已轉讓隊長", expect.anything())
+    expect(screen.queryByRole("button", { name: "解散隊伍" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "小芸的操作" })).toBeNull()
+  })
+
+  it("退出隊伍：確認後導向我的隊伍並 Toast", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    signInAs()
+    const readTeam = mockReadTeam(PLAYER_VIEW)
+    vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
+      data: [] as MyTeamCard[],
+    } as MyTeamsResult)
+    const leave = vi
+      .spyOn(RegistrationService, "leaveTeam")
+      .mockResolvedValue({ data: undefined } as LeaveResult)
+    const router = renderApp("/teams/team-1")
+
+    const menu = await openMenu(user, "小安")
+    await user.click(within(menu).getByRole("menuitem", { name: "退出隊伍" }))
+    const dialog = await screen.findByRole("alertdialog")
+    expect(dialog).toHaveAccessibleName("退出隊伍")
+    expect(dialog).toHaveAccessibleDescription(
+      "退出後你的參賽資料會一併刪除，之後可以加入這場賽事的其他隊伍。",
+    )
+    const confirm = within(dialog).getByRole("button", { name: "退出隊伍" })
+    expect(confirm.className).toContain("destructive")
+    await user.click(confirm)
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/me/teams"),
+    )
+    expect(leave).toHaveBeenCalledWith({ path: { team_id: "team-1" } })
+    expect(success).toHaveBeenCalledWith("已退出隊伍", expect.anything())
+    // 導頁後才移除隊伍快取：S17 不會再抓一次隊伍（退出後會是 403）
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(readTeam).toHaveBeenCalledTimes(1)
+  })
+
+  it("解散隊伍：確認後導向我的隊伍並 Toast", async () => {
+    const user = userEvent.setup()
+    const success = vi.spyOn(toast, "success")
+    signInAs()
+    const readTeam = mockReadTeam(CAPTAIN_VIEW)
+    vi.spyOn(RegistrationService, "listMyTeams").mockResolvedValue({
+      data: [] as MyTeamCard[],
+    } as MyTeamsResult)
+    const disband = vi
+      .spyOn(RegistrationService, "disbandTeam")
+      .mockResolvedValue({ data: undefined } as DisbandResult)
+    const router = renderApp("/teams/team-1")
+
+    await user.click(await screen.findByRole("button", { name: "解散隊伍" }))
+    const dialog = await screen.findByRole("alertdialog")
+    expect(dialog).toHaveAccessibleName("解散隊伍")
+    expect(dialog).toHaveAccessibleDescription(
+      "解散後所有隊員都會離開隊伍、報名改為撤回，邀請連結失效，無法復原。",
+    )
+    const confirm = within(dialog).getByRole("button", { name: "解散隊伍" })
+    expect(confirm.className).toContain("destructive")
+    await user.click(confirm)
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/me/teams"),
+    )
+    expect(disband).toHaveBeenCalledWith({ path: { team_id: "team-1" } })
+    expect(success).toHaveBeenCalledWith("已解散隊伍", expect.anything())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(readTeam).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    {
+      label: "退出隊伍",
+      view: PLAYER_VIEW,
+      service: "leaveTeam" as const,
+      open: (user: ReturnType<typeof userEvent.setup>) =>
+        openMenu(user, "小安").then((menu) =>
+          user.click(within(menu).getByRole("menuitem", { name: "退出隊伍" })),
+        ),
+    },
+    {
+      label: "解散隊伍",
+      view: CAPTAIN_VIEW,
+      service: "disbandTeam" as const,
+      open: async (user: ReturnType<typeof userEvent.setup>) =>
+        user.click(await screen.findByRole("button", { name: "解散隊伍" })),
+    },
+    {
+      label: "轉讓隊長",
+      view: CAPTAIN_VIEW,
+      service: "transferTeamCaptain" as const,
+      open: (user: ReturnType<typeof userEvent.setup>) =>
+        openMenu(user, "小芸").then((menu) =>
+          user.click(within(menu).getByRole("menuitem", { name: "轉讓隊長" })),
+        ),
+    },
+  ])(
+    "$label 被拒（409）：對話框顯示原因、重新取得隊伍與 S12、不導頁",
+    async ({ label, view, service, open }) => {
+      const user = userEvent.setup()
+      signInAs()
+      const readTeam = mockReadTeam(view)
+      const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries")
+      vi.spyOn(RegistrationService, service).mockRejectedValue(
+        httpError(409, {
+          detail: {
+            code: "ROSTER_LOCKED",
+            message: "名單已鎖定，無法異動隊員。",
+          },
+        }),
+      )
+      const router = renderApp("/teams/team-1")
+
+      await open(user)
+      const dialog = await screen.findByRole("alertdialog", { name: label })
+      await user.click(within(dialog).getByRole("button", { name: label }))
+
+      expect(
+        await within(dialog).findByText("名單已鎖定，無法異動隊員。"),
+      ).toBeInTheDocument()
+      await waitFor(() => expect(readTeam).toHaveBeenCalledTimes(2))
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: myTeamsQueryOptions().queryKey,
+      })
+      expect(router.state.location.pathname).toBe("/teams/team-1")
+    },
+  )
+
+  it("伺服器拒絕（409）時在對話框內顯示原因，並重新取得隊伍與 S12", async () => {
+    const user = userEvent.setup()
+    signInAs()
+    const readTeam = mockReadTeam(CAPTAIN_VIEW)
+    readTeam.mockResolvedValueOnce({ data: CAPTAIN_VIEW } as ReadTeamResult)
+    readTeam.mockResolvedValue({
+      data: {
+        ...CAPTAIN_VIEW,
+        registration_status: "pending",
+        invite_status: "locked",
+        roster_editable: false,
+      },
+    } as ReadTeamResult)
+    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries")
+    vi.spyOn(RegistrationService, "removeTeamMember").mockRejectedValue(
+      httpError(409, {
+        detail: {
+          code: "ROSTER_LOCKED",
+          message: "名單已鎖定，無法異動隊員。",
+        },
+      }),
+    )
+    renderApp("/teams/team-1")
+
+    const menu = await openMenu(user, "小芸")
+    await user.click(within(menu).getByRole("menuitem", { name: "移除隊員" }))
+    const dialog = await screen.findByRole("alertdialog")
+    await user.click(within(dialog).getByRole("button", { name: "移除隊員" }))
+
+    expect(
+      await within(dialog).findByText("名單已鎖定，無法異動隊員。"),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(readTeam).toHaveBeenCalledTimes(2))
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: myTeamsQueryOptions().queryKey,
+    })
+    await user.click(within(dialog).getByRole("button", { name: "取消" }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(screen.queryByRole("button", { name: /的操作$/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: "解散隊伍" })).toBeNull()
+  })
+
+  it("已解散的隊伍：唯讀頁只有標頭、說明與原隊員名單", async () => {
+    signInAs()
+    mockReadTeam(DISBANDED)
+    renderApp("/teams/team-1")
+
+    const header = (
+      await screen.findByRole("heading", { level: 1, name: "夜貓隊" })
+    ).closest("header") as HTMLElement
+    expect(within(header).getByText("撤回")).toBeInTheDocument()
+    expect(
+      within(header).getByText("這支隊伍已由隊長解散。"),
+    ).toBeInTheDocument()
+    const roster = screen.getByRole("list", { name: "隊伍名單" })
+    expect(within(roster).getByText("阿哲")).toBeInTheDocument()
+    expect(within(roster).getByText("隊長")).toBeInTheDocument()
+    expect(within(roster).getByText("小芸")).toBeInTheDocument()
+    expect(within(roster).queryByText("資料完成")).toBeNull()
+    expect(screen.queryByRole("heading", { name: "邀請隊友" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "送出報名" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "填寫我的資料" })).toBeNull()
+    expect(screen.queryByRole("button", { name: /的操作$/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: "解散隊伍" })).toBeNull()
+    expect(screen.queryByText(/人（先發/)).toBeNull()
+  })
+
+  it("S19：已解散的隊伍顯示「連結已失效：隊伍已解散。」", async () => {
+    mockPreview({ ...INVITE, invite_status: "disbanded" })
+    renderApp("/join/tok-1")
+
+    expect(
+      await screen.findByText("連結已失效：隊伍已解散。"),
+    ).toBeInTheDocument()
+  })
+})
