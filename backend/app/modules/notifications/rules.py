@@ -34,6 +34,7 @@ from app.modules.disputes import service as disputes_service
 from app.modules.disputes.models import (
     AppealDecision,
     AppealFiled,
+    AppealReminded,
     AppealResolved,
     ReportFiled,
     ReportResolved,
@@ -559,3 +560,25 @@ def _team_disbanded(session: Session, event: TeamDisbanded) -> list[Notification
 register(TeamMemberRemoved, _team_member_removed)
 register(CaptainTransferred, _captain_transferred)
 register(TeamDisbanded, _team_disbanded)
+
+
+# ---------------------------------------------------------------- 申訴逾期提醒（6.3）
+
+
+def _appeal_reminded(
+    session: Session, event: AppealReminded
+) -> list[NotificationDraft]:
+    # 寫法同 `_appeal_filed`：收件人是該賽事主辦方，連到 S32
+    match = competition_service.get_match(session, match_id=event.match_id)
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=event.tournament_id
+    )
+    return _drafts(
+        [tournament.organizer_id],
+        title="申訴待處理",
+        body=f"「{tournament.name}」場次 {match.code} 的申訴已接近或超過處理期限，請盡快處理。",
+        link=f"/organizer/tournaments/{tournament.id}/appeals",
+    )
+
+
+register(AppealReminded, _appeal_reminded)

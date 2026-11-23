@@ -38,6 +38,7 @@ from app.modules.disputes.models import (
     AppealGroup,
     AppealItem,
     AppealRead,
+    AppealReminded,
     AppealResolved,
     AppealState,
     AppealStateReason,
@@ -748,6 +749,7 @@ def list_tournament_appeals(
     提出時間（重新比賽後再申訴時不以上一輪的申訴排序）；已結案的場次依最早提出時間。
 
     只有該賽事主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）。附件只回 `has_attachment`。
+    `deadline` 是處理期限（見 `_handling_deadline`），沒有未結案的申訴為 None（6.3）。
     """
     _owned_tournament(session, tournament_id=tournament_id, actor_id=actor_id)
     by_match: dict[uuid.UUID, list[Appeal]] = {}
@@ -759,9 +761,22 @@ def list_tournament_appeals(
         session, team_ids=list({appeal.team_id for appeal in all_appeals})
     )
     groups: list[AppealGroup] = []
+    cache: dict[uuid.UUID, MatchRead] = {}
     for match_id, appeals in by_match.items():
         detail = competition_service.get_public_match(
             session, tournament_id=tournament_id, match_id=match_id
+        )
+        # 6.3：處理期限與 S27 相同；決賽、季軍賽取最早一筆未結案申訴的提出後 1 小時
+        open_filed = [a.filed_at for a in appeals if a.status == AppealStatus.OPEN]
+        deadline = (
+            _handling_deadline(
+                session,
+                match=competition_service.get_match(session, match_id=match_id),
+                filed_at=min(open_filed),
+                cache=cache,
+            )
+            if open_filed
+            else None
         )
         groups.append(
             AppealGroup(
@@ -780,7 +795,8 @@ def list_tournament_appeals(
                 games=detail.games,
                 team_a=detail.team_a,
                 team_b=detail.team_b,
-                has_open=any(a.status == AppealStatus.OPEN for a in appeals),
+                has_open=bool(open_filed),
+                deadline=deadline,
                 appeals=[
                     AppealItem(
                         **_appeal_to_read(appeal).model_dump(),
@@ -811,7 +827,18 @@ def _handling_deadline(
 ) -> datetime:
     """處理期限：等待這場結果的下一場（勝隊、敗隊去的場次）中最早的預定時間。
 
-    決賽與季軍賽沒有下一場，為申訴提出後 1 小時。
+    決賽與季軍賽沒有下一場（或下一場都已取消），為申訴提出後 1 小時。
+    """
+    times = _next_match_times(session, match=match, cache=cache)
+    return min(times) if times else filed_at + _FINAL_HANDLING_TIME
+
+
+def _next_match_times(
+    session: Session, *, match: MatchRead, cache: dict[uuid.UUID, MatchRead]
+) -> list[datetime]:
+    """等待這場結果的下一場（勝隊、敗隊去的場次）的預定時間。
+
+    已取消（voided）的下一場不算，例如雙方棄權後取消的季軍賽：沒有人會等它開打。
     """
     times: list[datetime] = []
     for next_id in (match.next_match_id, match.loser_next_match_id):
@@ -819,8 +846,98 @@ def _handling_deadline(
             continue
         if next_id not in cache:
             cache[next_id] = competition_service.get_match(session, match_id=next_id)
+        if cache[next_id].status == MatchStatus.VOIDED:
+            continue
         times.append(cache[next_id].scheduled_at)
-    return min(times) if times else filed_at + _FINAL_HANDLING_TIME
+    return times
+
+
+# ---------------------------------------------------------------- 逾期提醒（6.3）
+
+# 有下一場時，在處理期限前 1 小時提醒；決賽與季軍賽在處理期限（提出後 1 小時）提醒
+_REMIND_BEFORE_NEXT_MATCH = timedelta(hours=1)
+
+
+def _remind_at(
+    session: Session,
+    *,
+    match: MatchRead,
+    filed_at: datetime,
+    cache: dict[uuid.UUID, MatchRead],
+) -> datetime:
+    """提醒時間：有下一場（含季軍賽）為處理期限前 1 小時；決賽與季軍賽為處理期限。
+
+    下一場都已取消時視同沒有下一場（與 `_handling_deadline` 一致）。
+    """
+    times = _next_match_times(session, match=match, cache=cache)
+    if times:
+        return min(times) - _REMIND_BEFORE_NEXT_MATCH
+    return filed_at + _FINAL_HANDLING_TIME
+
+
+def remind_due_appeal(session: Session) -> bool:
+    """worker 用：對一筆已到提醒時間、未結案且尚未提醒的申訴發出 `AppealReminded`（AD-8）。
+
+    先找候選（依提出時間），略過已結束或已取消賽事的申訴，以不鎖定的讀取算出提醒時間；
+    找到已到時間的一筆後先鎖賽事、再鎖申訴，在鎖內重新檢查（仍未結案、仍未提醒、賽事
+    不是已結束或已取消、仍已到提醒時間），通過才在同一交易寫入 `reminded_at` 並發事件。
+    回傳是否找到已到時間的候選（找到就可能還有下一筆）；沒有任何已到時間的申訴回傳 False。
+    不 commit（交易由 worker 負責）。
+    """
+    now = clock.now()
+    statuses: dict[uuid.UUID, TournamentStatus] = {}
+    cache: dict[uuid.UUID, MatchRead] = {}
+    for candidate in repository.list_unreminded_open_appeals(session):
+        tid = candidate.tournament_id
+        if tid not in statuses:
+            statuses[tid] = tournaments_service.get_tournament(
+                session, tournament_id=tid
+            ).status
+        if statuses[tid] in _ENDED_TOURNAMENT:
+            continue
+        if candidate.match_id not in cache:
+            cache[candidate.match_id] = competition_service.get_match(
+                session, match_id=candidate.match_id
+            )
+        if (
+            _remind_at(
+                session,
+                match=cache[candidate.match_id],
+                filed_at=candidate.filed_at,
+                cache=cache,
+            )
+            > now
+        ):
+            continue
+
+        appeal_id = candidate.id
+        tournament = tournaments_service.lock_tournament(session, tournament_id=tid)
+        # 鎖住賽事後清掉不鎖定讀取時載入的物件：之後的申訴與場次都從資料庫重讀，
+        # 否則 `get_match`（session.get）可能拿到身分對照表裡的舊值，鎖內重新檢查形同虛設
+        session.expire_all()
+        appeal = repository.lock_appeal(session, appeal_id)
+        if (
+            appeal is None
+            or tournament.status in _ENDED_TOURNAMENT
+            or appeal.status != AppealStatus.OPEN
+            or appeal.reminded_at is not None
+        ):
+            return True
+        # 鎖住後重新讀場次（期間可能改期），重新判斷是否已到提醒時間
+        match = competition_service.get_match(session, match_id=appeal.match_id)
+        if _remind_at(session, match=match, filed_at=appeal.filed_at, cache={}) > now:
+            return True
+        repository.mark_reminded(session, appeal, now)
+        events.publish(
+            session,
+            AppealReminded(
+                appeal_id=appeal.id,
+                match_id=appeal.match_id,
+                tournament_id=appeal.tournament_id,
+            ),
+        )
+        return True
+    return False
 
 
 def _report_deadline(

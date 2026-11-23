@@ -34,6 +34,15 @@ describe("Match header", () => {
     expect(subtitle).toHaveClass("text-caption")
   })
 
+  it("等待前一場申訴結果：徽章為「棄權計時暫停」（appeal），不是「待開打」", () => {
+    renderHeader(matchDetail({ team_b: null, awaiting_appeal: true }))
+    expect(screen.getByText("棄權計時暫停")).toHaveAttribute(
+      "data-tone",
+      "appeal",
+    )
+    expect(screen.queryByText("待開打")).toBeNull()
+  })
+
   it("決賽：「決賽 · M31」", () => {
     renderHeader(matchDetail({ code: "M31", round_name: "決賽", round_no: 5 }))
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(

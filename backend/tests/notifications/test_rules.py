@@ -28,7 +28,12 @@ from app.modules.competition.models import (
     RefereeUnassigned,
 )
 from app.modules.disputes import service as disputes_service
-from app.modules.disputes.models import AppealDecision, AppealFiled, AppealResolved
+from app.modules.disputes.models import (
+    AppealDecision,
+    AppealFiled,
+    AppealReminded,
+    AppealResolved,
+)
 from app.modules.identity import service as identity_service
 from app.modules.identity.models import Account
 from app.modules.notifications import service
@@ -506,6 +511,22 @@ def test_appeal_filed_notifies_organizer(client: TestClient, session: Session) -
     notifications = _publish(
         session,
         AppealFiled(appeal_id=uuid.uuid4(), match_id=match.id, team_id=match.team_a_id),
+    )
+
+    assert set(notifications) == {w.organizer.id}
+    assert _links(notifications) == {f"/organizer/tournaments/{w.tid}/appeals"}
+
+
+def test_appeal_reminded_notifies_organizer(
+    client: TestClient, session: Session
+) -> None:
+    """6.3：申訴逾期提醒只給該賽事主辦方，連到 S32。"""
+    w = _drawn(client, session)
+    match = _first_match(session, w)
+
+    notifications = _publish(
+        session,
+        AppealReminded(appeal_id=uuid.uuid4(), match_id=match.id, tournament_id=w.tid),
     )
 
     assert set(notifications) == {w.organizer.id}

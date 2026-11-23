@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, onTestFinished, vi } from "vitest"
 
 import {
   type AppealGroup,
@@ -25,6 +25,7 @@ import {
   NO_OPEN_APPEALS_TEXT,
   POPUP_BLOCKED_TEXT,
 } from "@/features/disputes/AppealsPage"
+import { HANDLING_OVERDUE_TEXT } from "@/features/disputes/HandlingDeadlineCountdown"
 import { NO_OPEN_DISPUTES_TEXT } from "@/features/disputes/OpenDisputesPanel"
 import {
   CORRECT_TEXT,
@@ -116,6 +117,7 @@ function group(overrides: Partial<AppealGroup> = {}): AppealGroup {
     team_a: { id: "a", name: "甲隊" },
     team_b: { id: "b", name: "乙隊" },
     has_open: true,
+    deadline: "2026-10-26T14:00:00Z",
     appeals: [
       appeal(),
       appeal({
@@ -154,6 +156,7 @@ const DOUBLE_FORFEIT = group({
 
 const HANDLED_ELSEWHERE = group({
   has_open: false,
+  deadline: null,
   match_status: "confirmed",
   appeals: [
     appeal({
@@ -212,6 +215,17 @@ async function rowOf(code: string) {
   return row
 }
 
+/** 依欄名取得某一列的儲存格（不寫死欄位順序） */
+async function cellOf(code: string, header: string) {
+  const row = await rowOf(code)
+  const table = row.closest("table") as HTMLElement
+  const index = within(table)
+    .getAllByRole("columnheader")
+    .findIndex((th) => th.textContent === header)
+  if (index < 0) throw new Error(`找不到「${header}」欄`)
+  return within(row).getAllByRole("cell")[index]
+}
+
 describe("S32 申訴：列表", () => {
   it("側欄有「申訴」；欄位、隊伍與提出時間、狀態", async () => {
     mockList([PLAYED, FORFEIT])
@@ -235,6 +249,7 @@ describe("S32 申訴：列表", () => {
       "提出隊伍",
       "提出時間",
       "狀態與決定",
+      "處理期限",
       "說明與附件",
       "操作",
     ])
@@ -377,6 +392,39 @@ describe("S32 申訴：列表", () => {
     open()
 
     expect(await screen.findByText(NO_OPEN_APPEALS_TEXT)).toBeInTheDocument()
+  })
+
+  it("處理期限倒數：超過 1 小時 muted、最後 1 小時 destructive、過期寫「已超過處理期限」；已結案為「—」", async () => {
+    const at = (ms: number) => new Date(Date.now() + ms).toISOString()
+    const HOUR = 60 * 60 * 1000
+    mockList([
+      group({ deadline: at(3 * HOUR) }),
+      group({ match_id: "m-2", match_code: "M2", deadline: at(HOUR / 2) }),
+      group({ match_id: "m-3", match_code: "M3", deadline: at(-HOUR) }),
+      group({
+        match_id: "m-4",
+        match_code: "M4",
+        has_open: false,
+        deadline: null,
+        match_status: "confirmed",
+        appeals: [appeal({ status: "closed", decision: "upheld" })],
+      }),
+    ])
+    open()
+
+    const deadlineCell = (code: string) => cellOf(code, "處理期限")
+    const variantOf = async (code: string) =>
+      (await deadlineCell(code))
+        .querySelector("[data-slot=countdown]")
+        ?.getAttribute("data-variant")
+    expect(await variantOf("M1")).toBe("muted")
+    expect(await variantOf("M2")).toBe("destructive")
+    expect(await variantOf("M3")).toBe("destructive")
+    expect((await deadlineCell("M3")).textContent).toContain(
+      HANDLING_OVERDUE_TEXT,
+    )
+    expect((await deadlineCell("M3")).textContent).not.toContain("系統處理中")
+    expect((await deadlineCell("M4")).textContent).toBe("—")
   })
 
   it("查看說明：列出每筆申訴，有附件時可查看附件", async () => {
@@ -931,6 +979,12 @@ describe("S32 申訴：處理", () => {
 
 describe("S27 待處理清單", () => {
   it("顯示待處理數，依處理期限由近到遠，點選進 S32", async () => {
+    // 固定裝置時間：M7 的處理期限（13:00）已過、M1（14:00）還有 30 分鐘；只假造 Date，輪詢與 Promise 照常
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-26T13:30:00Z"))
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
     const disputes: OpenDisputes = {
       appeals: 2,
       reports: 0,
@@ -974,12 +1028,64 @@ describe("S27 待處理清單", () => {
       "申訴 · M1",
     ])
     expect(items[0]).toHaveAttribute("href", APPEALS_URL)
+    // 6.3：申訴的處理期限是倒數（已過期：「已超過處理期限」），下方仍寫絕對時間
+    const countdown = items[0].querySelector("[data-slot=countdown]")
+    expect(countdown).not.toBeNull()
+    expect(countdown).toHaveAttribute("data-variant", "destructive")
+    expect(within(items[0]).getByText("處理期限")).toBeInTheDocument()
+    expect(within(items[1]).getByRole("timer")).toHaveTextContent("30:00")
+    expect(
+      within(items[0]).getByText(HANDLING_OVERDUE_TEXT),
+    ).toBeInTheDocument()
     expect(
       within(items[0]).getByText(
-        `處理期限 ${formatMatchDateTime("2026-10-26T13:00:00Z")}`,
+        `${formatMatchDateTime("2026-10-26T13:00:00Z")} 截止`,
       ),
     ).toBeInTheDocument()
     expect(screen.getByText(/待處理申訴/).textContent).toContain("2")
+  })
+
+  it("申訴的處理期限倒數：超過 1 小時 muted，最後 1 小時 destructive", async () => {
+    const at = (ms: number) => new Date(Date.now() + ms).toISOString()
+    const HOUR = 60 * 60 * 1000
+    vi.spyOn(DisputesService, "readOpenDisputes").mockResolvedValue({
+      data: {
+        appeals: 2,
+        reports: 0,
+        earliest_deadline: at(HOUR / 2),
+        items: [
+          {
+            kind: "appeal",
+            id: "ap-1",
+            match_id: "m-1",
+            match_code: "M1",
+            filed_at: at(-HOUR),
+            deadline: at(HOUR / 2),
+          },
+          {
+            kind: "appeal",
+            id: "ap-2",
+            match_id: "m-2",
+            match_code: "M2",
+            filed_at: at(-HOUR),
+            deadline: at(3 * HOUR),
+          },
+        ],
+      },
+    } as OpenResult)
+    open("/organizer/tournaments/t-1")
+
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll("[data-slot=open-dispute]"),
+      ).toHaveLength(2),
+    )
+    const variants = [
+      ...document.querySelectorAll<HTMLElement>("[data-slot=open-dispute]"),
+    ].map((item) =>
+      item.querySelector("[data-slot=countdown]")?.getAttribute("data-variant"),
+    )
+    expect(variants).toEqual(["destructive", "muted"])
   })
 
   it("申訴與檢舉列在一起：標示類型，檢舉進 S33，沒有期限的檢舉排最後", async () => {

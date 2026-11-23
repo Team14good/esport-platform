@@ -9,6 +9,10 @@
 #   （骨架、架構規則與部署 NFR-8、定時規則 NFR-4、權限 NFR-5、操作紀錄 NFR-3、交易與併發 NFR-1）。
 # - 測試報告（scripts/test-all.sh）的追溯區塊依這裡替每個案例帶上 Story 與 FR。
 
+competition/test_appeal_pause.py:
+  layer: integration
+  stories: ["6.3"]
+  frs: [FR-24, FR-25, FR-31]
 competition/test_appeal_resolution.py:
   layer: integration
   stories: ["6.2"]
@@ -189,6 +193,10 @@ disputes/test_appeal_concurrency.py:
   layer: integration
   stories: ["6.1"]
   frs: [FR-30, NFR-1]
+disputes/test_appeal_reminder.py:
+  layer: integration
+  stories: ["6.3"]
+  frs: [FR-31, NFR-4]
 disputes/test_open_disputes_reports.py:
   layer: integration
   stories: ["6.5"]
@@ -275,7 +283,7 @@ notifications/test_notification_api.py:
   frs: [FR-38, NFR-5]
 notifications/test_rules.py:
   layer: integration
-  stories: ["1.6", "3.7", "3.8", "3.11"]
+  stories: ["1.6", "3.7", "3.8", "3.11", "6.3"]
   frs: [FR-37]
 registration/test_allocation.py:
   layer: unit
@@ -457,6 +465,10 @@ worker/test_registration_deadline.py:
   layer: integration
   stories: ["3.6"]
   frs: [FR-16, NFR-4]
+worker/test_remind_due_appeals.py:
+  layer: integration
+  stories: ["6.3"]
+  frs: [FR-31, NFR-4]
 worker/test_worker.py:
   layer: integration
   stories: ["1.1"]

@@ -10,6 +10,7 @@ from app.core import events
 from app.modules.competition import service as competition_service
 from app.modules.competition.forfeit_adapter import SERVICE_FORFEIT_PORTS
 from app.modules.competition.forfeit_job import make_forfeit_job
+from app.modules.disputes import service as disputes_service
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.email import EmailSender, SmtpEmailSender
 from app.modules.registration import service as registration_service
@@ -78,6 +79,14 @@ def confirm_expired_appeals(session: Session) -> bool:
     return competition_service.auto_confirm_expired(session)
 
 
+def remind_due_appeals(session: Session) -> bool:
+    """對一筆快到處理期限、尚未提醒的申訴提醒主辦方（Story 6.3，同一筆只提醒一次）。
+
+    排在 `dispatch_outbox` 之前：同一輪發出的提醒事件，這一輪就會分派。
+    """
+    return disputes_service.remind_due_appeal(session)
+
+
 JOBS: list[Job] = [
     open_registrations,
     allocate_priority_windows,
@@ -86,6 +95,7 @@ JOBS: list[Job] = [
     start_due_tournaments,
     judge_forfeits,
     confirm_expired_appeals,
+    remind_due_appeals,
     dispatch_outbox,
     make_send_email_job(SmtpEmailSender()),
 ]

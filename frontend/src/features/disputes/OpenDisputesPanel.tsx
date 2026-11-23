@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
+import { HandlingDeadlineCountdown } from "./HandlingDeadlineCountdown"
 import { openDisputesQueryOptions, sortOpenItems } from "./organizer-queries"
 
 export const OPEN_DISPUTES_TITLE = "待處理"
@@ -18,7 +19,8 @@ const KIND_ROUTE = {
 /**
  * S27 待處理清單：待處理申訴數、檢舉數與每一筆（類型、場次或被檢舉隊名、提出時間、
  * 處理期限），依處理期限由近到遠，沒有期限的檢舉排最後；申訴點選進 S32、檢舉進 S33。
- * 期中不做逾期變色（6.3）。
+ * 申訴的處理期限以倒數呈現（6.3：最後 1 小時 destructive、過期寫「已超過處理期限」）；
+ * 檢舉的期限維持絕對時間。
  */
 export function OpenDisputesPanel({ tournamentId }: { tournamentId: string }) {
   const disputes = useQuery(openDisputesQueryOptions(tournamentId))
@@ -62,7 +64,12 @@ export function OpenDisputesPanel({ tournamentId }: { tournamentId: string }) {
                     <span className="text-caption text-muted-foreground">
                       提出 {formatMatchDateTime(item.filed_at)}
                     </span>
-                    {item.deadline ? (
+                    {item.deadline && item.kind === "appeal" ? (
+                      <HandlingDeadlineCountdown
+                        deadline={item.deadline}
+                        className="w-full sm:max-w-xs"
+                      />
+                    ) : item.deadline ? (
                       <span className="text-caption">
                         處理期限 {formatMatchDateTime(item.deadline)}
                       </span>

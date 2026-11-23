@@ -61,6 +61,36 @@ def list_open_match_appeals(session: Session, match_id: uuid.UUID) -> list[Appea
     ]
 
 
+def list_unreminded_open_appeals(session: Session) -> list[Appeal]:
+    """未結案、尚未提醒（`reminded_at` 為空）的申訴，依提出時間、再依 id（6.3 worker）。"""
+    statement = (
+        select(Appeal)
+        .where(
+            Appeal.status == AppealStatus.OPEN,
+            col(Appeal.reminded_at).is_(None),
+        )
+        .order_by(col(Appeal.filed_at), col(Appeal.id))
+    )
+    return list(session.exec(statement))
+
+
+def lock_appeal(session: Session, appeal_id: uuid.UUID) -> Appeal | None:
+    """`SELECT … FOR UPDATE` 鎖住申訴並回傳最新值（呼叫端已先鎖賽事，AD-6）。"""
+    statement = (
+        select(Appeal)
+        .where(Appeal.id == appeal_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return session.exec(statement).first()
+
+
+def mark_reminded(session: Session, appeal: Appeal, at: datetime) -> None:
+    appeal.reminded_at = at
+    session.add(appeal)
+    session.flush()
+
+
 def list_tournament_appeals(
     session: Session, tournament_id: uuid.UUID, *, open_only: bool = False
 ) -> list[Appeal]:

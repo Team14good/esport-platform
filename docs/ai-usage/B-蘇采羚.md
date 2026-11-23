@@ -816,3 +816,52 @@
   - 審查發現取消後讓公開查詢失效的程式沒有測試守住，補了測試；「哪些狀態不能取消」重複定義，改由狀態轉換表判斷
 - 成熟度：L4（三個審查者平行審查，主代理驗證分類，人決定 intent_gap，完整測試自動驗證）
 - 證據：`spec-2-6-cancel-tournament.md` 的 Review Triage Log、Spec Change Log；commit：未記錄（尚未 commit）
+
+### 2026-11-23｜設計／細部設計｜Story 6.3 申訴逾期提醒與受影響場次暫停的 spec
+
+- Story／範圍：6.3（期末，分支 `story/6-3-appeal-overdue`，從 main `beb855f` 開出）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：請 AI 開始做 6.3；AI 依 epics.md 原版驗收條件、epic-6 context 與現有程式（`_handling_deadline`、5.1／5.2／5.5 已有的暫停行為）寫 spec
+- AI 產出：`spec-6-3-appeal-overdue.md`（I/O Matrix 10 列、10 個 Tasks）；提出 2 個要人決定的問題
+- 人做了什麼：
+  - 決定在 D 的 `PublicMatchDetail` 新增 `awaiting_appeal`，由 competition 計算，PR 說明列出並請 D 審查
+  - spec 約 3,500 tokens，超過建議長度仍決定不拆；核准 Checkpoint 1
+- 驗證：AI 確認 `Appeal.reminded_at` 欄位在既有遷移已建立，本 Story 不需要遷移；確認報到與棄權計時的暫停後端已實作，只補測試
+- 問題與修正：AI 發現 S4 沒有資料能判斷「在等前一場申訴」，前端只能看到 `teams_pending`，無法和一般的「對手未定」區分；AI 列出兩種做法讓人選，沒有自己改 D 的 API
+- 成熟度：L3（AI 依既有規格與程式調查並寫 spec，人做決策並核准）
+- 證據：`_bmad-output/implementation-artifacts/spec-6-3-appeal-overdue.md` 的 Decisions；commit：未記錄（尚未 commit）
+
+### 2026-11-23｜程式／程式生成｜Story 6.3 的實作
+
+- Story／範圍：6.3（分支 `story/6-3-appeal-overdue`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，實作交給只拿 spec 的子代理
+- 怎麼用：子代理依 spec 實作；主代理讀 diff、逐列核對 I/O Matrix 都有測試，再單獨跑完整驗證，最後在瀏覽器手動檢查
+- AI 產出：
+  - 後端：事件 `AppealReminded`、worker 工作 `remind_due_appeals`（排在 `dispatch_outbox` 前）、`remind_due_appeal`（先鎖賽事、鎖內重新檢查、同一交易寫 `reminded_at`）、S32 `AppealGroup.deadline`、notifications 收件規則（A 的模組，只新增）、`PublicMatchDetail.awaiting_appeal`（D 的模組）；沒有 schema 變更
+  - 前端：S4 暫停 banner、徽章「棄權計時暫停」、「計時暫停」；S27、S32 處理期限倒數（剩超過 1 小時灰色、最後 1 小時紅色、過期顯示「已超過處理期限」且不重抓）
+  - 測試：提醒 21 個、暫停 7 個以上、worker 3 個、前端倒數與 S4 暫停／恢復等
+- 人做了什麼：核准 spec；同意把開發資料庫退回 main 的遷移版本以便手動檢查
+- 驗證：
+  - 完整驗證（單獨執行）：後端 2843 passed、覆蓋率 97%、lint 通過；前端 typecheck、biome、build 通過，`test:unit` 81 檔 1222 passed
+  - 瀏覽器：worker 實際寫入 `reminded_at` 並送出站內通知；S4 暫停提示、S27／S32 紅色與灰色倒數都正確；375 px 的 S4、S32 沒有橫向捲軸
+- 問題與修正：
+  - 前端全套第一次有 2 個既有的 `match-route` 測試在冷啟動時 5 秒逾時；主代理單獨重跑與重跑全套都通過，判斷不是程式錯誤，記在 spec
+  - 手動檢查時 worker 派送通知失敗：開發資料庫雖然標示在最新遷移版本，實際少了 `notification` 與 `disbanded_team_member` 兩張表（之前 2.3 遷移改接在 3.11 之後，alembic 誤以為已套用）。主代理用 `alembic check` 確認差異，補建兩張表後通知正常送出
+- 成熟度：L4（spec → 子代理實作 → 主代理核對 diff、測試與瀏覽器，人只在 checkpoint 決策）
+- 證據：`spec-6-3-appeal-overdue.md` 的 Implementation Notes；commit：未記錄（尚未 commit）
+
+### 2026-11-23｜測試／程式審查與測試個案｜Story 6.3 的三層審查與修補
+
+- Story／範圍：6.3（分支 `story/6-3-appeal-overdue`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build 的審查步驟（Blind Hunter、Edge Case Hunter、Verification Gap 三個子代理平行審查）
+- 怎麼用：Blind Hunter 只拿 diff，另兩位可讀 spec 與程式；主代理對照程式驗證後分類，1 筆 intent_gap 交給人決定，其餘修補交回實作子代理
+- AI 產出：約 30 筆發現（含重複）；1 筆 intent_gap、10 項 patch、3 筆延後（deferred-work）、4 筆不處理
+- 人做了什麼：決定提醒通知改為標題「申訴待處理」、內文「……的申訴已接近或超過處理期限，請盡快處理。」
+- 驗證：修補後重跑完整驗證全部通過（數字見上一筆）；子代理確認新加的「鎖內重讀」測試在拿掉修正時會失敗
+- 問題與修正：
+  - 實作子代理寫的通知標題「申訴快到處理期限」跟行為不符：決賽、季軍賽在期限當下才提醒，已經逾期才提出的申訴也會立刻提醒；Edge Case Hunter 與 Blind Hunter 指出後交給人決定文字
+  - AI 寫的「鎖內重新讀場次」實際沒有重讀：`get_match` 用 `session.get`，拿到的是加鎖前讀進 identity map 的舊物件，主辦方剛改期仍會照舊時間提醒；兩位審查者獨立發現。加上 `session.expire_all()` 後補測試，子代理另外發現原本的測試是因為弱參照碰巧通過，改成持有強參照才真正測到
+  - 處理期限把已取消的季軍賽算進去，季軍賽排在決賽前時會太早提醒；這是 6.2 留下的算法，修正後 S27 一起受益
+  - Verification Gap 指出 8 處測試太弱（鎖內分支、不 commit、`awaiting_appeal` 負向情境、S32 決賽期限等），以及 S27 測試依賴真實時鐘才通過
+- 成熟度：L4（三個審查者平行審查，主代理驗證分類，人決定 intent_gap，完整測試自動驗證）
+- 證據：`spec-6-3-appeal-overdue.md` 的 Review Triage Log；commit：未記錄（尚未 commit）
