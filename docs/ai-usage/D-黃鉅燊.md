@@ -812,3 +812,15 @@
 - 問題與修正：(1) 子代理的併發測試抓到報到只鎖場次、退賽先鎖賽事時會死結，報到改成先鎖賽事；審查再指出比分寫入與結算截圖是同一機制，一起修正並補確定性鎖序測試（順帶結掉 deferred 的兩項）；(2) 所有退賽測試都用替身、不看學校，「先讓離開的隊伍出局、再取候補」的順序沒有任何測試保護，補了真 registration 的測試，對調順序時失敗；(3) 寫入後才 `assert`，改成業務錯誤避免 500；(4) 退賽被拒後區塊被卸載、錯誤訊息一閃即逝（與 3.7 同一個 bug），改成確認框開著時保持掛載；(5) 第一輪完整測試因新測試檔沒寫進 `traceability.yaml` 失敗；(6) 21 項審查發現中 10 項駁回，理由記在 spec 的 Review Triage Log
 - 成熟度：L4（規劃 → 實作 → 三層獨立審查 → 完整測試、e2e 與突變檢查，人只在 checkpoint 決策）
 - 證據：spec 的 Implementation Notes、Review Triage Log；本 PR 的 diff
+
+### 2026-11-23｜程式＋測試／修 bug、審查與突變檢查｜賽事取消後的公開場次頁（deferred 項目）
+
+- Story／範圍：deferred-work「賽事取消後公開單場仍回傳申訴期限」（2.6 合併後的後續）；competition `get_public_match`、S4 場次頁
+- 工具：Claude Code（Opus 5.5）＋ bmad-build；1 個實作子代理、3 個只拿 diff 的審查子代理（Blind Hunter、Edge Case Hunter、Verification Gap）
+- 怎麼用：AI 先查程式找出影響範圍（「我的下一場」、申訴、比分、報到後端已擋取消賽事，不用改），把 3 個看得到的決定列成選項給人選；spec 核准後由子代理實作，三層審查後主 session 逐條判定並修正
+- AI 產出：`PublicMatchDetail.tournament_status`；取消時 `appeal_deadline`、`appeal_started_at`、`forfeit_deadline` 回 null；場次頁取消橫幅；`MatchCheckIn` 取消時不顯示倒數與報到按鈕；後端 3 個、前端 3 個新測試
+- 人做了什麼：3 個決定採建議（兩種倒數都不顯示、加橫幅、場次狀態標籤不變），把核准方式交給 AI 判斷
+- 驗證：後端 `test_match_api.py`＋`test_traceability.py` 21 passed；前端 vitest 全套 1187 passed（修正前），修正後 `match-route`＋`match-check-in` 31 passed，tsc、biome、ruff、mypy 通過；突變檢查：拿掉 `MatchCheckIn` 的取消判斷，新測試失敗，放回後通過；後端全套與 CI 見本 PR
+- 問題與修正：(1) AI 寫的 spec 以為後端把 `forfeit_deadline` 設為 null 就能讓報到倒數消失，三個審查子代理都指出「報到開放」「距預定開始」兩段倒數是用預定時間算的，取消後仍會顯示，隊長還會看到「目前無法報到，請重新整理頁面」，改在 `MatchCheckIn` 判斷並補測試；(2) spec 的 I/O 表把進行中寫成不存在的 `in_progress`，實作子代理發現；(3) 主 session 把「未取消」測試的斷言猜成 `ongoing`，執行失敗才發現抽籤後是 `published`；(4) 實作子代理在本機跑後端全套時 `test_rules.py` 有不固定的測試失敗（每次不同、通知模組未改），未查明，交給 CI；(5) 12 項審查發現中 6 項駁回，理由記在 spec 的 Review Triage Log
+- 成熟度：L4（規劃 → 實作 → 三層獨立審查 → 測試與突變檢查，人只在 checkpoint 決策）
+- 證據：`_bmad-output/implementation-artifacts/spec-deferred-public-match-cancelled.md`、本 PR 的 diff
