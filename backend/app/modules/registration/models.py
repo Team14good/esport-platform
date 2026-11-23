@@ -328,7 +328,7 @@ SubmitBlockerCode = Literal[
 WaitlistReasonCode = Literal[
     "SCHOOL_NOT_ELIGIBLE", "LATER_THAN_SCHOOLMATE", "SCHOOL_LIMIT_REACHED"
 ]
-WaitlistPhase = Literal["first_come", "after_deadline"]
+WaitlistPhase = Literal["first_come", "after_deadline", "custom"]
 
 
 class WaitlistFields(BaseModel):
@@ -336,7 +336,9 @@ class WaitlistFields(BaseModel):
 
     `waitlist_position`：候補第 N 位，沒有順位時為 null 並帶 `waitlist_reason`；
     `representative_backfill`：代表隊退出時由同校遞補的補充；`waitlist_phase`：計算順位
-    的階段（報名截止前為先搶期，之後為截止後），畫面依此顯示當下階段的遞補規則說明。
+    的階段（校園賽報名截止前為先搶期，之後為截止後；自訂賽事一律為 `custom`，
+    Story 3.10），畫面依此顯示當下階段的遞補規則說明。自訂賽事的候補都有順位，
+    `waitlist_reason` 一律 null、`representative_backfill` 一律 false。
     """
 
     waitlist_position: int | None

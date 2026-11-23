@@ -166,20 +166,28 @@ def test_backfill_without_waitlist_returns_none_and_changes_nothing(
     assert len(audit.list_for_tournament(session, tournament.id)) == logs
 
 
-def test_backfill_in_custom_mode_returns_none(
+def test_backfill_in_custom_mode_takes_earliest_submitted(
     session: Session, frozen_clock: FrozenClock
 ) -> None:
+    """自訂模式（Story 3.10）：最早送出的候補接手，不看積分、不受每校上限。"""
     tournament = _published(session, frozen_clock, mode=TournamentMode.CUSTOM)
-    _team(session, tournament, _school(session), S.DRAWN)
-    waiting = _team(session, tournament, _school(session), S.WAITLISTED)
+    school = _school(session)
+    leaving = _team(session, tournament, school, S.DRAWN)
+    _team(session, tournament, school, S.DRAWN)
+    _team(session, tournament, school, S.DRAWN)
+    earliest = _team(session, tournament, school, S.WAITLISTED, score="10", minutes=2)
+    later = _team(
+        session, tournament, _school(session), S.WAITLISTED, score="90", minutes=3
+    )
 
+    assert service.has_backfill_candidate(
+        session, tournament_id=tournament.id, leaving_team_id=leaving.team_id
+    )
     chosen = service.backfill_drawn_from_waitlist(session, tournament_id=tournament.id)
 
-    assert chosen is None
-    assert _status(session, waiting) == S.WAITLISTED
-    assert not service.has_backfill_candidate(
-        session, tournament_id=tournament.id, leaving_team_id=waiting.team_id
-    )
+    assert chosen == earliest.team_id
+    assert _status(session, earliest) == S.DRAWN
+    assert _status(session, later) == S.WAITLISTED
 
 
 def test_backfill_ignores_the_tournament_capacity(

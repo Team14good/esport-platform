@@ -211,11 +211,6 @@
   summary: （中）既有通知規則在 worker 處理時才以 `_member_ids` 查隊員（`notifications/rules.py`）：主辦方退回後、worker 處理前隊長就移除隊員或解散，`RegistrationRejected`、`RegistrationAllocated`、`RegistrationBackfilled` 只寄給處理當下仍在隊上的人（解散則沒有人收到）。
   evidence: Story 3.11 spec 審查第 3 點、Design Notes。修法候選：這些事件改帶發生當下的收件人帳號（違反 AD-8「事件只帶 id」，需要人決定），或規則在隊伍已解散時改查 `registration.service.list_disbanded_member_ids`（只補解散的情況，移除仍會少人）。
 
-## Deferred from: spec-4-5-post-draw-withdrawal.md (2026-11-22)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
-  summary: （中）自訂模式抽籤後退賽／取消資格的遞補沒有做：registration `backfill_drawn_from_waitlist` 對非 `campus` 回 `None`，自訂賽事一律走「沒有候補」（退賽對手輪空、取消資格判對手勝）。
-  evidence: Story 4.5 Decisions 第 2 項（2026-11-22 黃鉅燊核准）。自訂模式的候補怎麼產生由 C 的 3.10 決定，目前 `create_tournament` 一律存 `campus`、無法端對端驗證。修法：3.10 在 `backfill_drawn_from_waitlist` 同一個函式內（依 AD-20 經 `allocation.py` 的策略）補「最早送出的候補遞補、不受每校 2 隊上限」，並補 epics 4.5「自訂模式」那條 AC 的測試。
 ## Deferred from: spec-3-11-roster-changes-and-disband-team.md（#110 組員審查，2026-11-23）
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
@@ -227,3 +222,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-public-accepted-teams.md`
   summary: （低）前端「能不能檢舉」的前置判斷（已登入、此賽事有四種狀態隊伍、是隊長、賽事未結束或取消）在 6.4 `ReportTeamEntry` 與 3.9 `AcceptedTeamReportAction` 的 `useReportableTeamsById` 各寫一份；之後改其中一邊的條件，另一邊要記得一起改。哪些隊伍可檢舉、是否已有處理中的檢舉由後端 `reportable-teams` 決定，兩邊共用，不受影響。
   evidence: 2026-11-23 OG-Matcha 在 #106 的審查建議。抽成共用 hook 要改 C 的 `ReportTeamEntry.tsx`（CLAUDE.md：動到別人的模組只新增），所以 3.9 不動。修法：把 `useReportableTeamsById` 移到 `features/disputes/useReportableTeams.ts` 匯出，`ReportTeamEntry` 改用它（`eligible` 改成 Map 不為空），兩邊的 `REPORTER_STATUSES`、`ENDED_STATUSES` 只留一份；`report-team.test.tsx`、`accepted-teams.test.tsx` 應不需修改。
+
+## Deferred from: spec-3-10-custom-mode-first-come.md (2026-11-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-custom-mode-first-come.md`
+  summary: （中）Story 3.10 第 2 部分：建立賽事的模式選項（自訂免填優先期）、`Tournament.invite_token` 與遷移、主辦方在 S27 檢視與重設賽事報名連結、建隊檢查 `TOURNAMENT_INVITE_REQUIRED`、S1「邀請制報名」、S2 依 `?invite=` 顯示「建立隊伍」、示範資料自訂賽事（7.1）、`@story-3.10` E2E。
+  evidence: spec 估計約 4,900 tokens，使用者 2026-11-23 選擇拆分；第 2 部分要改 B 的 tournaments 模組，與 PR #103 同檔，等 #103 合併後做。網址、重設後既有隊伍不受影響與介面文字已在第 1 部分 spec 的 Decisions 定案。
