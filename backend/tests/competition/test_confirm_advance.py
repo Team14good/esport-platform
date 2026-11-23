@@ -27,6 +27,7 @@ from app.core.errors import BusinessError
 from app.core.events import OutboxEvent
 from app.modules.competition import repository, service
 from app.modules.competition.models import Match, MatchOutcome, MatchStatus
+from app.modules.competition.registration_port import RegistrationUnavailableError
 from app.modules.tournaments import service as tournaments_service
 from app.modules.tournaments.models import (
     Tournament,
@@ -989,6 +990,53 @@ def test_inconsistent_result_does_not_block_other_expired_matches(
     assert rows["M2"].winner_id in (rows["M5"].team_a_id, rows["M5"].team_b_id)
     assert _rows(session, other.id)["M1"].status == S.CONFIRMED
     assert f"Match {rows['M1'].id} has an inconsistent result" in caplog.text
+
+
+def test_unexpected_error_does_not_block_other_expired_matches(
+    session: Session,
+    session_factory: Callable[[], Session],
+    fake_registration: FakeRegistration,
+    frozen_clock: FrozenClockLike,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 期限最早的場次結果正常，但晉級時拋 ValueError 以外的例外（例如 registration
+    # 暫時無法使用）；它要被略過並記錄，後面期滿的場次照常確認
+    fake = fake_registration
+    tournament, _bracket = draw_with(session, fake, 8)
+    rows = _rows(session, tournament.id)
+    _enter_appeal(
+        session,
+        rows["M1"],
+        outcome=O.PLAYED,
+        winner_id=rows["M1"].team_a_id,
+        deadline=START + timedelta(minutes=5),
+    )
+    _enter_appeal(
+        session,
+        rows["M2"],
+        outcome=O.PLAYED,
+        winner_id=rows["M2"].team_a_id,
+        deadline=START + APPEAL,
+    )
+    frozen_clock.set(START + APPEAL)
+    failing_id = rows["M1"].id
+    real_advance = service.advance
+
+    def _advance(session: Session, *, match: Match) -> None:
+        if match.id == failing_id:
+            raise RegistrationUnavailableError("確認")
+        real_advance(session, match=match)
+
+    monkeypatch.setattr(service, "advance", _advance)
+
+    assert _drain(session, session_factory) == 1
+
+    rows = _rows(session, tournament.id)
+    # savepoint 回滾：M1 維持申訴期、沒有確認時間
+    assert (rows["M1"].status, rows["M1"].confirmed_at) == (S.APPEAL_WINDOW, None)
+    assert rows["M2"].status == S.CONFIRMED
+    assert f"Match {failing_id} failed to auto-confirm" in caplog.text
 
 
 @pytest.mark.parametrize("confirm", ["confirm_match", "confirm_walkover"])

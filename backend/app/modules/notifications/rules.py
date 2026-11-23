@@ -6,7 +6,8 @@ resolver 自己判斷查不到時拋 `RecipientsNotFound`，都由 `service.disp
 
 匯入本模組即完成登錄（`notifications.service` 匯入時就會載入）。
 不在這裡登錄的：`MatchResultSubmitted`、`MatchResultConfirmed`、`TeamCheckedIn`
-（不在 FR-37 對照表）；2.6 取消賽事、3.7～3.11 的事件由那些 Story 自己登錄。
+（不在 FR-37 對照表）；3.7～3.11 的事件由那些 Story 自己登錄（2.6 取消賽事的
+`TournamentCancelled` 由 3.9 登錄）。
 """
 
 import uuid
@@ -61,6 +62,7 @@ from app.modules.registration.models import (
     TeamMemberRemoved,
 )
 from app.modules.tournaments import service as tournaments_service
+from app.modules.tournaments.models import TournamentCancelled
 
 _TAIPEI = ZoneInfo("Asia/Taipei")
 _WEEKDAYS = "一二三四五六日"
@@ -582,3 +584,38 @@ def _appeal_reminded(
 
 
 register(AppealReminded, _appeal_reminded)
+
+# ---------------------------------------------------------------- 取消賽事（2.6 發出、3.9 登錄）
+
+# 「已送出報名」的隊伍：待分配、正取、候補、已參賽（與 6.4 的四種狀態相同）。
+# 組隊中還沒送出；退回、撤回、退賽、取消資格已離開賽事，不通知。
+_CANCEL_NOTIFIED_STATUSES = frozenset(
+    {
+        RegistrationStatus.PENDING,
+        RegistrationStatus.ACCEPTED,
+        RegistrationStatus.WAITLISTED,
+        RegistrationStatus.DRAWN,
+    }
+)
+
+
+def _tournament_cancelled(
+    session: Session, event: TournamentCancelled
+) -> list[NotificationDraft]:
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=event.tournament_id
+    )
+    teams = registration_service.list_teams_by_status(
+        session,
+        tournament_id=event.tournament_id,
+        statuses=_CANCEL_NOTIFIED_STATUSES,
+    )
+    return _drafts(
+        [account_id for team in teams for account_id in _member_ids(session, team.id)],
+        title="賽事已取消",
+        body=f"「{tournament.name}」已由主辦方取消，你的隊伍不會再進行比賽。",
+        link=f"/tournaments/{tournament.id}",
+    )
+
+
+register(TournamentCancelled, _tournament_cancelled)

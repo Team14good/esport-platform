@@ -285,6 +285,10 @@ notifications/test_rules.py:
   layer: integration
   stories: ["1.6", "3.7", "3.8", "3.11", "6.3"]
   frs: [FR-37]
+notifications/test_tournament_cancelled.py:
+  layer: integration
+  stories: ["3.9"]
+  frs: [FR-10]
 registration/test_allocation.py:
   layer: unit
   stories: ["3.4", "3.5", "3.6", "3.7", "3.8"]

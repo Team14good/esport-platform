@@ -527,15 +527,17 @@ def auto_draw_due(session: Session) -> bool:
     下一個候選，不讓它卡住之後的賽事。
 
     已判定正取不足、且正取仍不足 2 隊的賽事先以不加鎖的讀取排除，不必每一輪都鎖住它們
-    （鎖內仍會再查一次）；正取補足後就不再排除，會照常抽籤。預先排除也在 try 內，
-    查詢拋錯只略過這一場。
+    （鎖內仍會再查一次）；正取補足後就不再排除，會照常抽籤。預先排除與抽籤在同一個
+    savepoint 內，拋錯（含 SQL 錯誤）只回滾並略過這一場。
     """
     for tournament_id in tournaments_service.list_closed_tournament_ids(session):
+        outcome: AutoDrawOutcome
         try:
-            if _skipped_and_still_short(session, tournament_id):
-                continue
             with session.begin_nested():
-                outcome = auto_draw(session, tournament_id=tournament_id)
+                if _skipped_and_still_short(session, tournament_id):
+                    outcome = "not_due"
+                else:
+                    outcome = auto_draw(session, tournament_id=tournament_id)
         except Exception:
             logger.exception(
                 "Tournament %s failed to auto draw; skipped", tournament_id
@@ -1144,7 +1146,8 @@ def auto_confirm_expired(session: Session) -> bool:
 
     結果資料不自洽（例如完賽卻沒有勝隊，`progression` 拋 ValueError）的場次，退回
     savepoint、記錄日誌後排除，改處理下一場；否則它每一輪都會排在最前面、rollback，
-    讓所有賽事後面的場次都無法確認。
+    讓所有賽事後面的場次都無法確認。確認時拋其他例外的場次也同樣處理（本次呼叫排除，
+    下一次呼叫會再試）。
     """
     now = clock.now()
     ended_tournaments: set[uuid.UUID] = set()
@@ -1192,6 +1195,12 @@ def auto_confirm_expired(session: Session) -> bool:
             logger.exception(
                 "Match %s has an inconsistent result; auto-confirm skipped", match_id
             )
+            broken_matches.add(match_id)
+            continue
+        except Exception:
+            # 非預期的錯誤（例如 registration 暫時無法使用）也只略過這一場，
+            # 不讓它每一輪都排在最前面、擋住其他期滿的場次（同 auto_draw_due）
+            logger.exception("Match %s failed to auto-confirm; skipped", match_id)
             broken_matches.add(match_id)
             continue
         return True
