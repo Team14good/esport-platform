@@ -224,6 +224,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-auto-draw-prefilter-savepoint.md`
   summary: （中，未驗證）`auto_confirm_expired` 只攔 `ValueError`，鎖與確認拋其他例外（例如 `BusinessError`）時整個工作失敗、下一輪又排在同一場，之後的申訴期滿場次都無法確認。
   evidence: 2026-11-23 預先排除 savepoint 修正的審查（Blind Hunter）指出與 `auto_draw_due` 同類。要確認：找出 `confirm_match`／`progression` 在資料一致時是否可能拋 `ValueError` 以外的例外；若可能，改成像 `auto_draw_due` 一樣攔 `Exception`、記錄後排除該場。
+
 ## Deferred from: spec-3-9-public-accepted-teams.md（#106 組員審查，2026-11-23）
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-public-accepted-teams.md`
