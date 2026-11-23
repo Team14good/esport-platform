@@ -34,6 +34,7 @@ export function matchDetail(
   return {
     ...publicMatch(),
     tournament: { id: "t1", name: "2026 秋季校際盃" },
+    tournament_status: "ongoing",
     game_name: "特戰英豪",
     best_of: 3,
     score_type: "rounds",

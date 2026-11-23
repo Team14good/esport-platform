@@ -2,9 +2,10 @@ import { useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import type { PublicMatchDetail } from "@/client"
 import { Countdown } from "@/components/common/Countdown"
+import { PageBannerSlot } from "@/components/common/PageBanner"
 import { NotFoundPage } from "@/components/layout/ErrorPage"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ConnectionLostBanner } from "@/features/competition/ConnectionLostBanner"
+import { connectionLostText } from "@/features/competition/ConnectionLostBanner"
 import { MatchCheckIn, showsCheckIn } from "@/features/competition/MatchCheckIn"
 import { matchTitle } from "@/features/competition/MatchHeader"
 import {
@@ -21,6 +22,7 @@ import { useDisqualifiedMarks } from "@/features/competition/use-disqualified-ma
 import { useMatchPolling } from "@/features/competition/use-match-polling"
 import { AppealPanel } from "@/features/disputes/AppealPanel"
 import { AppealResultBadge } from "@/features/disputes/AppealResultBadge"
+import { CANCELLED_BANNER_TEXT } from "@/features/tournaments/TournamentPage"
 
 export const Route = createFileRoute(
   "/tournaments/$tournamentId/matches/$matchId",
@@ -75,7 +77,15 @@ function MatchPage({
   const showBanner = connectionLost || error != null
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      {showBanner && <ConnectionLostBanner lastUpdatedAt={lastUpdatedAt} />}
+      <PageBannerSlot
+        banners={[
+          detail?.tournament_status === "cancelled" && {
+            variant: "destructive",
+            children: CANCELLED_BANNER_TEXT,
+          },
+          showBanner && { children: connectionLostText(lastUpdatedAt) },
+        ]}
+      />
       {detail ? (
         <MatchContent detail={detail} changed={changed} refresh={refresh} />
       ) : (

@@ -13,7 +13,7 @@ from sqlmodel import Field, SQLModel
 from app.core import clock
 from app.core.events import Event
 from app.modules.competition.scoring import SeriesReason
-from app.modules.tournaments.models import ScoreType
+from app.modules.tournaments.models import ScoreType, TournamentStatus
 
 
 class MatchStatus(StrEnum):
@@ -488,6 +488,8 @@ class PublicMatchDetail(PublicMatch):
     """公開單場（5.8 S4 場次頁）：`PublicMatch` 加上賽事、輪次與同輪場次。"""
 
     tournament: PublicTournamentRef
+    # 賽事狀態；已取消時兩個期限一律為 None，S4 場次頁顯示取消橫幅
+    tournament_status: TournamentStatus
     game_name: str
     # 本輪 BO
     best_of: int

@@ -1734,6 +1734,7 @@ export type PublicMatchDetail = {
    */
   wins_b: number
   tournament: PublicTournamentRef
+  tournament_status: TournamentStatus
   /**
    * Game Name
    */

@@ -692,8 +692,12 @@ def get_public_match(
     }
     # 送出結果與判棄權都把截止設為「當下＋申訴時限」，賽事建立後時限不能修改，
     # 所以開始時間由截止往回推即可，不必另存欄位
+    # 賽事已取消時場次狀態不變、worker 也不再處理，期限不會有後續，一律不給前端倒數
+    cancelled = tournament.status == TournamentStatus.CANCELLED
     appeal_deadline = (
-        match.appeal_deadline if match.status in _APPEAL_STATUSES else None
+        match.appeal_deadline
+        if match.status in _APPEAL_STATUSES and not cancelled
+        else None
     )
     appeal_started_at = (
         appeal_deadline - timedelta(minutes=tournament.appeal_minutes)
@@ -703,6 +707,7 @@ def get_public_match(
     return PublicMatchDetail(
         **this.model_dump(),
         tournament=PublicTournamentRef(id=tournament.id, name=tournament.name),
+        tournament_status=tournament.status,
         game_name=tournament.game_name,
         best_of=tournaments_service.bo_for_round(
             session,
@@ -728,6 +733,7 @@ def get_public_match(
             if match.status == MatchStatus.SCHEDULED
             and match.team_a_id is not None
             and match.team_b_id is not None
+            and not cancelled
             else None
         ),
         result_screenshot_enabled=result_screenshot.is_result_submitted(match),
