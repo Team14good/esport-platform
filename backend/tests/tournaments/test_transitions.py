@@ -154,8 +154,14 @@ def test_bo_for_round_returns_tournament_bo_for_every_round(session: Session) ->
     tournament = make_tournament(session, bo=5, round_interval_minutes=300)
 
     assert [
-        service.bo_for_round(session, tournament_id=tournament.id, round_no=n)
-        for n in (1, 2, 7)
+        service.bo_for_round(
+            session,
+            tournament_id=tournament.id,
+            round_no=n,
+            rounds=4,
+            is_third_place=False,
+        )
+        for n in (1, 2, 4)
     ] == [5, 5, 5]
 
 
@@ -164,7 +170,13 @@ def test_bo_for_round_rejects_round_zero(session: Session) -> None:
     tournament = make_tournament(session)
 
     with pytest.raises(ValueError):
-        service.bo_for_round(session, tournament_id=tournament.id, round_no=0)
+        service.bo_for_round(
+            session,
+            tournament_id=tournament.id,
+            round_no=0,
+            rounds=4,
+            is_third_place=False,
+        )
 
 
 # ---------------------------------------------------------------- core.authz

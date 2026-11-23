@@ -125,6 +125,10 @@ competition/test_reschedule.py:
   layer: integration
   stories: ["4.3"]
   frs: [FR-23]
+competition/test_round_bo_scoring.py:
+  layer: integration
+  stories: ["2.3"]
+  frs: [FR-8]
 competition/test_schedule.py:
   layer: unit
   stories: ["4.3"]
@@ -417,6 +421,10 @@ tournaments/test_referees.py:
   layer: integration
   stories: ["2.7"]
   frs: [FR-4]
+tournaments/test_round_bo.py:
+  layer: integration
+  stories: ["2.3"]
+  frs: [FR-8]
 tournaments/test_tournaments.py:
   layer: integration
   stories: ["2.2"]

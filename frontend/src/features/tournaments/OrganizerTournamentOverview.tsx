@@ -20,6 +20,7 @@ import {
   myTournamentQueryOptions,
 } from "./organizer-queries"
 import { isTournamentNotFound } from "./queries"
+import { formatRoundBo, totalRounds } from "./round-bo"
 import { formatInterval, formatRegistrationPeriod } from "./status"
 import {
   REGISTRATION_OPENING_TEXT,
@@ -200,6 +201,13 @@ export function OrganizerTournamentSummary({
           {formatInterval(tournament.round_interval_minutes)}
         </Field>
         <Field term="BO">{`BO${tournament.bo}`}</Field>
+        {tournament.round_bo.length > 0 ? (
+          <Field term="分輪 BO">
+            {tournament.round_bo.length < totalRounds(tournament.capacity)
+              ? `${formatRoundBo(tournament.round_bo)}；其他輪次 BO${tournament.bo}`
+              : formatRoundBo(tournament.round_bo)}
+          </Field>
+        ) : null}
         <Field term="先發／替補">
           {`先發 ${tournament.starters} 人／替補 ${tournament.substitutes} 人`}
         </Field>

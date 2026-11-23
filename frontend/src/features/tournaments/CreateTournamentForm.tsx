@@ -1,11 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
-import { type ReactNode, useEffect, useRef, useState } from "react"
+import { ChevronDownIcon } from "lucide-react"
+import { type ReactNode, useEffect, useId, useRef, useState } from "react"
 import {
   type Control,
   type FieldPath,
   useForm,
+  useFormState,
   useWatch,
 } from "react-hook-form"
 import { z } from "zod"
@@ -24,6 +26,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
   Select,
@@ -44,6 +47,7 @@ import {
   organizerGamesQueryOptions,
   useCreateTournament,
 } from "./organizer-queries"
+import { roundLabel, totalRounds } from "./round-bo"
 
 export const TOURNAMENT_CREATED_TEXT = "已建立賽事。"
 export const CAPACITY_WARNING_THRESHOLD = 128
@@ -51,6 +55,11 @@ export const CAPACITY_WARNING_TITLE = "確認名額"
 export const CAPACITY_WARNING_TEXT = "名額超過 128 隊，請確認沒有輸入錯誤"
 export const SUBMIT_TEXT = "建立賽事"
 export const ALLOWED_BO = [1, 3, 5, 7] as const
+export const ROUND_BO_TOGGLE_TEXT = "分輪 BO"
+export const ROUND_BO_HINT =
+  "沒有設定的輪次沿用上方的 BO。BO 較大的輪次，下一輪會自動順延。"
+export const ROUND_BO_NEED_CAPACITY_TEXT = "先輸入名額，才能依名額列出輪次。"
+const ROUND_BO_DEFAULT = "default"
 
 // 與後端 models.py 相同的限制
 const TOURNAMENT_NAME_MAX_LENGTH = 100
@@ -96,10 +105,14 @@ const formShape = z.object({
   forfeit_minutes: z.string(),
   appeal_minutes: z.string(),
   livestream_url: z.string(),
+  // 分輪 BO：索引是距決賽的輪數（決賽＝0），值是 "default" 或 BO 數
+  round_bo: z.array(z.string()),
 })
 
 export type CreateTournamentValues = z.infer<typeof formShape>
 type FieldName = keyof CreateTournamentValues
+// 以單一字串輸入的欄位（分輪 BO 是清單，另外處理）
+type TextFieldName = Exclude<FieldName, "round_bo">
 
 const DEFAULT_VALUES: CreateTournamentValues = {
   name: "",
@@ -116,9 +129,10 @@ const DEFAULT_VALUES: CreateTournamentValues = {
   forfeit_minutes: "15",
   appeal_minutes: "30",
   livestream_url: "",
+  round_bo: [],
 }
 
-const INTEGER_FIELDS: { name: FieldName; label: string; min: number }[] = [
+const INTEGER_FIELDS: { name: TextFieldName; label: string; min: number }[] = [
   { name: "capacity", label: "名額", min: MIN_CAPACITY },
   { name: "starters", label: "先發人數", min: 1 },
   { name: "substitutes", label: "替補人數", min: 0 },
@@ -128,7 +142,7 @@ const INTEGER_FIELDS: { name: FieldName; label: string; min: number }[] = [
   { name: "appeal_minutes", label: "申訴期", min: MIN_APPEAL_MINUTES },
 ]
 
-const DATETIME_FIELDS: { name: FieldName; label: string }[] = [
+const DATETIME_FIELDS: { name: TextFieldName; label: string }[] = [
   { name: "registration_start", label: "報名開始" },
   { name: "registration_end", label: "報名截止" },
   { name: "start_at", label: "開賽時間" },
@@ -257,6 +271,14 @@ export function toTournamentCreate(
   const int = (value: string) => Number(value.trim())
   const iso = (value: string) => taipeiLocalToIso(value) ?? value
   const url = values.livestream_url.trim()
+  // 只送名額可能的輪次中、有設定的那些（名額改小後，超出的輪次不送）
+  const rounds = totalRounds(int(values.capacity))
+  const roundBo = values.round_bo.flatMap((value, roundsFromFinal) => {
+    const bo = Number(value)
+    return roundsFromFinal < rounds && isAllowedBo(bo)
+      ? [{ rounds_from_final: roundsFromFinal, bo }]
+      : []
+  })
   return {
     name: values.name.trim(),
     game_id: values.game_id,
@@ -272,7 +294,141 @@ export function toTournamentCreate(
     forfeit_minutes: int(values.forfeit_minutes),
     appeal_minutes: int(values.appeal_minutes),
     livestream_url: url || null,
+    round_bo: roundBo,
   }
+}
+
+function isAllowedBo(value: number): boolean {
+  return (ALLOWED_BO as readonly number[]).includes(value)
+}
+
+/** 名額欄位的值可以列出輪次時回傳總輪數，否則（空白、不是整數、超出範圍）回傳 null。 */
+function roundsForCapacity(capacity: string): number | null {
+  const value = parseInteger(capacity)
+  return value !== null && value >= MIN_CAPACITY && value <= INT_MAX
+    ? totalRounds(value)
+    : null
+}
+
+/**
+ * S26 的「分輪 BO」：預設收合，展開後依名額列出輪次（決賽在最上），
+ * 每列可選「沿用預設」或 BO1／3／5／7。伺服器的 `round_bo` 錯誤顯示在下方並自動展開。
+ */
+function RoundBoField({
+  control,
+  capacity,
+  bo,
+}: {
+  control: Control<CreateTournamentValues>
+  capacity: string
+  bo: string
+}) {
+  const [open, setOpen] = useState(false)
+  const panelId = useId()
+  // 收到伺服器的 round_bo 錯誤時展開；之後仍由使用者自行收合
+  const { errors } = useFormState({ control, name: "round_bo" })
+  const roundBoError = errors.round_bo
+  useEffect(() => {
+    if (roundBoError) setOpen(true)
+  }, [roundBoError])
+  const rounds = roundsForCapacity(capacity)
+  const defaultBo = Number(bo)
+  const defaultLabel = isAllowedBo(defaultBo)
+    ? `沿用預設（BO${defaultBo}）`
+    : "沿用預設"
+
+  return (
+    <FormField
+      control={control}
+      name="round_bo"
+      render={({ field }) => {
+        const expanded = open
+        return (
+          <FormItem className="min-w-0 sm:col-span-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-self-start"
+              aria-expanded={expanded}
+              aria-controls={panelId}
+              onClick={() => setOpen((value) => !value)}
+            >
+              <ChevronDownIcon
+                aria-hidden
+                className={expanded ? "rotate-180" : undefined}
+              />
+              {ROUND_BO_TOGGLE_TEXT}
+            </Button>
+            {/* 一律渲染，收合時隱藏：aria-controls 才會一直指向存在的元素 */}
+            <div
+              id={panelId}
+              hidden={!expanded}
+              // `flex` 會蓋過 hidden 屬性的 display: none，收合時改用 `hidden`
+              className={expanded ? "flex min-w-0 flex-col gap-3" : "hidden"}
+            >
+              <p className="text-sm text-muted-foreground">{ROUND_BO_HINT}</p>
+              {rounds === null ? (
+                <p className="text-sm text-muted-foreground">
+                  {ROUND_BO_NEED_CAPACITY_TEXT}
+                </p>
+              ) : (
+                <ul className="flex min-w-0 flex-col gap-3">
+                  {Array.from({ length: rounds }, (_, roundsFromFinal) => {
+                    const selectId = `${panelId}-${roundsFromFinal}`
+                    return (
+                      <li
+                        key={roundsFromFinal}
+                        className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,14rem)] items-center gap-3"
+                      >
+                        <Label htmlFor={selectId}>
+                          {roundLabel(roundsFromFinal)}
+                        </Label>
+                        <Select
+                          value={
+                            field.value[roundsFromFinal] || ROUND_BO_DEFAULT
+                          }
+                          onValueChange={(value) => {
+                            const next = Array.from(
+                              {
+                                length: Math.max(field.value.length, rounds),
+                              },
+                              (_, index) =>
+                                field.value[index] || ROUND_BO_DEFAULT,
+                            )
+                            next[roundsFromFinal] = value
+                            field.onChange(next)
+                          }}
+                        >
+                          <SelectTrigger
+                            id={selectId}
+                            className="w-full"
+                            onBlur={field.onBlur}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={ROUND_BO_DEFAULT}>
+                              {defaultLabel}
+                            </SelectItem>
+                            {ALLOWED_BO.map((value) => (
+                              <SelectItem key={value} value={String(value)}>
+                                {`BO${value}`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+            <FormMessage />
+          </FormItem>
+        )
+      }}
+    />
+  )
 }
 
 type TextFieldProps = {
@@ -369,9 +525,9 @@ export function CreateTournamentForm() {
     defaultValues: DEFAULT_VALUES,
   })
 
-  const [gameId, bo, forfeit, appeal] = useWatch({
+  const [gameId, bo, forfeit, appeal, capacity] = useWatch({
     control: form.control,
-    name: ["game_id", "bo", "forfeit_minutes", "appeal_minutes"],
+    name: ["game_id", "bo", "forfeit_minutes", "appeal_minutes", "capacity"],
   })
   const selectedGame = gameList.find((game) => game.id === gameId)
   const boValue = Number(bo)
@@ -572,11 +728,14 @@ export function CreateTournamentForm() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <FormDescription>每一輪都用這個 BO 數。</FormDescription>
+                  <FormDescription>
+                    沒有分輪設定的輪次都用這個 BO 數。
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+            <RoundBoField control={form.control} capacity={capacity} bo={bo} />
           </FormSection>
 
           <FormSection title="報名與賽程">
