@@ -46,6 +46,11 @@ class TournamentRead(BaseModel):
     game_minutes: int                # 每局預估時間（分鐘）
     score_type: ScoreType
     rank_tiers: list[RankTierRead]   # 段位對照表快照，積分由高到低
+    round_bo: list[RoundBo]          # 2.3 分輪 BO：有設定的輪次，依距決賽的輪數由小到大；沒列出的輪次用 bo
+
+class RoundBo(BaseModel):        # 2.3
+    rounds_from_final: int           # 距決賽的輪數：決賽 0、4 強 1、8 強 2…
+    bo: int                          # 1、3、5、7
 
 class RefereeRead(BaseModel):    # 2.7 已實作
     account_id: UUID
@@ -82,6 +87,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 
 - 列舉沿用 `models.py` 既有的 `ScoreType`、`TournamentMode`、`TournamentStatus`。
 - 時間一律帶時區（UTC）。
+- 分輪 BO（2.3）：`POST /organizer/tournaments` 的 `round_bo: list[RoundBo]`（預設空清單）只列有設定的輪次。值的規則錯誤（BO 不是 1／3／5／7、輪次重複或小於 0、輪次超出名額可能的輪數；名額 N 共 ⌈log₂N⌉ 輪，可設距決賽 0～輪數−1）回 422，`loc` 為 `["body", "round_bo"]`；項目型別錯誤（例如 `bo` 是字串、`null` 或缺欄位）沿用欄位層級的 `loc`：`["body", "round_bo", <i>, <欄位>]`。存於 `round_setting` 表（主鍵 `tournament_id`＋`rounds_from_final`），建立後不能修改（修改屬 2.5）。
 - 不登入就能呼叫的公開 API 用另外的 `Public*` schema（2.4 定義的 `PublicTournament`），不含 `organizer_id`、Email 與學校（AD-19）。
 - 裁判 API（2.7）：
   - `POST /organizer/tournaments/{tournament_id}/referee-invitation`（主辦方）：產生新邀請，201 回 `RefereeInvitationRead`；同賽事尚未過期的舊邀請 `expires_at` 設為現在（不刪除）。
@@ -111,7 +117,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `transition_tournament(session, *, tournament_id, to, actor_id) -> TournamentRead` | 見〈三〉 | 唯一改賽事狀態的入口（AD-11）；呼叫前要先 `lock_tournament`。非法轉換拋 `TOURNAMENT_INVALID_TRANSITION` 409。寫操作紀錄 `tournament.status_changed`；`actor_id=None` 表示系統（worker） | 2.2 |
 | `ensure_accepting_registrations(tournament: TournamentRead) -> None` | C（3.1～3.6） | 狀態不是 `open` 時拋 `REGISTRATION_CLOSED` 409。只看狀態：報名截止由 worker 轉成 `closed` | 2.2 |
 | `ensure_accepting_scores(tournament: TournamentRead) -> None` | D（5.3、5.4）、B（6.2） | 狀態不是 `published`、`ongoing` 時拋 `TOURNAMENT_NOT_ACCEPTING_SCORES` 409（已結束、已取消都拒絕） | 2.2 |
-| `bo_for_round(session, *, tournament_id, round_no) -> int` | D（4.3、5.3、5.4） | 期中一律回傳 `TournamentRead.bo`（2.3 分輪 BO 擱置）；`round_no` 從 1 起算 | 2.2 |
+| `bo_for_round(session, *, tournament_id, round_no, rounds, is_third_place) -> int` | D（4.3、5.3、5.4、5.8） | 實際對戰表共 `rounds` 輪時第 `round_no` 輪（從 1 起算）的 BO：換算成距決賽的輪數（`rounds - round_no`，季軍賽再 +1，即沿用 4 強）查 `round_bo`，沒有設定回 `TournamentRead.bo`；`round_no` 不在 1～`rounds` 拋 `ValueError`（程式錯誤）。換算是純函式 `resolve_round_bo` | 2.2；2.3 改簽名 |
 | `is_referee(session, *, tournament_id, account_id) -> bool` | D（4.4） | 已接受該賽事的裁判邀請；只在該賽事有效（經 `core.authz.is_tournament_referee` 判斷） | 2.7 |
 | `list_referees(session, *, tournament_id) -> list[RefereeRead]` | D（4.4 的 S30 選單） | 依接受邀請的時間排序 | 2.7 |
 | `has_referee_role(session, *, account_id) -> bool` | 組裝層（`app/api/main.py`）註冊給 identity 的 `register_referee_lookup`（4.4 S13） | 帳號是不是任一賽事的裁判（有 `TournamentReferee` 列即是，不看賽事狀態）；身分切換器的「裁判」用 | 4.4 |

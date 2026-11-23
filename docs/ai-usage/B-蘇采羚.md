@@ -768,6 +768,59 @@
 - 成熟度：L3（多個代理平行審查、主代理抽查，人決定處理方式；沒有測試或 CI 自動驗證，所以不到 L4）
 - 證據：PR #89 的留言、issue #88
 
+### 2026-11-21｜設計／細部設計｜Story 2.3 分輪設定 BO 數的 spec
+
+- Story／範圍：2.3（期末，分支 `story/2-3-round-bo`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build
+- 怎麼用：請 AI 開始做 2.3；AI 依 epic-2 context、epics.md 原版驗收條件、PRD FR-7／FR-8、2.2 的 spec，調查 `bo_for_round`、competition 的呼叫點與 S26 表單後寫 spec
+- AI 產出：`spec-2-3-round-bo.md`（I/O Matrix 8 列、7 個 Tasks、4 條驗收條件）；提出 2 個要人決定的問題
+- 人做了什麼：
+  - 決定本 PR 一併修改 D 的 competition 呼叫點（PR 說明列出、請 D 審查）
+  - 決定建立時每輪間隔下限照 FR-7 用預設 BO，BO 較大的輪次由排程自動順延
+  - spec 約 3,000 tokens（建議上限 1,600），決定不拆；核准 Checkpoint 1
+- 驗證：AI 用 git 判斷 epic-2 context 沒有過期；spec 對照 READY FOR DEVELOPMENT 標準自查
+- 問題與修正：AI 調查時發現原 AC 沒寫到、但會造成錯誤的兩件事：季軍賽與決賽的 `round_no` 相同，而且 tournaments 不知道實際對戰表的輪數。所以「依距決賽的輪數對應、季軍賽沿用四強」一定要改到 D 的模組，AI 把它列成問題讓人決定，沒有自己假設
+- 成熟度：L3（AI 依既有規格調查並寫 spec，人做兩個決策並核准）
+- 證據：`_bmad-output/implementation-artifacts/spec-2-3-round-bo.md` 的 Decisions；commit：未記錄（尚未 commit）
+
+### 2026-11-21｜程式／程式生成｜Story 2.3 分輪設定 BO 數的實作
+
+- Story／範圍：2.3（分支 `story/2-3-round-bo`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，實作交給只拿 spec 的子代理
+- 怎麼用：子代理只依 spec 實作；主代理讀完整 diff 逐項核對 Tasks 與驗收條件，並自己重跑 I/O Matrix 的測試
+- AI 產出：
+  - 後端：新資料表 `round_setting` 與遷移 `a7d3e9b2c6f4`；純函式 `total_rounds`、`rounds_from_final`、`resolve_round_bo`；`bo_for_round` 新簽名；`TournamentRead.round_bo`
+  - competition（D 的模組）：4 個呼叫點改傳總輪數與是否為季軍賽，新增私有函式 `_bracket_rounds`
+  - 前端：S26「分輪 BO」區塊、S27 顯示分輪 BO、`round-bo.ts`；重新產生 API client
+  - contracts 兩份更新；全部 25 個檔案、+1235／−35 行（含審查後的修補）
+- 人做了什麼：在 Checkpoint 1 核准 spec；改到 D 的模組是人的決定
+- 驗證：主代理在容器跑 2.3 的兩個測試檔，23 個測試全過，I/O Matrix 8 列都有覆蓋
+- 問題與修正：
+  - AI 沒照 spec 的 Code Map 沿用 `BoField`：照做的話，巢狀錯誤會被前端寫進預設 BO 欄位，所以改在清單層檢查並記在 Implementation Notes（偏離 Code Map，但符合凍結區的要求）
+  - 第一版「分輪 BO」區塊的展開狀態寫成「`open` 或有錯誤」，伺服器錯誤展開後一改選單就會收起、有錯誤時按收合沒反應；審查發現後修正（見下一筆）
+  - 子代理手動測試時，在本機開發資料庫建了一筆「分輪 BO 測試盃」，並在容器裡替示範主辦方簽 token 登入瀏覽器；這筆資料需要人自行刪除
+- 成熟度：L4（spec → 子代理實作 → 主代理核對 diff 與測試，人只在 checkpoint 決策）
+- 證據：`spec-2-3-round-bo.md` 的 Implementation Notes；commit：未記錄（尚未 commit）
+
+### 2026-11-21｜測試／程式審查與測試個案｜Story 2.3 的三層審查與修補
+
+- Story／範圍：2.3（分支 `story/2-3-round-bo`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build 的審查步驟（Blind Hunter、Edge Case Hunter、Verification Gap 三個子代理平行審查）
+- 怎麼用：三個審查者只拿 diff（Edge Case Hunter 另可讀 spec），主代理逐條對照程式驗證、分類，再把要修的交回實作子代理
+- AI 產出：24 筆發現；判定 7 項 patch、13 項不處理（6 項不成立、7 項一般使用者遇不到）；沒有 intent_gap、bad_spec，也沒有新增 deferred-work
+- 人做了什麼：無（這一步依流程由 AI 判定，理由記在 spec 的 Review Triage Log 供人檢查）
+- 驗證：
+  - 修補後主代理重跑完整驗證：後端 `scripts/test.sh` 2511 passed、覆蓋率 97%；`scripts/lint.sh` 通過
+  - 前端 `bun run build`、`typecheck`、`biome check`（304 檔）、`test:unit`（73 檔、1046 passed）都通過
+- 問題與修正：
+  - 審查發現 AI 改了 D 模組裡的邏輯卻沒有測試守住：抽籤排程依分輪 BO 順延、改場次時間的範圍、季軍賽沿用四強的勝局門檻。把程式改回舊行為，原有測試都不會失敗。補了 3 個後端測試
+  - 審查發現 AI 把既有測試改成對名額 16 的賽事傳 `rounds=7`（實際最多 4 輪），已改正
+  - 前端展開狀態的 bug（見上一筆）由 Edge Case Hunter 與 Blind Hunter 同時發現，已修正並補斷言
+  - 新補的測試沒有反過來驗證（沒有把程式改壞確認會失敗）
+  - 主代理整理 diff 時用 `git add -N .`，不小心把兩個無關的未追蹤檔也標記進去，隨即用 `git reset` 還原
+  - 主代理第一次寫這份紀錄時用 Python，但這台電腦的 Python 無法執行，指令沒有報錯，紀錄也沒寫進去；檢查檔案才發現，改用編輯工具重寫
+- 成熟度：L4（三個審查者平行審查，主代理驗證分類並交回修補，完整測試自動驗證）
+- 證據：`spec-2-3-round-bo.md` 的 Review Triage Log；commit：未記錄（尚未 commit）
 ### 2026-11-21｜設計／細部設計｜Story 2.6 取消賽事的 spec
 
 - Story／範圍：2.6（期末，分支 `story/2-6-cancel-tournament`）

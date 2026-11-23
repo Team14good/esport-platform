@@ -441,6 +441,7 @@ export type {
   ResultScreenshotState,
   RetirementStatus,
   RetireResult,
+  RoundBo,
   SchoolIn,
   ScoreEntryState,
   ScoreType,

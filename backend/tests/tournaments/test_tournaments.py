@@ -54,6 +54,7 @@ CONTRACT_FIELDS = {
     "game_minutes",
     "score_type",
     "rank_tiers",
+    "round_bo",
 }
 
 

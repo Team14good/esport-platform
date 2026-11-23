@@ -148,9 +148,15 @@ def _round_starts(
         start_at=tournament.start_at,
         rounds=rounds,
         interval_minutes=tournament.round_interval_minutes,
+        # 季軍賽與決賽同輪、共用開始時間，決賽又是最後一輪，不影響任何輪的順延，
+        # 所以每輪只取正規場次的 BO
         best_of=[
             tournaments_service.bo_for_round(
-                session, tournament_id=tournament.id, round_no=r
+                session,
+                tournament_id=tournament.id,
+                round_no=r,
+                rounds=rounds,
+                is_third_place=False,
             )
             for r in range(1, rounds + 1)
         ],
@@ -713,7 +719,11 @@ def get_public_match(
         tournament_status=tournament.status,
         game_name=tournament.game_name,
         best_of=tournaments_service.bo_for_round(
-            session, tournament_id=tournament_id, round_no=match.round_no
+            session,
+            tournament_id=tournament_id,
+            round_no=match.round_no,
+            rounds=bracket.rounds,
+            is_third_place=match.is_third_place,
         ),
         score_type=tournament.score_type,
         round_name="季軍賽"
@@ -1565,9 +1575,21 @@ def _game_values(game: MatchGame) -> dict[str, object]:
     }
 
 
+def _bracket_rounds(session: Session, tournament_id: uuid.UUID) -> int:
+    """實際對戰表的總輪數（分輪 BO 依距決賽的輪數換算，2.3）；有場次就一定有對戰表。"""
+    bracket = repository.get_bracket_by_tournament(session, tournament_id)
+    if bracket is None:
+        raise RuntimeError(f"bracket missing for tournament {tournament_id}")
+    return bracket.rounds
+
+
 def _bo(session: Session, match: Match) -> int:
     return tournaments_service.bo_for_round(
-        session, tournament_id=match.tournament_id, round_no=match.round_no
+        session,
+        tournament_id=match.tournament_id,
+        round_no=match.round_no,
+        rounds=_bracket_rounds(session, match.tournament_id),
+        is_third_place=match.is_third_place,
     )
 
 
@@ -1973,11 +1995,17 @@ def _reschedule_window(
     前一輪場次＝勝隊或敗隊會進入本場的場次。
     """
 
-    def min_gap(round_no: int) -> int:
+    rounds = _bracket_rounds(session, tournament.id)
+
+    def min_gap(m: Match) -> int:
         return schedule_rules.round_min_gap(
             forfeit_minutes=tournament.forfeit_minutes,
             best_of=tournaments_service.bo_for_round(
-                session, tournament_id=tournament.id, round_no=round_no
+                session,
+                tournament_id=tournament.id,
+                round_no=m.round_no,
+                rounds=rounds,
+                is_third_place=m.is_third_place,
             ),
             game_minutes=tournament.game_minutes,
             appeal_minutes=tournament.appeal_minutes,
@@ -1998,9 +2026,9 @@ def _reschedule_window(
         floor += timedelta(minutes=1)
     now = floor + checkin_rules.CHECK_IN_LEAD
     next_match_at = min(next_times) if next_times else None
-    own_min_gap = min_gap(match.round_no)
+    own_min_gap = min_gap(match)
     feeder_times = [m.scheduled_at for m in feeders]
-    feeder_min_gap = max((min_gap(m.round_no) for m in feeders), default=0)
+    feeder_min_gap = max((min_gap(m) for m in feeders), default=0)
     window = schedule_rules.reschedule_window(
         now=now,
         next_match_at=next_match_at,

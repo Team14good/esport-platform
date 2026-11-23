@@ -27,6 +27,9 @@ import {
 } from "@/features/tournaments/CancelTournamentButton"
 import {
   CAPACITY_WARNING_TEXT,
+  ROUND_BO_HINT,
+  ROUND_BO_NEED_CAPACITY_TEXT,
+  ROUND_BO_TOGGLE_TEXT,
   TOURNAMENT_CREATED_TEXT,
 } from "@/features/tournaments/CreateTournamentForm"
 import { PRIORITY_ENDED_TEXT } from "@/features/tournaments/OrganizerTournamentOverview"
@@ -119,6 +122,7 @@ const TOURNAMENT: TournamentRead = {
   game_minutes: 40,
   score_type: "rounds",
   rank_tiers: [],
+  round_bo: [],
 }
 const ONGOING: TournamentRead = {
   ...TOURNAMENT,
@@ -640,6 +644,7 @@ describe("S26 建立賽事", () => {
       forfeit_minutes: 15,
       appeal_minutes: 30,
       livestream_url: null,
+      round_bo: [],
     })
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(
@@ -674,6 +679,110 @@ describe("S26 建立賽事", () => {
       expect(fieldMessage("報名截止")).toBe("報名截止必須晚於現在"),
     )
     expect(screen.queryByRole("alert")).toBeNull()
+  })
+
+  it("分輪 BO：預設收合；展開後依名額列出輪次，決賽在最上；沒有名額時提示先輸入", async () => {
+    const user = userEvent.setup()
+    await openCreatePage()
+
+    const toggle = screen.getByRole("button", { name: ROUND_BO_TOGGLE_TEXT })
+    expect(toggle).toHaveAttribute("aria-expanded", "false")
+    expect(screen.queryByRole("combobox", { name: "決賽" })).toBeNull()
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute("aria-expanded", "true")
+    expect(screen.getByText(ROUND_BO_HINT)).toBeInTheDocument()
+    expect(screen.getByText(ROUND_BO_NEED_CAPACITY_TEXT)).toBeInTheDocument()
+
+    await chooseGame(user, "特戰英豪")
+    await setNumber(user, "名額", "16")
+    const panel = document.getElementById(
+      toggle.getAttribute("aria-controls") ?? "",
+    ) as HTMLElement
+    const rounds = [...panel.querySelectorAll("label")].map(
+      (label) => label.textContent,
+    )
+    expect(rounds).toEqual(["決賽", "4 強", "8 強", "16 強"])
+    expect(screen.getByRole("combobox", { name: "決賽" })).toHaveTextContent(
+      "沿用預設（BO3）",
+    )
+
+    // 名額改小：輪次跟著變少
+    await setNumber(user, "名額", "6")
+    expect(screen.queryByRole("combobox", { name: "16 強" })).toBeNull()
+    expect(screen.getByRole("combobox", { name: "8 強" })).toBeInTheDocument()
+
+    await user.click(toggle)
+    expect(screen.queryByRole("combobox", { name: "決賽" })).toBeNull()
+  })
+
+  it("分輪 BO：只送有設定的輪次；名額改小後超出的輪次不送", async () => {
+    const user = userEvent.setup()
+    const create = mockCreate()
+    mockRead({ ...TOURNAMENT, id: "t-new" })
+    await openCreatePage()
+    await fillValidForm(user, { capacity: "16" })
+
+    await user.click(screen.getByRole("button", { name: ROUND_BO_TOGGLE_TEXT }))
+    const choose = async (round: string, option: string) => {
+      await user.click(screen.getByRole("combobox", { name: round }))
+      await user.click(await screen.findByRole("option", { name: option }))
+    }
+    await choose("4 強", "BO3")
+    await choose("決賽", "BO5")
+    await choose("16 強", "BO7")
+    await choose("16 強", "沿用預設（BO3）")
+    await choose("8 強", "BO1")
+    // 名額 4 只有 2 輪：8 強的設定不送
+    await setNumber(user, "名額", "4")
+
+    await user.click(screen.getByRole("button", { name: "建立賽事" }))
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0][0].body.round_bo).toEqual([
+      { rounds_from_final: 0, bo: 5 },
+      { rounds_from_final: 1, bo: 3 },
+    ])
+  })
+
+  it("分輪 BO：伺服器 422 寫回分輪 BO 區塊並自動展開，不寫進預設 BO", async () => {
+    const user = userEvent.setup()
+    vi.spyOn(TournamentsService, "createTournament").mockRejectedValue(
+      httpError(422, {
+        detail: [
+          {
+            loc: ["body", "round_bo"],
+            msg: "BO 數只能是 1、3、5 或 7",
+            type: "bo_invalid",
+          },
+        ],
+      }),
+    )
+    await openCreatePage()
+    await fillValidForm(user)
+
+    await user.click(screen.getByRole("button", { name: "建立賽事" }))
+
+    const toggle = screen.getByRole("button", { name: ROUND_BO_TOGGLE_TEXT })
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-expanded", "true"))
+    const item = toggle.closest("[data-slot=form-item]") as HTMLElement
+    expect(item.querySelector("[data-slot=form-message]")?.textContent).toBe(
+      "BO 數只能是 1、3、5 或 7",
+    )
+    const boItem = screen
+      .getByRole("combobox", { name: "BO" })
+      .closest("[data-slot=form-item]") as HTMLElement
+    expect(boItem.querySelector("[data-slot=form-message]")).toBeNull()
+    expect(screen.queryByRole("alert")).toBeNull()
+
+    // 有錯誤時仍可收合；收合後 aria-controls 指向的區塊仍存在（隱藏）
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute("aria-expanded", "false")
+    const panel = document.getElementById(
+      toggle.getAttribute("aria-controls") ?? "",
+    )
+    expect(panel).not.toBeNull()
+    expect(panel).toHaveAttribute("hidden")
   })
 
   it("伺服器 422 後修正欄位再送出：呼叫第二次並導向 S27", async () => {
@@ -838,6 +947,59 @@ describe("S27 賽事總覽", () => {
       "href",
       "https://twitch.tv/ntu",
     )
+  })
+
+  it("有分輪 BO：列出有設定的輪次，其他輪次沿用預設；沒有設定時不顯示該列", async () => {
+    mockRead({
+      ...TOURNAMENT,
+      bo: 1,
+      round_bo: [
+        { rounds_from_final: 1, bo: 3 },
+        { rounds_from_final: 0, bo: 5 },
+      ],
+    })
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer/tournaments/t-1")
+
+    await screen.findByRole("heading", { name: "臺大秋季盃" })
+    const details = within(
+      screen.getByText("模式").closest("dl") as HTMLElement,
+    )
+    expect(details.getByText("分輪 BO").nextElementSibling?.textContent).toBe(
+      "決賽 BO5、4 強 BO3；其他輪次 BO1",
+    )
+    expect(details.getByText("BO").nextElementSibling?.textContent).toBe("BO1")
+  })
+
+  it("每一輪都有分輪設定：不顯示「其他輪次」", async () => {
+    mockRead({
+      ...TOURNAMENT,
+      capacity: 4,
+      bo: 1,
+      round_bo: [
+        { rounds_from_final: 0, bo: 5 },
+        { rounds_from_final: 1, bo: 3 },
+      ],
+    })
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer/tournaments/t-1")
+
+    await screen.findByRole("heading", { name: "臺大秋季盃" })
+    const details = within(
+      screen.getByText("模式").closest("dl") as HTMLElement,
+    )
+    const text = details.getByText("分輪 BO").nextElementSibling?.textContent
+    expect(text).toBe("決賽 BO5、4 強 BO3")
+    expect(text).not.toContain("其他輪次")
+  })
+
+  it("沒有設定分輪 BO：不顯示該列", async () => {
+    mockRead()
+    signInAs({ account: ORGANIZER })
+    renderApp("/organizer/tournaments/t-1")
+
+    await screen.findByRole("heading", { name: "臺大秋季盃" })
+    expect(screen.queryByText("分輪 BO")).toBeNull()
   })
 
   it("沒有直播連結時不顯示該列", async () => {

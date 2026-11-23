@@ -162,6 +162,19 @@ class Tournament(SQLModel, table=True):
     )
 
 
+class RoundSetting(SQLModel, table=True):
+    """分輪 BO（Story 2.3）：以「距決賽的輪數」儲存（決賽＝0、4 強＝1、8 強＝2…）。
+
+    沒有設定的輪次用 `game_snapshot["bo"]`；季軍賽沿用 4 強（距決賽 1）的設定。
+    """
+
+    __tablename__ = "round_setting"
+
+    tournament_id: uuid.UUID = Field(foreign_key="tournament.id", primary_key=True)
+    rounds_from_final: int = Field(primary_key=True)
+    bo: int
+
+
 class RefereeInvitation(SQLModel, table=True):
     """裁判邀請連結。S31 要能再次顯示目前的連結，所以 token 明文儲存（UNIQUE）。
 
@@ -328,6 +341,32 @@ class GameRead(BaseModel):
 # ---------------------------------------------------------------- 賽事
 
 
+class RoundBo(BaseModel):
+    """一輪的 BO：`rounds_from_final` 是距決賽的輪數（決賽＝0、4 強＝1、8 強＝2…）。"""
+
+    # 值的規則（BO 只能 1／3／5／7、輪次 ≥ 0、不重複）在 `_validate_round_bo` 對整個清單
+    # 檢查：錯誤的 loc 才會停在 `round_bo`，前端（以 loc 最後一段對應欄位）不會寫進預設 BO
+    rounds_from_final: Annotated[int, BeforeValidator(_require_int)]
+    bo: Annotated[int, BeforeValidator(_require_int)]
+
+
+def _validate_round_bo(items: list[RoundBo]) -> list[RoundBo]:
+    """BO 只能 1、3、5、7；輪次不能小於 0、不能重複。依距決賽的輪數排序。
+
+    輪次是否超出名額可能的輪數由 service 檢查（要對照名額）。
+    """
+    seen: set[int] = set()
+    for item in items:
+        if item.bo not in ALLOWED_BO:
+            raise PydanticCustomError("bo_invalid", "BO 數只能是 1、3、5 或 7")
+        if item.rounds_from_final < 0:
+            raise PydanticCustomError("round_bo_round_invalid", "輪次不能小於 0")
+        if item.rounds_from_final in seen:
+            raise PydanticCustomError("round_bo_duplicated", "同一輪不能設定兩次 BO")
+        seen.add(item.rounds_from_final)
+    return sorted(items, key=lambda item: item.rounds_from_final)
+
+
 def _optional_str(value: object) -> object:
     return value if value is None else _require_str(value)
 
@@ -410,6 +449,8 @@ class TournamentCreate(BaseModel):
     substitutes: SubstitutesField | None = None
     bo: BoField | None = None
     livestream_url: LivestreamUrlField = None
+    # 分輪 BO（2.3）：只列有設定的輪次，其他輪次用 `bo`
+    round_bo: Annotated[list[RoundBo], AfterValidator(_validate_round_bo)] = []
 
 
 class TournamentRead(BaseModel):
@@ -442,6 +483,8 @@ class TournamentRead(BaseModel):
     score_type: ScoreType
     # 段位對照表快照，積分由高到低
     rank_tiers: list[RankTierRead]
+    # 分輪 BO（2.3）：有設定的輪次，依距決賽的輪數由小到大；沒列出的輪次用 `bo`
+    round_bo: list[RoundBo]
 
 
 class PublicTournament(BaseModel):
