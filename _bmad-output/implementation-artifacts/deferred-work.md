@@ -216,9 +216,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
   summary: （中）自訂模式抽籤後退賽／取消資格的遞補沒有做：registration `backfill_drawn_from_waitlist` 對非 `campus` 回 `None`，自訂賽事一律走「沒有候補」（退賽對手輪空、取消資格判對手勝）。
   evidence: Story 4.5 Decisions 第 2 項（2026-11-22 黃鉅燊核准）。自訂模式的候補怎麼產生由 C 的 3.10 決定，目前 `create_tournament` 一律存 `campus`、無法端對端驗證。修法：3.10 在 `backfill_drawn_from_waitlist` 同一個函式內（依 AD-20 經 `allocation.py` 的策略）補「最早送出的候補遞補、不受每校 2 隊上限」，並補 epics 4.5「自訂模式」那條 AC 的測試。
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
-  summary: （低）4.2 截止時正取不足、`auto_draw` 寫了 `AutoDrawSkip` 後，主辦方在「報名截止」用 3.7 的 `raise_capacity` 讓候補遞補到 2 隊以上，同一個 `registration_end` 不會再自動抽籤（主辦方仍可手動抽籤）。
-  evidence: Story 4.5 Decisions 第 8 項（2026-11-22 黃鉅燊核准不在 4.5 做）。修法：competition `auto_draw` 鎖內查到略過紀錄時，若目前正取 ≥2 且大於 `skip.accepted_teams` 就照常抽籤（`auto_draw_due` 的不加鎖預先排除也要同樣放寬），補「略過後提高名額再自動抽籤」與「略過後正取仍不足不重複發事件」的測試。
 ## Deferred from: spec-3-11-roster-changes-and-disband-team.md（#110 組員審查，2026-11-23）
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`

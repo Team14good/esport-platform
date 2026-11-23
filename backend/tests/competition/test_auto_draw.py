@@ -230,6 +230,80 @@ def test_new_registration_end_is_tried_again(
     assert _status(session, tournament) == S.PUBLISHED
 
 
+def test_drawn_after_skip_when_accepted_reaches_two(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    tournament = tournament_in(session, S.CLOSED)
+    fake_registration.set_team_count(1)
+    assert service.auto_draw(session, tournament_id=tournament.id) == "not_enough_teams"
+    # 提高名額讓候補遞補到 2 隊
+    teams = fake_registration.set_team_count(2)
+
+    assert service.auto_draw(session, tournament_id=tournament.id) == "drawn"
+
+    assert _status(session, tournament) == S.PUBLISHED
+    assert _has_bracket(session, tournament)
+    assert len(fake_registration.drawn) == 1
+    assert sorted(fake_registration.drawn[0][1]) == sorted(teams)
+    assert len(_events(session, tournament, "BracketDrawn")) == 1
+    # 沒有第二則「正取不足」，既有略過紀錄與操作紀錄不變
+    assert len(_events(session, tournament, "AutoDrawSkipped")) == 1
+    assert len(_logs(session, tournament, "bracket.auto_draw_skipped")) == 1
+    assert _skips(session, tournament) == 1
+    drawn_logs = _logs(session, tournament, "bracket.drawn")
+    assert [log.actor_id for log in drawn_logs] == [None]
+
+
+@pytest.mark.parametrize("later_count", [0, 1])
+def test_still_not_enough_after_skip_does_nothing(
+    session: Session, fake_registration: FakeRegistration, later_count: int
+) -> None:
+    tournament = tournament_in(session, S.CLOSED)
+    fake_registration.set_team_count(1)
+    service.auto_draw(session, tournament_id=tournament.id)
+    fake_registration.set_team_count(later_count)
+    before = _snapshot(session, tournament)
+
+    assert service.auto_draw(session, tournament_id=tournament.id) == "not_due"
+
+    assert _snapshot(session, tournament) == before
+    assert fake_registration.drawn == []
+
+
+def test_manual_draw_after_skip_then_auto_draw_does_nothing(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    organizer = make_account(session, organizer=True)
+    tournament = tournament_in(session, S.CLOSED, organizer=organizer)
+    fake_registration.set_team_count(1)
+    service.auto_draw(session, tournament_id=tournament.id)
+    fake_registration.set_team_count(2)
+    service.draw(session, tournament_id=tournament.id, actor_id=organizer.id)
+    before = _snapshot(session, tournament)
+
+    assert service.auto_draw(session, tournament_id=tournament.id) == "not_due"
+
+    assert _snapshot(session, tournament) == before
+    assert len(_events(session, tournament, "BracketDrawn")) == 1
+
+
+def test_start_passed_after_skip_is_not_drawn(
+    session: Session,
+    fake_registration: FakeRegistration,
+    frozen_clock: FrozenClockLike,
+) -> None:
+    tournament = tournament_in(session, S.CLOSED)
+    fake_registration.set_team_count(1)
+    service.auto_draw(session, tournament_id=tournament.id)
+    fake_registration.set_team_count(2)
+    frozen_clock.set(tournament.start_at)
+    before = _snapshot(session, tournament)
+
+    assert service.auto_draw(session, tournament_id=tournament.id) == "not_due"
+
+    assert _snapshot(session, tournament) == before
+
+
 # ---------------------------------------------------------------- 不是候選
 
 
