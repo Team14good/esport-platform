@@ -10,6 +10,7 @@ from sqlmodel import Session
 
 from app.modules.competition import service
 from app.modules.competition.models import Match, MatchStatus
+from app.modules.tournaments import service as tournaments_service
 from app.modules.tournaments.models import TournamentStatus
 from tests.competition.conftest import (
     FakeRegistration,
@@ -44,6 +45,7 @@ DETAIL_KEYS = {
     "wins_b",
     # PublicMatchDetail 新增
     "tournament",
+    "tournament_status",
     "game_name",
     "best_of",
     "score_type",
@@ -283,6 +285,75 @@ def test_appeal_deadline_only_in_appeal_states(
 
         assert data["appeal_deadline"] == want_deadline, status
         assert data["appeal_started_at"] == want_start, status
+
+
+def _cancel(session: Session, tournament_id: uuid.UUID) -> None:
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=tournament_id
+    )
+    tournaments_service.cancel_tournament(
+        session, tournament_id=tournament_id, actor_id=tournament.organizer_id
+    )
+    session.commit()
+
+
+def test_cancelled_tournament_hides_appeal_deadline(
+    client: TestClient, session: Session, fake_registration: FakeRegistration
+) -> None:
+    tournament_id, ids = _drawn(session, fake_registration)
+    row = session.get(Match, ids["M1"])
+    assert row is not None
+    row.appeal_deadline = datetime(2026, 10, 26, 12, 30, tzinfo=UTC)
+    session.add(row)
+    session.commit()
+    for status in (S.APPEAL_WINDOW, S.APPEALED):
+        row.status = status
+        session.add(row)
+        session.commit()
+        assert _get(client, tournament_id, ids["M1"])["appeal_deadline"] is not None
+
+    _cancel(session, tournament_id)
+
+    for status in (S.APPEAL_WINDOW, S.APPEALED):
+        row.status = status
+        session.add(row)
+        session.commit()
+        data = _get(client, tournament_id, ids["M1"])
+        assert data["appeal_deadline"] is None, status
+        assert data["appeal_started_at"] is None, status
+        assert data["tournament_status"] == "cancelled"
+        assert data["status"] == status.value
+
+
+def test_cancelled_tournament_hides_forfeit_deadline(
+    client: TestClient, session: Session, fake_registration: FakeRegistration
+) -> None:
+    tournament_id, ids = _drawn(session, fake_registration)
+    session.commit()
+    assert _get(client, tournament_id, ids["M1"])["forfeit_deadline"] is not None
+
+    _cancel(session, tournament_id)
+
+    data = _get(client, tournament_id, ids["M1"])
+    assert data["forfeit_deadline"] is None
+    assert data["status"] == "scheduled"
+
+
+def test_uncancelled_tournament_keeps_deadlines(
+    client: TestClient, session: Session, fake_registration: FakeRegistration
+) -> None:
+    tournament_id, ids = _drawn(session, fake_registration)
+    row = session.get(Match, ids["M1"])
+    assert row is not None
+    row.status = S.APPEAL_WINDOW
+    row.appeal_deadline = datetime(2026, 10, 26, 12, 30, tzinfo=UTC)
+    session.add(row)
+    session.commit()
+
+    data = _get(client, tournament_id, ids["M1"])
+
+    assert data["appeal_deadline"] == "2026-10-26T12:30:00Z"
+    assert data["tournament_status"] == "published"
 
 
 def test_updated_at_follows_same_round_changes(
