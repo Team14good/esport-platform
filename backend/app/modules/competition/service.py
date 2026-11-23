@@ -527,15 +527,17 @@ def auto_draw_due(session: Session) -> bool:
     下一個候選，不讓它卡住之後的賽事。
 
     已判定正取不足、且正取仍不足 2 隊的賽事先以不加鎖的讀取排除，不必每一輪都鎖住它們
-    （鎖內仍會再查一次）；正取補足後就不再排除，會照常抽籤。預先排除也在 try 內，
-    查詢拋錯只略過這一場。
+    （鎖內仍會再查一次）；正取補足後就不再排除，會照常抽籤。預先排除與抽籤在同一個
+    savepoint 內，拋錯（含 SQL 錯誤）只回滾並略過這一場。
     """
     for tournament_id in tournaments_service.list_closed_tournament_ids(session):
+        outcome: AutoDrawOutcome
         try:
-            if _skipped_and_still_short(session, tournament_id):
-                continue
             with session.begin_nested():
-                outcome = auto_draw(session, tournament_id=tournament_id)
+                if _skipped_and_still_short(session, tournament_id):
+                    outcome = "not_due"
+                else:
+                    outcome = auto_draw(session, tournament_id=tournament_id)
         except Exception:
             logger.exception(
                 "Tournament %s failed to auto draw; skipped", tournament_id
