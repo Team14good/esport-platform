@@ -2603,7 +2603,9 @@ def disqualify(
     disputes `resolve_report` 屬實時呼叫；規則與對手未定時拒絕的情況見 `disqualification.py`。
     先 `lock_tournament`，再依 id 遞增鎖住對戰表的全部場次（AD-6），判斷完成後才寫入。
     報名一律改為取消資格（registration `disqualify_registration`，操作者為 `actor_id`）；
-    抽籤前只改報名狀態，不做遞補。判對手獲勝以 `disqualified` 確認並沿用 `advance`
+    抽籤前 competition 只改報名狀態、不動場次，`replacement_team_id` 為 None。自訂賽事
+    （3.10）抽籤前取消正取隊伍時，registration 會在同一交易由最早送出的候補遞補並發
+    `RegistrationBackfilled`，遞補的隊伍要從該事件取得。判對手獲勝以 `disqualified` 確認並沿用 `advance`
     晉級；頂替後對該場呼叫 `unassign_referee_if_member`，兩隊湊齊且待開打時
     `start_forfeit_clock`。每個被改動的場次寫操作紀錄（操作者為 `actor_id`；
     隨後晉級推進的變更操作者為系統）。
