@@ -289,6 +289,11 @@ describe("S34 操作紀錄：差異計算與格式", () => {
   it("動作對照表；未知代碼與原型鏈上的名稱顯示原文", () => {
     expect(auditActionLabel("tournament.created")).toBe("建立賽事")
     expect(auditActionLabel("tournament.status_changed")).toBe("賽事狀態變更")
+    // Story 3.11 的隊員異動
+    expect(auditActionLabel("team.member_removed")).toBe("移除隊員")
+    expect(auditActionLabel("team.captain_transferred")).toBe("轉讓隊長")
+    expect(auditActionLabel("team.member_left")).toBe("隊員退出隊伍")
+    expect(auditActionLabel("team.disbanded")).toBe("解散隊伍")
     expect(auditActionLabel("unknown.action")).toBe("unknown.action")
     expect(auditActionLabel("toString")).toBe("toString")
   })

@@ -297,6 +297,40 @@ describe("S29 報名清單：列表", () => {
       await screen.findByRole("heading", { name: FORBIDDEN_FALLBACK_MESSAGE }),
     ).toBeInTheDocument()
   })
+
+  it("已解散的隊伍（Story 3.11）：隊名下列出原隊員，沒有「段位截圖」", async () => {
+    mockList([
+      registration({
+        status: "withdrawn",
+        rejectable: false,
+        disbanded: true,
+        members: [
+          memberOf("acc-1", "阿哲", {
+            role: "captain",
+            game_account_id: null,
+            rank_tier: null,
+            has_rank_screenshot: false,
+            rank_screenshot_version: null,
+          }),
+          memberOf("acc-2", "小芸", {
+            game_account_id: null,
+            rank_tier: null,
+            has_rank_screenshot: false,
+            rank_screenshot_version: null,
+          }),
+        ],
+      }),
+    ])
+    open()
+
+    const row = await firstRow()
+    expect(within(row).getByText("撤回")).toBeInTheDocument()
+    expect(
+      within(row).getByText("已解散・原隊員：阿哲（隊長）、小芸"),
+    ).toBeInTheDocument()
+    expect(within(row).queryByRole("button", { name: "段位截圖" })).toBeNull()
+    expect(within(row).queryByRole("button", { name: "退回報名" })).toBeNull()
+  })
 })
 
 describe("S29 報名清單：分頁", () => {

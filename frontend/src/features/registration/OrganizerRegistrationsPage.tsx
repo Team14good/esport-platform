@@ -71,6 +71,16 @@ function StatusCell({ row }: { row: OrganizerRegistration }) {
   )
 }
 
+/** 解散的隊伍（Story 3.11）在隊名下列出原隊員：「已解散・原隊員：阿哲（隊長）、小芸」。 */
+export function disbandedMembersText(row: OrganizerRegistration): string {
+  const names = row.members.map((member) =>
+    member.role === "captain"
+      ? `${member.display_name}（隊長）`
+      : member.display_name,
+  )
+  return `已解散・原隊員：${names.join("、")}`
+}
+
 function buildColumns(
   onViewScreenshots: (row: OrganizerRegistration) => void,
   onReject: (row: OrganizerRegistration) => void,
@@ -79,7 +89,19 @@ function buildColumns(
     {
       key: "team",
       header: "隊伍",
-      cell: (row) => <span className="break-words">{row.team_name}</span>,
+      cell: (row) => (
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="break-words">{row.team_name}</span>
+          {row.disbanded && (
+            <span
+              data-slot="disbanded-members"
+              className="break-words text-caption text-muted-foreground"
+            >
+              {disbandedMembersText(row)}
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       key: "status",
@@ -107,13 +129,16 @@ function buildColumns(
       header: "操作",
       cell: (row) => (
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onViewScreenshots(row)}
-          >
-            {RANK_SCREENSHOT_TEXT}
-          </Button>
+          {/* 解散的隊伍（Story 3.11）隊員列已刪、截圖檔已刪，不顯示截圖檢視器 */}
+          {!row.disbanded && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onViewScreenshots(row)}
+            >
+              {RANK_SCREENSHOT_TEXT}
+            </Button>
+          )}
           {row.rejectable && (
             <Button
               variant="outline"

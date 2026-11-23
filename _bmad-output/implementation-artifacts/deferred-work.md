@@ -210,6 +210,14 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
   summary: （中）一般通知事件之間仍沒有重試上限：某則事件的 resolver 每次都拋非預期例外（程式錯誤、DataError）時，`dispatch_outbox` 每輪回滾、停在這則，之後的一般通知全部延後；驗證信與重設信已改為優先處理，不受影響。
   evidence: 2026-11-21 OG-Matcha 在 #100 的審查第 1 點；followup 只做了 token 事件優先。修法：`outbox_event` 加 `attempts`／`last_error`（需遷移，`core/events.py`），失敗時在獨立交易裡累加，超過上限標為 dead-letter 並寫 log；或改成略過時記錄到操作紀錄。
+## Deferred from: spec-3-11-roster-changes-and-disband-team.md (2026-11-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （低）3.7 撤回的隊伍隊員仍佔同賽事一隊：撤回後 `TeamMember` 列保留，`ALREADY_IN_TOURNAMENT` 與唯一鍵 (tournament_id, account_id) 讓隊員無法加入同賽事的其他隊伍；3.11 只處理名單鎖定前的異動（FR-41），撤回後的報名名單已鎖定，移除、退出、解散都回 409 `ROSTER_LOCKED`。
+  evidence: Story 3.11 Decisions。修法候選：撤回時比照解散把原隊員搬到 `disbanded_team_member`（或另一張保存表）並刪除隊員列；或 `_ensure_can_join` 與唯一鍵改為排除報名已撤回的隊伍（要改唯一鍵與遷移）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （中）既有通知規則在 worker 處理時才以 `_member_ids` 查隊員（`notifications/rules.py`）：主辦方退回後、worker 處理前隊長就移除隊員或解散，`RegistrationRejected`、`RegistrationAllocated`、`RegistrationBackfilled` 只寄給處理當下仍在隊上的人（解散則沒有人收到）。
+  evidence: Story 3.11 spec 審查第 3 點、Design Notes。修法候選：這些事件改帶發生當下的收件人帳號（違反 AD-8「事件只帶 id」，需要人決定），或規則在隊伍已解散時改查 `registration.service.list_disbanded_member_ids`（只補解散的情況，移除仍會少人）。
 
 ## Deferred from: spec-4-5-post-draw-withdrawal.md (2026-11-22)
 
@@ -219,3 +227,8 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
   summary: （低）4.2 截止時正取不足、`auto_draw` 寫了 `AutoDrawSkip` 後，主辦方在「報名截止」用 3.7 的 `raise_capacity` 讓候補遞補到 2 隊以上，同一個 `registration_end` 不會再自動抽籤（主辦方仍可手動抽籤）。
   evidence: Story 4.5 Decisions 第 8 項（2026-11-22 黃鉅燊核准不在 4.5 做）。修法：competition `auto_draw` 鎖內查到略過紀錄時，若目前正取 ≥2 且大於 `skip.accepted_teams` 就照常抽籤（`auto_draw_due` 的不加鎖預先排除也要同樣放寬），補「略過後提高名額再自動抽籤」與「略過後正取仍不足不重複發事件」的測試。
+## Deferred from: spec-3-11-roster-changes-and-disband-team.md（#110 組員審查，2026-11-23）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （低）S19 先顯示「可加入」、隊長在這之後解散隊伍，按加入時 `join_team` 回 409 `ROSTER_LOCKED`，畫面顯示「名單已鎖定」，重新整理後才變成「隊伍已解散」；行為正確，只是文字不一致。
+  evidence: 2026-11-23 OG-Matcha 在 #110 的審查第 2 點；Story 3.11 程式審查 R7（凍結矩陣「解散與加入同時」規定回 `ROSTER_LOCKED`）。修法候選：解散的隊伍加入時回專屬錯誤碼（例如 `TEAM_DISBANDED`，需改 spec 矩陣），或前端在加入得到 409 時重新取得邀請預覽。

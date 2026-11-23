@@ -172,12 +172,18 @@ import type {
   registrationCreateTeamData,
   registrationCreateTeamErrors,
   registrationCreateTeamResponses,
+  registrationDisbandTeamData,
+  registrationDisbandTeamErrors,
+  registrationDisbandTeamResponses,
   registrationDownloadRankScreenshotData,
   registrationDownloadRankScreenshotErrors,
   registrationDownloadRankScreenshotResponses,
   registrationJoinTeamData,
   registrationJoinTeamErrors,
   registrationJoinTeamResponses,
+  registrationLeaveTeamData,
+  registrationLeaveTeamErrors,
+  registrationLeaveTeamResponses,
   registrationListAcceptedTeamsData,
   registrationListAcceptedTeamsErrors,
   registrationListAcceptedTeamsResponses,
@@ -198,9 +204,15 @@ import type {
   registrationRejectRegistrationData,
   registrationRejectRegistrationErrors,
   registrationRejectRegistrationResponses,
+  registrationRemoveTeamMemberData,
+  registrationRemoveTeamMemberErrors,
+  registrationRemoveTeamMemberResponses,
   registrationSubmitRegistrationData,
   registrationSubmitRegistrationErrors,
   registrationSubmitRegistrationResponses,
+  registrationTransferTeamCaptainData,
+  registrationTransferTeamCaptainErrors,
+  registrationTransferTeamCaptainResponses,
   registrationUpdateMyPlayerProfileData,
   registrationUpdateMyPlayerProfileErrors,
   registrationUpdateMyPlayerProfileResponses,
@@ -1243,6 +1255,98 @@ export class RegistrationService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/teams/{team_id}/withdrawal",
+      ...options,
+    })
+  }
+
+  /**
+   * Remove Team Member
+   *
+   * S17 隊長在名單鎖定前移除隊員：參賽資料一併刪除，被移除者收到通知。
+   *
+   * 賽事不是開放報名／報名截止、或名單已鎖定時 409 `ROSTER_LOCKED`；不是隊員 403
+   * `TEAM_MEMBER_REQUIRED`；不是隊長 403 `TEAM_CAPTAIN_REQUIRED`；移除自己 409
+   * `CAPTAIN_CANNOT_REMOVE_SELF`；對象不在本隊 404 `TEAM_MEMBER_NOT_FOUND`。
+   */
+  public static removeTeamMember<ThrowOnError extends boolean = true>(
+    options: Options<registrationRemoveTeamMemberData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationRemoveTeamMemberResponses,
+      registrationRemoveTeamMemberErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/members/{account_id}/removal",
+      ...options,
+    })
+  }
+
+  /**
+   * Transfer Team Captain
+   *
+   * S17 隊長在名單鎖定前把隊長轉讓給隊員：兩人角色互換，新隊長收到通知。
+   *
+   * 錯誤同移除隊員；轉給自己 409 `ALREADY_CAPTAIN`。
+   */
+  public static transferTeamCaptain<ThrowOnError extends boolean = true>(
+    options: Options<registrationTransferTeamCaptainData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationTransferTeamCaptainResponses,
+      registrationTransferTeamCaptainErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/captain-transfer",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Leave Team
+   *
+   * S17 隊員在名單鎖定前自行退出：參賽資料一併刪除，不發通知。
+   *
+   * 隊長要先轉讓才能退出（409 `CAPTAIN_MUST_TRANSFER`）；其他錯誤同移除隊員。
+   */
+  public static leaveTeam<ThrowOnError extends boolean = true>(
+    options: Options<registrationLeaveTeamData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationLeaveTeamResponses,
+      registrationLeaveTeamErrors,
+      ThrowOnError
+    >({
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/departure",
+      ...options,
+    })
+  }
+
+  /**
+   * Disband Team
+   *
+   * S17 隊長在名單鎖定前解散隊伍：報名改為撤回、所有隊員離隊，原隊員保留唯讀頁並收到通知。
+   *
+   * 錯誤同移除隊員。
+   */
+  public static disbandTeam<ThrowOnError extends boolean = true>(
+    options: Options<registrationDisbandTeamData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      registrationDisbandTeamResponses,
+      registrationDisbandTeamErrors,
+      ThrowOnError
+    >({
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/teams/{team_id}/disbandment",
       ...options,
     })
   }

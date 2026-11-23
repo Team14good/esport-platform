@@ -313,3 +313,55 @@ export async function waitForMatchStatus(
     .toBe(ids.size)
   return latest as unknown as PublicBracket
 }
+
+/** 帶隊員的隊伍（Story 3.11）：`members[0]` 是隊長，其餘依加入順序。 */
+export type FormingTeam = {
+  id: string
+  name: string
+  inviteToken: string
+  members: BulkMember[]
+}
+
+/**
+ * 組隊中的隊伍（Story 3.11）：`size` 人（第一位是隊長），走公開 API 註冊、驗證、建隊與加入；
+ * 不填參賽資料、不送出。回傳的隊員帳號給畫面登入用。
+ */
+export async function createFormingTeamWithMembers(
+  tournamentId: string,
+  size: number,
+  suffix: string,
+): Promise<FormingTeam> {
+  const accounts = Array.from({ length: size }, () => newTestAccount("roster"))
+  await inPool(accounts, 4, async (account) =>
+    call("POST", "/accounts", {
+      json: {
+        email: account.email,
+        password: account.password,
+        display_name: account.displayName,
+      },
+    }),
+  )
+  await markEmailsVerified(accounts.map((account) => account.email))
+  const members: BulkMember[] = []
+  for (const account of accounts) {
+    members.push({ account, token: await apiLogin(account) })
+  }
+  const [captain, ...others] = members
+  const name = `E2E 異動隊 ${suffix.slice(-6)}`
+  const team = await call<TeamDetail>(
+    "POST",
+    `/tournaments/${tournamentId}/teams`,
+    { token: captain.token, json: { name } },
+  )
+  for (const member of others) {
+    await call("POST", `/team-invites/${team.invite_token}/members`, {
+      token: member.token,
+    })
+  }
+  return {
+    id: team.id,
+    name,
+    inviteToken: team.invite_token ?? "",
+    members,
+  }
+}

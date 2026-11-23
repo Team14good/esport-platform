@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.modules.registration.models import (
+    DisbandedTeamMember,
     PriorityWindowSettlement,
     Registration,
     RegistrationStatus,
@@ -161,6 +162,80 @@ def add_member(session: Session, member: TeamMember) -> TeamMember:
             raise
         raise translated from exc
     return member
+
+
+def delete_member(session: Session, member: TeamMember) -> None:
+    """刪除隊員列（Story 3.11 移除、退出、解散）；參賽資料在同一列，一併刪除。"""
+    session.delete(member)
+    session.flush()
+
+
+def add_disbanded_members(
+    session: Session, members: Collection[DisbandedTeamMember]
+) -> None:
+    session.add_all(members)
+    session.flush()
+
+
+def list_disbanded_members(
+    session: Session, team_id: uuid.UUID
+) -> list[DisbandedTeamMember]:
+    """解散當下的原隊員，依原加入時間排列（同時間依 id）。"""
+    statement = (
+        select(DisbandedTeamMember)
+        .where(DisbandedTeamMember.team_id == team_id)
+        .order_by(col(DisbandedTeamMember.joined_at), col(DisbandedTeamMember.id))
+    )
+    return list(session.exec(statement))
+
+
+def get_disbanded_member(
+    session: Session, team_id: uuid.UUID, account_id: uuid.UUID
+) -> DisbandedTeamMember | None:
+    statement = (
+        select(DisbandedTeamMember)
+        .where(DisbandedTeamMember.team_id == team_id)
+        .where(DisbandedTeamMember.account_id == account_id)
+    )
+    return session.exec(statement).first()
+
+
+def is_disbanded(session: Session, team_id: uuid.UUID) -> bool:
+    """隊伍已解散：解散時至少寫入隊長一列。"""
+    statement = select(DisbandedTeamMember.id).where(
+        DisbandedTeamMember.team_id == team_id
+    )
+    return session.exec(statement.limit(1)).first() is not None
+
+
+def list_disbanded_of_account(
+    session: Session, account_id: uuid.UUID
+) -> list[DisbandedTeamMember]:
+    """帳號待過、後來被解散的隊伍（新加入的在前）。"""
+    statement = (
+        select(DisbandedTeamMember)
+        .where(DisbandedTeamMember.account_id == account_id)
+        .order_by(
+            col(DisbandedTeamMember.joined_at).desc(), col(DisbandedTeamMember.id)
+        )
+    )
+    return list(session.exec(statement))
+
+
+def list_disbanded_by_team_ids(
+    session: Session, team_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, list[DisbandedTeamMember]]:
+    """多支隊伍的解散名單一次查出；沒有解散的隊伍不出現在結果中。"""
+    members: dict[uuid.UUID, list[DisbandedTeamMember]] = {}
+    if not team_ids:
+        return members
+    for member in session.exec(
+        select(DisbandedTeamMember)
+        .where(col(DisbandedTeamMember.team_id).in_(list(team_ids)))
+        .order_by(col(DisbandedTeamMember.joined_at), col(DisbandedTeamMember.id))
+    ):
+        members.setdefault(member.team_id, []).append(member)
+    return members
 
 
 def add_registration(session: Session, registration: Registration) -> Registration:
