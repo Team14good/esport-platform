@@ -188,10 +188,6 @@
   evidence: Story 1.6 Decisions。修法：competition 在 `RefereeUnassigned` 加一個原因欄位（例如 `reason: "conflict" | "organizer"`，5.5 `unassign_referee_if_member` 發 `conflict`），notifications 的 `_referee_unassigned` 在 `conflict` 時另加主辦方一份草稿（link `/organizer/tournaments/{tid}/matches`）。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-6-cancel-tournament.md`
-  summary: 3.9 第 2 部分登錄 `TournamentCancelled` 收件規則前取消的賽事，事件已被 notifications 標為已處理（找不到規則只記 log），3.9 上線後不會補發通知；3.9 第 2 部分要決定是否補發這段期間已取消賽事的通知。
-  evidence: 2026-11-22 Story 2.6 審查（Edge Case Hunter、Blind Hunter），已對照 `notifications/service.py` `dispatch_event` 確認；使用者決定 2.6 不改程式，因為 3.9 合併前只有本機與示範環境會取消賽事。
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-6-cancel-tournament.md`
   summary: （未驗證，若為真屬 medium）賽事取消後，側欄的場次管理（S30）、裁判（S31）、申訴（S32）、檢舉（S33）頁可能仍顯示可操作的按鈕；確認對話框寫「賽事資訊改為唯讀」，2.6 的驗收條件只要求 S27 唯讀。
   evidence: 2026-11-22 Story 2.6 審查（Blind Hunter）。後端已確認裁判邀請（`ensure_accepting_referees`）與申訴處理（`disputes/service.py` 拒絕已取消）會擋下；改場次時間是否擋下未確認。要確認 competition 的改時間 API 對已取消賽事的處理，並決定各頁是否隱藏動作。
 ## Deferred from: spec-3-8-review-and-reject-registration.md (2026-11-22)
@@ -232,3 +228,8 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
   summary: （低）S19 先顯示「可加入」、隊長在這之後解散隊伍，按加入時 `join_team` 回 409 `ROSTER_LOCKED`，畫面顯示「名單已鎖定」，重新整理後才變成「隊伍已解散」；行為正確，只是文字不一致。
   evidence: 2026-11-23 OG-Matcha 在 #110 的審查第 2 點；Story 3.11 程式審查 R7（凍結矩陣「解散與加入同時」規定回 `ROSTER_LOCKED`）。修法候選：解散的隊伍加入時回專屬錯誤碼（例如 `TEAM_DISBANDED`，需改 spec 矩陣），或前端在加入得到 409 時重新取得邀請預覽。
+## Deferred from: spec-3-9-public-accepted-teams.md（#106 組員審查，2026-11-23）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-public-accepted-teams.md`
+  summary: （低）前端「能不能檢舉」的前置判斷（已登入、此賽事有四種狀態隊伍、是隊長、賽事未結束或取消）在 6.4 `ReportTeamEntry` 與 3.9 `AcceptedTeamReportAction` 的 `useReportableTeamsById` 各寫一份；之後改其中一邊的條件，另一邊要記得一起改。哪些隊伍可檢舉、是否已有處理中的檢舉由後端 `reportable-teams` 決定，兩邊共用，不受影響。
+  evidence: 2026-11-23 OG-Matcha 在 #106 的審查建議。抽成共用 hook 要改 C 的 `ReportTeamEntry.tsx`（CLAUDE.md：動到別人的模組只新增），所以 3.9 不動。修法：把 `useReportableTeamsById` 移到 `features/disputes/useReportableTeams.ts` 匯出，`ReportTeamEntry` 改用它（`eligible` 改成 Map 不為空），兩邊的 `REPORTER_STATUSES`、`ENDED_STATUSES` 只留一份；`report-team.test.tsx`、`accepted-teams.test.tsx` 應不需修改。
