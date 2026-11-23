@@ -21,6 +21,7 @@ from app.modules.tournaments.models import (
     RefereeRead,
     TournamentCreate,
     TournamentRead,
+    TournamentUpdate,
 )
 
 router = APIRouter(tags=["tournaments"])
@@ -119,6 +120,28 @@ def read_my_tournament(
     tournament = service.get_tournament(session, tournament_id=tournament_id)
     authz.ensure_tournament_owner(tournament, organizer.id)
     return tournament
+
+
+@router.patch("/organizer/tournaments/{tournament_id}")
+def update_my_tournament(
+    session: SessionDep,
+    organizer: Organizer,
+    tournament_id: uuid.UUID,
+    body: TournamentUpdate,
+) -> TournamentRead:
+    """修改自己的賽事設定（S28）；只帶要改的欄位，依賽事狀態限制可改的欄位。
+
+    不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；欄位不合法或抽籤前不能改的
+    欄位 422（指向欄位）；抽籤後改直播連結以外的欄位 409 `TOURNAMENT_SETTINGS_LOCKED`；
+    已結束或已取消 409 `TOURNAMENT_NOT_EDITABLE`。
+    """
+    tournament = service.lock_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, organizer.id)
+    updated = service.update_tournament(
+        session, tournament_id=tournament_id, actor_id=organizer.id, data=body
+    )
+    session.commit()
+    return updated
 
 
 @router.post("/organizer/tournaments/{tournament_id}/cancel")

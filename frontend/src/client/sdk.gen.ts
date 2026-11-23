@@ -254,6 +254,9 @@ import type {
   tournamentsUpdateGameData,
   tournamentsUpdateGameErrors,
   tournamentsUpdateGameResponses,
+  tournamentsUpdateMyTournamentData,
+  tournamentsUpdateMyTournamentErrors,
+  tournamentsUpdateMyTournamentResponses,
   utilsHealthCheckData,
   utilsHealthCheckResponses,
 } from "./types.gen"
@@ -911,6 +914,34 @@ export class TournamentsService {
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/organizer/tournaments/{tournament_id}",
       ...options,
+    })
+  }
+
+  /**
+   * Update My Tournament
+   *
+   * 修改自己的賽事設定（S28）；只帶要改的欄位，依賽事狀態限制可改的欄位。
+   *
+   * 不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；欄位不合法或抽籤前不能改的
+   * 欄位 422（指向欄位）；抽籤後改直播連結以外的欄位 409 `TOURNAMENT_SETTINGS_LOCKED`；
+   * 已結束或已取消 409 `TOURNAMENT_NOT_EDITABLE`。
+   */
+  public static updateMyTournament<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsUpdateMyTournamentData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).patch<
+      tournamentsUpdateMyTournamentResponses,
+      tournamentsUpdateMyTournamentErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 

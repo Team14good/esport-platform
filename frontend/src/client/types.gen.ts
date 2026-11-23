@@ -2871,6 +2871,78 @@ export type TournamentStatus =
   | "cancelled"
 
 /**
+ * TournamentUpdate
+ *
+ * 修改賽事（Story 2.5）：只帶要改的欄位，未帶的欄位不變。
+ *
+ * 欄位型別與下限沿用 `TournamentCreate`；`null` 視同未帶（`livestream_url` 例外：
+ * `null` 或空白代表移除直播連結）。依賽事狀態能改哪些欄位、日期順序與每輪間隔等
+ * 檢查由 service 進行，錯誤同樣是 422 並指向欄位。不接受賽事模式（3.10 才有自訂）。
+ */
+export type TournamentUpdate = {
+  /**
+   * Name
+   */
+  name?: string | null
+  /**
+   * Game Id
+   */
+  game_id?: string | null
+  /**
+   * Capacity
+   */
+  capacity?: number | null
+  /**
+   * Registration Start
+   */
+  registration_start?: string | null
+  /**
+   * Registration End
+   */
+  registration_end?: string | null
+  /**
+   * Priority Hours
+   */
+  priority_hours?: number | null
+  /**
+   * Start At
+   */
+  start_at?: string | null
+  /**
+   * Round Interval Minutes
+   */
+  round_interval_minutes?: number | null
+  /**
+   * Forfeit Minutes
+   */
+  forfeit_minutes?: number | null
+  /**
+   * Appeal Minutes
+   */
+  appeal_minutes?: number | null
+  /**
+   * Starters
+   */
+  starters?: number | null
+  /**
+   * Substitutes
+   */
+  substitutes?: number | null
+  /**
+   * Bo
+   */
+  bo?: number | null
+  /**
+   * Livestream Url
+   */
+  livestream_url?: string | null
+  /**
+   * Round Bo
+   */
+  round_bo?: Array<RoundBo> | null
+}
+
+/**
  * UnreadCount
  */
 export type UnreadCount = {
@@ -3667,6 +3739,38 @@ export type tournamentsReadMyTournamentResponses = {
 
 export type tournamentsReadMyTournamentResponse =
   tournamentsReadMyTournamentResponses[keyof tournamentsReadMyTournamentResponses]
+
+export type tournamentsUpdateMyTournamentData = {
+  body: TournamentUpdate
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}"
+}
+
+export type tournamentsUpdateMyTournamentErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsUpdateMyTournamentError =
+  tournamentsUpdateMyTournamentErrors[keyof tournamentsUpdateMyTournamentErrors]
+
+export type tournamentsUpdateMyTournamentResponses = {
+  /**
+   * Successful Response
+   */
+  200: TournamentRead
+}
+
+export type tournamentsUpdateMyTournamentResponse =
+  tournamentsUpdateMyTournamentResponses[keyof tournamentsUpdateMyTournamentResponses]
 
 export type tournamentsCancelMyTournamentData = {
   body?: never

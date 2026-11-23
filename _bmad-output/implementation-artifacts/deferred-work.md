@@ -219,3 +219,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
   summary: （低）4.2 截止時正取不足、`auto_draw` 寫了 `AutoDrawSkip` 後，主辦方在「報名截止」用 3.7 的 `raise_capacity` 讓候補遞補到 2 隊以上，同一個 `registration_end` 不會再自動抽籤（主辦方仍可手動抽籤）。
   evidence: Story 4.5 Decisions 第 8 項（2026-11-22 黃鉅燊核准不在 4.5 做）。修法：competition `auto_draw` 鎖內查到略過紀錄時，若目前正取 ≥2 且大於 `skip.accepted_teams` 就照常抽籤（`auto_draw_due` 的不加鎖預先排除也要同樣放寬），補「略過後提高名額再自動抽籤」與「略過後正取仍不足不重複發事件」的測試。
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-5-edit-tournament.md`
+  summary: （未驗證，若為真屬 medium）報名截止的賽事延長報名、轉回開放報名時，沒有處理截止時已發出的事件或已改變的狀態，也沒有通知已報名隊伍報名重新開放。
+  evidence: 2026-11-23 Story 2.5 審查（Blind Hunter）。2.5 的 AC 沒有要求通知；優先期結算（`priority_window_settlement`）已完成不重跑是預期行為。要確認 registration `close_registration` 有沒有發出在重新開放後會變成錯誤的事件，並決定是否通知隊伍。

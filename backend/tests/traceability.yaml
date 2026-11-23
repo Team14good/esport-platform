@@ -425,6 +425,10 @@ tournaments/test_transitions.py:
   layer: integration
   stories: ["2.2"]
   frs: [FR-7]
+tournaments/test_update_tournament.py:
+  layer: integration
+  stories: ["2.5"]
+  frs: [FR-9, FR-7]
 worker/test_auto_draw.py:
   layer: integration
   stories: ["4.2", "3.6"]
