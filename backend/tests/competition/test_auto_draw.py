@@ -13,6 +13,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
+from sqlalchemy import text
 from sqlmodel import Session, col, func, select
 
 from app.core import audit
@@ -409,6 +410,52 @@ def test_due_skips_a_failing_tournament_and_draws_the_next(
     assert count_matches(session, failing.id) == 0
     assert _events(session, failing, "BracketDrawn") == []
     assert _skips(session, failing) == 0
+    # 後面的賽事照常抽籤
+    assert _status(session, ok) == S.PUBLISHED
+    assert len(_events(session, ok, "BracketDrawn")) == 1
+
+
+def test_due_prefilter_sql_error_skips_only_that_tournament(
+    session: Session,
+    fake_registration: FakeRegistration,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failing = tournament_in(session, S.CLOSED)
+    ok = tournament_in(session, S.CLOSED)
+    # 讓 failing 排在前面（報名截止較早），並已有略過紀錄，預先排除才會查正取
+    row = session.get(Tournament, failing.id)
+    assert row is not None
+    row.registration_end = row.registration_end - timedelta(hours=1)
+    session.add(row)
+    session.add(
+        AutoDrawSkip(
+            tournament_id=failing.id,
+            registration_end=row.registration_end,
+            accepted_teams=1,
+            skipped_at=row.registration_end,
+        )
+    )
+    session.flush()
+    fake_registration.set_team_count(3)
+    original = fake_registration.list_accepted_teams
+
+    def _accepted(_session: Session, *, tournament_id: uuid.UUID) -> list[uuid.UUID]:
+        if tournament_id == failing.id:
+            # 真的 SQL 錯誤：沒有 savepoint 時外層交易會進入 aborted
+            _session.execute(text("SELECT 1 / 0"))
+            # 上一行一定拋錯；這行執行不到，只為了讓替身的回傳型別完整
+            return original(_session, tournament_id=tournament_id)[:1]
+        return original(_session, tournament_id=tournament_id)
+
+    monkeypatch.setattr(registration_port, "list_accepted_teams", _accepted)
+
+    _drain(session)
+
+    assert _status(session, failing) == S.CLOSED
+    assert not _has_bracket(session, failing)
+    # 只回滾那一場的 savepoint：之前寫入的略過紀錄還在，也沒有新事件
+    assert _skips(session, failing) == 1
+    assert _events(session, failing, "AutoDrawSkipped") == []
     # 後面的賽事照常抽籤
     assert _status(session, ok) == S.PUBLISHED
     assert len(_events(session, ok, "BracketDrawn")) == 1

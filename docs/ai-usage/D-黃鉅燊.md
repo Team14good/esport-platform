@@ -836,3 +836,15 @@
 - 問題與修正：(1) 這項 deferred 是 AI 在 4.5 spec 寫的，前提「提高名額讓候補遞補到 2 隊」沒有查證；審查子代理質疑測試的候補是人為寫入，主 session 追 `fill_from_waitlist`、`waitlist_order` 才確認截止時已補滿、剩下的候補都超過每校上限，這條路目前走不到，原本要加的通知句子會誤導主辦方，改請人重新決定；(2) 預先排除的跨模組查詢放在 try 外，拋錯會讓同一輪後面的賽事都不抽籤；(3) 「不鎖」的測試原本只看結果，拿掉預先排除也會過，改用 spy；(4) 契約文件沒跟著改；(5) 11 項審查發現中 4 項駁回，理由記在 spec 的 Review Triage Log
 - 成熟度：L4（規劃 → 實作 → 三層獨立審查 → 查證、測試與突變檢查，人在 checkpoint 與改決定時決策）
 - 證據：`_bmad-output/implementation-artifacts/spec-deferred-auto-draw-after-skip.md`、本 PR 的 diff
+
+### 2026-11-23｜程式＋測試／修 bug（審查建議）｜自動抽籤的預先排除放進 savepoint
+
+- Story／範圍：#113 審查時 A 的行內建議；competition `auto_draw_due`
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（oneshot）；1 個只看改動的審查子代理（Blind Hunter）
+- 怎麼用：AI 依 A 的建議把預先排除移進每個候選的 savepoint，寫一個會拋真 SQL 錯誤的測試，審查後逐條判定
+- AI 產出：`auto_draw_due` 調整與 docstring；新測試 `test_due_prefilter_sql_error_skips_only_that_tournament`；deferred-work 新增 1 項
+- 人做了什麼：A 在 #113 指出 docstring「查詢拋錯只略過這一場」對 SQL 錯誤不成立；擁有者指示「修」
+- 驗證：自動抽籤 3 個測試檔 34 passed；ruff、mypy 通過；突變檢查：換回修正前的 `service.py`，新測試失敗，換回後通過；後端全套見本 PR 的 CI
+- 問題與修正：(1) #113 的 AI 只把預先排除放進 try、沒放進 savepoint，以為例外都能就地吞掉，沒想到 PostgreSQL 的 SQL 錯誤會讓整個外層交易失效，由組員審查發現；(2) AI 做突變檢查時在容器內執行 `git show ... > service.py`，容器沒有 git，重新導向把檔案清空，靠事先備份還原（本機檔案未受影響）；(3) 審查 10 項中 3 項修正、1 項延後（`auto_confirm_expired` 同類問題，未驗證）、5 項駁回、1 項為本紀錄
+- 成熟度：L3（AI 依組員建議修正並驗證，人決定要不要做）
+- 證據：`_bmad-output/implementation-artifacts/spec-auto-draw-prefilter-savepoint.md`、本 PR 的 diff
