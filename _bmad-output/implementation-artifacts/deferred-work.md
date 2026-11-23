@@ -211,18 +211,12 @@
   summary: （中）既有通知規則在 worker 處理時才以 `_member_ids` 查隊員（`notifications/rules.py`）：主辦方退回後、worker 處理前隊長就移除隊員或解散，`RegistrationRejected`、`RegistrationAllocated`、`RegistrationBackfilled` 只寄給處理當下仍在隊上的人（解散則沒有人收到）。
   evidence: Story 3.11 spec 審查第 3 點、Design Notes。修法候選：這些事件改帶發生當下的收件人帳號（違反 AD-8「事件只帶 id」，需要人決定），或規則在隊伍已解散時改查 `registration.service.list_disbanded_member_ids`（只補解散的情況，移除仍會少人）。
 
-## Deferred from: spec-4-5-post-draw-withdrawal.md (2026-11-22)
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
-  summary: （中）自訂模式抽籤後退賽／取消資格的遞補沒有做：registration `backfill_drawn_from_waitlist` 對非 `campus` 回 `None`，自訂賽事一律走「沒有候補」（退賽對手輪空、取消資格判對手勝）。
-  evidence: Story 4.5 Decisions 第 2 項（2026-11-22 黃鉅燊核准）。自訂模式的候補怎麼產生由 C 的 3.10 決定，目前 `create_tournament` 一律存 `campus`、無法端對端驗證。修法：3.10 在 `backfill_drawn_from_waitlist` 同一個函式內（依 AD-20 經 `allocation.py` 的策略）補「最早送出的候補遞補、不受每校 2 隊上限」，並補 epics 4.5「自訂模式」那條 AC 的測試。
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
-  summary: （低）4.2 截止時正取不足、`auto_draw` 寫了 `AutoDrawSkip` 後，主辦方在「報名截止」用 3.7 的 `raise_capacity` 讓候補遞補到 2 隊以上，同一個 `registration_end` 不會再自動抽籤（主辦方仍可手動抽籤）。
-  evidence: Story 4.5 Decisions 第 8 項（2026-11-22 黃鉅燊核准不在 4.5 做）。修法：competition `auto_draw` 鎖內查到略過紀錄時，若目前正取 ≥2 且大於 `skip.accepted_teams` 就照常抽籤（`auto_draw_due` 的不加鎖預先排除也要同樣放寬），補「略過後提高名額再自動抽籤」與「略過後正取仍不足不重複發事件」的測試。
+## Deferred from: spec-2-5-edit-tournament.md (2026-11-23)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-5-edit-tournament.md`
   summary: （未驗證，若為真屬 medium）報名截止的賽事延長報名、轉回開放報名時，沒有處理截止時已發出的事件或已改變的狀態，也沒有通知已報名隊伍報名重新開放。
   evidence: 2026-11-23 Story 2.5 審查（Blind Hunter）。2.5 的 AC 沒有要求通知；優先期結算（`priority_window_settlement`）已完成不重跑是預期行為。要確認 registration `close_registration` 有沒有發出在重新開放後會變成錯誤的事件，並決定是否通知隊伍。
+
 ## Deferred from: spec-3-11-roster-changes-and-disband-team.md（#110 組員審查，2026-11-23）
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
