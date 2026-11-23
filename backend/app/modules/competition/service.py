@@ -1127,7 +1127,8 @@ def auto_confirm_expired(session: Session) -> bool:
 
     結果資料不自洽（例如完賽卻沒有勝隊，`progression` 拋 ValueError）的場次，退回
     savepoint、記錄日誌後排除，改處理下一場；否則它每一輪都會排在最前面、rollback，
-    讓所有賽事後面的場次都無法確認。
+    讓所有賽事後面的場次都無法確認。確認時拋其他例外的場次也同樣處理（本次呼叫排除，
+    下一次呼叫會再試）。
     """
     now = clock.now()
     ended_tournaments: set[uuid.UUID] = set()
@@ -1175,6 +1176,12 @@ def auto_confirm_expired(session: Session) -> bool:
             logger.exception(
                 "Match %s has an inconsistent result; auto-confirm skipped", match_id
             )
+            broken_matches.add(match_id)
+            continue
+        except Exception:
+            # 非預期的錯誤（例如 registration 暫時無法使用）也只略過這一場，
+            # 不讓它每一輪都排在最前面、擋住其他期滿的場次（同 auto_draw_due）
+            logger.exception("Match %s failed to auto-confirm; skipped", match_id)
             broken_matches.add(match_id)
             continue
         return True

@@ -848,3 +848,15 @@
 - 問題與修正：(1) #113 的 AI 只把預先排除放進 try、沒放進 savepoint，以為例外都能就地吞掉，沒想到 PostgreSQL 的 SQL 錯誤會讓整個外層交易失效，由組員審查發現；(2) AI 做突變檢查時在容器內執行 `git show ... > service.py`，容器沒有 git，重新導向把檔案清空，靠事先備份還原（本機檔案未受影響）；(3) 審查 10 項中 3 項修正、1 項延後（`auto_confirm_expired` 同類問題，未驗證）、5 項駁回、1 項為本紀錄
 - 成熟度：L3（AI 依組員建議修正並驗證，人決定要不要做）
 - 證據：`_bmad-output/implementation-artifacts/spec-auto-draw-prefilter-savepoint.md`、本 PR 的 diff
+
+### 2026-11-23｜程式＋測試／修 bug（防禦性）｜申訴期滿自動確認遇到非預期例外只略過那一場
+
+- Story／範圍：deferred-work「auto_confirm_expired 只攔 ValueError」（未驗證）；competition `auto_confirm_expired`（5.5，D 寫的）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（oneshot）；1 個只看改動的審查子代理（Blind Hunter）
+- 怎麼用：AI 先查證能不能發生（讀 `confirm_match`、`advance` 的例外來源），結論是資料一致時走不到，依擁有者「自動照建議」的授權做防禦性修正並補測試
+- AI 產出：`except Exception` 分支與 docstring；新測試 `test_unexpected_error_does_not_block_other_expired_matches`；刪除 deferred 項目
+- 人做了什麼：授權之後的決定都自動採建議
+- 驗證：`test_confirm_advance.py`、worker `test_confirm_expired_appeals.py` 50 passed；mypy 通過；突變檢查：換回修正前的 `service.py`，新測試失敗，換回後通過；後端全套見本 PR 的 CI
+- 問題與修正：(1) AI 第一版測試用 `BusinessError(..., status_code=503)` 模擬 registration 無法使用，但 `BusinessError` 只接受 4xx，建構時就拋 `ValueError`，測試走的是舊分支，執行時斷言失敗才發現，改用實際的 `RegistrationUnavailableError`；(2) 第一次用 shell heredoc 一次寫 spec、程式與測試，引號沒配對而失敗，改成先寫成 Python 腳本再執行；(3) 審查子代理說確認流程不會呼叫 registration，查 `advance` → `_unassign_if_member` → `registration_port.is_member` 後判定為誤判；10 項中 2 項修正、8 項駁回或判定不成立
+- 成熟度：L3（AI 查證、修正、驗證，人只授權）
+- 證據：`_bmad-output/implementation-artifacts/spec-auto-confirm-catch-all.md`、本 PR 的 diff
