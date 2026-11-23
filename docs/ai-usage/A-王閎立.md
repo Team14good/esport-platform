@@ -1147,3 +1147,51 @@
 - 問題與修正：主流程第一次跑全套後端測試時，同時執行 `docker compose --profile e2e run`，重建了 backend 容器，測試跑到 97% 中斷；判斷是執行方式錯誤，不碰 compose 重跑一次全過。2.8 的紀錄已記過同樣的教訓，這次仍重犯
 - 成熟度：L4（依矩陣產生測試，主流程逐列稽核並跑 e2e）
 - 證據：commit 24d43b5；上列測試檔
+
+### 2026-11-23｜程式／程式生成｜Story 3.9 第 2 部分：取消賽事通知的收件規則
+
+- Story／範圍：3.9 第 2 部分（PR #112，分支 `story/3-9-followup`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：flow-bot followup 任務；2.6 合併後，依 spec〈第 2 部分〉在 `notifications/rules.py` 接上 `TournamentCancelled`
+- AI 產出：`rules.py` 新增 `_tournament_cancelled` 與 `_CANCEL_NOTIFIED_STATUSES`（pending、accepted、waitlisted、drawn），登錄 `TournamentCancelled`，更新檔頭註解；spec Decisions 新增三項（收件人、文案、不補發 3.9 上線前已取消賽事的通知），刪除 deferred-work 中 2.6 留下的補發項目
+- 人做了什麼：無人值守執行；收件人狀態集合與不補發的決定列在 PR「給審查者」，由 B 確認是否符合 2.6 對話框的本意
+- 驗證：後端 `scripts/test.sh` 2810 passed、`scripts/lint.sh` 通過；沒有 API、遷移與前端變動
+- 問題與修正：AI 用 Python 修改 spec 時，要取代的字串漏了任務列表的 `[x] ` 前綴，比對失敗；因為腳本先斷言再寫檔，檔案沒有被寫到一半，修正字串後重跑
+- 成熟度：L3（AI 依 spec 預先寫好的接點產出，決策等組員審查）
+- 證據：commit 82308de；`backend/app/modules/notifications/rules.py`
+
+### 2026-11-23｜測試／測試個案產生｜Story 3.9 第 2 部分：取消賽事通知測試
+
+- Story／範圍：3.9 第 2 部分（PR #112）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：以真的取消流程（API 與 `cancel_tournament`）產生 outbox 事件，交給 `dispatch_event`，檢查 Notification 與 EmailDelivery
+- AI 產出：`backend/tests/notifications/test_tournament_cancelled.py` 9 例：經 API 取消時三種狀態的隊伍都收到站內通知與 Email、五種不通知的狀態（參數化）、抽籤後取消、只有組隊中的隊伍時沒有收件人、賽事不存在時略過；`traceability.yaml` 加一列（3.9、FR-10）
+- 人做了什麼：無人值守執行
+- 驗證：`tests/notifications/` 加 traceability 共 98 passed；全套 2810 passed
+- 問題與修正：無
+- 成熟度：L3（依 spec 的驗收條件產生測試並全數執行）
+- 證據：commit 82308de
+
+### 2026-11-23｜測試／程式審查｜Story 3.9 #106 審查建議的處理
+
+- Story／範圍：3.9（原 PR #106，處理在 PR #112）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：收集 #106 上組員的審查意見，先在目前的 main 驗證是否成立，再決定修正、延後或不採用
+- AI 產出：D 指出 `useReportableTeamsById` 重寫了 6.4 的查詢鏈。AI 對照兩個檔案確認前端前置條件確實重複，但哪些隊伍可檢舉由後端 `reportable-teams` 決定、兩邊共用；抽出共用 hook 要改 C 的檔案，所以寫進 deferred-work 並附修法，在 #106 回覆
+- 人做了什麼：D 提出建議；無人值守執行
+- 驗證：讀 `ReportTeamEntry.tsx` 與 `AcceptedTeamReportAction.tsx` 對照，確認重複的範圍
+- 問題與修正：第 1 部分的 AI 為了遵守「不改別人的檔案」而複製了一份查詢鏈，留下日後兩邊不同步的風險，是 D 人工審查指出
+- 成熟度：L4（人審查提出問題，AI 驗證並依專案規則決定處理方式）
+- 證據：PR #106 的審查；`deferred-work.md` 新增項目
+
+### 2026-11-22～23｜測試／程式審查｜審查 D 的 PR #109、#111
+
+- Story／範圍：#109（Story 4.5 抽籤後退賽與候補遞補）、#111（賽事取消後的公開場次頁不再顯示倒數）
+- 工具：Claude Code（Opus 5.5），flow-bot review_others，GitHub Actions 執行
+- 怎麼用：flow-bot 審查組員的 PR，由 workflow 決定是否核准
+- AI 產出：兩個 PR 都核准，0 則意見
+- 人做了什麼：無人值守執行
+- 驗證：未記錄
+- 問題與修正：無
+- 成熟度：L3（AI 依專案規則審查，結果交給 workflow 與作者）
+- 證據：PR #109、#111

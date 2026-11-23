@@ -69,7 +69,7 @@ development_status:
   3-6-報名截止與截止補位: done  # 負責：C；截止補位規則已在 3.4 第一階段完成（allocation.py）；抽籤用函式（PR #53）與報名截止 worker 工作 close_registrations（spec-3-6-deadline-fill）完成
   3-7-抽籤前撤回報名: done  # 負責：C（期末）
   3-8-主辦方檢視段位截圖與退回報名: done  # 負責：C（期末）
-  3-9-公開正取名單與取消賽事通知: in-progress  # 負責：A（期末）
+  3-9-公開正取名單與取消賽事通知: done  # 負責：A（期末）
   3-10-自訂模式的先到先得分配: backlog  # 負責：C（期末）
   3-11-隊員異動與解散隊伍: done  # 負責：C（期末）
   epic-3-retrospective: optional
