@@ -575,6 +575,18 @@ export type CapacityUpdate = {
 }
 
 /**
+ * CaptainTransfer
+ *
+ * 轉讓隊長（Story 3.11）：對象是本隊的隊員。
+ */
+export type CaptainTransfer = {
+  /**
+   * Account Id
+   */
+  account_id: string
+}
+
+/**
  * CheckInRead
  */
 export type CheckInRead = {
@@ -1371,6 +1383,10 @@ export type OrganizerRegistration = {
    * Members
    */
   members: Array<OrganizerRegistrationMember>
+  /**
+   * Disbanded
+   */
+  disbanded?: boolean
 }
 
 /**
@@ -2518,11 +2534,11 @@ export type TeamDetail = {
   /**
    * Invite Token
    */
-  invite_token: string
+  invite_token: string | null
   /**
    * Invite Status
    */
-  invite_status: "active" | "full" | "closed" | "locked"
+  invite_status: "active" | "full" | "closed" | "locked" | "disbanded"
   my_role: MemberRole
   /**
    * Rank Tiers
@@ -2568,6 +2584,14 @@ export type TeamDetail = {
    * Reject Reason
    */
   reject_reason?: string | null
+  /**
+   * Roster Editable
+   */
+  roster_editable?: boolean
+  /**
+   * Disbanded
+   */
+  disbanded?: boolean
 }
 
 /**
@@ -2625,7 +2649,7 @@ export type TeamInvitePreview = {
   /**
    * Invite Status
    */
-  invite_status: "active" | "full" | "closed" | "locked"
+  invite_status: "active" | "full" | "closed" | "locked" | "disbanded"
 }
 
 /**
@@ -4132,6 +4156,138 @@ export type registrationWithdrawRegistrationResponses = {
 
 export type registrationWithdrawRegistrationResponse =
   registrationWithdrawRegistrationResponses[keyof registrationWithdrawRegistrationResponses]
+
+export type registrationRemoveTeamMemberData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+    /**
+     * Account Id
+     */
+    account_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/members/{account_id}/removal"
+}
+
+export type registrationRemoveTeamMemberErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationRemoveTeamMemberError =
+  registrationRemoveTeamMemberErrors[keyof registrationRemoveTeamMemberErrors]
+
+export type registrationRemoveTeamMemberResponses = {
+  /**
+   * Successful Response
+   */
+  200: TeamDetail
+}
+
+export type registrationRemoveTeamMemberResponse =
+  registrationRemoveTeamMemberResponses[keyof registrationRemoveTeamMemberResponses]
+
+export type registrationTransferTeamCaptainData = {
+  body: CaptainTransfer
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/captain-transfer"
+}
+
+export type registrationTransferTeamCaptainErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationTransferTeamCaptainError =
+  registrationTransferTeamCaptainErrors[keyof registrationTransferTeamCaptainErrors]
+
+export type registrationTransferTeamCaptainResponses = {
+  /**
+   * Successful Response
+   */
+  200: TeamDetail
+}
+
+export type registrationTransferTeamCaptainResponse =
+  registrationTransferTeamCaptainResponses[keyof registrationTransferTeamCaptainResponses]
+
+export type registrationLeaveTeamData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/departure"
+}
+
+export type registrationLeaveTeamErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationLeaveTeamError =
+  registrationLeaveTeamErrors[keyof registrationLeaveTeamErrors]
+
+export type registrationLeaveTeamResponses = {
+  /**
+   * Successful Response
+   */
+  204: void
+}
+
+export type registrationLeaveTeamResponse =
+  registrationLeaveTeamResponses[keyof registrationLeaveTeamResponses]
+
+export type registrationDisbandTeamData = {
+  body?: never
+  path: {
+    /**
+     * Team Id
+     */
+    team_id: string
+  }
+  query?: never
+  url: "/api/v1/teams/{team_id}/disbandment"
+}
+
+export type registrationDisbandTeamErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type registrationDisbandTeamError =
+  registrationDisbandTeamErrors[keyof registrationDisbandTeamErrors]
+
+export type registrationDisbandTeamResponses = {
+  /**
+   * Successful Response
+   */
+  204: void
+}
+
+export type registrationDisbandTeamResponse =
+  registrationDisbandTeamResponses[keyof registrationDisbandTeamResponses]
 
 export type registrationRaiseCapacityData = {
   body: CapacityUpdate

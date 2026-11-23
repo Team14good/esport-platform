@@ -21,6 +21,8 @@ from app.core.errors import BusinessError, FieldError
 from app.modules.identity import service as identity_service
 from app.modules.registration import allocation, player_profile, repository
 from app.modules.registration.models import (
+    CaptainTransferred,
+    DisbandedTeamMember,
     InviteStatus,
     MemberRole,
     MissingProfileField,
@@ -40,9 +42,11 @@ from app.modules.registration.models import (
     SubmitBlocker,
     Team,
     TeamDetail,
+    TeamDisbanded,
     TeamInvitePreview,
     TeamMember,
     TeamMemberRead,
+    TeamMemberRemoved,
     TeamMemberRole,
     TeamRead,
     TeamSummary,
@@ -215,6 +219,37 @@ def _file_not_found() -> BusinessError:
     return BusinessError("FILE_NOT_FOUND", "找不到這個檔案", status_code=404)
 
 
+# ---------------------------------------------------------------- 隊員異動的錯誤（Story 3.11）
+
+ROSTER_CAPTAIN_REQUIRED_MESSAGE = "只有隊長可以管理隊員或解散隊伍。"
+
+
+def _roster_member_required() -> BusinessError:
+    return BusinessError(
+        "TEAM_MEMBER_REQUIRED", "你不是這支隊伍的隊員。", status_code=403
+    )
+
+
+def _roster_change_locked() -> BusinessError:
+    return BusinessError("ROSTER_LOCKED", "名單已鎖定，無法異動隊員。", status_code=409)
+
+
+def _captain_cannot_remove_self() -> BusinessError:
+    return BusinessError(
+        "CAPTAIN_CANNOT_REMOVE_SELF", "隊長不能移除自己。", status_code=409
+    )
+
+
+def _already_captain() -> BusinessError:
+    return BusinessError("ALREADY_CAPTAIN", "你已經是隊長。", status_code=409)
+
+
+def _captain_must_transfer() -> BusinessError:
+    return BusinessError(
+        "CAPTAIN_MUST_TRANSFER", "先轉讓隊長才能退出。", status_code=409
+    )
+
+
 # ---------------------------------------------------------------- 報名狀態
 
 # 期中文件 B 參、四（二）的報名狀態圖
@@ -312,6 +347,23 @@ _ROSTER_UNLOCKED_STATUSES = frozenset(
 
 def _roster_unlocked(status: RegistrationStatus) -> bool:
     return status in _ROSTER_UNLOCKED_STATUSES
+
+
+# 隊員異動（Story 3.11）可用的賽事狀態：抽籤前（同 3.7 撤回）
+_ROSTER_EDITABLE_TOURNAMENT_STATUSES = frozenset(
+    {TournamentStatus.OPEN, TournamentStatus.CLOSED}
+)
+
+
+def _roster_editable(tournament: TournamentRead, registration: Registration) -> bool:
+    """名單可以異動（移除、轉讓、退出、解散）：名單未鎖定且賽事為開放報名或報名截止。
+
+    不檢查報名期間：報名截止後仍是組隊中或被退回的隊伍也能異動（Story 3.11 Decisions）。
+    """
+    return (
+        tournament.status in _ROSTER_EDITABLE_TOURNAMENT_STATUSES
+        and _roster_unlocked(registration.status)
+    )
 
 
 def _max_members(tournament: TournamentRead) -> int:
@@ -612,7 +664,66 @@ def _build_detail(
         backfilled=_backfilled(registration),
         withdrawable=_withdrawable(tournament, registration, viewer.role),
         reject_reason=_visible_reject_reason(registration),
+        roster_editable=_roster_editable(tournament, registration),
         **_waitlist_fields(session, registration, tournament).model_dump(),
+    )
+
+
+def _build_disbanded_detail(
+    session: Session,
+    team: Team,
+    tournament: TournamentRead,
+    viewer: DisbandedTeamMember,
+) -> TeamDetail:
+    """已解散隊伍的 S17 唯讀頁（Story 3.11）：原隊員只有名稱與角色，不回邀請連結，
+    不能做任何操作（`roster_editable`、`withdrawable`、`profile_editable` 皆為 false）。"""
+    members = repository.list_disbanded_members(session, team.id)
+    names = identity_service.get_display_names(
+        session, account_ids=[m.account_id for m in members]
+    )
+    registration = _registration_of(session, team)
+    return TeamDetail(
+        id=team.id,
+        name=team.name,
+        tournament_id=team.tournament_id,
+        tournament_name=tournament.name,
+        game_name=tournament.game_name,
+        starters=tournament.starters,
+        substitutes=tournament.substitutes,
+        max_members=_max_members(tournament),
+        members=[
+            TeamMemberRead(
+                account_id=member.account_id,
+                display_name=names.get(member.account_id, ""),
+                role=member.role,
+                joined_at=member.joined_at,
+                game_account_id=None,
+                rank_tier=None,
+                rank_score=None,
+                has_rank_screenshot=False,
+                rank_screenshot_name=None,
+                missing_fields=[],
+            )
+            for member in members
+        ],
+        registration_status=registration.status,
+        invite_token=None,
+        invite_status="disbanded",
+        my_role=viewer.role,
+        rank_tiers=tournament.rank_tiers,
+        avg_rank_score=None,
+        rank_filled_count=0,
+        profile_editable=False,
+        submit_blockers=[],
+        priority_end=tournament.priority_end,
+        registration_end=tournament.registration_end,
+        submitted_at=registration.submitted_at,
+        backfilled=False,
+        withdrawable=False,
+        reject_reason=None,
+        roster_editable=False,
+        disbanded=True,
+        **_NO_WAITLIST.model_dump(),
     )
 
 
@@ -681,6 +792,13 @@ def preview_invite(session: Session, *, token: str) -> TeamInvitePreview:
     tournament = _get_tournament(session, team.tournament_id)
     member_count = repository.count_members(session, team.id)
     max_members = _max_members(tournament)
+    invite_status: InviteStatus = (
+        "disbanded"
+        if repository.is_disbanded(session, team.id)
+        else _invite_status(
+            tournament, member_count, _registration_of(session, team).status
+        )
+    )
     return TeamInvitePreview(
         team_id=team.id,
         team_name=team.name,
@@ -689,9 +807,7 @@ def preview_invite(session: Session, *, token: str) -> TeamInvitePreview:
         game_name=tournament.game_name,
         member_count=member_count,
         max_members=max_members,
-        invite_status=_invite_status(
-            tournament, member_count, _registration_of(session, team).status
-        ),
+        invite_status=invite_status,
     )
 
 
@@ -738,15 +854,23 @@ def join_team(session: Session, *, token: str, account_id: uuid.UUID) -> TeamDet
 def get_team_detail(
     session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
 ) -> TeamDetail:
-    """S17 隊伍頁：只有隊員能看（含邀請 token）。"""
+    """S17 隊伍頁：只有隊員能看（含邀請 token）。
+
+    依序判斷：現任隊員 → 解散當下的原隊員（Story 3.11 唯讀頁）→ 403
+    `TEAM_MEMBER_REQUIRED`（被移除或自行退出的帳號也看不到）。
+    """
     team = repository.get_team(session, team_id)
     if team is None:
         raise _team_not_found()
     viewer = repository.get_team_member(session, team.id, account_id)
-    if viewer is None:
+    if viewer is not None:
+        tournament = _get_tournament(session, team.tournament_id)
+        return _build_detail(session, team, tournament, viewer)
+    former = repository.get_disbanded_member(session, team.id, account_id)
+    if former is None:
         raise _team_member_required()
     tournament = _get_tournament(session, team.tournament_id)
-    return _build_detail(session, team, tournament, viewer)
+    return _build_disbanded_detail(session, team, tournament, former)
 
 
 @dataclass(frozen=True)
@@ -934,13 +1058,40 @@ def submit_registration(
 
 
 def list_my_teams(session: Session, *, account_id: uuid.UUID) -> list[MyTeamCard]:
-    """S12 我的隊伍：帳號加入的每支隊伍與其報名狀態（新加入的在前）。"""
+    """S12 我的隊伍：帳號加入的每支隊伍與其報名狀態（新加入的在前）。
+
+    已解散的隊伍（Story 3.11）也列出：依原加入時間與現任隊伍合併排序，狀態為撤回、
+    不能退賽。
+    """
+    entries: list[tuple[datetime, TeamMember | DisbandedTeamMember]] = [
+        (m.created_at, m)
+        for m in repository.list_memberships_of_account(session, account_id)
+    ]
+    entries.extend(
+        (m.joined_at, m)
+        for m in repository.list_disbanded_of_account(session, account_id)
+    )
+    # 兩份清單各自已是新到舊；sorted 是穩定排序，同時間時維持各自的順序
+    entries.sort(key=lambda entry: entry[0], reverse=True)
     cards: list[MyTeamCard] = []
-    for membership in repository.list_memberships_of_account(session, account_id):
+    for _, membership in entries:
         team = repository.get_team(session, membership.team_id)
         assert team is not None  # 外鍵保證隊伍存在
         tournament = _get_tournament(session, team.tournament_id)
         registration = _registration_of(session, team)
+        if isinstance(membership, DisbandedTeamMember):
+            cards.append(
+                MyTeamCard(
+                    team_id=team.id,
+                    team_name=team.name,
+                    tournament_id=team.tournament_id,
+                    tournament_name=tournament.name,
+                    game_name=tournament.game_name,
+                    registration_status=registration.status,
+                    **_NO_WAITLIST.model_dump(),
+                )
+            )
+            continue
         cards.append(
             MyTeamCard(
                 team_id=team.id,
@@ -1449,19 +1600,54 @@ def _organizer_items(
     phase: allocation.AllocationPhase,
     order: dict[uuid.UUID, allocation.WaitlistEntry],
 ) -> list[OrganizerRegistration]:
-    """S29 的列：隊伍、隊員與顯示名稱各一次查出（不逐隊查詢）。"""
+    """S29 的列：隊伍、隊員與顯示名稱各一次查出（不逐隊查詢）。
+
+    已解散的隊伍（Story 3.11）改列解散當下的原隊員：只有名稱與角色，沒有截圖。
+    """
     team_ids = [r.team_id for r in registrations]
     teams = {team.id: team for team in repository.list_teams_by_ids(session, team_ids)}
     members = repository.list_members_by_team_ids(session, team_ids)
+    disbanded = repository.list_disbanded_by_team_ids(session, team_ids)
     names = identity_service.get_display_names(
         session,
-        account_ids=[m.account_id for team in members.values() for m in team],
+        account_ids=[
+            *(m.account_id for team in members.values() for m in team),
+            *(m.account_id for team in disbanded.values() for m in team),
+        ],
     )
     items: list[OrganizerRegistration] = []
     for registration in registrations:
+        former = disbanded.get(registration.team_id)
         # 隊長在前，再依加入順序（sorted 是穩定排序）
-        roster = sorted(
-            members[registration.team_id], key=lambda m: m.role != MemberRole.CAPTAIN
+        roster_members: list[OrganizerRegistrationMember] = (
+            [
+                OrganizerRegistrationMember(
+                    account_id=member.account_id,
+                    display_name=names.get(member.account_id, ""),
+                    role=member.role,
+                    game_account_id=None,
+                    rank_tier=None,
+                    has_rank_screenshot=False,
+                    rank_screenshot_version=None,
+                )
+                for member in sorted(former, key=lambda m: m.role != MemberRole.CAPTAIN)
+            ]
+            if former is not None
+            else [
+                OrganizerRegistrationMember(
+                    account_id=member.account_id,
+                    display_name=names.get(member.account_id, ""),
+                    role=member.role,
+                    game_account_id=member.game_account_id,
+                    rank_tier=member.rank_tier,
+                    has_rank_screenshot=member.rank_screenshot_key is not None,
+                    rank_screenshot_version=_screenshot_version(member),
+                )
+                for member in sorted(
+                    members[registration.team_id],
+                    key=lambda m: m.role != MemberRole.CAPTAIN,
+                )
+            ]
         )
         snapshot = _candidate(registration)
         waitlist = (
@@ -1480,18 +1666,8 @@ def _organizer_items(
                 backfilled=_backfilled(registration),
                 rejectable=_can_withdraw(tournament, registration),
                 reject_reason=_visible_reject_reason(registration),
-                members=[
-                    OrganizerRegistrationMember(
-                        account_id=member.account_id,
-                        display_name=names.get(member.account_id, ""),
-                        role=member.role,
-                        game_account_id=member.game_account_id,
-                        rank_tier=member.rank_tier,
-                        has_rank_screenshot=member.rank_screenshot_key is not None,
-                        rank_screenshot_version=_screenshot_version(member),
-                    )
-                    for member in roster
-                ],
+                members=roster_members,
+                disbanded=former is not None,
                 **waitlist.model_dump(),
             )
         )
@@ -1678,7 +1854,274 @@ def reject_registration(
     )[0]
 
 
+# ---------------------------------------------------------------- 隊員異動與解散（Story 3.11）
+
+
+@dataclass(frozen=True)
+class RosterChange:
+    """`remove_member` 的結果：`deleted_keys` 是被刪除隊員的截圖鍵值，交易提交後由 router 刪檔。"""
+
+    detail: TeamDetail
+    deleted_keys: list[str]
+
+
+@dataclass(frozen=True)
+class _LockedRoster:
+    team: Team
+    tournament: TournamentRead
+    members: list[TeamMember]
+    viewer: TeamMember
+    registration: Registration
+
+
+def _lock_roster_change(
+    session: Session,
+    *,
+    team_id: uuid.UUID,
+    account_id: uuid.UUID,
+    captain_required: bool,
+) -> _LockedRoster:
+    """隊員異動的共同檢查，依序：隊伍存在（404 `TEAM_NOT_FOUND`）→ 鎖賽事 → 賽事為開放報名或
+    報名截止（409 `ROSTER_LOCKED`）→ 隊員（403 `TEAM_MEMBER_REQUIRED`）→ 隊長（需要時，403
+    `TEAM_CAPTAIN_REQUIRED`）→ 名單未鎖定（409 `ROSTER_LOCKED`）。不檢查報名期間。"""
+    team = repository.get_team(session, team_id)
+    if team is None:
+        raise _team_not_found()
+    tournament = _lock_tournament(session, team.tournament_id)
+    if tournament.status not in _ROSTER_EDITABLE_TOURNAMENT_STATUSES:
+        raise _roster_change_locked()
+    members = repository.list_members(session, team.id)
+    viewer = next((m for m in members if m.account_id == account_id), None)
+    if viewer is None:
+        raise _roster_member_required()
+    if captain_required:
+        authz.ensure_captain(
+            _team_read(team, members),
+            account_id,
+            message=ROSTER_CAPTAIN_REQUIRED_MESSAGE,
+        )
+    registration = _registration_of(session, team)
+    # 鎖住賽事後以資料庫最新值判斷（等鎖期間可能已送出或被退回）
+    session.refresh(registration)
+    if not _roster_unlocked(registration.status):
+        raise _roster_change_locked()
+    return _LockedRoster(team, tournament, members, viewer, registration)
+
+
+def _target(members: list[TeamMember], account_id: uuid.UUID) -> TeamMember:
+    target = next((m for m in members if m.account_id == account_id), None)
+    if target is None:
+        raise _team_member_not_found()
+    return target
+
+
+def _delete_member(session: Session, member: TeamMember) -> str | None:
+    """刪除隊員列（參賽資料一併刪除），回傳截圖鍵值讓 router 在交易提交後刪檔。"""
+    key = member.rank_screenshot_key
+    repository.delete_member(session, member)
+    return key
+
+
+def remove_member(
+    session: Session,
+    *,
+    team_id: uuid.UUID,
+    account_id: uuid.UUID,
+    target_id: uuid.UUID,
+) -> RosterChange:
+    """S17 隊長移除隊員（FR-41）：刪除該隊員列與參賽資料，發 `TeamMemberRemoved`。
+
+    檢查順序見 `_lock_roster_change`；之後隊長移除自己 409 `CAPTAIN_CANNOT_REMOVE_SELF`、
+    對象不在本隊 404 `TEAM_MEMBER_NOT_FOUND`。不重新產生邀請 token：人數低於上限後
+    邀請連結恢復有效，被移除者可再經原連結加入。截圖檔在交易提交後由 router 刪除。
+    """
+    locked = _lock_roster_change(
+        session, team_id=team_id, account_id=account_id, captain_required=True
+    )
+    if target_id == account_id:
+        raise _captain_cannot_remove_self()
+    target = _target(locked.members, target_id)
+    before = {"account_id": target.account_id, "role": target.role}
+    key = _delete_member(session, target)
+    audit.record(
+        session,
+        actor_id=account_id,
+        tournament_id=locked.team.tournament_id,
+        action="team.member_removed",
+        entity_type="team",
+        entity_id=locked.team.id,
+        before=before,
+        after=None,
+    )
+    events.publish(
+        session,
+        TeamMemberRemoved(
+            team_id=locked.team.id,
+            tournament_id=locked.team.tournament_id,
+            account_id=target_id,
+        ),
+    )
+    session.flush()
+    return RosterChange(
+        detail=_build_detail(session, locked.team, locked.tournament, locked.viewer),
+        deleted_keys=[key] if key is not None else [],
+    )
+
+
+def transfer_captain(
+    session: Session,
+    *,
+    team_id: uuid.UUID,
+    account_id: uuid.UUID,
+    target_id: uuid.UUID,
+) -> TeamDetail:
+    """S17 隊長轉讓（FR-41）：同一交易互換兩人的角色，原隊長立即失去隊長權限。
+
+    檢查順序見 `_lock_roster_change`；之後對象是自己 409 `ALREADY_CAPTAIN`、對象不在本隊
+    404 `TEAM_MEMBER_NOT_FOUND`。發 `CaptainTransferred`；回傳原隊長（現為選手）看到的頁面。
+    """
+    locked = _lock_roster_change(
+        session, team_id=team_id, account_id=account_id, captain_required=True
+    )
+    if target_id == account_id:
+        raise _already_captain()
+    target = _target(locked.members, target_id)
+    locked.viewer.role = MemberRole.PLAYER
+    target.role = MemberRole.CAPTAIN
+    session.add(locked.viewer)
+    session.add(target)
+    audit.record(
+        session,
+        actor_id=account_id,
+        tournament_id=locked.team.tournament_id,
+        action="team.captain_transferred",
+        entity_type="team",
+        entity_id=locked.team.id,
+        before={"captain_id": account_id},
+        after={"captain_id": target_id},
+    )
+    events.publish(
+        session,
+        CaptainTransferred(
+            team_id=locked.team.id,
+            tournament_id=locked.team.tournament_id,
+            from_account_id=account_id,
+            to_account_id=target_id,
+        ),
+    )
+    session.flush()
+    return _build_detail(session, locked.team, locked.tournament, locked.viewer)
+
+
+def leave_team(
+    session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+) -> list[str]:
+    """S17 隊員自行退出（FR-41）：刪除自己的隊員列與參賽資料，之後可加入同賽事的其他隊伍。
+
+    檢查順序見 `_lock_roster_change`（不需隊長）；隊長退出 409 `CAPTAIN_MUST_TRANSFER`。
+    不發通知。回傳要在交易提交後刪除的截圖鍵值。
+    """
+    locked = _lock_roster_change(
+        session, team_id=team_id, account_id=account_id, captain_required=False
+    )
+    if locked.viewer.role == MemberRole.CAPTAIN:
+        raise _captain_must_transfer()
+    before = {"account_id": account_id, "role": locked.viewer.role}
+    key = _delete_member(session, locked.viewer)
+    audit.record(
+        session,
+        actor_id=account_id,
+        tournament_id=locked.team.tournament_id,
+        action="team.member_left",
+        entity_type="team",
+        entity_id=locked.team.id,
+        before=before,
+        after=None,
+    )
+    session.flush()
+    return [key] if key is not None else []
+
+
+def disband_team(
+    session: Session, *, team_id: uuid.UUID, account_id: uuid.UUID
+) -> list[str]:
+    """S17 隊長解散隊伍（FR-41）：報名轉撤回，所有隊員離隊，原隊員保留唯讀頁。
+
+    檢查順序見 `_lock_roster_change`。被退回的報名在同一交易內 `rejected → forming →
+    withdrawn`（沿用 `_TRANSITIONS`）；原隊員（帳號、角色、加入時間）寫入
+    `disbanded_team_member` 後刪除所有隊員列；保留 `Team`、`Registration` 列（隊名仍被佔用）。
+    組隊中與被退回的報名不佔名額，不遞補。發 `TeamDisbanded`。回傳要在交易提交後刪除的
+    截圖鍵值。
+    """
+    locked = _lock_roster_change(
+        session, team_id=team_id, account_id=account_id, captain_required=True
+    )
+    registration = locked.registration
+    if registration.status == RegistrationStatus.REJECTED:
+        mark_status(
+            session,
+            registration=registration,
+            to=RegistrationStatus.FORMING,
+            actor_id=account_id,
+        )
+    mark_status(
+        session,
+        registration=registration,
+        to=RegistrationStatus.WITHDRAWN,
+        actor_id=account_id,
+    )
+    now = clock.now()
+    repository.add_disbanded_members(
+        session,
+        [
+            DisbandedTeamMember(
+                team_id=locked.team.id,
+                tournament_id=locked.team.tournament_id,
+                account_id=member.account_id,
+                role=member.role,
+                joined_at=member.created_at,
+                created_at=now,
+            )
+            for member in locked.members
+        ],
+    )
+    keys = [
+        key
+        for key in (_delete_member(session, member) for member in locked.members)
+        if key is not None
+    ]
+    audit.record(
+        session,
+        actor_id=account_id,
+        tournament_id=locked.team.tournament_id,
+        action="team.disbanded",
+        entity_type="team",
+        entity_id=locked.team.id,
+        before={"member_ids": [member.account_id for member in locked.members]},
+        after=None,
+    )
+    events.publish(
+        session,
+        TeamDisbanded(team_id=locked.team.id, tournament_id=locked.team.tournament_id),
+    )
+    session.flush()
+    return keys
+
+
 # ---------------------------------------------------------------- 公開函式（給其他模組）
+
+
+def list_disbanded_member_ids(
+    session: Session, *, team_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """隊伍解散當下的原隊員帳號（Story 3.11，依原加入順序）；沒有解散時為空。
+
+    給 notifications 的解散通知規則查收件人（事件不帶收件人清單，AD-8）。
+    """
+    return [
+        member.account_id
+        for member in repository.list_disbanded_members(session, team_id)
+    ]
 
 
 def get_team(session: Session, *, team_id: uuid.UUID) -> TeamRead:

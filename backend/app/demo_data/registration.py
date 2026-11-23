@@ -115,10 +115,12 @@ def _seed_team(
         account_id=captain_id,
         name=f"{school_name}{DEMO_TEAM_NAME_SUFFIX}",
     )
+    token = team.invite_token
+    if token is None:
+        # 只有已解散的隊伍（Story 3.11）沒有邀請 token；剛建立的隊伍一定有
+        raise RuntimeError(f"隊伍 {team.id} 沒有邀請 token")
     for member_id in member_ids[1:]:
-        registration_service.join_team(
-            session, token=team.invite_token, account_id=member_id
-        )
+        registration_service.join_team(session, token=token, account_id=member_id)
     for index, member_id in enumerate(member_ids):
         registration_service.update_player_profile(
             session,
