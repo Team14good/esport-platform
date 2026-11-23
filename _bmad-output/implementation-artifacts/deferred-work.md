@@ -227,3 +227,8 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-5-post-draw-withdrawal.md`
   summary: （低）4.2 截止時正取不足、`auto_draw` 寫了 `AutoDrawSkip` 後，主辦方在「報名截止」用 3.7 的 `raise_capacity` 讓候補遞補到 2 隊以上，同一個 `registration_end` 不會再自動抽籤（主辦方仍可手動抽籤）。
   evidence: Story 4.5 Decisions 第 8 項（2026-11-22 黃鉅燊核准不在 4.5 做）。修法：competition `auto_draw` 鎖內查到略過紀錄時，若目前正取 ≥2 且大於 `skip.accepted_teams` 就照常抽籤（`auto_draw_due` 的不加鎖預先排除也要同樣放寬），補「略過後提高名額再自動抽籤」與「略過後正取仍不足不重複發事件」的測試。
+## Deferred from: spec-3-11-roster-changes-and-disband-team.md（#110 組員審查，2026-11-23）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （低）S19 先顯示「可加入」、隊長在這之後解散隊伍，按加入時 `join_team` 回 409 `ROSTER_LOCKED`，畫面顯示「名單已鎖定」，重新整理後才變成「隊伍已解散」；行為正確，只是文字不一致。
+  evidence: 2026-11-23 OG-Matcha 在 #110 的審查第 2 點；Story 3.11 程式審查 R7（凍結矩陣「解散與加入同時」規定回 `ROSTER_LOCKED`）。修法候選：解散的隊伍加入時回專屬錯誤碼（例如 `TEAM_DISBANDED`，需改 spec 矩陣），或前端在加入得到 409 時重新取得邀請預覽。
