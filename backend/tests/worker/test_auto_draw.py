@@ -8,11 +8,13 @@
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from sqlmodel import Session, col, select
 
 from app.core import audit
 from app.core.events import OutboxEvent
 from app.modules.competition import service as competition_service
+from app.modules.registration import service as registration_service
 from app.modules.registration.models import RegistrationStatus
 from app.modules.tournaments.models import TournamentRead, TournamentStatus
 from app.worker import run_once
@@ -153,3 +155,88 @@ def test_not_enough_teams_after_fill_stays_closed_and_notifies_once(
     assert _status(session, tournament) == TournamentStatus.CLOSED
     assert _status_changes(session, tournament) == [(None, {"status": "closed"})]
     assert auto_draw_closed(session) is False
+
+
+def _skipped_with_one_accepted(
+    session: Session,
+    session_factory: Callable[[], Session],
+    frozen_clock: FrozenClock,
+) -> tuple[TournamentRead, Any]:
+    """名額 2、只有一隊正取，截止後略過自動抽籤；回傳賽事與那筆報名。"""
+    tournament = _due_tournament(session, frozen_clock, capacity=2)
+    a1 = _submitted(
+        session, tournament, _school(session), submitted_at=_in_window(tournament)
+    )
+    _set(session, a1, A)
+    _settled(session, tournament)
+    session.commit()
+
+    frozen_clock.set(tournament.registration_end)
+    _round(session_factory)
+    assert _status(session, tournament) == TournamentStatus.CLOSED
+    assert len(_events(session, tournament, "AutoDrawSkipped")) == 1
+    return tournament, a1
+
+
+def test_raise_capacity_after_skip_is_drawn_in_next_round(
+    session: Session,
+    session_factory: Callable[[], Session],
+    frozen_clock: FrozenClock,
+) -> None:
+    tournament, a1 = _skipped_with_one_accepted(session, session_factory, frozen_clock)
+    # 目前截止時已用候補補滿，略過後不會有排得上的候補；這裡直接寫入一筆候補，
+    # 模擬之後正取來源增加（3.10 自訂模式），遞補與抽籤走真的 raise_capacity 與 worker
+    w1 = _submitted(
+        session, tournament, _school(session), submitted_at=_in_window(tournament)
+    )
+    _set(session, w1, W)
+    session.commit()
+
+    registration_service.raise_capacity(
+        session,
+        tournament_id=tournament.id,
+        capacity=3,
+        actor_id=tournament.organizer_id,
+    )
+    session.commit()
+    assert auto_draw_closed(session) is True
+    session.commit()
+
+    assert _status(session, tournament) == TournamentStatus.PUBLISHED
+    assert _statuses(session, tournament) == {a1.id: D, w1.id: D}
+    assert len(_events(session, tournament, "BracketDrawn")) == 1
+    # 沒有第二則「正取不足」
+    assert len(_events(session, tournament, "AutoDrawSkipped")) == 1
+    # 下一輪沒有東西可處理
+    assert auto_draw_closed(session) is False
+    _round(session_factory)
+    assert len(_events(session, tournament, "BracketDrawn")) == 1
+
+
+def test_still_not_enough_after_skip_is_not_locked_nor_notified(
+    session: Session,
+    session_factory: Callable[[], Session],
+    frozen_clock: FrozenClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tournament, a1 = _skipped_with_one_accepted(session, session_factory, frozen_clock)
+    locked: list[object] = []
+    real_auto_draw = competition_service.auto_draw
+
+    def spy(session: Session, *, tournament_id: Any, **kwargs: Any) -> Any:
+        locked.append(tournament_id)
+        return real_auto_draw(session, tournament_id=tournament_id, **kwargs)
+
+    monkeypatch.setattr(competition_service, "auto_draw", spy)
+
+    for _ in range(3):
+        _round(session_factory)
+
+    # 預先排除生效：仍不足的賽事不進 auto_draw（不鎖）
+    assert tournament.id not in locked
+
+    assert auto_draw_closed(session) is False
+    assert _status(session, tournament) == TournamentStatus.CLOSED
+    assert _statuses(session, tournament)[a1.id] == A
+    assert len(_events(session, tournament, "AutoDrawSkipped")) == 1
+    assert _events(session, tournament, "BracketDrawn") == []
