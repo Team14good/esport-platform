@@ -834,3 +834,85 @@
   - 判斷這是 Radix 下拉選單本身的行為，加上自動化點得太快，不是本 Story 的 bug；實驗腳本看完即刪除。
 - 成熟度：L4（人工檢視發現問題 → 修正 → 重拍驗證；遇到測試失敗先做實驗區分真 bug 與測試假象）
 - 證據：spec-3-11-roster-changes-and-disband-team.md（Implementation Notes「瀏覽器人工檢視後」）；commit 見本次 PR
+
+### 2026-11-23｜需求／spec 撰寫與審查｜Story 3.10 自訂模式的先到先得分配（第 1 部分）
+
+- Story／範圍：3.10（分支 story/3-10，尚未實作）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（規劃階段）＋ 子代理
+- 怎麼用：
+  - 使用者問「能不能做下一個」。AI 查 sprint-status 找到 3.10，也發現 B 的 PR #103 會改同一批 tournaments 檔案。
+  - AI 查 #103 的狀態：已 Approve、CI 通過，最近只是同步 main，不是還在改。建議先規劃，實作等 #103 合併。
+  - 規劃時派 3 個子代理平行調查：registration 後端、tournaments 與前端、需求與 UX 文件。
+  - spec 草稿完成後，使用者選「審查 spec」，AI 另派 1 個沒參與規劃的子代理獨立審查。
+- AI 產出：spec `spec-3-10-custom-mode-first-come.md`（第 1 部分：分配與遞補，只改 registration）：I/O 矩陣 13 列、Tasks 11 項、AC 4 條；第 2 部分記進 deferred-work。
+- 人做了什麼：
+  - 決定先等 #103、先做規劃。
+  - 回答 5 個問題：拆成兩部分；賽事報名連結用 S2 的 `?invite=`；重設連結不影響既有隊伍；抽籤前取消資格要立即遞補；介面文字照提案。
+  - 選擇「審查 spec」，最後選「核准並停止」。
+- 驗證：
+  - 獨立審查提出 9 項：high 1、medium 3、low 5。
+  - AI 抽查第 1、2、4 項屬實：
+    - 抽籤後 `retirement.py:335` 也呼叫取消資格。
+    - AD-20 原文寫「其他程式不得自行依模式分支」。
+    - deferred-work 有 4.5 留下的項目。
+  - 9 項都能由程式與文件決定，AI 直接修 spec，全部記在 Review Triage Log。
+- 問題與修正：
+  - AI 一開始跟使用者說「程式完全沒有自訂模式」，是錯的：它用 `head -15` 截斷了搜尋結果，沒看到 `TournamentMode.CUSTOM`。之後讀到 spec-3-9 的 Code Map 提到 `mode` 欄位，重新完整搜尋才發現，並主動向使用者更正。原本以為要新增模式欄位與遷移，其實只缺 `invite_token`。
+  - AI 寫的 spec 要求「取消資格時自訂模式要遞補」，卻沒限定抽籤前。抽籤後也會走這條路，會先遞補一次再被 4.5 頂替，造成重複遞補與錯誤通知；由獨立審查發現。
+  - AI 在 Code Map 要求 service 多處加 `if mode`，違反架構 AD-20，也和 spec 自己的 Boundaries 矛盾；由獨立審查對照架構文件發現。
+  - AI 把兩支「行為不變」的既有測試列在「要改」的清單，其中一支是 D 的測試；由獨立審查發現。
+- 成熟度：L4（子代理平行調查 → 寫 spec → 獨立子代理審查 → AI 抽查查證；人在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-10-custom-mode-first-come.md（Decisions、Review Triage Log）；deferred-work.md（第 2 部分）；commit 未記錄（尚未 commit）
+
+### 2026-11-24｜程式／程式生成｜Story 3.10 自訂模式的先到先得分配（第 1 部分）
+
+- Story／範圍：3.10 第 1 部分（分支 story/3-10，PR 未建立）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作階段）＋ 子代理
+- 怎麼用：使用者以 `/bmad-build` 指定已核准的 spec。主流程記錄 baseline 後，派 1 個沒有對話脈絡的子代理只依 spec 實作；完成後主流程讀完整 diff 逐項對照 Tasks、AC 與 I/O 矩陣，而不是只看子代理的回報。
+- AI 產出：
+  - `allocation.py` 依模式回答的 6 個函式與 `AllocationPhase.CUSTOM`；`service.py` 的自訂送出（`_custom_locked`）、撤回／退回／提高名額／抽籤前取消資格的遞補、4.5 候補查詢改經 allocation（AD-20）。
+  - 新測試檔 3 支：`test_custom_mode.py` 21 個、`test_custom_concurrency.py` 2 個（平行 200 筆、最後一席）、`competition/test_custom_post_draw_backfill.py` 3 個；`test_allocation.py` 新增 15 個；改寫 spec 指定的 3 支既有測試。
+  - 前端：重新產生 client、`registration-status.tsx` 自訂遞補說明、S17 與 S29 各 1 個單元測試；EXPERIENCE.md 加 1 列固定字串。
+- 人做了什麼：核准 spec（含 Decisions：兩部分拆分、抽籤前取消資格立即遞補、介面文字）；之後審查本次結果與 PR。
+- 驗證：
+  - 子代理改動前先跑 registration／competition／worker：只有 spec 指定的 3 支「自訂什麼都不做」的既有測試失敗（1811 passed、3 failed），確認其他校園賽測試不需修改。
+  - 主流程在容器內跑本 Story 相關 7 支測試檔 183 passed，並比對容器內程式與本機檔案的 sha1 一致。
+- 問題與修正：
+  - spec 的矩陣寫「剩 1 名額」，但賽事名額下限是 2，子代理改用「名額 2 加一支既有正取」，並記在 Implementation Notes 讓人確認。
+  - 子代理把一支既有校園賽測試順手重排格式，違反 AC「既有校園賽測試不需修改」；由審查發現並還原（見下一筆）。
+- 成熟度：L4（spec → 無脈絡子代理實作 → 主流程對照 diff 與矩陣驗證；人只在 spec 核准與 PR 審查時決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-10-custom-mode-first-come.md（Implementation Notes）；commit 未記錄（尚未 commit）
+
+### 2026-11-24｜測試／程式審查與測試｜Story 3.10 自訂模式的先到先得分配（第 1 部分）
+
+- Story／範圍：3.10 第 1 部分（分支 story/3-10，PR 未建立）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（審查階段）＋ 3 個審查子代理
+- 怎麼用：平行派 Blind Hunter（只看 diff）、Edge Case Hunter（追邊界，最後才讀 spec）、Verification Gap（找沒被測試鎖住的行為）三個獨立審查者；主流程逐項讀程式查證、判定後把要修的交回原實作子代理。
+- AI 產出：21 項發現，全部記在 spec 的 Review Triage Log：
+  - 修正 6 項（low）：兩段 docstring 與實際行為矛盾、`decide_custom` 經以學校為鍵的計數、既有校園賽測試的格式改動、測試註解宣稱沒有斷言的事、先鎖測試沒檢查執行緒已結束。
+  - 不改程式、要在 PR 說明列出 2 項：competition（D 的模組）`retirement.py` 對手未定時，自訂賽事有候補現在可退賽；competition `disqualify` 的 docstring「抽籤前不做遞補」對自訂賽事已不成立。
+  - 駁回 13 項，各附查證理由（例如「自訂賽事殘留 pending」查無產生路徑；「沒列 FR-37」該檔不檢查通知）。
+  - Verification Gap 追了 `_backfill_released_locked` 的 5 個呼叫端，沒有找到測試缺口。
+- 人做了什麼：待使用者審查本次結果與 PR 說明。
+- 驗證：修正後重建映像，`scripts/lint.sh` 通過；`scripts/test.sh` 2902 passed，覆蓋率 97%，`allocation.py` 分支 46/46（100%）。前端在修正前由子代理跑 vitest 1212 passed、biome 與 tsc 通過，修正沒有動到前端。
+- 問題與修正：
+  - 實作子代理的回報沒有提到它改變了 D 模組的行為：`has_backfill_candidate` 不再對自訂回 False，使 `retirement.py:123` 對手未定時的退賽從一律拒絕變成有候補就允許。由 Blind Hunter 追呼叫端發現；主流程讀 `retirement.py` 確認屬實，判斷與校園賽 4.5 一致、是預期結果，改為在 PR 說明告知 D。
+  - 實作子代理宣稱「其他既有測試沒有修改」，但 diff 裡有一支既有校園賽測試被重排格式；由 Blind Hunter 與 Edge Case Hunter 都發現，已還原到 baseline。
+  - 子代理寫了 `disqualify_registration` 的新段落卻沒改開頭「本身不做遞補」，文件自相矛盾；兩個審查者都發現，已修正。
+- 成熟度：L4（多個獨立審查者 → 主流程查證並判定 → 原子代理修正 → 完整測試驗證）
+- 證據：_bmad-output/implementation-artifacts/spec-3-10-custom-mode-first-come.md（Review Triage Log「實作審查」）；commit 未記錄（尚未 commit）
+
+### 2026-11-24｜測試／瀏覽器人工檢視｜Story 3.10 自訂模式的先到先得分配（第 1 部分）
+
+- Story／範圍：3.10 第 1 部分（分支 story/3-10，PR 未建立）
+- 工具：Claude Code（Opus 5.5）＋ Playwright（e2e 容器）
+- 怎麼用：使用者要求先在瀏覽器實際走過，順便完成 PR 檢查清單的「瀏覽器實際走過，含 375 px」。第 1 部分沒有建立自訂賽事的介面，AI 寫暫時的 Playwright 腳本：用既有 e2e support 建賽事與隊伍，以 SQL 把賽事改成自訂、把一隊改成混校，再用瀏覽器送出並截圖；看完即刪除，不提交。
+- AI 產出：桌機與 375 px 各 7 張截圖（S17 送出前後、S12、S29 撤回前後、被遞補隊的 S17）；結果寫進 spec 的 Implementation Notes。
+- 人做了什麼：提出要先實際走過；看截圖確認。
+- 驗證：最後一次執行桌機、375 px 共 2 passed；資料庫查詢確認混校隊伍的學校快照為 null。沒有發現要修正的畫面問題。
+- 問題與修正：
+  - AI 的腳本假設 `createRegisteredTeams` 依序送出，寫死「第 4 隊候補」；它其實是平行送出、順序不固定，第一次 375 px 失敗。改成依實際狀態找出正取與候補的隊伍。
+  - S29 在 375 px 同時渲染表格與卡片，`getByText(...).first()` 抓到隱藏的那份而失敗；AI 先看失敗截圖確認文字確實顯示，才判定是腳本問題，改成只找可見元素。
+  - AI 為了查看失敗原因又啟動一次 e2e 容器，容器啟動時會清空 `test-results`，把失敗紀錄刪掉；改成只重跑 375 px 專案取得錯誤訊息。
+- 成熟度：L3（AI 依 spec 寫腳本並檢查截圖，人提出檢視需求並確認結果）
+- 證據：spec-3-10-custom-mode-first-come.md（Implementation Notes「瀏覽器檢視」）；截圖在本機 frontend/test-results（未提交）

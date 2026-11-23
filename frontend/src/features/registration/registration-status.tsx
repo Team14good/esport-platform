@@ -74,10 +74,14 @@ export const REPRESENTATIVE_BACKFILL_MESSAGE =
  */
 export const DEPARTED_REPRESENTATIVE_MESSAGE = "本校代表隊已退出，由本校遞補"
 
-/** 當下階段的遞補規則說明（EXPERIENCE.md〈固定介面字串〉，Story 3.4 決定）。 */
+/**
+ * 當下階段的遞補規則說明（EXPERIENCE.md〈固定介面字串〉，Story 3.4 決定）；
+ * 自訂賽事不分報名截止前後都是 `custom`（Story 3.10 決定）。
+ */
 export const WAITLIST_PHASE_RULES: Record<WaitlistPhase, string> = {
   first_come: "先搶期由優先期沒有報名、目前也沒有正取的學校，依送出先後遞補。",
   after_deadline: "報名截止後依平均段位積分由高到低遞補，每校最多 2 隊正取。",
+  custom: "自訂賽事依送出時間遞補，沒有每校隊數上限。",
 }
 
 /**

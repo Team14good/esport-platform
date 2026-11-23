@@ -993,7 +993,7 @@ export type MyTeamCard = {
   /**
    * Waitlist Phase
    */
-  waitlist_phase: "first_come" | "after_deadline" | null
+  waitlist_phase: "first_come" | "after_deadline" | "custom" | null
   /**
    * Team Id
    */
@@ -1345,7 +1345,7 @@ export type OrganizerRegistration = {
   /**
    * Waitlist Phase
    */
-  waitlist_phase: "first_come" | "after_deadline" | null
+  waitlist_phase: "first_come" | "after_deadline" | "custom" | null
   /**
    * Registration Id
    */
@@ -2510,7 +2510,7 @@ export type TeamDetail = {
   /**
    * Waitlist Phase
    */
-  waitlist_phase: "first_come" | "after_deadline" | null
+  waitlist_phase: "first_come" | "after_deadline" | "custom" | null
   /**
    * Id
    */

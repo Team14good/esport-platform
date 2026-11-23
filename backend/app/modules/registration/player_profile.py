@@ -115,11 +115,12 @@ def _names(entries: Iterable[RosterEntry]) -> str:
 
 
 def submit_blockers(
-    *, starters: int, members: Sequence[RosterEntry]
+    *, starters: int, members: Sequence[RosterEntry], check_school: bool = True
 ) -> list[SubmitBlocker]:
     """不能送出報名的原因，依固定順序全部列出（不只第一項）；`members` 依加入順序。
 
     人數達先發人數 → 每位參賽資料完整 → 每位都設定了學校 → 已設學校的隊員學校相同。
+    `check_school` 為 False（自訂模式，由 `allocation.checks_school` 決定）時不檢查後兩項。
     """
     blockers: list[SubmitBlocker] = []
     shortage = starters - len(members)
@@ -138,6 +139,8 @@ def submit_blockers(
                 message=f"尚未填完參賽資料：{_names(incomplete)}",
             )
         )
+    if not check_school:
+        return blockers
     no_school = [entry for entry in members if entry.school_id is None]
     if no_school:
         blockers.append(

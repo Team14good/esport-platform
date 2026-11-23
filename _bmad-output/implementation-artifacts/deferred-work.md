@@ -234,3 +234,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-public-accepted-teams.md`
   summary: （低）前端「能不能檢舉」的前置判斷（已登入、此賽事有四種狀態隊伍、是隊長、賽事未結束或取消）在 6.4 `ReportTeamEntry` 與 3.9 `AcceptedTeamReportAction` 的 `useReportableTeamsById` 各寫一份；之後改其中一邊的條件，另一邊要記得一起改。哪些隊伍可檢舉、是否已有處理中的檢舉由後端 `reportable-teams` 決定，兩邊共用，不受影響。
   evidence: 2026-11-23 OG-Matcha 在 #106 的審查建議。抽成共用 hook 要改 C 的 `ReportTeamEntry.tsx`（CLAUDE.md：動到別人的模組只新增），所以 3.9 不動。修法：把 `useReportableTeamsById` 移到 `features/disputes/useReportableTeams.ts` 匯出，`ReportTeamEntry` 改用它（`eligible` 改成 Map 不為空），兩邊的 `REPORTER_STATUSES`、`ENDED_STATUSES` 只留一份；`report-team.test.tsx`、`accepted-teams.test.tsx` 應不需修改。
+
+## Deferred from: spec-3-10-custom-mode-first-come.md (2026-11-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-custom-mode-first-come.md`
+  summary: （中）Story 3.10 第 2 部分：建立賽事的模式選項（自訂免填優先期）、`Tournament.invite_token` 與遷移、主辦方在 S27 檢視與重設賽事報名連結、建隊檢查 `TOURNAMENT_INVITE_REQUIRED`、S1「邀請制報名」、S2 依 `?invite=` 顯示「建立隊伍」、示範資料自訂賽事（7.1）、`@story-3.10` E2E。
+  evidence: spec 估計約 4,900 tokens，使用者 2026-11-23 選擇拆分；第 2 部分要改 B 的 tournaments 模組，與 PR #103 同檔，等 #103 合併後做。網址、重設後既有隊伍不受影響與介面文字已在第 1 部分 spec 的 Decisions 定案。
+
+## Deferred from: spec-3-10-custom-mode-first-come.md（#118 組員審查，2026-11-24）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-custom-mode-first-come.md`
+  summary: （低）registration `_candidate` 為了讓自訂賽事的學校快照可為 null，拿掉了「缺學校快照拋 RuntimeError」的檢查，校園賽也一併放行；校園賽若有 `school_id` 為 null 的報名，會被當成同一所學校套用每校上限與順位，不會報錯。
+  evidence: 2026-11-24 OG-Matcha 在 #118 的審查建議（第 2 點）；本 Story 實作審查 R9 同一件事。目前沒有路徑會產生這種資料（校園賽送出時 `submit_registration` 已保證有學校），屬防禦性退步。修法：校園賽的呼叫端（或 `_candidate` 加模式參數，經 `allocation.checks_school` 判斷）在學校快照為 null 時拋 RuntimeError，自訂賽事照常放行。

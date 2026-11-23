@@ -550,11 +550,12 @@ def test_submission_just_after_priority_end_is_allocated(
     ]
 
 
-def test_custom_mode_submission_stays_pending(
+def test_custom_mode_submission_is_allocated_immediately(
     client: TestClient, session: Session, frozen_clock: FrozenClock
 ) -> None:
+    """自訂模式（Story 3.10）不走先搶期：不結算優先期，名額有剩立即正取，學校快照為 null。"""
     tournament = _tournament(session, frozen_clock)
-    # 建立賽事一律是校園賽（期中），所以直接改賽事列的模式
+    # 建立賽事一律是校園賽（3.10 第 2 部分才有模式選項），所以直接改賽事列的模式
     row = session.get(Tournament, tournament.id)
     assert row is not None
     row.mode = TournamentMode.CUSTOM
@@ -565,11 +566,15 @@ def test_custom_mode_submission_stays_pending(
 
     body = _submit_ok(client, captain, team)
 
-    assert body["registration_status"] == "pending"
-    assert _events(session, tournament) == []
+    assert body["registration_status"] == "accepted"
     assert repository.get_settlement(session, tournament.id) is None
     registration = _registration(session, team["id"])
-    assert _changes(session, tournament, registration.id) == [("pending", captain.id)]
+    assert registration.school_id is None
+    assert _changes(session, tournament, registration.id) == [
+        ("pending", captain.id),
+        ("accepted", None),
+    ]
+    assert [e["status"] for e in _events(session, tournament)] == ["accepted"]
 
 
 def test_rejected_submission_does_not_settle_or_allocate(
