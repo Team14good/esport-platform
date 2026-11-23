@@ -13,6 +13,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
+from sqlalchemy import text
 from sqlmodel import Session, col, func, select
 
 from app.core import audit
@@ -230,6 +231,80 @@ def test_new_registration_end_is_tried_again(
     assert _status(session, tournament) == S.PUBLISHED
 
 
+def test_drawn_after_skip_when_accepted_reaches_two(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    tournament = tournament_in(session, S.CLOSED)
+    fake_registration.set_team_count(1)
+    assert service.auto_draw(session, tournament_id=tournament.id) == "not_enough_teams"
+    # 提高名額讓候補遞補到 2 隊
+    teams = fake_registration.set_team_count(2)
+
+    assert service.auto_draw(session, tournament_id=tournament.id) == "drawn"
+
+    assert _status(session, tournament) == S.PUBLISHED
+    assert _has_bracket(session, tournament)
+    assert len(fake_registration.drawn) == 1
+    assert sorted(fake_registration.drawn[0][1]) == sorted(teams)
+    assert len(_events(session, tournament, "BracketDrawn")) == 1
+    # 沒有第二則「正取不足」，既有略過紀錄與操作紀錄不變
+    assert len(_events(session, tournament, "AutoDrawSkipped")) == 1
+    assert len(_logs(session, tournament, "bracket.auto_draw_skipped")) == 1
+    assert _skips(session, tournament) == 1
+    drawn_logs = _logs(session, tournament, "bracket.drawn")
+    assert [log.actor_id for log in drawn_logs] == [None]
+
+
+@pytest.mark.parametrize("later_count", [0, 1])
+def test_still_not_enough_after_skip_does_nothing(
+    session: Session, fake_registration: FakeRegistration, later_count: int
+) -> None:
+    tournament = tournament_in(session, S.CLOSED)
+    fake_registration.set_team_count(1)
+    service.auto_draw(session, tournament_id=tournament.id)
+    fake_registration.set_team_count(later_count)
+    before = _snapshot(session, tournament)
+
+    assert service.auto_draw(session, tournament_id=tournament.id) == "not_due"
+
+    assert _snapshot(session, tournament) == before
+    assert fake_registration.drawn == []
+
+
+def test_manual_draw_after_skip_then_auto_draw_does_nothing(
+    session: Session, fake_registration: FakeRegistration
+) -> None:
+    organizer = make_account(session, organizer=True)
+    tournament = tournament_in(session, S.CLOSED, organizer=organizer)
+    fake_registration.set_team_count(1)
+    service.auto_draw(session, tournament_id=tournament.id)
+    fake_registration.set_team_count(2)
+    service.draw(session, tournament_id=tournament.id, actor_id=organizer.id)
+    before = _snapshot(session, tournament)
+
+    assert service.auto_draw(session, tournament_id=tournament.id) == "not_due"
+
+    assert _snapshot(session, tournament) == before
+    assert len(_events(session, tournament, "BracketDrawn")) == 1
+
+
+def test_start_passed_after_skip_is_not_drawn(
+    session: Session,
+    fake_registration: FakeRegistration,
+    frozen_clock: FrozenClockLike,
+) -> None:
+    tournament = tournament_in(session, S.CLOSED)
+    fake_registration.set_team_count(1)
+    service.auto_draw(session, tournament_id=tournament.id)
+    fake_registration.set_team_count(2)
+    frozen_clock.set(tournament.start_at)
+    before = _snapshot(session, tournament)
+
+    assert service.auto_draw(session, tournament_id=tournament.id) == "not_due"
+
+    assert _snapshot(session, tournament) == before
+
+
 # ---------------------------------------------------------------- 不是候選
 
 
@@ -335,6 +410,52 @@ def test_due_skips_a_failing_tournament_and_draws_the_next(
     assert count_matches(session, failing.id) == 0
     assert _events(session, failing, "BracketDrawn") == []
     assert _skips(session, failing) == 0
+    # 後面的賽事照常抽籤
+    assert _status(session, ok) == S.PUBLISHED
+    assert len(_events(session, ok, "BracketDrawn")) == 1
+
+
+def test_due_prefilter_sql_error_skips_only_that_tournament(
+    session: Session,
+    fake_registration: FakeRegistration,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failing = tournament_in(session, S.CLOSED)
+    ok = tournament_in(session, S.CLOSED)
+    # 讓 failing 排在前面（報名截止較早），並已有略過紀錄，預先排除才會查正取
+    row = session.get(Tournament, failing.id)
+    assert row is not None
+    row.registration_end = row.registration_end - timedelta(hours=1)
+    session.add(row)
+    session.add(
+        AutoDrawSkip(
+            tournament_id=failing.id,
+            registration_end=row.registration_end,
+            accepted_teams=1,
+            skipped_at=row.registration_end,
+        )
+    )
+    session.flush()
+    fake_registration.set_team_count(3)
+    original = fake_registration.list_accepted_teams
+
+    def _accepted(_session: Session, *, tournament_id: uuid.UUID) -> list[uuid.UUID]:
+        if tournament_id == failing.id:
+            # 真的 SQL 錯誤：沒有 savepoint 時外層交易會進入 aborted
+            _session.execute(text("SELECT 1 / 0"))
+            # 上一行一定拋錯；這行執行不到，只為了讓替身的回傳型別完整
+            return original(_session, tournament_id=tournament_id)[:1]
+        return original(_session, tournament_id=tournament_id)
+
+    monkeypatch.setattr(registration_port, "list_accepted_teams", _accepted)
+
+    _drain(session)
+
+    assert _status(session, failing) == S.CLOSED
+    assert not _has_bracket(session, failing)
+    # 只回滾那一場的 savepoint：之前寫入的略過紀錄還在，也沒有新事件
+    assert _skips(session, failing) == 1
+    assert _events(session, failing, "AutoDrawSkipped") == []
     # 後面的賽事照常抽籤
     assert _status(session, ok) == S.PUBLISHED
     assert len(_events(session, ok, "BracketDrawn")) == 1

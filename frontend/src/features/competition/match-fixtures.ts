@@ -105,6 +105,7 @@ export function matchDetailFromBracket(
   return {
     ...match,
     tournament: { id: bracket.tournament_id, name: FIXTURE_TOURNAMENT_NAME },
+    tournament_status: "ongoing",
     game_name: FIXTURE_GAME_NAME,
     best_of: FIXTURE_BEST_OF,
     score_type: scoreType,

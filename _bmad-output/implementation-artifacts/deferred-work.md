@@ -43,10 +43,6 @@
   summary: 6.2 更正已結束賽事或季軍賽已開打後的準決賽時，`VoidMatch`、名次與賽事狀態怎麼處理還沒定（未驗證，若為真屬 medium）。
   evidence: `_void` 只能從待開打轉 voided；`_finish` 對已結束的賽事不再動作，但名次從場次重算，會和 `tournament.podium` 操作紀錄不一致。6.2 實作時要決定規則並補測試。
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-public-match-api.md`
-  summary: （低）賽事取消後，停在申訴期或申訴中的場次，公開單場 API 仍會回傳 `appeal_deadline`，但 worker 已不再自動確認（未驗證，若為真屬 low）。
-  evidence: 2026-10-31 公開單場 API 審查（Edge Case Hunter、Blind Hunter）。期中不能取消賽事（2.6 擱置），已結束的賽事也不會有停在申訴期的場次，所以目前不會發生。2.6 實作取消時，要決定公開頁對這類場次顯示什麼，並在 `get_public_match` 加上賽事狀態判斷。
-
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
   summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
   evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。
@@ -188,10 +184,6 @@
   evidence: Story 1.6 Decisions。修法：competition 在 `RefereeUnassigned` 加一個原因欄位（例如 `reason: "conflict" | "organizer"`，5.5 `unassign_referee_if_member` 發 `conflict`），notifications 的 `_referee_unassigned` 在 `conflict` 時另加主辦方一份草稿（link `/organizer/tournaments/{tid}/matches`）。
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-6-cancel-tournament.md`
-  summary: 3.9 第 2 部分登錄 `TournamentCancelled` 收件規則前取消的賽事，事件已被 notifications 標為已處理（找不到規則只記 log），3.9 上線後不會補發通知；3.9 第 2 部分要決定是否補發這段期間已取消賽事的通知。
-  evidence: 2026-11-22 Story 2.6 審查（Edge Case Hunter、Blind Hunter），已對照 `notifications/service.py` `dispatch_event` 確認；使用者決定 2.6 不改程式，因為 3.9 合併前只有本機與示範環境會取消賽事。
-
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-6-cancel-tournament.md`
   summary: （未驗證，若為真屬 medium）賽事取消後，側欄的場次管理（S30）、裁判（S31）、申訴（S32）、檢舉（S33）頁可能仍顯示可操作的按鈕；確認對話框寫「賽事資訊改為唯讀」，2.6 的驗收條件只要求 S27 唯讀。
   evidence: 2026-11-22 Story 2.6 審查（Blind Hunter）。後端已確認裁判邀請（`ensure_accepting_referees`）與申訴處理（`disputes/service.py` 拒絕已取消）會擋下；改場次時間是否擋下未確認。要確認 competition 的改時間 API 對已取消賽事的處理，並決定各頁是否隱藏動作。
 ## Deferred from: spec-3-8-review-and-reject-registration.md (2026-11-22)
@@ -210,6 +202,14 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-notification-center.md`
   summary: （中）一般通知事件之間仍沒有重試上限：某則事件的 resolver 每次都拋非預期例外（程式錯誤、DataError）時，`dispatch_outbox` 每輪回滾、停在這則，之後的一般通知全部延後；驗證信與重設信已改為優先處理，不受影響。
   evidence: 2026-11-21 OG-Matcha 在 #100 的審查第 1 點；followup 只做了 token 事件優先。修法：`outbox_event` 加 `attempts`／`last_error`（需遷移，`core/events.py`），失敗時在獨立交易裡累加，超過上限標為 dead-letter 並寫 log；或改成略過時記錄到操作紀錄。
+## Deferred from: spec-3-11-roster-changes-and-disband-team.md (2026-11-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （低）3.7 撤回的隊伍隊員仍佔同賽事一隊：撤回後 `TeamMember` 列保留，`ALREADY_IN_TOURNAMENT` 與唯一鍵 (tournament_id, account_id) 讓隊員無法加入同賽事的其他隊伍；3.11 只處理名單鎖定前的異動（FR-41），撤回後的報名名單已鎖定，移除、退出、解散都回 409 `ROSTER_LOCKED`。
+  evidence: Story 3.11 Decisions。修法候選：撤回時比照解散把原隊員搬到 `disbanded_team_member`（或另一張保存表）並刪除隊員列；或 `_ensure_can_join` 與唯一鍵改為排除報名已撤回的隊伍（要改唯一鍵與遷移）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （中）既有通知規則在 worker 處理時才以 `_member_ids` 查隊員（`notifications/rules.py`）：主辦方退回後、worker 處理前隊長就移除隊員或解散，`RegistrationRejected`、`RegistrationAllocated`、`RegistrationBackfilled` 只寄給處理當下仍在隊上的人（解散則沒有人收到）。
+  evidence: Story 3.11 spec 審查第 3 點、Design Notes。修法候選：這些事件改帶發生當下的收件人帳號（違反 AD-8「事件只帶 id」，需要人決定），或規則在隊伍已解散時改查 `registration.service.list_disbanded_member_ids`（只補解散的情況，移除仍會少人）。
 
 ## Deferred from: spec-4-5-post-draw-withdrawal.md (2026-11-22)
 
@@ -223,3 +223,14 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-5-edit-tournament.md`
   summary: （未驗證，若為真屬 medium）報名截止的賽事延長報名、轉回開放報名時，沒有處理截止時已發出的事件或已改變的狀態，也沒有通知已報名隊伍報名重新開放。
   evidence: 2026-11-23 Story 2.5 審查（Blind Hunter）。2.5 的 AC 沒有要求通知；優先期結算（`priority_window_settlement`）已完成不重跑是預期行為。要確認 registration `close_registration` 有沒有發出在重新開放後會變成錯誤的事件，並決定是否通知隊伍。
+## Deferred from: spec-3-11-roster-changes-and-disband-team.md（#110 組員審查，2026-11-23）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-11-roster-changes-and-disband-team.md`
+  summary: （低）S19 先顯示「可加入」、隊長在這之後解散隊伍，按加入時 `join_team` 回 409 `ROSTER_LOCKED`，畫面顯示「名單已鎖定」，重新整理後才變成「隊伍已解散」；行為正確，只是文字不一致。
+  evidence: 2026-11-23 OG-Matcha 在 #110 的審查第 2 點；Story 3.11 程式審查 R7（凍結矩陣「解散與加入同時」規定回 `ROSTER_LOCKED`）。修法候選：解散的隊伍加入時回專屬錯誤碼（例如 `TEAM_DISBANDED`，需改 spec 矩陣），或前端在加入得到 409 時重新取得邀請預覽。
+
+## Deferred from: spec-3-9-public-accepted-teams.md（#106 組員審查，2026-11-23）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-public-accepted-teams.md`
+  summary: （低）前端「能不能檢舉」的前置判斷（已登入、此賽事有四種狀態隊伍、是隊長、賽事未結束或取消）在 6.4 `ReportTeamEntry` 與 3.9 `AcceptedTeamReportAction` 的 `useReportableTeamsById` 各寫一份；之後改其中一邊的條件，另一邊要記得一起改。哪些隊伍可檢舉、是否已有處理中的檢舉由後端 `reportable-teams` 決定，兩邊共用，不受影響。
+  evidence: 2026-11-23 OG-Matcha 在 #106 的審查建議。抽成共用 hook 要改 C 的 `ReportTeamEntry.tsx`（CLAUDE.md：動到別人的模組只新增），所以 3.9 不動。修法：把 `useReportableTeamsById` 移到 `features/disputes/useReportableTeams.ts` 匯出，`ReportTeamEntry` 改用它（`eligible` 改成 Map 不為空），兩邊的 `REPORTER_STATUSES`、`ENDED_STATUSES` 只留一份；`report-team.test.tsx`、`accepted-teams.test.tsx` 應不需修改。

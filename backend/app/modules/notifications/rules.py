@@ -6,7 +6,8 @@ resolver 自己判斷查不到時拋 `RecipientsNotFound`，都由 `service.disp
 
 匯入本模組即完成登錄（`notifications.service` 匯入時就會載入）。
 不在這裡登錄的：`MatchResultSubmitted`、`MatchResultConfirmed`、`TeamCheckedIn`
-（不在 FR-37 對照表）；2.6 取消賽事、3.7～3.11 的事件由那些 Story 自己登錄。
+（不在 FR-37 對照表）；3.7～3.11 的事件由那些 Story 自己登錄（2.6 取消賽事的
+`TournamentCancelled` 由 3.9 登錄）。
 """
 
 import uuid
@@ -51,12 +52,16 @@ from app.modules.notifications.registry import (
 )
 from app.modules.registration import service as registration_service
 from app.modules.registration.models import (
+    CaptainTransferred,
     RegistrationAllocated,
     RegistrationBackfilled,
     RegistrationRejected,
     RegistrationStatus,
+    TeamDisbanded,
+    TeamMemberRemoved,
 )
 from app.modules.tournaments import service as tournaments_service
+from app.modules.tournaments.models import TournamentCancelled
 
 _TAIPEI = ZoneInfo("Asia/Taipei")
 _WEEKDAYS = "一二三四五六日"
@@ -498,3 +503,97 @@ def _opponent_retired(
 
 register(BracketBackfilled, _bracket_backfilled)
 register(OpponentRetired, _opponent_retired)
+
+
+# ---------------------------------------------------------------- 隊員異動與解散（3.11）
+
+
+def _team_label(session: Session, team_id: uuid.UUID, tournament_id: uuid.UUID) -> str:
+    """「「隊名」（賽事）」：解散後隊伍沒有隊員，隊名用 `get_team_names` 查。"""
+    names = registration_service.get_team_names(session, team_ids=[team_id])
+    if team_id not in names:
+        raise RecipientsNotFound(f"team {team_id} not found")
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=tournament_id
+    )
+    return f"「{names[team_id]}」（{tournament.name}）"
+
+
+def _team_member_removed(
+    session: Session, event: TeamMemberRemoved
+) -> list[NotificationDraft]:
+    # 被移除者在 worker 處理時已不在隊上，收件人取自事件
+    label = _team_label(session, event.team_id, event.tournament_id)
+    return _drafts(
+        [event.account_id],
+        title="已被移出隊伍",
+        body=f"你已被隊長移出{label}。",
+        link=f"/tournaments/{event.tournament_id}",
+    )
+
+
+def _captain_transferred(
+    session: Session, event: CaptainTransferred
+) -> list[NotificationDraft]:
+    label = _team_label(session, event.team_id, event.tournament_id)
+    return _drafts(
+        [event.to_account_id],
+        title="你成為隊長",
+        body=f"{label}的隊長已轉讓給你。",
+        link=f"/teams/{event.team_id}",
+    )
+
+
+def _team_disbanded(session: Session, event: TeamDisbanded) -> list[NotificationDraft]:
+    # 所有原隊員（含隊長本人，FR-37）；解散後隊伍已沒有隊員，查解散名單
+    recipients = registration_service.list_disbanded_member_ids(
+        session, team_id=event.team_id
+    )
+    label = _team_label(session, event.team_id, event.tournament_id)
+    return _drafts(
+        recipients,
+        title="隊伍已解散",
+        body=f"{label}已被隊長解散，報名已撤回。",
+        link=f"/teams/{event.team_id}",
+    )
+
+
+register(TeamMemberRemoved, _team_member_removed)
+register(CaptainTransferred, _captain_transferred)
+register(TeamDisbanded, _team_disbanded)
+
+
+# ---------------------------------------------------------------- 取消賽事（2.6 發出、3.9 登錄）
+
+# 「已送出報名」的隊伍：待分配、正取、候補、已參賽（與 6.4 的四種狀態相同）。
+# 組隊中還沒送出；退回、撤回、退賽、取消資格已離開賽事，不通知。
+_CANCEL_NOTIFIED_STATUSES = frozenset(
+    {
+        RegistrationStatus.PENDING,
+        RegistrationStatus.ACCEPTED,
+        RegistrationStatus.WAITLISTED,
+        RegistrationStatus.DRAWN,
+    }
+)
+
+
+def _tournament_cancelled(
+    session: Session, event: TournamentCancelled
+) -> list[NotificationDraft]:
+    tournament = tournaments_service.get_tournament(
+        session, tournament_id=event.tournament_id
+    )
+    teams = registration_service.list_teams_by_status(
+        session,
+        tournament_id=event.tournament_id,
+        statuses=_CANCEL_NOTIFIED_STATUSES,
+    )
+    return _drafts(
+        [account_id for team in teams for account_id in _member_ids(session, team.id)],
+        title="賽事已取消",
+        body=f"「{tournament.name}」已由主辦方取消，你的隊伍不會再進行比賽。",
+        link=f"/tournaments/{tournament.id}",
+    )
+
+
+register(TournamentCancelled, _tournament_cancelled)

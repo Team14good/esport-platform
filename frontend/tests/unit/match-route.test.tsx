@@ -289,6 +289,59 @@ describe("S4 場次頁路由", () => {
     expect(screen.queryByRole("heading", { name: "比分登錄" })).toBeNull()
   })
 
+  it("賽事已取消：頁首顯示取消橫幅；後端不給申訴期限時沒有申訴倒數", async () => {
+    mockPublicMatch((detail) => ({
+      ...detail,
+      tournament_status: "cancelled",
+      appeal_deadline: null,
+      appeal_started_at: null,
+    }))
+    renderAt(matchUrl("match-M18"))
+
+    const banner = await screen.findByRole("alert")
+    expect(banner).toHaveTextContent("此賽事已取消")
+    expect(document.querySelector("[data-slot=countdown]")).toBeNull()
+  })
+
+  it("賽事已取消：待開打場次沒有報到倒數，隊長看不到報到按鈕", async () => {
+    signInAs()
+    vi.spyOn(CompetitionService, "readCheckInStatus").mockResolvedValue({
+      data: {
+        side: "a",
+        reason: "not_checkable",
+        opens_at: "2099-01-01T04:30:00Z",
+      },
+    } as unknown as ReadStatusResult)
+    mockPublicMatch((detail) => ({
+      ...detail,
+      tournament_status: "cancelled",
+      status: "scheduled",
+      scheduled_at: "2099-01-01T05:00:00Z",
+      forfeit_deadline: null,
+      outcome: null,
+      winner_id: null,
+      wins_a: 0,
+      wins_b: 0,
+      games: [],
+    }))
+    renderAt(matchUrl("match-M3"))
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "報到" }),
+    ).toBeInTheDocument()
+    expect(await screen.findByRole("alert")).toHaveTextContent("此賽事已取消")
+    expect(document.querySelector("[data-slot=countdown]")).toBeNull()
+    expect(screen.queryByRole("button", { name: "報到" })).toBeNull()
+  })
+
+  it("賽事未取消：不顯示取消橫幅", async () => {
+    mockPublicMatch()
+    renderAt(matchUrl("match-M18"))
+
+    await screen.findByRole("region", { name: "申訴期" })
+    expect(screen.queryByText("此賽事已取消")).toBeNull()
+  })
+
   it("API 回傳的資料直接顯示，不經過任何假資料", async () => {
     mockPublicMatch((detail) => ({
       ...detail,

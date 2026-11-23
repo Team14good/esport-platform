@@ -1,4 +1,4 @@
-"""Story 3.1：真實 PostgreSQL 上平行加入隊伍不會超收。
+"""Story 3.1：真實 PostgreSQL 上平行加入隊伍不會超收；Story 3.11：異動與送出、解散與加入依鎖序。
 
 人數上限沒有資料庫約束，只靠 `lock_tournament` 的列鎖讓加入依序執行；所以這裡用多條
 連線、多執行緒同時加入，資料要真正提交，另一條連線才看得到。
@@ -10,6 +10,7 @@
 
 import threading
 import uuid
+from collections.abc import Callable
 
 from sqlalchemy import delete
 from sqlmodel import Session, col, select
@@ -17,9 +18,14 @@ from sqlmodel import Session, col, select
 from app.core.audit import AuditLog
 from app.core.db import engine
 from app.core.errors import BusinessError
-from app.modules.identity.models import Account
+from app.modules.identity.models import Account, School
 from app.modules.registration import repository, service
-from app.modules.registration.models import Registration, Team, TeamMember
+from app.modules.registration.models import (
+    DisbandedTeamMember,
+    Registration,
+    Team,
+    TeamMember,
+)
 from tests.helpers import make_account, make_game, make_tournament
 
 JOINERS = 5
@@ -120,3 +126,146 @@ def test_parallel_joins_never_exceed_team_size() -> None:
             )
             cleanup.execute(delete(Team).where(col(Team.id) == team_id))
             cleanup.commit()
+
+
+# ---------------------------------------------------------------- 隊員異動（Story 3.11）
+
+
+def _race(actions: list[Callable[[Session], object]]) -> dict[int, str]:
+    """各用一條連線同時開始；回傳每個動作（依索引）的結果："ok" 或業務錯誤代碼。"""
+    start = threading.Barrier(len(actions))
+    outcomes: dict[int, str] = {}
+    outcomes_lock = threading.Lock()
+
+    def _run(index: int, action: Callable[[Session], object]) -> None:
+        with Session(engine) as db:
+            try:
+                start.wait(timeout=10)
+                action(db)
+                db.commit()
+                result = "ok"
+            except BusinessError as exc:
+                result = exc.code
+            except Exception as exc:  # 讓非預期錯誤出現在斷言訊息裡
+                result = repr(exc)
+        with outcomes_lock:
+            outcomes[index] = result
+
+    threads = [
+        threading.Thread(target=_run, args=(i, a)) for i, a in enumerate(actions)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert not any(thread.is_alive() for thread in threads)
+    return outcomes
+
+
+def _cleanup(team_id: uuid.UUID) -> None:
+    with Session(engine) as cleanup:
+        cleanup.execute(delete(TeamMember).where(col(TeamMember.team_id) == team_id))
+        cleanup.execute(
+            delete(DisbandedTeamMember).where(
+                col(DisbandedTeamMember.team_id) == team_id
+            )
+        )
+        cleanup.execute(
+            delete(Registration).where(col(Registration.team_id) == team_id)
+        )
+        cleanup.execute(delete(Team).where(col(Team.id) == team_id))
+        cleanup.commit()
+
+
+def test_parallel_remove_and_submit_follow_the_lock_order() -> None:
+    """隊長送出與移除 B 同時：先送出則移除得 409 `ROSTER_LOCKED`、B 仍在名單；
+    先移除則送出以移除後的名單判斷（先發 1 人，只剩隊長也能送出）。"""
+    with Session(engine) as setup:
+        game = make_game(setup)
+        _demote_game_creator(setup, game.id)
+        tournament = make_tournament(setup, game=game, starters=1, substitutes=1)
+        school = School(name=f"併發大學-{uuid.uuid4().hex[:8]}")
+        setup.add(school)
+        setup.flush()
+        captain = make_account(setup, school_id=school.id)
+        player = make_account(setup, school_id=school.id)
+        team = service.create_team(
+            setup, tournament_id=tournament.id, account_id=captain.id, name="異動隊"
+        )
+        assert team.invite_token is not None
+        service.join_team(setup, token=team.invite_token, account_id=player.id)
+        for member in repository.list_members(setup, team.id):
+            member.game_account_id = "ID#TW1"
+            member.rank_tier = "鑽石"
+            member.rank_score = 30
+            member.rank_screenshot_key = f"{'b' * 32}.png"
+            member.rank_screenshot_name = "rank.png"
+            setup.add(member)
+        setup.commit()
+        team_id, captain_id, player_id = team.id, captain.id, player.id
+
+    try:
+        outcomes = _race(
+            [
+                lambda db: service.submit_registration(
+                    db, team_id=team_id, account_id=captain_id
+                ),
+                lambda db: service.remove_member(
+                    db, team_id=team_id, account_id=captain_id, target_id=player_id
+                ),
+            ]
+        )
+
+        assert outcomes[0] == "ok", outcomes
+        assert outcomes[1] in ("ok", "ROSTER_LOCKED"), outcomes
+        with Session(engine) as check:
+            members = {m.account_id for m in repository.list_members(check, team_id)}
+            registration = repository.get_registration_by_team(check, team_id)
+            assert registration is not None
+            assert registration.status == "pending"
+            if outcomes[1] == "ok":
+                assert members == {captain_id}
+            else:
+                assert members == {captain_id, player_id}
+    finally:
+        _cleanup(team_id)
+
+
+def test_parallel_disband_and_join_follow_the_lock_order() -> None:
+    """解散與新隊員加入同時：先解散則加入得 409 `ROSTER_LOCKED`；先加入則新隊員也被
+    解散（在解散名單內，會收到通知）。兩種順序都不會留下隊員列。"""
+    with Session(engine) as setup:
+        game = make_game(setup)
+        _demote_game_creator(setup, game.id)
+        tournament = make_tournament(setup, game=game, starters=5, substitutes=1)
+        captain = make_account(setup)
+        joiner = make_account(setup)
+        team = service.create_team(
+            setup, tournament_id=tournament.id, account_id=captain.id, name="解散隊"
+        )
+        setup.commit()
+        team_id, token = team.id, team.invite_token
+        captain_id, joiner_id = captain.id, joiner.id
+    assert token is not None
+
+    try:
+        outcomes = _race(
+            [
+                lambda db: service.disband_team(
+                    db, team_id=team_id, account_id=captain_id
+                ),
+                lambda db: service.join_team(db, token=token, account_id=joiner_id),
+            ]
+        )
+
+        assert outcomes[0] == "ok", outcomes
+        assert outcomes[1] in ("ok", "ROSTER_LOCKED"), outcomes
+        with Session(engine) as check:
+            assert repository.count_members(check, team_id) == 0
+            former = set(service.list_disbanded_member_ids(check, team_id=team_id))
+            if outcomes[1] == "ok":
+                assert former == {captain_id, joiner_id}
+            else:
+                assert former == {captain_id}
+    finally:
+        _cleanup(team_id)
