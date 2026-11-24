@@ -98,7 +98,7 @@ class Appeal(SQLModel, table=True):
     reason: str | None = Field(default=None, sa_type=Text)
     handled_by: uuid.UUID | None = Field(default=None, foreign_key="account.id")
     handled_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
-    # 6.3 逾期提醒（期中擱置）；期中一律 None
+    # 6.3 逾期提醒：worker 發出 `AppealReminded` 的時間；同一筆申訴只提醒一次
     reminded_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
 
 
@@ -156,6 +156,14 @@ class AppealResolved(Event):
 
     match_id: uuid.UUID
     decision: AppealDecision
+
+
+class AppealReminded(Event):
+    """申訴快到處理期限仍未處理，提醒主辦方（6.3，worker 發出；同一筆申訴只發一次）。"""
+
+    appeal_id: uuid.UUID
+    match_id: uuid.UUID
+    tournament_id: uuid.UUID
 
 
 class ReportFiled(Event):
@@ -245,6 +253,8 @@ class AppealGroup(BaseModel):
     team_b: PublicTeamRef | None
     # 有未結案的申訴（可以處理）
     has_open: bool
+    # 6.3：處理期限（與 S27 相同的算法，取未結案申訴中最早的期限）；沒有未結案的申訴為 None
+    deadline: datetime | None
     # 依提出時間
     appeals: list[AppealItem]
 

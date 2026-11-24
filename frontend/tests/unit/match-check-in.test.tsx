@@ -15,10 +15,12 @@ import {
   CompetitionService,
   type PublicMatchDetail,
 } from "@/client"
+import { PAUSED_TEXT } from "@/components/common/Countdown"
 import {
   CHECK_IN_LEAD_MS,
   checkInCountdownPhase,
   MatchCheckIn,
+  PAUSED_COUNTDOWN_LABEL,
   showsCheckIn,
   TOO_EARLY_RETRY_MS,
   tooEarlyRetryInterval,
@@ -332,6 +334,65 @@ describe("S4 報到面板的資料轉接", () => {
     expect(await screen.findByText("對手確定後才能報到")).toBeInTheDocument()
     expect(screen.getByText("待定")).toBeInTheDocument()
     expect(document.querySelector("[data-slot=countdown]")).toBeNull()
+  })
+
+  it("等待前一場申訴結果：面板停用、倒數位置顯示「計時暫停」；處理完成後倒數依新的棄權期限", async () => {
+    const paused = scheduledIn(-10 * MINUTE, {
+      team_b: null,
+      source_b: "M4 勝者",
+      forfeit_deadline: null,
+      awaiting_appeal: true,
+    })
+    const forfeitDeadline = iso(Date.now() + 15 * MINUTE)
+    const resumed = {
+      ...paused,
+      team_b: TEAM_B,
+      source_b: null,
+      forfeit_deadline: forfeitDeadline,
+      awaiting_appeal: false,
+    }
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const refresh = vi.fn(async () => {})
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <MatchCheckIn detail={paused} refresh={refresh} />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByText(PAUSED_COUNTDOWN_LABEL)).toBeInTheDocument()
+    expect(screen.getByText(PAUSED_TEXT)).toBeInTheDocument()
+    expect(screen.queryByRole("timer")).toBeNull()
+    expect(screen.getByText("對手確定後才能報到")).toBeInTheDocument()
+
+    // 申訴處理完成：伺服器回傳兩隊與新的棄權期限
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <MatchCheckIn detail={resumed} refresh={refresh} />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.queryByText(PAUSED_TEXT)).toBeNull()
+    expect(screen.getByText("棄權期限")).toBeInTheDocument()
+    expect(
+      screen.getByText(`${formatMatchDateTime(forfeitDeadline)} 截止`),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("對手確定後才能報到")).toBeNull()
+  })
+
+  it("賽事已取消：即使在等申訴結果也不顯示「計時暫停」", () => {
+    renderCheckIn(
+      scheduledIn(-10 * MINUTE, {
+        team_b: null,
+        source_b: "M4 勝者",
+        forfeit_deadline: null,
+        awaiting_appeal: true,
+        tournament_status: "cancelled",
+      }),
+    )
+
+    expect(screen.queryByText(PAUSED_TEXT)).toBeNull()
   })
 
   it("離開待開打：只留報到時間，不顯示倒數與按鈕", async () => {

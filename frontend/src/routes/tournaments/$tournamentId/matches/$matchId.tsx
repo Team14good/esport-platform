@@ -18,6 +18,7 @@ import {
   fetchMatchDetail,
   matchQueryKey,
 } from "@/features/competition/match-source"
+import { AWAITING_APPEAL_BANNER_TEXT } from "@/features/competition/match-status"
 import { useDisqualifiedMarks } from "@/features/competition/use-disqualified-marks"
 import { useMatchPolling } from "@/features/competition/use-match-polling"
 import { AppealPanel } from "@/features/disputes/AppealPanel"
@@ -84,6 +85,8 @@ function MatchPage({
             children: CANCELLED_BANNER_TEXT,
           },
           showBanner && { children: connectionLostText(lastUpdatedAt) },
+          // 6.3：等待前一場申訴結果（伺服器資料更新後自動消失）
+          detail?.awaiting_appeal && { children: AWAITING_APPEAL_BANNER_TEXT },
         ]}
       />
       {detail ? (

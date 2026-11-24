@@ -8,9 +8,11 @@ import {
   type PublicMatchDetail,
   type ScoreEntryState,
 } from "@/client"
+import { PAUSED_TEXT } from "@/components/common/Countdown"
 import { RouteErrorPage } from "@/components/layout/ErrorPage"
 import { createBracketFixture } from "@/features/competition/bracket-fixtures"
 import { matchDetailFromBracket } from "@/features/competition/match-fixtures"
+import { AWAITING_APPEAL_BANNER_TEXT } from "@/features/competition/match-status"
 import { routeTree } from "@/routeTree.gen"
 import { signInAs } from "./auth-fixtures"
 import { httpError } from "./helpers"
@@ -332,6 +334,152 @@ describe("S4 場次頁路由", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("此賽事已取消")
     expect(document.querySelector("[data-slot=countdown]")).toBeNull()
     expect(screen.queryByRole("button", { name: "報到" })).toBeNull()
+  })
+
+  it("同一頁從暫停到恢復：輪詢拿到申訴處理後的資料，暫停提示消失、徽章回到「待開打」、顯示棄權期限倒數", async () => {
+    const MINUTE = 60 * 1000
+    const scheduledAt = new Date(Date.now() - 5 * MINUTE).toISOString()
+    const forfeitDeadline = new Date(Date.now() + 30 * MINUTE).toISOString()
+    let resolved = false
+    mockPublicMatch((detail) => ({
+      ...detail,
+      status: "scheduled",
+      scheduled_at: scheduledAt,
+      outcome: null,
+      winner_id: null,
+      wins_a: 0,
+      wins_b: 0,
+      games: [],
+      team_b: resolved ? detail.team_b : null,
+      source_b: resolved ? null : "M4 勝者",
+      forfeit_deadline: resolved ? forfeitDeadline : null,
+      awaiting_appeal: !resolved,
+    }))
+    renderAt(matchUrl("match-M3"))
+
+    expect(
+      await screen.findByText(AWAITING_APPEAL_BANNER_TEXT),
+    ).toBeInTheDocument()
+    const header = () =>
+      document.querySelector("[data-slot=match-header]") as HTMLElement
+    expect(within(header()).getByText("棄權計時暫停")).toBeInTheDocument()
+
+    // 主辦方處理完申訴：下一次輪詢（每 5 秒）拿到兩隊與新的棄權期限
+    resolved = true
+    await waitFor(
+      () => expect(screen.queryByText(AWAITING_APPEAL_BANNER_TEXT)).toBeNull(),
+      { timeout: 8000 },
+    )
+    expect(within(header()).queryByText("棄權計時暫停")).toBeNull()
+    expect(within(header()).getByText("待開打")).toBeInTheDocument()
+    expect(screen.queryByText(PAUSED_TEXT)).toBeNull()
+    const checkIn = document.querySelector(
+      "[data-slot=match-check-in]",
+    ) as HTMLElement
+    expect(within(checkIn).getByText("棄權期限")).toBeInTheDocument()
+    expect(checkIn.querySelector("[role=timer]")).not.toBeNull()
+  }, 15_000)
+
+  it("在等申訴結果時，已確定那一隊的隊長也不能報到", async () => {
+    signInAs()
+    mockPublicMatch((detail) => ({
+      ...detail,
+      status: "scheduled",
+      scheduled_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      outcome: null,
+      winner_id: null,
+      wins_a: 0,
+      wins_b: 0,
+      games: [],
+      check_in_a_at: null,
+      team_b: null,
+      source_b: "M4 勝者",
+      forfeit_deadline: null,
+      awaiting_appeal: true,
+    }))
+    // 登入者是已確定那一隊（A 方）的隊長
+    vi.spyOn(CompetitionService, "readCheckInStatus").mockResolvedValue({
+      data: {
+        side: "a",
+        reason: "teams_pending",
+        opens_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+      },
+    } as unknown as ReadStatusResult)
+    vi.spyOn(CompetitionService, "readScoreEntry").mockResolvedValue({
+      data: { is_scorer: false, games: [], series: null },
+    } as unknown as ReadScoreEntryResult)
+    const checkInCall = vi.spyOn(CompetitionService, "checkIn")
+    renderAt(matchUrl("match-M3"))
+
+    const checkIn = await waitFor(() => {
+      const panel = document.querySelector("[data-slot=match-check-in]")
+      expect(panel).not.toBeNull()
+      return panel as HTMLElement
+    })
+    await waitFor(() =>
+      expect(within(checkIn).getByText(PAUSED_TEXT)).toBeInTheDocument(),
+    )
+    const button = await within(checkIn).findByRole("button", { name: "報到" })
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(checkInCall).not.toHaveBeenCalled()
+  })
+
+  it("等待前一場申訴結果：頁頂 banner、徽章「棄權計時暫停」、報到面板停用並顯示「計時暫停」", async () => {
+    mockPublicMatch((detail) => ({
+      ...detail,
+      status: "scheduled",
+      team_b: null,
+      source_b: "M4 勝者",
+      outcome: null,
+      winner_id: null,
+      wins_a: 0,
+      wins_b: 0,
+      games: [],
+      forfeit_deadline: null,
+      awaiting_appeal: true,
+    }))
+    renderAt(matchUrl("match-M3"))
+
+    const banner = (
+      await screen.findByText(AWAITING_APPEAL_BANNER_TEXT)
+    ).closest("[data-slot=page-banner]")
+    expect(banner).not.toBeNull()
+    const header = document.querySelector(
+      "[data-slot=match-header]",
+    ) as HTMLElement
+    expect(within(header).getByText("棄權計時暫停")).toBeInTheDocument()
+    expect(within(header).queryByText("待開打")).toBeNull()
+    const checkIn = document.querySelector(
+      "[data-slot=match-check-in]",
+    ) as HTMLElement
+    expect(within(checkIn).getByText(PAUSED_TEXT)).toBeInTheDocument()
+    expect(checkIn.querySelector("[role=timer]")).toBeNull()
+    expect(within(checkIn).getByText("對手確定後才能報到")).toBeInTheDocument()
+  })
+
+  it("同一輪其他場次（awaiting_appeal 為 false）：沒有暫停提示，徽章為「待開打」", async () => {
+    mockPublicMatch((detail) => ({
+      ...detail,
+      status: "scheduled",
+      scheduled_at: "2099-01-01T05:00:00Z",
+      outcome: null,
+      winner_id: null,
+      wins_a: 0,
+      wins_b: 0,
+      games: [],
+      forfeit_deadline: "2099-01-01T05:15:00Z",
+      awaiting_appeal: false,
+    }))
+    renderAt(matchUrl("match-M3"))
+
+    await screen.findByRole("heading", { level: 2, name: "報到" })
+    expect(screen.queryByText(AWAITING_APPEAL_BANNER_TEXT)).toBeNull()
+    expect(screen.queryByText(PAUSED_TEXT)).toBeNull()
+    const header = document.querySelector(
+      "[data-slot=match-header]",
+    ) as HTMLElement
+    expect(within(header).getByText("待開打")).toBeInTheDocument()
   })
 
   it("賽事未取消：不顯示取消橫幅", async () => {

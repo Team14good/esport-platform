@@ -62,9 +62,39 @@ type CountdownProps = {
   suffix?: string
   /** 歸零後顯示的文字，預設「已截止 · 系統處理中」；例如報名開始倒數傳「報名開放中 · 系統處理中」 */
   expiredText?: string
+  /**
+   * 歸零後文字的顏色（6.3）。有指定時代表到期後系統不會自動處理（例如申訴處理期限）：
+   * 不顯示轉圈、不呼叫 onExpire、也不在 2 分鐘後改顯示逾時提示
+   */
+  expiredVariant?: CountdownVariant
   /** 歸零後立即呼叫、之後每 5 秒呼叫一次，最多 2 分鐘：呼叫端在這裡重抓資料 */
   onExpire?: () => void
   className?: string
+}
+
+/** 倒數暫停時顯示的文字（EXPERIENCE.md〈固定介面字串〉） */
+export const PAUSED_TEXT = "計時暫停"
+
+/** 倒數暫停（6.3）：與 Countdown 相同的版面，數字位置改顯示「計時暫停」。 */
+export function PausedCountdown({
+  label,
+  className,
+}: {
+  label: string
+  className?: string
+}) {
+  return (
+    <div
+      data-slot="countdown"
+      data-variant="paused"
+      className={cn("flex min-w-0 flex-col gap-1", className)}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-label text-muted-foreground">{label}</span>
+        <span className="text-body text-muted-foreground">{PAUSED_TEXT}</span>
+      </div>
+    </div>
+  )
 }
 
 /** 每秒更新的目前時間（毫秒）；stopped 時停止更新。 */
@@ -140,9 +170,12 @@ export function Countdown({
   startsAt,
   suffix = "截止",
   expiredText = EXPIRED_TEXT,
+  expiredVariant,
   onExpire,
   className,
 }: CountdownProps) {
+  // 到期後不等系統處理：不重抓、不轉圈、不顯示逾時提示
+  const settlesOnExpire = expiredVariant !== undefined
   const deadlineMs = new Date(deadline).getTime()
   const valid = !Number.isNaN(deadlineMs)
   const [expiredOnce, setExpiredOnce] = useState(false)
@@ -163,13 +196,21 @@ export function Countdown({
     if (expired && !expiredOnce) setExpiredOnce(true)
   }, [expired, expiredOnce])
 
-  const timedOut = useExpirePolling(expired, deadline, onExpire)
+  const timedOut = useExpirePolling(
+    expired && !settlesOnExpire,
+    deadline,
+    onExpire,
+  )
 
   // 格式錯誤的時間不讓整個畫面壞掉
   if (!valid) return null
 
   const resolvedVariant =
-    typeof variant === "function" ? variant(remainingMs) : variant
+    expired && expiredVariant !== undefined
+      ? expiredVariant
+      : typeof variant === "function"
+        ? variant(remainingMs)
+        : variant
   const showBar = resolvedVariant === "appeal" && !expired
   const barStartMs = startsAt
     ? new Date(startsAt).getTime()
@@ -192,12 +233,16 @@ export function Countdown({
         <span
           role="status"
           className={
-            expired
-              ? "inline-flex items-center gap-1.5 text-body text-muted-foreground"
-              : "sr-only"
+            !expired
+              ? "sr-only"
+              : expiredVariant !== undefined
+                ? cn("text-body", VARIANT_CLASS[expiredVariant])
+                : "inline-flex items-center gap-1.5 text-body text-muted-foreground"
           }
         >
-          {!expired ? null : timedOut ? (
+          {!expired ? null : settlesOnExpire ? (
+            expiredText
+          ) : timedOut ? (
             EXPIRE_TIMEOUT_TEXT
           ) : (
             <>

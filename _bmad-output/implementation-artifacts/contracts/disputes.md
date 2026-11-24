@@ -12,7 +12,7 @@
 | 6.2 主辦方處理申訴 | B（D 審查 competition 端） | `resolve_appeals`、S32、S27 待處理、S4 處理結果；competition 新檔 `appeals.py` 新增 `uphold_result`、`correct_result`、`replay_match`（`service.py` 只新增公開函式） |
 | 6.4 提出檢舉 | C | `file_report`；只新增檢舉相關檔案 |
 | 6.5 查證檢舉與取消資格 | B | `resolve_report`、S33；competition 新增 `disqualify`（D 審查） |
-| 6.3 逾期提醒 | 期中擱置 | `Appeal.reminded_at` 先保留欄位，不寫 worker |
+| 6.3 逾期提醒 | B（期末；D 審查 competition 端、A 審查 notifications 規則） | worker `remind_due_appeal` 寫 `Appeal.reminded_at`、發 `AppealReminded`；S32 `AppealGroup.deadline`；competition `PublicMatchDetail.awaiting_appeal` |
 
 2026-11-09（使用者）：Epic 6 的 6.1、6.2、6.5 全部由 B 實作，包含 competition 端的函式（D 審查）；取代 2026-11-08 與 D 協議的模組分工（當時改由 D 實作 6.2、6.5 的 competition 函式）；見 spec-6-2 Decisions。
 
@@ -33,7 +33,7 @@ class Appeal(SQLModel, table=True):        # appeal；6.1 建立
     reason: str | None                      # 處理理由，結案時必填
     handled_by: UUID | None                 # 處理的主辦方帳號，不覆寫 filed_by
     handled_at: datetime | None
-    reminded_at: datetime | None            # 6.3 擱置；期中一律 null
+    reminded_at: datetime | None            # 6.3：worker 發出 AppealReminded 的時間；同一筆只提醒一次
 
 class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 只更新處理欄位（B）
     id: UUID
@@ -62,7 +62,7 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | --- | --- | --- | --- |
 | `file_appeal(session, *, tournament_id, match_id, account_id, description, attachment: BinaryIO \| None, content_type: str \| None) -> FiledAppeal` | router（S21） | 說明去頭尾空白後 1～1000 字（422 `APPEAL_DESCRIPTION_REQUIRED`／`APPEAL_DESCRIPTION_TOO_LONG`，`loc` 為 `description`）；先以不鎖定的讀取確認場次屬於該賽事（404 `MATCH_NOT_FOUND`），再 `lock_tournament`、`lock_match`，鎖住後確認登入者是兩隊之一的隊長、賽事不是已結束或已取消且場次為申訴期或申訴中（否則 409 `APPEAL_NOT_ALLOWED`）、`now < appeal_deadline`、該隊沒有未結案的申訴（重新比賽後上一輪已結案，可再申訴；2026-11-09 使用者決定）；全部通過才存附件；建立申訴；場次仍在申訴期時呼叫 competition `mark_appealed`。寫 `appeal.filed`（`before` 為 `{match_status}`，`after` 含場次、隊伍、說明、`has_attachment`、新的 `match_status`），發 `AppealFiled`。回傳 `FiledAppeal {appeal: AppealRead, attachment_key}`：router 在交易提交失敗時刪掉剛存的附件（比照 3.2 參賽資料） | 6.1 |
 | `get_appeal_state(session, *, tournament_id, match_id, account_id) -> AppealState` | router（S4 入口） | 只回本隊的狀態：`can_file`、`already_filed`、`deadline`（申訴期、申訴中才有值）、`reason`（`not_captain`／`not_appealable`／`deadline_passed`／`already_filed`，與 API 錯誤碼一一對應，順序同 `file_appeal`）；`already_filed` 不論其他原因都照實回傳，只看未結案的申訴；不透露另一隊有沒有申訴（申訴內容不公開）。場次不屬於該賽事 404 `MATCH_NOT_FOUND` | 6.1 |
-| `list_tournament_appeals(session, *, tournament_id, actor_id) -> list[AppealGroup]` | router（S32） | 主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）；依場次分組（有未結案申訴的場次在前，依最早一筆未結案申訴的提出時間；已結案的場次依最早提出時間）。`AppealGroup {match_id, match_code, round_name, is_third_place, scheduled_at, match_status, outcome, winner_id, wins_a, wins_b, score_type, best_of, games: list[PublicGame], team_a, team_b, has_open, appeals: list[AppealItem]}`，`AppealItem` 為 `AppealRead`＋`team_name`（場次取自 competition `get_public_match`；`team_name` 依 `appeal.team_id` 以 registration `get_team_names` 查，6.5 頂替後原申訴隊仍顯示隊名） | 6.2 |
+| `list_tournament_appeals(session, *, tournament_id, actor_id) -> list[AppealGroup]` | router（S32） | 主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）；依場次分組（有未結案申訴的場次在前，依最早一筆未結案申訴的提出時間；已結案的場次依最早提出時間）。`AppealGroup {match_id, match_code, round_name, is_third_place, scheduled_at, match_status, outcome, winner_id, wins_a, wins_b, score_type, best_of, games: list[PublicGame], team_a, team_b, has_open, deadline, appeals: list[AppealItem]}`（`deadline`：6.3 處理期限，算法同 `count_open_disputes`，決賽與季軍賽取最早一筆未結案申訴提出後 1 小時；沒有未結案申訴為 null），`AppealItem` 為 `AppealRead`＋`team_name`（場次取自 competition `get_public_match`；`team_name` 依 `appeal.team_id` 以 registration `get_team_names` 查，6.5 頂替後原申訴隊仍顯示隊名） | 6.2 |
 | `resolve_appeals(session, *, tournament_id, match_id, actor_id, decision: AppealDecision, reason: str, games: Sequence[GameScoreIn] \| None, replay_at: datetime \| None) -> list[AppealRead]` | router（S32） | 順序：理由去頭尾空白後 1～1000 字（422 `APPEAL_REASON_REQUIRED`／`APPEAL_REASON_TOO_LONG`，`loc` 為 `reason`）→ `corrected` 缺 `games`（422 `APPEAL_GAMES_REQUIRED`）、`rematch` 缺 `replay_at`（422 `APPEAL_REPLAY_AT_REQUIRED`）→ 場次屬於該賽事（404 `MATCH_NOT_FOUND`）→ `lock_tournament` → 主辦方（403）→ `lock_match` → 有未結案申訴（409 `NO_OPEN_APPEALS`）→ competition 函式。同一場次未結案的申訴一次以相同決定與理由結案（寫 `handled_by`、`handled_at`，不改 `filed_by`）。`upheld` → `uphold_result`；`corrected` → `correct_result(games)`；`rematch` → `replay_match(replay_at)`（只用於 `outcome` 為 `forfeit`／`double_forfeit` 的場次）。寫一筆 `appeal.resolved`（`entity_type=match`；`before` 為 `{match_status, outcome, winner_id}`，更正時加 `games`、重賽時加 `scheduled_at`；`after` 含 `decision`、`reason`、`appeal_ids`、新的 `match_status`、`outcome`、`winner_id`，更正時加 `games`、重賽時加 `scheduled_at`），發 `AppealResolved`。另一隊申訴期限未到也可以處理。`upheld`／`corrected` 後場次已確認，任何一隊都不能再申訴；`rematch` 後場次回到待開打，重賽結果送出後兩隊都可以對重賽結果申訴（同一隊同一場只能有一筆未結案申訴） | 6.2 |
 | `open_appeal_attachment(session, *, appeal_id, actor_id) -> tuple[BinaryIO, str]` | router | 只有該賽事主辦方（403 `TOURNAMENT_OWNER_REQUIRED`）；申訴不存在 404 `APPEAL_NOT_FOUND`、沒有附件 404 `FILE_NOT_FOUND`；回傳串流與 Content-Type | 6.1 |
 | `list_reportable_teams(session, *, tournament_id, account_id) -> list[ReportableTeam]` | router（S20） | 檢舉人資格檢查後（錯誤同 `file_report`），回可被檢舉的隊伍 `{id, name, has_open_report}`（排除自己；`has_open_report`＝本隊對它已有處理中的檢舉），依隊名排序 | 6.4（C） |
@@ -74,6 +74,7 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | `count_open_disputes(session, *, tournament_id, actor_id) -> OpenDisputes` | router（S27 待處理清單） | 主辦方（403）。`{appeals, reports, earliest_deadline, items: list[OpenDisputeItem]}`；`OpenDisputeItem {kind: appeal\|report, id, match_id, match_code, filed_at, deadline, team_name}`，依處理期限由近到遠（同期限依提出時間、再依 id）。申訴的處理期限＝等待結果的下一場（勝隊、敗隊去的場次中最早）的預定時間；決賽與季軍賽為申訴提出後 1 小時。檢舉（6.5 第二階段 B）：`match_id`、`match_code` 為 null，`team_name` 為被檢舉隊名；處理期限＝被檢舉隊伍最早一場待開打（`scheduled`）場次的預定時間（competition `list_team_matches`），沒有時 `deadline` 為 null，排在所有有期限的項目之後、依提出時間；`earliest_deadline` 只看有期限的項目（2026-11-09 使用者決定）。S27 前端直接呼叫 disputes 的 API（tournaments 不能呼叫 disputes） | 6.2；檢舉 6.5（B） |
 | `get_public_appeal_result(session, *, tournament_id, match_id) -> PublicAppealResult` | router（S4，公開） | `{decision: upheld\|corrected\|disqualified\|null}`：場次已確認且最後一次處理是維持、更正或取消資格（6.5）時才有值；未處理、未確認、重新比賽為 null。不含申訴內容（AD-19）。場次不屬於該賽事 404 `MATCH_NOT_FOUND` | 6.2 |
 | `get_replay_window(session, *, tournament_id, match_id, actor_id) -> RescheduleInfo` | router（S32 重新比賽） | 主辦方（403）、場次屬於該賽事（404）後呼叫 competition `get_replay_window` | 6.2 |
+| `remind_due_appeal(session) -> bool` | worker `remind_due_appeals`（排在 `confirm_expired_appeals` 之後、`dispatch_outbox` 之前） | 一次處理一筆、不 commit。候選＝未結案且 `reminded_at` 為空的申訴（依提出時間），略過已結束或已取消賽事；提醒時間：有下一場（含季軍賽）為處理期限前 1 小時，決賽與季軍賽為處理期限（提出後 1 小時）；已過提醒時間才提出的申訴下一輪立即提醒。找到已到時間的一筆後 `lock_tournament` → 鎖申訴 → 鎖內重新檢查（仍未結案、仍未提醒、賽事不是已結束或已取消、仍已到時間），通過才在同一交易寫 `reminded_at` 並發 `AppealReminded`（AD-8，每筆只提醒一次）。回傳是否找到已到時間的候選 | 6.3 |
 
 ### API（提議）
 
@@ -102,6 +103,7 @@ class Report(SQLModel, table=True):        # report；6.4 建立（C），6.5 �
 | --- | --- | --- |
 | `AppealFiled` | `appeal_id`, `match_id`, `team_id` | 6.1 提出申訴 |
 | `AppealResolved` | `match_id`, `decision` | 6.2 結案（同一場一次） |
+| `AppealReminded` | `appeal_id`, `match_id`, `tournament_id` | 6.3 worker 逾期提醒（每筆申訴一次）；notifications 登錄收件規則：該賽事主辦方，連到 S32 |
 | `ReportFiled` | `report_id`, `tournament_id`, `reported_team_id` | 6.4 提出檢舉 |
 | `ReportResolved` | `report_id`, `substantiated` | 6.5 結案 |
 

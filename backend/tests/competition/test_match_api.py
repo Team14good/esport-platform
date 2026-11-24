@@ -62,6 +62,8 @@ DETAIL_KEYS = {
     "forfeit_deadline",
     "result_screenshot_enabled",
     "result_screenshot_at",
+    # 6.3：等待前一場申訴結果
+    "awaiting_appeal",
 }
 
 

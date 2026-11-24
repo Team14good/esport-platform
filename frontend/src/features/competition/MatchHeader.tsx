@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import type { PublicMatchDetail } from "@/client"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { cn } from "@/lib/utils"
-import { MATCH_STATUS_BADGES, THIRD_PLACE_LABEL } from "./match-status"
+import { matchStatusBadge, THIRD_PLACE_LABEL } from "./match-status"
 import { formatMatchDateTime } from "./match-time"
 
 /** S4 標題：「32 強 · M3」「決賽 · M31」；季軍賽只寫「季軍賽」。頁面 head 也用同一句。 */
@@ -24,7 +24,7 @@ type MatchHeaderProps = {
 
 /** Match header：返回連結、標題＋狀態徽章、遊戲 · BO · 預定時間（DESIGN.md〈場次頁（S4）〉），不放在 Card 內。 */
 export function MatchHeader({ detail, extra, className }: MatchHeaderProps) {
-  const badge = MATCH_STATUS_BADGES[detail.status]
+  const badge = matchStatusBadge(detail)
   const time = formatMatchDateTime(detail.scheduled_at)
   return (
     <header
