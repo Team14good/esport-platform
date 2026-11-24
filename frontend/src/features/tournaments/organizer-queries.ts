@@ -4,7 +4,13 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
-import { type TournamentCreate, TournamentsService } from "@/client"
+import {
+  RegistrationService,
+  type TournamentCreate,
+  type TournamentRead,
+  TournamentsService,
+  type TournamentUpdate,
+} from "@/client"
 import { parseApiError } from "@/lib/api-error"
 import { notifyError, notifySuccess } from "@/lib/feedback"
 import { shouldRetryQuery } from "@/lib/query-client"
@@ -105,5 +111,74 @@ export function useCancelTournament(tournamentId: string) {
           (queryKey) => queryClient.invalidateQueries({ queryKey }),
         ),
       ),
+  })
+}
+
+/** 修改賽事或提高名額成功後：以回傳值更新 S27／S28，並讓 S25 清單與公開賽事重抓。 */
+function useApplyTournamentUpdate(tournamentId: string) {
+  const queryClient = useQueryClient()
+  return (updated: TournamentRead) => {
+    queryClient.setQueryData(
+      myTournamentQueryOptions(tournamentId).queryKey,
+      updated,
+    )
+    for (const queryKey of [
+      myTournamentsQueryOptions().queryKey,
+      PUBLIC_TOURNAMENTS_KEY,
+    ]) {
+      void queryClient.invalidateQueries({ queryKey })
+    }
+  }
+}
+
+/**
+ * S28 儲存設定（2.5）：`PATCH` 只帶有變動的欄位。失敗時由呼叫端把欄位錯誤寫回表單；
+ * 業務錯誤（例如 409 抽籤後、已結束或已取消）另外重抓賽事，畫面才會跟上目前的狀態。
+ */
+export function useUpdateTournament(tournamentId: string) {
+  const queryClient = useQueryClient()
+  const apply = useApplyTournamentUpdate(tournamentId)
+  return useMutation({
+    mutationFn: async (body: TournamentUpdate) =>
+      (
+        await TournamentsService.updateMyTournament({
+          path: { tournament_id: tournamentId },
+          body,
+        })
+      ).data,
+    onSuccess: apply,
+    onError: (error) => {
+      if (parseApiError(error).kind === "business") {
+        void queryClient.invalidateQueries({
+          queryKey: myTournamentQueryOptions(tournamentId).queryKey,
+        })
+      }
+    },
+  })
+}
+
+/**
+ * S28 提高名額：沿用 3.7 的 API，候補依順位立即遞補。業務錯誤（例如 409
+ * `CAPACITY_NOT_EDITABLE`）時重抓賽事，畫面才會跟上目前的狀態。
+ */
+export function useRaiseCapacity(tournamentId: string) {
+  const queryClient = useQueryClient()
+  const apply = useApplyTournamentUpdate(tournamentId)
+  return useMutation({
+    mutationFn: async (capacity: number) =>
+      (
+        await RegistrationService.raiseCapacity({
+          path: { tournament_id: tournamentId },
+          body: { capacity },
+        })
+      ).data,
+    onSuccess: apply,
+    onError: (error) => {
+      if (parseApiError(error).kind === "business") {
+        void queryClient.invalidateQueries({
+          queryKey: myTournamentQueryOptions(tournamentId).queryKey,
+        })
+      }
+    },
   })
 }
