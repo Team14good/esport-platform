@@ -28,6 +28,7 @@ from app.modules.registration.allocation import (
     waitlist_order,
 )
 from app.modules.registration.models import RegistrationStatus as S
+from app.modules.tournaments.models import TournamentMode
 
 T0 = datetime(2026, 11, 1, 9, 0, tzinfo=UTC)
 FIRST = AllocationPhase.FIRST_COME
@@ -962,3 +963,192 @@ def test_departed_schools_ignored_after_deadline() -> None:
     assert waitlist_order(
         cs, phase=AFTER, priority_schools=(), departed_schools={school(1)}
     ) == waitlist_order(cs, phase=AFTER, priority_schools=())
+
+
+# ── 自訂模式（Story 3.10，FR-39、AD-20）─────────────────────
+
+CUSTOM = AllocationPhase.CUSTOM
+CAMPUS_MODE = allocation.AllocationMode.CAMPUS
+CUSTOM_MODE = allocation.AllocationMode.CUSTOM
+
+
+def ccand(
+    n: int, *, minute: int = 0, status: S = S.PENDING, score: str | int = 1000
+) -> Candidate:
+    """自訂賽事的報名：沒有學校快照。"""
+    return Candidate(
+        id=uid(n),
+        school_id=None,
+        avg_rank_score=Decimal(score),
+        submitted_at=T0 + timedelta(minutes=minute),
+        status=status,
+    )
+
+
+def test_mode_values_match_tournament_mode() -> None:
+    """`AllocationMode` 與 tournaments 的 `TournamentMode` 值相同（service 以值轉換）。"""
+    assert {m.value for m in allocation.AllocationMode} == {
+        m.value for m in TournamentMode
+    }
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"), [(CAMPUS_MODE, True), (CUSTOM_MODE, False)]
+)
+def test_checks_school_only_for_campus(
+    mode: allocation.AllocationMode, expected: bool
+) -> None:
+    assert allocation.checks_school(mode) is expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"), [(CAMPUS_MODE, True), (CUSTOM_MODE, False)]
+)
+def test_needs_settlement_only_for_campus(
+    mode: allocation.AllocationMode, expected: bool
+) -> None:
+    assert allocation.needs_settlement(mode) is expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"), [(CAMPUS_MODE, False), (CUSTOM_MODE, True)]
+)
+def test_backfills_on_disqualify_only_for_custom(
+    mode: allocation.AllocationMode, expected: bool
+) -> None:
+    assert allocation.backfills_on_disqualify(mode) is expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "after_priority", "expected"),
+    [
+        (CAMPUS_MODE, False, allocation.SubmitAllocation.DEFER),
+        (CAMPUS_MODE, True, allocation.SubmitAllocation.FIRST_COME),
+        (CUSTOM_MODE, False, allocation.SubmitAllocation.IMMEDIATE),
+        (CUSTOM_MODE, True, allocation.SubmitAllocation.IMMEDIATE),
+    ],
+)
+def test_submit_allocation_by_mode(
+    mode: allocation.AllocationMode,
+    after_priority: bool,
+    expected: allocation.SubmitAllocation,
+) -> None:
+    assert (
+        allocation.submit_allocation(mode, after_priority_window=after_priority)
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "before_deadline", "expected"),
+    [
+        (CAMPUS_MODE, True, FIRST),
+        (CAMPUS_MODE, False, AFTER),
+        (CUSTOM_MODE, True, CUSTOM),
+        (CUSTOM_MODE, False, CUSTOM),
+    ],
+)
+def test_current_phase_by_mode(
+    mode: allocation.AllocationMode,
+    before_deadline: bool,
+    expected: AllocationPhase,
+) -> None:
+    assert allocation.current_phase(mode, before_deadline=before_deadline) == expected
+
+
+def test_decide_custom_accepts_while_capacity_remains() -> None:
+    """不看學校：同校（皆為 None）已有正取也照樣正取。"""
+    others = [ccand(1, status=S.ACCEPTED), ccand(2, status=S.DRAWN)]
+    me = ccand(3, minute=5)
+    assert (
+        allocation.decide_custom(me, candidates=[*others, me], capacity=3) == S.ACCEPTED
+    )
+
+
+def test_decide_custom_waitlists_when_full() -> None:
+    others = [
+        ccand(1, status=S.ACCEPTED),
+        ccand(2, status=S.DRAWN),
+        ccand(3, status=S.WAITLISTED),
+        ccand(4, status=S.PENDING),
+    ]
+    me = ccand(5, minute=5)
+    assert allocation.decide_custom(me, candidates=others, capacity=2) == S.WAITLISTED
+
+
+def test_decide_custom_ignores_school_snapshots() -> None:
+    """校園賽同校已有正取會候補；自訂模式即使帶了學校也不看。"""
+    others = [cand(1, 1, status=S.ACCEPTED)]
+    me = cand(2, 1, minute=5)
+    assert allocation.decide_custom(me, candidates=others, capacity=2) == S.ACCEPTED
+
+
+def test_decide_custom_rejects_negative_capacity() -> None:
+    with pytest.raises(ValueError, match="capacity"):
+        allocation.decide_custom(ccand(1), candidates=[], capacity=-1)
+
+
+def test_decide_custom_rejects_duplicate_ids() -> None:
+    with pytest.raises(ValueError, match="重複"):
+        allocation.decide_custom(ccand(1), candidates=[ccand(2), ccand(2)], capacity=1)
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_custom_order_by_submit_time_all_positioned(seed: int) -> None:
+    """自訂：依送出時間（同時再依 id）排序，全部有順位，與積分、輸入順序無關。"""
+    cs = [
+        ccand(1, status=S.ACCEPTED),
+        ccand(5, minute=3, score=10, status=S.WAITLISTED),
+        ccand(4, minute=1, score=9000, status=S.WAITLISTED),
+        ccand(3, minute=1, score=1, status=S.WAITLISTED),
+        ccand(2, minute=2, status=S.PENDING),
+    ]
+    order = waitlist_order(shuffled(cs, seed), phase=CUSTOM, priority_schools=())
+    assert list(order.values()) == [
+        WaitlistEntry(uid(3), 1, None),
+        WaitlistEntry(uid(4), 2, None),
+        WaitlistEntry(uid(5), 3, None),
+    ]
+
+
+def test_custom_order_has_no_school_limit() -> None:
+    """同校已有 2 隊正取，同校候補照樣有順位（不受每校上限，也不受優先期學校影響）。"""
+    cs = [
+        cand(1, 1, status=S.ACCEPTED),
+        cand(2, 1, status=S.ACCEPTED),
+        cand(3, 1, minute=1, status=S.WAITLISTED),
+        cand(4, 1, minute=2, status=S.WAITLISTED),
+    ]
+    order = waitlist_order(
+        cs,
+        phase=CUSTOM,
+        priority_schools={school(1)},
+        departed_schools={school(1)},
+    )
+    assert [(e.registration_id, e.position, e.reason) for e in order.values()] == [
+        (uid(3), 1, None),
+        (uid(4), 2, None),
+    ]
+    assert not any(e.representative_backfill for e in order.values())
+
+
+def test_custom_backfill_takes_earliest_submitted() -> None:
+    cs = [
+        ccand(1, status=S.ACCEPTED),
+        ccand(2, minute=3, score=9000, status=S.WAITLISTED),
+        ccand(3, minute=1, score=1, status=S.WAITLISTED),
+        ccand(4, minute=2, status=S.WAITLISTED),
+    ]
+    assert backfill_vacancies(cs, phase=CUSTOM, priority_schools=(), capacity=3) == (
+        uid(3),
+        uid(4),
+    )
+
+
+def test_custom_backfill_without_vacancy_or_waitlist() -> None:
+    full = [ccand(1, status=S.ACCEPTED), ccand(2, minute=1, status=S.WAITLISTED)]
+    assert backfill_vacancies(full, phase=CUSTOM, priority_schools=(), capacity=1) == ()
+    empty = [ccand(1, status=S.ACCEPTED)]
+    assert (
+        backfill_vacancies(empty, phase=CUSTOM, priority_schools=(), capacity=5) == ()
+    )

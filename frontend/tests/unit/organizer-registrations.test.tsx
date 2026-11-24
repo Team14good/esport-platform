@@ -298,6 +298,25 @@ describe("S29 報名清單：列表", () => {
     ).toBeInTheDocument()
   })
 
+  it("自訂賽事的候補（Story 3.10）：「候補第 N 位」＋自訂的遞補規則", async () => {
+    mockList([
+      registration({
+        status: "waitlisted",
+        waitlist_position: 3,
+        waitlist_reason: null,
+        representative_backfill: false,
+        waitlist_phase: "custom",
+      }),
+    ])
+    open()
+
+    const row = await firstRow()
+    expect(within(row).getByText("候補第 3 位")).toBeInTheDocument()
+    expect(
+      within(row).getByText("自訂賽事依送出時間遞補，沒有每校隊數上限。"),
+    ).toBeInTheDocument()
+  })
+
   it("已解散的隊伍（Story 3.11）：隊名下列出原隊員，沒有「段位截圖」", async () => {
     mockList([
       registration({

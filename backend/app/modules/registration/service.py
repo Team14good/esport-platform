@@ -75,6 +75,11 @@ def _lock_tournament(session: Session, tournament_id: uuid.UUID) -> TournamentRe
     return tournaments_service.lock_tournament(session, tournament_id=tournament_id)
 
 
+def _mode(tournament: TournamentRead) -> allocation.AllocationMode:
+    """賽事模式轉成 allocation 的模式；依模式的判斷都由 `allocation` 回答（AD-20）。"""
+    return allocation.AllocationMode(tournament.mode)
+
+
 def _ensure_accepting_registrations(tournament: TournamentRead) -> None:
     """賽事不是開放報名時，由 tournaments 拋 409 `REGISTRATION_CLOSED`。"""
     tournaments_service.ensure_accepting_registrations(tournament)
@@ -462,12 +467,9 @@ def _registration_closed_blocker() -> SubmitBlocker:
 
 
 def _candidate(registration: Registration) -> allocation.Candidate:
-    """報名快照轉成 `allocation.Candidate`；送出後三個快照必有值（`submit_registration`）。"""
-    if (
-        registration.school_id is None
-        or registration.avg_rank_score is None
-        or registration.submitted_at is None
-    ):
+    """報名快照轉成 `allocation.Candidate`；送出後平均段位積分與送出時間必有值
+    （`submit_registration`）。學校快照在自訂賽事為 null（Story 3.10），校園賽必有值。"""
+    if registration.avg_rank_score is None or registration.submitted_at is None:
         # 不用 assert（python -O 會略過）；目前沒有路徑會產生沒有快照的已送出報名
         raise RuntimeError(f"報名 {registration.id} 沒有送出時的快照")
     return allocation.Candidate(
@@ -480,17 +482,15 @@ def _candidate(registration: Registration) -> allocation.Candidate:
 
 
 def _current_phase(tournament: TournamentRead) -> allocation.AllocationPhase:
-    """候補順位的階段：開放報名且早於報名截止為先搶期，其餘為截止後。
+    """候補順位的階段（`allocation.current_phase`）：校園賽開放報名且早於報名截止為先搶期，
+    其餘為截止後；自訂賽事一律為自訂階段（Story 3.10）。
 
     賽事不是開放報名（提前抽籤後、報名截止、取消等）時，即使還沒到報名截止時間也是
     截止後（Story 3.6 Decisions）。
     """
-    if (
-        tournament.status == TournamentStatus.OPEN
-        and clock.now() < tournament.registration_end
-    ):
-        return allocation.AllocationPhase.FIRST_COME
-    return allocation.AllocationPhase.AFTER_DEADLINE
+    return allocation.current_phase(
+        _mode(tournament), before_deadline=_in_registration_period(tournament)
+    )
 
 
 # 計算候補順位時參考的狀態：正取（含已參賽）決定學校資格與每校上限，候補是排序對象
@@ -637,6 +637,7 @@ def _build_detail(
             player_profile.submit_blockers(
                 starters=tournament.starters,
                 members=_roster_entries(session, members, names),
+                check_school=allocation.checks_school(_mode(tournament)),
             )
         )
     return TeamDetail(
@@ -978,7 +979,10 @@ def submit_registration(
     Story 3.5）：優先期還沒結算就先結算（`settle_priority_window`），再以
     `_first_come_locked` 依送出順序判定所有 `pending`（殘留的先判定，本筆最後），
     操作者為系統，每筆發 `RegistrationAllocated`；回應帶正取或候補結果與順位。
-    優先期內（`now <= priority_end`）與自訂模式維持 `pending`，由 worker 或之後的分配處理。
+    優先期內（`now <= priority_end`）維持 `pending`，由 worker 或之後的分配處理。
+    自訂賽事（Story 3.10）不檢查學校、學校快照寫 null，在同一個鎖與交易內以
+    `_custom_locked` 立即判定（名額有剩正取，否則候補）。要做哪一種分配由
+    `allocation.submit_allocation` 依模式決定（AD-20）。
     鎖住賽事後只取一次當下時間，截止檢查、`submitted_at` 與先搶期判斷共用，所以已送出
     的報名一定早於報名截止時間（中間的查詢跨過截止時也一樣）。
     """
@@ -1000,17 +1004,19 @@ def submit_registration(
         raise _registration_already_submitted()
 
     entries = _roster_entries(session, members, _display_names(session, members))
+    check_school = allocation.checks_school(_mode(tournament))
     blockers = player_profile.submit_blockers(
-        starters=tournament.starters, members=entries
+        starters=tournament.starters, members=entries, check_school=check_school
     )
     if blockers:
         raise _requirements_unmet(blockers)
 
-    # 送出條件保證每位都有段位積分、都設了學校且學校相同
-    school_id = entries[0].school_id
+    # 送出條件保證每位都有段位積分；檢查學校時（校園賽）也保證都設了學校且學校相同。
+    # 不檢查學校時（自訂賽事）學校快照一律 null（期中文件 B：自訂賽事為空）
+    school_id = entries[0].school_id if check_school else None
     scores = [m.rank_score for m in members if m.rank_score is not None]
     avg_rank_score = player_profile.average_rank_score_decimal(scores)
-    if school_id is None or avg_rank_score is None:
+    if (check_school and school_id is None) or avg_rank_score is None:
         # 送出條件已保證；不用 assert（python -O 會略過而把 null 寫進快照）
         raise RuntimeError("送出條件通過後仍缺學校或段位積分")
     submitted_at = now
@@ -1048,11 +1054,17 @@ def submit_registration(
         },
     )
     session.flush()
-    if tournament.mode == TournamentMode.CAMPUS and now > tournament.priority_end:
+    plan = allocation.submit_allocation(
+        _mode(tournament), after_priority_window=now > tournament.priority_end
+    )
+    if plan == allocation.SubmitAllocation.FIRST_COME:
         # 先搶期送出：_first_come_locked 不過濾優先期內的 pending，所以一定要先結算；
         # 同一交易內重新鎖同一列不會阻塞，已結算時不做任何事
         settle_priority_window(session, tournament_id=tournament.id)
         _first_come_locked(session, tournament, actor_id=None)
+        session.flush()
+    elif plan == allocation.SubmitAllocation.IMMEDIATE:
+        _custom_locked(session, tournament)
         session.flush()
     return _build_detail(session, team, tournament, viewer)
 
@@ -1190,7 +1202,9 @@ def _settle_locked(
             publish=registration_id not in silent_ids,
         )
 
-    priority_school_ids = sorted({c.school_id for c in candidates})
+    priority_school_ids = sorted(
+        {c.school_id for c in candidates if c.school_id is not None}
+    )
     repository.add_settlement(
         session,
         PriorityWindowSettlement(
@@ -1322,6 +1336,30 @@ def _first_come_locked(
             _representative_backfill_locked(session, tournament)
 
 
+def _custom_locked(session: Session, tournament: TournamentRead) -> None:
+    """已鎖定的自訂賽事判定仍為 `pending` 的報名（FR-39，Story 3.10），依送出時間（同時再依 id）。
+
+    每一筆都先讓有順位的候補遞補空位（`_backfill_released_locked`；名額釋出時已立即遞補，
+    正常不會有），再以 `allocation.decide_custom` 判定：正取數未達名額為正取，否則候補。
+    不看學校、不結算優先期。操作者為系統，每筆發 `RegistrationAllocated`。
+    """
+    pending = sorted(
+        _registrations_in(
+            session, tournament.id, frozenset({RegistrationStatus.PENDING})
+        ).values(),
+        key=lambda r: (_candidate(r).submitted_at, r.id),
+    )
+    for registration in pending:
+        _backfill_released_locked(session, tournament)
+        current = _registrations_in(session, tournament.id, _FIRST_COME_STATUSES)
+        status = allocation.decide_custom(
+            _candidate(registration),
+            candidates=[_candidate(r) for r in current.values()],
+            capacity=tournament.capacity,
+        )
+        _allocate(session, registration, status, None)
+
+
 _HOLDING_STATUSES = frozenset({RegistrationStatus.ACCEPTED, RegistrationStatus.DRAWN})
 
 # 代表隊已退出的狀態：不在正取／已參賽的都算，含撤回、取消資格、退回（Story 3.8），
@@ -1388,16 +1426,19 @@ def _representative_backfill_locked(
 
 
 def _backfill_released_locked(session: Session, tournament: TournamentRead) -> None:
-    """已鎖定的賽事在名額釋出後（撤回、提高名額）讓候補遞補（Story 3.7）。
+    """已鎖定的賽事在名額釋出後（撤回、退回、提高名額、自訂賽事抽籤前取消資格）讓候補遞補
+    （Story 3.7、3.10）。
 
-    `tournament` 要是鎖內拿到的值（提高名額時是改名額後的值）。自訂模式、或校園賽還沒有
-    結算紀錄（優先期內）時不遞補。階段依 `_current_phase`（與畫面的候補順位一致）：
-    先搶期先做代表隊的同校遞補，再一律以 `backfill_vacancies` 遞補剩下的空位；截止後以
-    截止後的順位遞補。沒有空位時 `backfill_vacancies` 回空，所以撤回候補也照跑。
+    `tournament` 要是鎖內拿到的值（提高名額時是改名額後的值）。需要優先期結算的模式
+    （校園賽，`allocation.needs_settlement`）還沒有結算紀錄（優先期內）時不遞補。
+    階段依 `_current_phase`（與畫面的候補順位一致）：先搶期先做代表隊的同校遞補，再一律以
+    `backfill_vacancies` 遞補剩下的空位；截止後以截止後的順位遞補；自訂賽事依送出時間
+    遞補、沒有每校上限。沒有空位時 `backfill_vacancies` 回空，所以撤回候補也照跑。
     """
-    if tournament.mode != TournamentMode.CAMPUS:
-        return
-    if repository.get_settlement(session, tournament.id) is None:
+    if (
+        allocation.needs_settlement(_mode(tournament))
+        and repository.get_settlement(session, tournament.id) is None
+    ):
         return
     phase = _current_phase(tournament)
     if phase == allocation.AllocationPhase.FIRST_COME:
@@ -2251,26 +2292,39 @@ def disqualify_registration(
     先鎖住賽事（AD-6）。報名不存在拋 404 `REGISTRATION_NOT_FOUND`；已是取消資格拋
     409 `TEAM_ALREADY_DISQUALIFIED`；其他不能轉為取消資格的狀態（組隊中、退回、撤回、
     退賽）由 `mark_status` 拋 409 `REGISTRATION_INVALID_TRANSITION`。拒絕時不改任何資料。
-    本身不做遞補：抽籤前空出的名額交給之後的分配（先搶期送出時 `_first_come_locked`
+    校園賽本身不做遞補：抽籤前空出的名額交給之後的分配（先搶期送出時 `_first_come_locked`
     先做代表隊的同校遞補、再 `backfill_vacancies`；截止補位）。
-    操作紀錄 `registration.status_changed` 的操作者為 `actor_id`；不發事件。
+    操作紀錄 `registration.status_changed` 的操作者為 `actor_id`；取消資格本身不發事件。
+
+    自訂賽事（Story 3.10，`allocation.backfills_on_disqualify`）沒有截止補位，所以在鎖內
+    賽事為開放報名或報名截止（抽籤前）、且被取消的報名原本是正取時，同一個鎖與交易內由
+    最早送出的候補遞補（`_backfill_released_locked`，發 `RegistrationBackfilled`）。抽籤後
+    的取消資格不在這裡遞補，由 4.5 的 `backfill_drawn_from_waitlist` 讓候補接手位置。
     """
     registration = repository.get_registration_by_team(session, team_id)
     if registration is None:
         raise _registration_not_found()
-    _lock_tournament(session, registration.tournament_id)
+    tournament = _lock_tournament(session, registration.tournament_id)
     # 鎖住賽事後以資料庫最新值判斷（等鎖期間可能已被改變）
     session.refresh(registration)
     if registration.status == RegistrationStatus.DISQUALIFIED:
         raise BusinessError(
             "TEAM_ALREADY_DISQUALIFIED", "這支隊伍已被取消資格。", status_code=409
         )
+    previous = registration.status
     mark_status(
         session,
         registration=registration,
         to=RegistrationStatus.DISQUALIFIED,
         actor_id=actor_id,
     )
+    if (
+        allocation.backfills_on_disqualify(_mode(tournament))
+        and tournament.status in _WITHDRAWABLE_TOURNAMENT_STATUSES
+        and previous == RegistrationStatus.ACCEPTED
+    ):
+        _backfill_released_locked(session, tournament)
+        session.flush()
     return RegistrationRead.model_validate(registration, from_attributes=True)
 
 
@@ -2328,11 +2382,9 @@ def has_backfill_candidate(
 ) -> bool:
     """`leaving_team_id` 退出後，是否有候補可以遞補（只讀、不鎖；退賽與取消資格預先判斷用）。
 
-    自訂模式回 False（與 `backfill_drawn_from_waitlist` 一致）。
+    順位與 `backfill_drawn_from_waitlist` 相同（`_first_waitlisted`）。
     """
     tournament = _get_tournament(session, tournament_id)
-    if tournament.mode != TournamentMode.CAMPUS:
-        return False
     return (
         _first_waitlisted(session, tournament, leaving_team_id=leaving_team_id)
         is not None
@@ -2344,15 +2396,14 @@ def backfill_drawn_from_waitlist(
 ) -> uuid.UUID | None:
     """抽籤後的一對一遞補：候補第 1 位轉為已參賽（`drawn`），回傳它的隊伍 id；沒有候補回 None。
 
-    先鎖住賽事。順位沿用 `_waitlist_order`（抽籤後一定是截止後：平均段位積分、送出時間、id，
-    每校正取與已參賽合計不超過 2 隊）；呼叫端要先讓退賽隊離開（`retire_registration`），
-    它的學校名額才會先釋出。不看賽事名額（一對一換位，不是補空位，所以不沿用
-    `backfill_vacancies`）。自訂模式回 None（3.10 再補規則）。寫 `backfilled_at`，操作者為系統；
+    先鎖住賽事。順位沿用 `_waitlist_order`：校園賽抽籤後一定是截止後（平均段位積分、
+    送出時間、id，每校正取與已參賽合計不超過 2 隊），呼叫端要先讓退賽隊離開
+    （`retire_registration`），它的學校名額才會先釋出；自訂賽事（Story 3.10）依送出時間、
+    沒有每校上限，由最早送出的候補接手。不看賽事名額（一對一換位，不是補空位，所以不沿用
+    `backfill_vacancies`）。寫 `backfilled_at`，操作者為系統；
     不發 `RegistrationBackfilled`（它的文字是「遞補為正取」）。
     """
     tournament = _lock_tournament(session, tournament_id)
-    if tournament.mode != TournamentMode.CAMPUS:
-        return None
     registration = _first_waitlisted(session, tournament, leaving_team_id=None)
     if registration is None:
         return None

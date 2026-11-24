@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-15-2026 22:44
-last_updated: 11-23-2026 21:00
+last_updated: 11-24-2026 09:00
 project: se-final-project
 project_key: NOKEY
 tracking_system: file-system
@@ -70,7 +70,7 @@ development_status:
   3-7-抽籤前撤回報名: done  # 負責：C（期末）
   3-8-主辦方檢視段位截圖與退回報名: done  # 負責：C（期末）
   3-9-公開正取名單與取消賽事通知: done  # 負責：A（期末）
-  3-10-自訂模式的先到先得分配: backlog  # 負責：C（期末）
+  3-10-自訂模式的先到先得分配: in-progress  # 負責：C（期末）
   3-11-隊員異動與解散隊伍: done  # 負責：C（期末）
   epic-3-retrospective: optional
 
