@@ -860,3 +860,15 @@
 - 問題與修正：(1) AI 第一版測試用 `BusinessError(..., status_code=503)` 模擬 registration 無法使用，但 `BusinessError` 只接受 4xx，建構時就拋 `ValueError`，測試走的是舊分支，執行時斷言失敗才發現，改用實際的 `RegistrationUnavailableError`；(2) 第一次用 shell heredoc 一次寫 spec、程式與測試，引號沒配對而失敗，改成先寫成 Python 腳本再執行；(3) 審查子代理說確認流程不會呼叫 registration，查 `advance` → `_unassign_if_member` → `registration_port.is_member` 後判定為誤判；10 項中 2 項修正、8 項駁回或判定不成立
 - 成熟度：L3（AI 查證、修正、驗證，人只授權）
 - 證據：`_bmad-output/implementation-artifacts/spec-auto-confirm-catch-all.md`、本 PR 的 diff
+
+### 2026-11-25｜專案管理／查證延後項目｜刪除兩個已不成立的 5.5 延後項目
+
+- Story／範圍：deferred-work 中 D 負責的 `spec-5-5-confirm-advance.md` 兩項（皆標「未驗證，若為真屬 medium」）
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：AI 逐項讀呼叫端與狀態限制查證前提，不改程式，只刪除查證後不成立的項目
+- AI 產出：查證結論與 `deferred-work.md` 的刪除
+- 人做了什麼：授權「自動照建議處理」
+- 驗證：(1) `confirm_walkover` 只有兩個呼叫端：`disqualification.py` 決賽頂替時，季軍賽另一方未定會先拋 `DISQUALIFY_OPPONENT_PENDING`，被清空的一方來源準決賽已確認；`retirement.py` 退賽時先確認對手已定。(2) `correct_result` 只接受申訴中的場次，晉級在確認時才發生，所以準決賽申訴期間季軍賽、決賽還沒有這場的隊伍，賽事也要決賽與季軍賽都確認後才結束
+- 問題與修正：無程式變更；這兩項是 5.5 審查時預先假設 6.2／6.5 的實作方式，實作後前提不成立
+- 成熟度：L3
+- 證據：本 PR 的 diff
