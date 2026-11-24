@@ -211,3 +211,79 @@ export async function apiDrawBracket(
     token: await apiLogin(organizer),
   })
 }
+
+/**
+ * Story 3.10 第 2 部分：與 `createOpenTournamentByApi` 相同的前置資料（已核准的主辦方與遊戲），
+ * 但不建立賽事：自訂賽事由主辦方在 S26 走畫面建立。回傳主辦方帳號與遊戲名稱。
+ */
+export async function createOrganizerAndGameByApi(
+  game: GameConfig,
+  suffix: string,
+): Promise<{ organizer: TestAccount; gameName: string }> {
+  const adminToken = await apiLogin(platformAdmin())
+  const schools = await request<{ id: string }[]>("GET", "/schools")
+
+  const organizer = newTestAccount("organizer")
+  await request("POST", "/accounts", {
+    json: {
+      email: organizer.email,
+      password: organizer.password,
+      display_name: organizer.displayName,
+      school_id: schools[0].id,
+    },
+  })
+  await markEmailsVerified([organizer.email])
+  const organizerToken = await apiLogin(organizer)
+  const application = await request<{ id: string }>(
+    "POST",
+    "/organizer-applications",
+    {
+      token: organizerToken,
+      json: { club_name: `E2E 電競社 ${suffix}`, school_id: schools[0].id },
+    },
+  )
+  await request(
+    "POST",
+    `/admin/organizer-applications/${application.id}/approval`,
+    { token: adminToken },
+  )
+
+  const gameName = `${game.name} ${suffix}`
+  await request("POST", "/admin/games", {
+    token: adminToken,
+    json: {
+      name: gameName,
+      starters: game.starters,
+      substitutes: game.substitutes,
+      default_bo: game.defaultBestOf,
+      game_minutes: game.minutesPerGame,
+      score_type: game.scoreType,
+      rank_tiers: game.ranks.map(({ name, points }) => ({
+        name,
+        score: points,
+      })),
+    },
+  })
+  return { organizer, gameName }
+}
+
+/** Story 3.10 第 2 部分：走 API 註冊 `count` 個已驗證 Email 的帳號（分屬不同學校）。 */
+export async function createVerifiedAccountsByApi(
+  role: string,
+  count: number,
+): Promise<TestAccount[]> {
+  const schools = await request<{ id: string }[]>("GET", "/schools")
+  const accounts = Array.from({ length: count }, () => newTestAccount(role))
+  for (const [index, account] of accounts.entries()) {
+    await request("POST", "/accounts", {
+      json: {
+        email: account.email,
+        password: account.password,
+        display_name: account.displayName,
+        school_id: schools[index % schools.length].id,
+      },
+    })
+  }
+  await markEmailsVerified(accounts.map((account) => account.email))
+  return accounts
+}

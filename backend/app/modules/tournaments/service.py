@@ -12,15 +12,18 @@ from app.core.errors import BusinessError, FieldError
 from app.modules.identity import service as identity_service
 from app.modules.tournaments import repository
 from app.modules.tournaments.models import (
+    DEFAULT_PRIORITY_HOURS,
     PAGE_SIZE,
     REFEREE_INVITATION_DAYS,
     REFEREE_INVITATION_TOKEN_BYTES,
+    TOURNAMENT_INVITE_TOKEN_BYTES,
     AuditLogEntry,
     AuditLogPage,
     GameIn,
     GameRead,
     GameTitle,
     PublicRefereeInvitation,
+    PublicRegistrationLinkStatus,
     PublicTournament,
     RankTier,
     RankTierRead,
@@ -35,6 +38,7 @@ from app.modules.tournaments.models import (
     TournamentMode,
     TournamentRead,
     TournamentReferee,
+    TournamentRegistrationLink,
     TournamentStatus,
     TournamentUpdate,
 )
@@ -393,14 +397,33 @@ def _validate_round_bo(data: TournamentCreate) -> None:
             )
 
 
+def _with_mode_priority(data: TournamentCreate) -> TournamentCreate:
+    """自訂賽事沒有優先期：優先期一律以 0 計（忽略傳入值），優先期結束＝報名開始。"""
+    if data.mode == TournamentMode.CUSTOM and data.priority_hours != 0:
+        return data.model_copy(update={"priority_hours": 0})
+    return data
+
+
+def _new_invite_token() -> str:
+    return secrets.token_urlsafe(TOURNAMENT_INVITE_TOKEN_BYTES)
+
+
+def _invite_token_for(mode: TournamentMode) -> str | None:
+    """自訂賽事產生新的報名連結 token，校園賽為 None（資料庫 CHECK 約束同一規則）。"""
+    return _new_invite_token() if mode == TournamentMode.CUSTOM else None
+
+
 def create_tournament(
     session: Session, *, organizer_id: uuid.UUID, data: TournamentCreate
 ) -> TournamentRead:
-    """建立賽事（期中一律校園賽）並複製遊戲快照；寫 `tournament.created`。
+    """建立賽事並複製遊戲快照；寫 `tournament.created`（不含報名連結 token）。
 
+    自訂賽事（Story 3.10）產生賽事報名連結 token，優先期一律 0（忽略傳入值），所以
+    優先期結束＝報名開始；校園賽沒有 token。
     遊戲不存在拋 404 `GAME_NOT_FOUND`；欄位不合法拋 422（`FieldError`，指向欄位）。
     報名開始已到時狀態為 `open`，否則為 `upcoming`（由 worker 到時開放）。
     """
+    data = _with_mode_priority(data)
     # 以 FOR SHARE 鎖住遊戲列：修改遊戲（FOR UPDATE）要等本交易結束，遊戲欄位與
     # 段位表因此取自同一個版本；多個主辦方同時以同一款遊戲建立賽事則不互相等待
     game_row = repository.get_game(session, data.game_id, for_share=True)
@@ -425,7 +448,8 @@ def create_tournament(
             if registration_start <= now
             else TournamentStatus.UPCOMING
         ),
-        mode=TournamentMode.CAMPUS,
+        mode=data.mode,
+        invite_token=_invite_token_for(data.mode),
         capacity=data.capacity,
         registration_start=registration_start,
         priority_end=registration_start + timedelta(hours=data.priority_hours),
@@ -496,6 +520,7 @@ def _tournament_to_public(tournament: Tournament) -> PublicTournament:
         id=tournament.id,
         name=tournament.name,
         status=tournament.status,
+        mode=tournament.mode,
         game_name=tournament.game_snapshot["game_name"],
         capacity=tournament.capacity,
         registration_start=tournament.registration_start,
@@ -671,6 +696,7 @@ _RELAXED_FIELDS: dict[str, str] = {
 # 開放報名後（抽籤前）不能改的欄位與原因
 _LOCKED_AFTER_OPEN: dict[str, str] = {
     "name": "開放報名後不能修改賽事名稱",
+    "mode": "開放報名後不能修改賽事模式",
     "game_id": "開放報名後不能更換遊戲",
     "registration_start": "開放報名後不能修改報名開始",
     "priority_hours": "開放報名後不能修改優先期",
@@ -695,6 +721,7 @@ def _editable_values(tournament: TournamentRead) -> dict[str, Any]:
     return {
         "name": tournament.name,
         "game_id": tournament.game_id,
+        "mode": tournament.mode,
         "capacity": tournament.capacity,
         "registration_start": tournament.registration_start,
         "registration_end": tournament.registration_end,
@@ -737,9 +764,16 @@ def _upcoming_row_changes(
 ) -> dict[str, Any]:
     """尚未開放：所有欄位都能改，改完的整份設定仍須通過建立時的檢查（FR-7）。
 
-    換遊戲時重建快照：未另填的先發、替補、BO 帶新遊戲的值。回傳要寫入賽事列的欄位。
+    換遊戲時重建快照：未另填的先發、替補、BO 帶新遊戲的值。切換模式（Story 3.10）時
+    同時產生（校園賽→自訂）或清除（自訂→校園賽）報名連結 token；自訂賽事的優先期一律
+    以 0 計，切回校園賽沒帶優先期時用預設 24 小時（與 S26／S28 預填相同）。回傳要寫入
+    賽事列的欄位。
     """
-    merged = {**current, **changes}
+    merged: dict[str, Any] = {**current, **changes}
+    if merged["mode"] == TournamentMode.CUSTOM:
+        merged["priority_hours"] = 0
+    elif "mode" in changes and data.priority_hours is None:
+        merged["priority_hours"] = DEFAULT_PRIORITY_HOURS
     snapshot: dict[str, Any] = dict(_snapshot_of(tournament))
     if "game_id" in changes:
         # 與建立賽事相同，以 FOR SHARE 鎖住遊戲列，遊戲欄位與段位表取自同一個版本
@@ -768,6 +802,7 @@ def _upcoming_row_changes(
     check = TournamentCreate.model_construct(
         name=merged["name"],
         game_id=merged["game_id"],
+        mode=merged["mode"],
         capacity=merged["capacity"],
         registration_start=merged["registration_start"],
         registration_end=merged["registration_end"],
@@ -797,6 +832,9 @@ def _upcoming_row_changes(
         "appeal_minutes": merged["appeal_minutes"],
         "livestream_url": merged["livestream_url"],
     }
+    if "mode" in changes:
+        row["mode"] = merged["mode"]
+        row["invite_token"] = _invite_token_for(merged["mode"])
     if snapshot != _snapshot_of(tournament):
         row["game_snapshot"] = snapshot
     return row
@@ -887,6 +925,16 @@ def _open_row_changes(
     return row
 
 
+def _ensure_editable(tournament: TournamentRead) -> None:
+    """已結束或已取消拋 409 `TOURNAMENT_NOT_EDITABLE`（修改賽事與重設報名連結共用）。"""
+    if tournament.status in _NOT_EDITABLE_STATUSES:
+        raise BusinessError(
+            "TOURNAMENT_NOT_EDITABLE",
+            "已結束或已取消的賽事不能修改。",
+            status_code=409,
+        )
+
+
 def update_tournament(
     session: Session,
     *,
@@ -898,23 +946,22 @@ def update_tournament(
 
     先 `lock_tournament`。權限由呼叫端（router）以 `authz.ensure_tournament_owner` 判斷。
     - 尚未開放：全部欄位都能改，改完仍須通過建立時的檢查；換遊戲時重建快照。報名開始
-      改到現在或更早時轉為開放報名。
+      改到現在或更早時轉為開放報名。可切換模式（Story 3.10），同時產生或清除報名連結。
+    - 自訂賽事（含本次切換成自訂）忽略傳入的優先期。
     - 開放報名、報名截止：只能延長報名截止與時限、改分輪 BO 與直播連結，其他 422。
-      報名截止的賽事把截止延到現在之後時轉回開放報名。
+      報名截止的賽事把截止延到現在之後時轉回開放報名。模式不能改（422）。
     - 賽程已公布、進行中：只能改直播連結，其他 409 `TOURNAMENT_SETTINGS_LOCKED`。
     - 已結束、已取消：409 `TOURNAMENT_NOT_EDITABLE`。
     操作紀錄只含變動欄位（分輪 BO 整份比較）；沒有變動時不寫紀錄，回傳目前的賽事。
     狀態變更另由 `transition_tournament` 寫 `tournament.status_changed`。
     """
     tournament = lock_tournament(session, tournament_id=tournament_id)
-    if tournament.status in _NOT_EDITABLE_STATUSES:
-        raise BusinessError(
-            "TOURNAMENT_NOT_EDITABLE",
-            "已結束或已取消的賽事不能修改。",
-            status_code=409,
-        )
+    _ensure_editable(tournament)
     current = _editable_values(tournament)
     changes = _requested_changes(current, data)
+    if changes.get("mode", tournament.mode) == TournamentMode.CUSTOM:
+        # 自訂賽事沒有優先期：忽略傳入的優先期（與建立賽事相同）
+        changes.pop("priority_hours", None)
     if tournament.status in _AFTER_DRAW_STATUSES and set(changes) - {"livestream_url"}:
         raise BusinessError(
             "TOURNAMENT_SETTINGS_LOCKED",
@@ -1324,3 +1371,92 @@ def list_audit_log(
         for log in page_logs
     ]
     return AuditLogPage(items=items, total=len(logs), page=page, page_size=PAGE_SIZE)
+
+
+# ---------------------------------------------------------------- 賽事報名連結
+# 自訂賽事（Story 3.10）持有連結的帳號才能建隊；token 明文存在賽事列（S27 要能再次顯示），
+# 只由主辦方專用端點回傳，不進 `TournamentRead`、任何 `Public*` schema 或操作紀錄。
+
+
+def _not_custom() -> BusinessError:
+    return BusinessError(
+        "TOURNAMENT_NOT_CUSTOM", "只有自訂賽事有賽事報名連結。", status_code=409
+    )
+
+
+def get_registration_link(
+    session: Session, *, tournament_id: uuid.UUID
+) -> TournamentRegistrationLink:
+    """S27 的賽事報名連結。主辦方身分由呼叫端（router）以 `ensure_tournament_owner` 檢查。
+
+    不存在拋 404 `TOURNAMENT_NOT_FOUND`；校園賽拋 409 `TOURNAMENT_NOT_CUSTOM`。
+    """
+    tournament = repository.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise _tournament_not_found()
+    if tournament.invite_token is None:
+        raise _not_custom()
+    return TournamentRegistrationLink(
+        tournament_id=tournament.id, invite_token=tournament.invite_token
+    )
+
+
+def reset_invite_link(
+    session: Session, *, tournament_id: uuid.UUID, actor_id: uuid.UUID
+) -> TournamentRegistrationLink:
+    """重設賽事報名連結：換新 token，舊連結立即失效；已建立的隊伍不受影響。
+
+    先鎖賽事（建隊也先鎖賽事再比對 token，所以重設與建隊不會交錯）。主辦方身分由呼叫端
+    （router）檢查。寫 `tournament.invite_link_reset`（不記 token）。
+    不存在拋 404 `TOURNAMENT_NOT_FOUND`；已結束或已取消拋 409 `TOURNAMENT_NOT_EDITABLE`；
+    校園賽拋 409 `TOURNAMENT_NOT_CUSTOM`。
+    """
+    _ensure_editable(lock_tournament(session, tournament_id=tournament_id))
+    entity = repository.get_tournament(session, tournament_id, for_update=True)
+    assert entity is not None  # 已在同一交易內鎖住
+    if entity.invite_token is None:
+        raise _not_custom()
+    token = _new_invite_token()
+    repository.update_tournament(
+        session, entity, {"invite_token": token, "updated_at": clock.now()}
+    )
+    audit.record(
+        session,
+        actor_id=actor_id,
+        tournament_id=tournament_id,
+        action="tournament.invite_link_reset",
+        entity_type="tournament",
+        entity_id=tournament_id,
+        before=None,
+        after=None,
+    )
+    return TournamentRegistrationLink(tournament_id=entity.id, invite_token=token)
+
+
+def invite_token_matches(
+    session: Session, *, tournament_id: uuid.UUID, token: str | None
+) -> bool:
+    """`token` 是否為這場賽事目前的報名連結（registration 建隊時呼叫，呼叫端先鎖賽事）。
+
+    以 `secrets.compare_digest` 比對；任一方為 None（校園賽、沒帶 token）都視為不符。
+    不存在拋 404 `TOURNAMENT_NOT_FOUND`。
+    """
+    tournament = repository.get_tournament(session, tournament_id)
+    if tournament is None:
+        raise _tournament_not_found()
+    expected = tournament.invite_token
+    if expected is None or token is None:
+        return False
+    return secrets.compare_digest(expected.encode(), token.encode())
+
+
+def get_registration_link_status(
+    session: Session, *, tournament_id: uuid.UUID, invite: str | None
+) -> PublicRegistrationLinkStatus:
+    """不需登入的報名連結檢查（S2 判斷顯示哪段提示，AD-19）：只回是否有效。
+
+    校園賽或沒帶 `invite` 時 `valid=False`；不存在拋 404 `TOURNAMENT_NOT_FOUND`。
+    """
+    return PublicRegistrationLinkStatus(
+        valid=invite_token_matches(session, tournament_id=tournament_id, token=invite)
+    )

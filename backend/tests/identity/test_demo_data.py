@@ -2,16 +2,18 @@
 
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from sqlmodel import Session, col, func, select
 
 from app import demo_data
+from app.core import clock
 from app.core.config import settings
 from app.core.errors import BusinessError
 from app.core.security import get_password_hash, verify_password
-from app.demo_data import load
+from app.demo_data import custom_tournament, load
 from app.demo_data import registration as registration_step
 from app.demo_data.accounts import DEMO_SCHOOL_NAME
 from app.initial_data import init
@@ -20,6 +22,8 @@ from app.modules.identity import service
 from app.modules.identity.models import Account, School
 from app.modules.registration import service as registration_service
 from app.modules.registration.models import Registration, Team, TeamMember
+from app.modules.tournaments import service as tournaments_service
+from app.modules.tournaments.models import Tournament, TournamentMode, TournamentStatus
 
 DEMO_PASSWORD = "demo-password"
 DEMO_DOMAIN = "demo.example.com"
@@ -283,3 +287,65 @@ def test_rejected_demo_team_is_skipped_with_its_accounts(
     assert "Demo team 2" in caplog.text
     assert _count(session, Team) == registration_step.DEMO_TEAM_COUNT - 1
     assert service.find_account_id_by_email(session, f"team02-m1@{DEMO_DOMAIN}") is None
+
+
+# ---------------------------------------------------------------- 自訂賽事（Story 3.10）
+
+
+def _custom_demo(session: Session) -> list[Tournament]:
+    return list(
+        session.exec(
+            select(Tournament).where(
+                Tournament.name == custom_tournament.DEMO_CUSTOM_TOURNAMENT_NAME
+            )
+        )
+    )
+
+
+@pytest.mark.usefixtures("demo_settings", "first_admin")
+def test_demo_custom_tournament_is_open_custom_league_without_teams(
+    session: Session,
+) -> None:
+    assert load(session) is True
+
+    [row] = _custom_demo(session)
+    tournament = tournaments_service.get_tournament(session, tournament_id=row.id)
+    now = clock.now()
+    assert tournament.mode == TournamentMode.CUSTOM
+    assert tournament.status == TournamentStatus.OPEN
+    assert tournament.game_name == "英雄聯盟"
+    assert tournament.capacity == 8
+    assert row.invite_token is not None
+    # 自訂賽事沒有優先期；時間比照校園賽示範賽事
+    assert tournament.priority_end == tournament.registration_start
+    assert abs(tournament.registration_start - (now - timedelta(hours=1))) < timedelta(
+        minutes=1
+    )
+    assert abs(tournament.registration_end - (now + timedelta(days=3))) < timedelta(
+        minutes=1
+    )
+    assert abs(tournament.start_at - (now + timedelta(days=7))) < timedelta(minutes=1)
+    organizer = _demo_accounts(session)[f"organizer@{DEMO_DOMAIN}"]
+    assert tournament.organizer_id == organizer.id
+    # 不建隊伍：示範隊伍都在校園賽
+    teams = session.exec(
+        select(func.count()).select_from(Team).where(Team.tournament_id == row.id)
+    ).one()
+    assert teams == 0
+
+
+@pytest.mark.usefixtures("demo_settings", "first_admin")
+def test_load_twice_does_not_duplicate_demo_custom_tournament(
+    session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    load(session)
+    [first] = _custom_demo(session)
+    token = first.invite_token
+
+    with caplog.at_level(logging.INFO):
+        assert load(session) is True
+
+    [again] = _custom_demo(session)
+    assert again.id == first.id
+    assert again.invite_token == token
+    assert "Demo custom tournament already exists, reused" in caplog.text

@@ -11,6 +11,7 @@
 都要早於它，不能用 `make_tournament` 預設的 7 天後截止。
 """
 
+import secrets
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
@@ -453,6 +454,7 @@ def test_custom_mode_only_closes(session: Session, frozen_clock: FrozenClock) ->
     row = session.get(Tournament, tournament.id)
     assert row is not None
     row.mode = TournamentMode.CUSTOM
+    row.invite_token = secrets.token_urlsafe(32)
     session.add(row)
     session.flush()
     accepted = _submitted(

@@ -167,7 +167,7 @@ bmad-build 的流程：
 - **6.3 擱置**：只少了申訴逾期提醒與「棄權計時暫停」的提示。申訴還沒處理時下一場本來就不起算棄權（兩隊未確定），5.1、5.2 照原規則做。
 - **6.4 檢舉入口**：3.9 擱置，只在 S2 總覽放「檢舉隊伍」。
 - **1.8 核准後**：沒有通知輪詢，申請人重新整理頁面後才出現主辦方身分。
-- **7.1 示範資料**：只放校園賽，不放自訂模式的賽事。
+- **7.1 示範資料**：期中只放校園賽；期末 3.10 加入一場開放報名中、自訂模式的《英雄聯盟》校內賽（不建隊伍）。
 
 Epic 1～7 的 context（`_bmad-output/implementation-artifacts/epic-*-context.md`）已預先產生，含期中規則與交接期限。`_bmad/custom/bmad-build.toml` 讓 `bmad-build` 依 git commit 判斷 context 是否過期，clone 或 pull 後不會重新產生，不必再 `touch`。修改 `planning-artifacts/` 但不影響需求內容時（改 metadata、刪備份），在 commit 訊息 body 加一行 `Epic-Context: unaffected`，避免全組的 context 被判定過期。
 

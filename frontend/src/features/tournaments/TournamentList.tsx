@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 import type { PublicTournament } from "@/client"
 import { EmptyState } from "@/components/common/EmptyState"
 import { PageBannerSlot } from "@/components/common/PageBanner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatMatchDateTime } from "@/features/competition/match-time"
@@ -13,6 +14,7 @@ import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { CreateTournamentButton } from "./CreateTournamentButton"
 import { useOrganizerApplyBanner } from "./OrganizerApplyBanner"
 import { publicTournamentsQueryOptions } from "./queries"
+import { INVITE_ONLY_TEXT } from "./registration-link"
 import {
   formatRegistrationPeriod,
   groupTournaments,
@@ -31,7 +33,7 @@ function Field({ term, children }: { term: string; children: string }) {
   )
 }
 
-/** S1 的一張賽事卡：整張是連往 S2 的連結。 */
+/** S1 的一張賽事卡：整張是連往 S2 的連結；自訂賽事加「邀請制報名」標籤（Story 3.10）。 */
 function TournamentCard({ tournament }: { tournament: PublicTournament }) {
   return (
     <li>
@@ -44,7 +46,12 @@ function TournamentCard({ tournament }: { tournament: PublicTournament }) {
           <h3 className="min-w-0 break-words text-heading-md">
             {tournament.name}
           </h3>
-          <TournamentStatusBadge status={tournament.status} />
+          <div className="flex flex-wrap items-center gap-2">
+            {tournament.mode === "custom" ? (
+              <Badge variant="outline">{INVITE_ONLY_TEXT}</Badge>
+            ) : null}
+            <TournamentStatusBadge status={tournament.status} />
+          </div>
         </div>
         <dl className="flex flex-col gap-1 text-body">
           <Field term="遊戲">{tournament.game_name}</Field>

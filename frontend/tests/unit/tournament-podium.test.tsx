@@ -68,6 +68,7 @@ function tournament(status: PublicTournament["status"]): PublicTournament {
     id: TOURNAMENT_ID,
     name: "期中盃",
     status,
+    mode: "campus",
     game_name: "特戰英豪",
     capacity: 16,
     registration_start: "2025-10-12T11:00:00Z",

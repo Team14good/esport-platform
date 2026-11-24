@@ -916,3 +916,71 @@
   - AI 為了查看失敗原因又啟動一次 e2e 容器，容器啟動時會清空 `test-results`，把失敗紀錄刪掉；改成只重跑 375 px 專案取得錯誤訊息。
 - 成熟度：L3（AI 依 spec 寫腳本並檢查截圖，人提出檢視需求並確認結果）
 - 證據：spec-3-10-custom-mode-first-come.md（Implementation Notes「瀏覽器檢視」）；截圖在本機 frontend/test-results（未提交）
+
+### 2026-11-24｜需求／spec 撰寫與審查｜Story 3.10 自訂模式的先到先得分配（第 2 部分）
+
+- Story／範圍：3.10 第 2 部分（分支 story/3-10-part2，尚未實作）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（規劃階段）＋ 子代理
+- 怎麼用：
+  - 使用者問「現在能不能做第二部分」。AI 查 PR 狀態，確認第 2 部分等的 B 的 #103、#117 都已合併，從最新 main 開新分支。
+  - 依 git 規則確認 epic-3 context 仍有效（之後動到 planning artifacts 的 commit 都標 `Epic-Context: unaffected`）。
+  - 派 3 個子代理平行調查：tournaments 後端、建隊與示範資料、前端與 UX 文件。
+  - spec 草稿完成後，使用者選「審查 spec」，AI 另派 1 個沒參與規劃的子代理獨立審查。
+- AI 產出：spec `spec-3-10-custom-mode-invite-link.md`：I/O 矩陣 17 列、Tasks 9 項、AC 3 條、Decisions 共 11 項（含第 1 部分已定的 3 項）。
+- 人做了什麼：
+  - 規劃時回答 5 個問題：由 C 修改 B 的 tournaments 與 A 的示範資料並請他們審查；S28 開放報名前可切換模式；未登入者顯示登入提示；不拆分（看過約 4,300 tokens 的長度後決定）；示範資料只建賽事。
+  - 審查後再回答 3 個問題：切回校園賽時優先期預填 24；錯誤訊息沿用 S2 兩則文字；示範賽事的名稱、名額與期間。
+  - 選「核准並停止」。
+- 驗證：
+  - 獨立審查提出 12 項：high 2、medium 5、low 5，全部修進 spec 並記在 Review Triage Log。
+  - AI 抽查第 1、2、6、7、8 項的證據屬實；也發現審查者把示範資料測試的位置寫錯（實際在 `tests/identity/test_demo_data.py`）。
+- 問題與修正：
+  - AI 規劃時沒想到加上建隊檢查會讓第 1 部分（自己剛合併的）自訂測試全部被拒，也寫了「既有測試不需修改」這條與實際矛盾的 AC；由獨立審查發現。
+  - AI 在矩陣寫「開放後送出 mode 回 `TOURNAMENT_SETTINGS_LOCKED`」，自己讀 `update_tournament` 後發現實際是 422 欄位錯誤 `TOURNAMENT_FIELD_LOCKED`，於審查前更正。
+  - AI 設計的公開檢查端點原本「只回布林值」，違反架構 AD-19（公開 API 只回 `Public*` schema）；由獨立審查發現。
+  - 調查子代理回報開頭寫「第 1 部分也要做」，把第 1 部分（已合併的分配）與尚未實作的 token 混為一談；AI 判斷是誤讀範圍，沒有採用。
+- 成熟度：L4（子代理平行調查 → 寫 spec → 獨立子代理審查 → AI 抽查查證；人在 checkpoint 決策）
+- 證據：_bmad-output/implementation-artifacts/spec-3-10-custom-mode-invite-link.md（Decisions、Review Triage Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-25｜程式／測試／審查｜Story 3.10 自訂模式的先到先得分配（第 2 部分）
+
+- Story／範圍：3.10 第 2 部分（分支 story/3-10-part2，PR 未建立）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（實作、審查階段）＋ 子代理
+- 怎麼用：
+  - 實作子代理依 spec 實作後端（tournaments、registration、遷移、示範資料）與前端（S1、S2、S26、S27、S28）；前端再交給它自己派的子代理。
+  - 主流程讀整份 diff 核對 Tasks 與 I/O 矩陣，不只看子代理回報。
+  - 派 3 個沒參與實作的子代理平行審查（盲審、邊界情況、驗證缺口）；主流程逐項對照程式碼判定，再交回原實作子代理修正。
+- AI 產出：新增 8 個檔案（遷移、示範自訂賽事、2 支後端測試、S27 連結元件與共用模組、前端單元測試、E2E），修改 57 個既有檔案（+1188／−118 行，含重新產生的 client，不含 docs/）。
+- 人做了什麼：
+  - 審查後回答 4 個問題：已取消、已結束時 S27 整區隱藏並由後端拒絕重設；自訂賽事的 S27 不顯示「優先期結束」；未登入、沒帶連結時顯示索取提示；三支被改成「先建隊再改模式」的測試改回照 spec「建隊時帶 token」。
+  - 問「剛才的決定符合原 story 規劃嗎」，AI 對照 FR-7、FR-10、FR-39 與 EXPERIENCE.md 逐項說明，確認沒有衝突後才繼續。
+- 驗證：
+  - 後端 `scripts/test.sh` 3040 passed、覆蓋率 97%；`scripts/lint.sh`（mypy、ty、ruff）通過。
+  - 前端 vitest 83 個檔、1271 passed；biome、tsc 通過。
+  - E2E `@story-3.10` desktop、mobile-375 共 2 passed。
+  - 審查 3 個子代理共提出 26 項，判定後整理成 20 列（Review Triage Log R1–R20）：修正 8、延後 1（遷移補 token 沒有帶資料的測試）、駁回 11（含判定為不成立的 5 項）。
+- 問題與修正：
+  - 實作子代理加 CHECK 約束後，遷移在本機資料庫失敗、backend 起不來（第 1 部分檢視時用 SQL 改成自訂的 7 場賽事沒有 token）；子代理在遷移中先補 token 才加約束。
+  - 前端子代理在模式欄位下加了一句 spec 沒有的說明文字；實作子代理發現後刪除，留給使用者決定。
+  - 實作子代理把三支自訂測試改成「先建隊再改模式」，偏離 spec 寫的「helper 帶 token」；主流程讀 diff 發現並問使用者，改回 spec 的做法。
+  - 主流程的矩陣稽核發現「S2 其他狀態」的主辦方本人、已有隊伍、報名截止只有校園賽的測試，補上自訂賽事的 3 個測試。
+  - 審查發現兩個子代理沒測到的錯誤：S28 校園賽切到自訂再切回，優先期被悄悄改成 24 並送出；API 自訂切回校園賽沒帶優先期時存成 0 小時。主流程讀 `_requested_changes` 與 `onModeChange` 確認屬實後修正。
+  - 驗證缺口審查指出「一般修改 upcoming 自訂賽事 token 不變」沒有測試：既有測試提早 return，根本沒走到產生 token 的函式；已補測試。
+  - 子代理第一次跑 E2E 時，desktop 因 NFR-2「API 超過 1 秒」檢查失敗（剛重建、環境未熱），重跑兩次通過，判定為偶發。
+- 成熟度：L4（子代理實作 → 主流程讀 diff 與矩陣稽核 → 3 個獨立審查者 → 主流程查證判定 → 人決定使用者可見的行為 → 原子代理修正 → 完整測試）
+- 證據：_bmad-output/implementation-artifacts/spec-3-10-custom-mode-invite-link.md（Decisions 2026-11-25、Implementation Notes、Review Triage Log）；commit 未記錄（尚未 commit）
+
+### 2026-11-25｜測試／瀏覽器人工檢視｜Story 3.10 自訂模式的先到先得分配（第 2 部分）
+
+- Story／範圍：3.10 第 2 部分（分支 story/3-10-part2，PR 未建立）
+- 工具：Claude Code（Opus 5.5）＋ Playwright（e2e 容器）
+- 怎麼用：使用者要求開 PR 前先完成 PR 檢查清單的「瀏覽器實際走過，含 375 px」。AI 寫暫時的 Playwright 腳本，以 API 建立開放報名、尚未開放、已取消三場自訂賽事，再用主辦方、一般帳號與未登入三種身分走過各畫面並截圖；看完即刪除，不提交。
+- AI 產出：桌機與 375 px 各 15 張截圖（S26、S27、S28、S1、S2 五種連結狀態、S16）；結果寫進 spec 的 Implementation Notes。
+- 人做了什麼：決定先做瀏覽器檢查再開 PR；看 AI 整理的結果。
+- 驗證：最後一次執行桌機、375 px 共 2 passed，每張截圖前都檢查沒有橫向捲動。AI 逐張檢視截圖：S27 自訂賽事沒有「優先期結束」、已取消時沒有連結區，S28 切回校園賽預填 24，開放後模式唯讀。沒有發現本 Story 要修正的畫面問題。
+- 問題與修正：
+  - AI 的腳本用了不存在的 `/organizer/games` 端點取遊戲 id，第一次兩個專案都失敗；查 router 後改成 `/games`。
+  - S1 整頁截圖在本機資料庫有大量賽事時高達 25,207 px，縮圖看不出卡片內容；改成只截該賽事的卡片。
+  - 看到兩個不是本 Story 造成的畫面細節（S28 側欄「總覽」「設定」同時反白、S26 兩個標籤高度差幾 px），記在 spec，沒有改別人的程式。
+- 成熟度：L3（AI 寫腳本並檢查截圖，人提出檢視需求並確認結果）
+- 證據：spec-3-10-custom-mode-invite-link.md（Implementation Notes「瀏覽器檢視」）；截圖在本機 frontend/test-results（未提交）

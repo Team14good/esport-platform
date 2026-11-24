@@ -120,19 +120,33 @@ def _auth(account: Account) -> dict[str, str]:
 
 
 def _create(
-    client: TestClient, account: Account, tournament_id: uuid.UUID, name: str = "夜貓隊"
+    client: TestClient,
+    account: Account,
+    tournament_id: uuid.UUID,
+    name: str = "夜貓隊",
+    *,
+    invite_token: str | None = None,
 ) -> Any:
+    """建立隊伍；自訂賽事（Story 3.10）要另給賽事報名連結 token。"""
+    body: dict[str, Any] = {"name": name}
+    if invite_token is not None:
+        body["invite_token"] = invite_token
     return client.post(
         f"{API}/tournaments/{tournament_id}/teams",
-        json={"name": name},
+        json=body,
         headers=_auth(account),
     )
 
 
 def _create_ok(
-    client: TestClient, account: Account, tournament_id: uuid.UUID, name: str = "夜貓隊"
+    client: TestClient,
+    account: Account,
+    tournament_id: uuid.UUID,
+    name: str = "夜貓隊",
+    *,
+    invite_token: str | None = None,
 ) -> dict[str, Any]:
-    response = _create(client, account, tournament_id, name)
+    response = _create(client, account, tournament_id, name, invite_token=invite_token)
     assert response.status_code == 201, response.text
     body: dict[str, Any] = response.json()
     return body

@@ -12,7 +12,7 @@ import {
 } from "react-hook-form"
 import { z } from "zod"
 
-import type { GameRead, TournamentCreate } from "@/client"
+import type { GameRead, TournamentCreate, TournamentMode } from "@/client"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { FormErrorAlert } from "@/components/common/FormErrorAlert"
 import { Button } from "@/components/ui/button"
@@ -60,6 +60,16 @@ export const ROUND_BO_HINT =
   "沒有設定的輪次沿用上方的 BO。BO 較大的輪次，下一輪會自動順延。"
 export const ROUND_BO_NEED_CAPACITY_TEXT = "先輸入名額，才能依名額列出輪次。"
 const ROUND_BO_DEFAULT = "default"
+export const MODE_LABEL_TEXT = "賽事模式"
+export const TOURNAMENT_MODE_OPTIONS: {
+  value: TournamentMode
+  label: string
+}[] = [
+  { value: "campus", label: "校園賽" },
+  { value: "custom", label: "自訂" },
+]
+/** 優先期的預設值（小時）；S28 自訂改回校園賽時也預填這個值 */
+export const DEFAULT_PRIORITY_HOURS = "24"
 
 // 與後端 models.py 相同的限制
 const TOURNAMENT_NAME_MAX_LENGTH = 100
@@ -93,6 +103,8 @@ export function roundIntervalTooShortText(minimum: number): string {
 export const formShape = z.object({
   name: z.string(),
   game_id: z.string(),
+  // 賽事模式（Story 3.10）：自訂賽事沒有優先期
+  mode: z.enum(["campus", "custom"]),
   capacity: z.string(),
   starters: z.string(),
   substitutes: z.string(),
@@ -111,19 +123,20 @@ export const formShape = z.object({
 
 export type CreateTournamentValues = z.infer<typeof formShape>
 export type FieldName = keyof CreateTournamentValues
-// 以單一字串輸入的欄位（分輪 BO 是清單，另外處理）
-type TextFieldName = Exclude<FieldName, "round_bo">
+// 以單一字串輸入的欄位（分輪 BO 是清單、模式是選項，另外處理）
+type TextFieldName = Exclude<FieldName, "round_bo" | "mode">
 
 const DEFAULT_VALUES: CreateTournamentValues = {
   name: "",
   game_id: "",
+  mode: "campus",
   capacity: "",
   starters: "",
   substitutes: "",
   bo: "",
   registration_start: "",
   registration_end: "",
-  priority_hours: "24",
+  priority_hours: DEFAULT_PRIORITY_HOURS,
   start_at: "",
   round_interval_minutes: "",
   forfeit_minutes: "15",
@@ -202,8 +215,11 @@ export function createTournamentSchema(
         : gameList.find((item) => item.id === values.game_id)
     if (!game) fail("game_id", "請選擇遊戲")
 
+    // 自訂賽事沒有優先期（欄位隱藏、送出 0），不檢查
+    const isCustom = values.mode === "custom"
     const numbers: Partial<Record<FieldName, number>> = {}
     for (const field of INTEGER_FIELDS) {
+      if (isCustom && field.name === "priority_hours") continue
       const raw = values[field.name]
       if (!raw.trim()) {
         fail(field.name, `請輸入${field.label}`)
@@ -293,13 +309,15 @@ export function toTournamentCreate(
   return {
     name: values.name.trim(),
     game_id: values.game_id,
+    mode: values.mode,
     capacity: int(values.capacity),
     starters: int(values.starters),
     substitutes: int(values.substitutes),
     bo: int(values.bo),
     registration_start: iso(values.registration_start),
     registration_end: iso(values.registration_end),
-    priority_hours: int(values.priority_hours),
+    // 自訂賽事沒有優先期：一律送 0（後端也會忽略）
+    priority_hours: values.mode === "custom" ? 0 : int(values.priority_hours),
     start_at: iso(values.start_at),
     round_interval_minutes: int(values.round_interval_minutes),
     forfeit_minutes: int(values.forfeit_minutes),
@@ -446,6 +464,61 @@ export function RoundBoField({
   )
 }
 
+/**
+ * 賽事模式選單（S26、S28 共用）：校園賽／自訂。`onModeChange` 在使用者改選時呼叫
+ * （例如 S28 改回校園賽時預填優先期）。
+ */
+export function TournamentModeField({
+  control,
+  disabled = false,
+  description,
+  onModeChange,
+}: {
+  control: Control<CreateTournamentValues>
+  disabled?: boolean
+  description?: ReactNode
+  onModeChange?: (mode: TournamentMode) => void
+}) {
+  return (
+    <FormField
+      control={control}
+      name="mode"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{MODE_LABEL_TEXT}</FormLabel>
+          <Select
+            value={field.value}
+            onValueChange={(value) => {
+              field.onChange(value)
+              onModeChange?.(value as TournamentMode)
+            }}
+            disabled={disabled}
+          >
+            <FormControl>
+              <SelectTrigger
+                className="w-full"
+                onBlur={field.onBlur}
+                ref={field.ref}
+              >
+                <SelectValue />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {TOURNAMENT_MODE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {description && <FormDescription>{description}</FormDescription>}
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  )
+}
+
 type TextFieldProps = {
   control: Control<CreateTournamentValues>
   name: FieldPath<CreateTournamentValues>
@@ -547,9 +620,16 @@ export function CreateTournamentForm() {
     defaultValues: DEFAULT_VALUES,
   })
 
-  const [gameId, bo, forfeit, appeal, capacity] = useWatch({
+  const [gameId, bo, forfeit, appeal, capacity, mode] = useWatch({
     control: form.control,
-    name: ["game_id", "bo", "forfeit_minutes", "appeal_minutes", "capacity"],
+    name: [
+      "game_id",
+      "bo",
+      "forfeit_minutes",
+      "appeal_minutes",
+      "capacity",
+      "mode",
+    ],
   })
   const selectedGame = gameList.find((game) => game.id === gameId)
   const boValue = Number(bo)
@@ -706,6 +786,10 @@ export function CreateTournamentForm() {
               min={MIN_CAPACITY}
               description="正取隊伍數"
             />
+            <TournamentModeField
+              control={form.control}
+              onModeChange={() => form.clearErrors("priority_hours")}
+            />
           </FormSection>
 
           <FormSection title="隊伍與賽制">
@@ -775,14 +859,16 @@ export function CreateTournamentForm() {
               type="datetime-local"
               description={TAIPEI_TIME_HINT}
             />
-            <TextField
-              control={form.control}
-              name="priority_hours"
-              label="優先期（小時）"
-              type="number"
-              min={0}
-              description="從報名開始起算。"
-            />
+            {mode === "custom" ? null : (
+              <TextField
+                control={form.control}
+                name="priority_hours"
+                label="優先期（小時）"
+                type="number"
+                min={0}
+                description="從報名開始起算。"
+              />
+            )}
             <TextField
               control={form.control}
               name="start_at"

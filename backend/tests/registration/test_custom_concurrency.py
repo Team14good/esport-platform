@@ -67,6 +67,7 @@ def _setup_custom(
         row = setup.get(Tournament, tournament.id)
         assert row is not None
         row.mode = TournamentMode.CUSTOM
+        row.invite_token = invite_token = secrets.token_urlsafe(32)
         setup.add(row)
         school = setup.exec(select(School).order_by(col(School.id))).first()
         assert school is not None
@@ -103,6 +104,7 @@ def _setup_custom(
                 tournament_id=tournament.id,
                 account_id=captain.id,
                 name=f"自訂隊-{i}",
+                invite_token=invite_token,
             )
             _fill(setup, created.id, captain)
             team_ids.append(created.id)

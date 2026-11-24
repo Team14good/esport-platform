@@ -82,7 +82,10 @@ function StatusPanel({
             tournamentId={tournament.id}
             capacity={tournament.capacity}
           />
-          <CreateTeamEntry tournamentId={tournament.id} />
+          <CreateTeamEntry
+            tournamentId={tournament.id}
+            mode={tournament.mode}
+          />
         </div>
       )
     case "closed":

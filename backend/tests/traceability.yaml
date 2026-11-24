@@ -235,7 +235,7 @@ disputes/test_disqualification_marks.py:
   frs: [FR-33, FR-35, NFR-3]
 identity/test_demo_data.py:
   layer: integration
-  stories: ["7.1"]
+  stories: ["7.1", "3.10"]
   frs: [NFR-8]
 identity/test_first_admin.py:
   layer: integration
@@ -381,6 +381,10 @@ registration/test_teams.py:
   layer: integration
   stories: ["3.1"]
   frs: [FR-11]
+registration/test_custom_team_invite.py:
+  layer: integration
+  stories: ["3.10", "3.1"]
+  frs: [FR-39, FR-11]
 registration/test_withdraw_registration.py:
   layer: integration
   stories: ["3.7"]
@@ -427,11 +431,15 @@ tournaments/test_games.py:
   frs: [FR-6, NFR-9]
 tournaments/test_public_tournaments.py:
   layer: integration
-  stories: ["2.4"]
+  stories: ["2.4", "3.10"]
   frs: [FR-34]
+tournaments/test_registration_link.py:
+  layer: integration
+  stories: ["3.10", "2.2", "2.5"]
+  frs: [FR-39, FR-7, FR-9, NFR-3]
 tournaments/test_audit_action_labels.py:
   layer: unit
-  stories: ["2.8", "3.11"]
+  stories: ["2.8", "3.11", "3.10"]
   frs: [NFR-3]
 tournaments/test_audit_log.py:
   layer: integration
@@ -447,7 +455,7 @@ tournaments/test_round_bo.py:
   frs: [FR-8]
 tournaments/test_tournaments.py:
   layer: integration
-  stories: ["2.2"]
+  stories: ["2.2", "3.10"]
   frs: [FR-7]
 tournaments/test_transitions.py:
   layer: integration

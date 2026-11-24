@@ -31,6 +31,7 @@ function fixtureTournament(): PublicTournament {
     id: FIXTURE_TOURNAMENT_ID,
     name: FIXTURE_TOURNAMENT_NAME,
     status: "ongoing",
+    mode: "campus",
     game_name: FIXTURE_GAME_NAME,
     capacity: 32,
     registration_start: "2026-10-12T11:00:00Z",

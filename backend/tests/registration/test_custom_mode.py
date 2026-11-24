@@ -85,6 +85,13 @@ def _custom(
     return service._get_tournament(session, tournament.id)
 
 
+def _invite(session: Session, tournament: TournamentRead) -> str | None:
+    """自訂賽事目前的賽事報名連結 token（建隊要帶，Story 3.10 第 2 部分）。"""
+    row = session.get(Tournament, tournament.id)
+    assert row is not None
+    return row.invite_token
+
+
 def _at(tournament: TournamentRead, minutes: int) -> datetime:
     """早於被測操作的送出時間（報名開始後 `minutes` 分鐘）。"""
     return tournament.registration_start + timedelta(minutes=minutes)
@@ -136,7 +143,13 @@ def _custom_team(
 ) -> tuple[dict[str, Any], Account, Registration]:
     """經 API 建立的一人隊伍（隊長沒有學校），報名直接改成 `status`。"""
     captain = _make_account(session, display_name=f"隊長{uuid.uuid4().hex[:4]}")
-    team = _create_ok(client, captain, tournament.id, name=f"隊-{uuid.uuid4().hex[:8]}")
+    team = _create_ok(
+        client,
+        captain,
+        tournament.id,
+        name=f"隊-{uuid.uuid4().hex[:8]}",
+        invite_token=_invite(session, tournament),
+    )
     _fill(session, team["id"], captain)
     registration = _custom_preset(
         session, tournament, status, minutes=minutes, school=school, team_id=team["id"]
@@ -153,7 +166,13 @@ def _no_school_team(
 ) -> tuple[dict[str, Any], Account]:
     """經 API 建立、填完資料、尚未送出的一人隊伍；隊長沒有設定學校。"""
     captain = _make_account(session, display_name=f"隊長{uuid.uuid4().hex[:4]}")
-    team = _create_ok(client, captain, tournament.id, name=f"隊-{uuid.uuid4().hex[:8]}")
+    team = _create_ok(
+        client,
+        captain,
+        tournament.id,
+        name=f"隊-{uuid.uuid4().hex[:8]}",
+        invite_token=_invite(session, tournament),
+    )
     _fill(session, team["id"], captain)
     return team, captain
 
@@ -176,7 +195,13 @@ def test_submit_with_capacity_is_accepted_without_school_checks(
     """
     tournament = _custom(session, frozen_clock, starters=3, capacity=2)
     captain = _make_account(session, display_name="阿哲")
-    team = _create_ok(client, captain, tournament.id, name="自訂一隊")
+    team = _create_ok(
+        client,
+        captain,
+        tournament.id,
+        name="自訂一隊",
+        invite_token=_invite(session, tournament),
+    )
     mate_a = _make_account(session, display_name="小芸")
     mate_b = _make_account(session, display_name="阿凱")
     for mate in (mate_a, mate_b):
@@ -238,7 +263,13 @@ def test_custom_still_checks_starters_and_profiles(
     """自訂只跳過學校檢查；人數與參賽資料照常檢查。"""
     tournament = _custom(session, frozen_clock, starters=2)
     captain = _make_account(session, display_name="阿哲")
-    team = _create_ok(client, captain, tournament.id, name="缺人隊")
+    team = _create_ok(
+        client,
+        captain,
+        tournament.id,
+        name="缺人隊",
+        invite_token=_invite(session, tournament),
+    )
 
     detail = _detail(client, captain, team["id"])
     response = _submit(client, captain, team["id"])

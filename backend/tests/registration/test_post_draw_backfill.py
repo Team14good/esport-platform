@@ -5,6 +5,7 @@
 截止後的規則：平均段位積分高者先、同分送出早者先，每校正取與已參賽合計不超過 2 隊。
 """
 
+import secrets
 import uuid
 
 import pytest
@@ -45,6 +46,9 @@ def _published(
     assert row is not None
     row.status = TournamentStatus.PUBLISHED
     row.mode = mode
+    row.invite_token = (
+        secrets.token_urlsafe(32) if mode == TournamentMode.CUSTOM else None
+    )
     session.add(row)
     session.flush()
     return service._get_tournament(session, tournament.id)

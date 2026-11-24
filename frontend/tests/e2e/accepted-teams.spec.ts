@@ -27,6 +27,7 @@ function tournament(): PublicTournament {
     id: TOURNAMENT_ID,
     name: "正取名單測試盃",
     status: "open",
+    mode: "campus",
     game_name: "特戰英豪",
     capacity: 16,
     registration_start: new Date(now - day).toISOString(),

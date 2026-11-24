@@ -23,6 +23,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "tournament.podium": "產生最終名次",
   "tournament.capacity_changed": "提高名額",
   "tournament.updated": "修改賽事設定",
+  "tournament.invite_link_reset": "重設報名連結",
   "referee_invitation.created": "產生裁判邀請",
   "referee.accepted": "裁判接受邀請",
   "team.created": "建立隊伍",

@@ -16,11 +16,13 @@ from app.modules.tournaments.models import (
     GameIn,
     GameRead,
     PublicRefereeInvitation,
+    PublicRegistrationLinkStatus,
     PublicTournament,
     RefereeInvitationRead,
     RefereeRead,
     TournamentCreate,
     TournamentRead,
+    TournamentRegistrationLink,
     TournamentUpdate,
 )
 
@@ -79,6 +81,21 @@ def read_public_tournament(
 ) -> PublicTournament:
     """一場賽事的公開資料；不需登入，不存在回 404 `TOURNAMENT_NOT_FOUND`。"""
     return service.get_public_tournament(session, tournament_id=tournament_id)
+
+
+@router.get("/tournaments/{tournament_id}/registration-link-status")
+def read_registration_link_status(
+    session: SessionDep,
+    tournament_id: uuid.UUID,
+    invite: str | None = None,
+) -> PublicRegistrationLinkStatus:
+    """S2 檢查賽事報名連結（自訂賽事）是否有效；不需登入，只回 `valid`。
+
+    校園賽或沒帶 `invite` 時 `valid=false`；不存在 404 `TOURNAMENT_NOT_FOUND`。
+    """
+    return service.get_registration_link_status(
+        session, tournament_id=tournament_id, invite=invite
+    )
 
 
 # ---------------------------------------------------------------- 主辦方
@@ -160,6 +177,41 @@ def cancel_my_tournament(
     )
     session.commit()
     return cancelled
+
+
+# ---------------------------------------------------------------- 賽事報名連結
+
+
+@router.get("/organizer/tournaments/{tournament_id}/registration-link")
+def read_registration_link(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> TournamentRegistrationLink:
+    """S27 自訂賽事的賽事報名連結（含 token）。
+
+    不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；校園賽 409
+    `TOURNAMENT_NOT_CUSTOM`。
+    """
+    tournament = service.get_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, organizer.id)
+    return service.get_registration_link(session, tournament_id=tournament_id)
+
+
+@router.post("/organizer/tournaments/{tournament_id}/registration-link")
+def reset_registration_link(
+    session: SessionDep, organizer: Organizer, tournament_id: uuid.UUID
+) -> TournamentRegistrationLink:
+    """重設賽事報名連結：舊連結立即失效，已建立的隊伍不受影響。
+
+    不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；校園賽 409
+    `TOURNAMENT_NOT_CUSTOM`。
+    """
+    tournament = service.lock_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(tournament, organizer.id)
+    link = service.reset_invite_link(
+        session, tournament_id=tournament_id, actor_id=organizer.id
+    )
+    session.commit()
+    return link
 
 
 # ---------------------------------------------------------------- 裁判

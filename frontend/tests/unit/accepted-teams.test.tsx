@@ -65,6 +65,7 @@ function tournament(
     id: "t-1",
     name: "期中盃",
     status: "open",
+    mode: "campus",
     game_name: "特戰英豪",
     capacity: 16,
     registration_start: "2025-10-09T11:00:00Z",

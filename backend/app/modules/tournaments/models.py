@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 from pydantic import AfterValidator, AwareDatetime, BaseModel, BeforeValidator
 from pydantic_core import PydanticCustomError
-from sqlalchemy import DateTime, Index, String, text
+from sqlalchemy import CheckConstraint, DateTime, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -67,6 +67,9 @@ MIN_CAPACITY = 2
 REFEREE_INVITATION_DAYS = 7
 REFEREE_INVITATION_TOKEN_BYTES = 32
 REFEREE_INVITATION_TOKEN_MAX_LENGTH = 64
+# 賽事報名連結（Story 3.10）：只有自訂賽事有；token 為 secrets.token_urlsafe(32)（43 字元）
+TOURNAMENT_INVITE_TOKEN_BYTES = 32
+TOURNAMENT_INVITE_TOKEN_MAX_LENGTH = 64
 
 
 # ---------------------------------------------------------------- 資料表
@@ -125,13 +128,21 @@ class Tournament(SQLModel, table=True):
     `game_snapshot` 的鍵：`game_name`、`starters`、`substitutes`、`bo`、
     `game_minutes`、`score_type`、`rank_tiers`（`[{name, score}]`，積分由高到低）。
     狀態只能經 `service.transition_tournament` 修改（AD-11）。
+
+    `invite_token`：自訂賽事的賽事報名連結（Story 3.10），明文儲存（S27 要能再次顯示）、
+    UNIQUE；校園賽為 null。不放進 `TournamentRead` 與任何 `Public*` schema。
     """
 
     __tablename__ = "tournament"
-    # worker 依狀態與報名開始時間找出到期的賽事
     __table_args__ = (
+        # worker 依狀態與報名開始時間找出到期的賽事
         Index(
             "ix_tournament_status_registration_start", "status", "registration_start"
+        ),
+        # 自訂賽事一定有報名連結、校園賽一定沒有；service 切換模式時同時產生或清除
+        CheckConstraint(
+            "(mode = 'custom') = (invite_token IS NOT NULL)",
+            name="ck_tournament_custom_has_invite_token",
         ),
     )
 
@@ -154,6 +165,9 @@ class Tournament(SQLModel, table=True):
         default=None, max_length=LIVESTREAM_URL_MAX_LENGTH
     )
     game_snapshot: dict[str, Any] = Field(sa_type=JSONB)
+    invite_token: str | None = Field(
+        default=None, max_length=TOURNAMENT_INVITE_TOKEN_MAX_LENGTH, unique=True
+    )
     created_at: datetime = Field(
         default_factory=clock.now, sa_type=DateTime(timezone=True)
     )
@@ -430,12 +444,14 @@ LivestreamUrlField = Annotated[
 class TournamentCreate(BaseModel):
     """建立賽事。時間必須帶時區；先發、替補、BO 未填時帶入遊戲的值。
 
-    期中一律為校園賽，不接受模式欄位。要對照遊戲或現在時間的檢查（日期順序、
-    優先期、每輪間隔）由 service 進行，錯誤同樣是 422 並指向欄位。
+    `mode` 預設校園賽；自訂賽事（Story 3.10）沒有優先期，`priority_hours` 一律以 0 計
+    （忽略傳入值）。要對照遊戲或現在時間的檢查（日期順序、優先期、每輪間隔）由 service
+    進行，錯誤同樣是 422 並指向欄位。
     """
 
     name: TournamentNameField
     game_id: uuid.UUID
+    mode: TournamentMode = TournamentMode.CAMPUS
     capacity: CapacityField
     registration_start: AwareDatetime
     registration_end: AwareDatetime
@@ -458,11 +474,13 @@ class TournamentUpdate(BaseModel):
 
     欄位型別與下限沿用 `TournamentCreate`；`null` 視同未帶（`livestream_url` 例外：
     `null` 或空白代表移除直播連結）。依賽事狀態能改哪些欄位、日期順序與每輪間隔等
-    檢查由 service 進行，錯誤同樣是 422 並指向欄位。不接受賽事模式（3.10 才有自訂）。
+    檢查由 service 進行，錯誤同樣是 422 並指向欄位。賽事模式只在尚未開放時能改
+    （Story 3.10）；自訂賽事的優先期一律以 0 計。
     """
 
     name: TournamentNameField | None = None
     game_id: uuid.UUID | None = None
+    mode: TournamentMode | None = None
     capacity: CapacityField | None = None
     registration_start: AwareDatetime | None = None
     registration_end: AwareDatetime | None = None
@@ -485,7 +503,7 @@ class TournamentRead(BaseModel):
     organizer_id: uuid.UUID
     name: str
     status: TournamentStatus
-    # 期中一律 campus
+    # 自訂賽事的報名連結 token 不放在這裡（修改賽事的操作紀錄會比對本 schema 的內容）
     mode: TournamentMode
     # 正取名額
     capacity: int
@@ -518,6 +536,8 @@ class PublicTournament(BaseModel):
     id: uuid.UUID
     name: str
     status: TournamentStatus
+    # 自訂賽事為邀請制報名（S1 標籤）；報名連結 token 不公開
+    mode: TournamentMode
     game_name: str
     # 正取名額
     capacity: int
@@ -528,6 +548,19 @@ class PublicTournament(BaseModel):
     start_at: datetime
     round_interval_minutes: int
     livestream_url: str | None
+
+
+class TournamentRegistrationLink(BaseModel):
+    """主辦方看到的賽事報名連結（Story 3.10，自訂賽事；含明文 token，用來組出連結）。"""
+
+    tournament_id: uuid.UUID
+    invite_token: str
+
+
+class PublicRegistrationLinkStatus(BaseModel):
+    """不需登入的報名連結檢查（AD-19）：只回是否有效，不含 token。"""
+
+    valid: bool
 
 
 # ---------------------------------------------------------------- 裁判

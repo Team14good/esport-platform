@@ -27,10 +27,10 @@ class TournamentRead(BaseModel):
     organizer_id: UUID
     name: str
     status: TournamentStatus
-    mode: TournamentMode             # 期中一律 campus
+    mode: TournamentMode             # 3.10 起可為 custom；自訂賽事的報名連結 token 不在這裡
     capacity: int                    # 正取名額
     registration_start: datetime
-    priority_end: datetime           # 優先期結束 = registration_start + 優先期時數（校園賽）
+    priority_end: datetime           # 優先期結束 = registration_start + 優先期時數（校園賽）；自訂賽事＝registration_start
     registration_end: datetime
     start_at: datetime               # 開賽時間（第 1 輪）
     round_interval_minutes: int
@@ -75,6 +75,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
     id: UUID
     name: str
     status: TournamentStatus
+    mode: TournamentMode             # 3.10：S1「邀請制報名」標籤用；不含報名連結 token
     game_name: str
     capacity: int                    # 正取名額
     registration_start: datetime
@@ -83,6 +84,13 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
     start_at: datetime               # 開賽時間（第 1 輪）
     round_interval_minutes: int
     livestream_url: str | None
+
+class TournamentRegistrationLink(BaseModel):  # 3.10：主辦方看到的賽事報名連結（S27）
+    tournament_id: UUID
+    invite_token: str                # 明文，用來組出 /tournaments/{id}?invite={token}
+
+class PublicRegistrationLinkStatus(BaseModel):  # 3.10：不需登入的連結檢查（S2，AD-19）
+    valid: bool
 ```
 
 - 列舉沿用 `models.py` 既有的 `ScoreType`、`TournamentMode`、`TournamentStatus`。
@@ -103,9 +111,15 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
   - 只經 `core.audit.list_for_tournament()` 查詢，service 反轉後切片（資料庫層分頁列為延後項目）；不含其他賽事與帳號類紀錄。
   - 不存在 404 `TOURNAMENT_NOT_FOUND`、別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`、不是主辦方 403 `ORGANIZER_REQUIRED`、未登入 401。
 - 公開 API（2.4，不需登入）：`GET /tournaments` 回傳所有賽事的 `list[PublicTournament]`，依開賽時間排序；`GET /tournaments/{tournament_id}` 回傳 `PublicTournament`，不存在 404 `TOURNAMENT_NOT_FOUND`，id 格式錯誤 422。
-- 修改賽事 API（2.5）：`PATCH /organizer/tournaments/{tournament_id}`（主辦方本人），body 為 `TournamentUpdate`（欄位與 `TournamentCreate` 相同但全部選填、不含 `mode`；只帶要改的欄位，`null` 視同未帶，`livestream_url` 的 `null` 或空白代表移除），200 回 `TournamentRead`。
-  - 尚未開放：全部欄位都能改，改完仍須通過建立時的全部檢查；換遊戲時重建 `game_snapshot`（未另填的先發、替補、BO 帶新遊戲的值）；報名開始改到現在或更早時轉為開放報名。
-  - 開放報名、報名截止：只能延長報名截止（須早於開賽時間，等於也回 422 `REGISTRATION_END_AFTER_START`）、延長棄權時限／申訴期／每輪間隔、修改分輪 BO（輪次範圍依目前名額）、修改直播連結；其他欄位 422 `TOURNAMENT_FIELD_LOCKED`、縮短 422 `TOURNAMENT_SETTING_TIGHTENED`（`loc` 指向該欄位）；延長後每輪間隔仍須符合下限（以賽事 BO 計算，422 `ROUND_INTERVAL_TOO_SHORT`）。名額只能經 3.7 的 `POST /tournaments/{id}/capacity` 提高。報名截止的賽事把截止延到現在之後時轉回開放報名（`tournament.status_changed`，操作者為主辦方）。
+- 賽事模式（3.10）：`TournamentCreate.mode` 預設 `campus`。自訂賽事（`custom`）建立時產生賽事報名連結 token（`Tournament.invite_token`，`secrets.token_urlsafe(32)`、UNIQUE，校園賽為 null，資料庫 CHECK 約束保證「自訂⇔有 token」），優先期一律 0（忽略傳入的 `priority_hours`），`priority_end`＝`registration_start`。token 不進 `TournamentRead`、任何 `Public*` schema 與操作紀錄。
+- 賽事報名連結 API（3.10）：
+  - `GET /organizer/tournaments/{tournament_id}/registration-link`（主辦方本人）：`TournamentRegistrationLink`。
+  - `POST /organizer/tournaments/{tournament_id}/registration-link`（主辦方本人）：重設，換新 token，舊連結立即失效、已建立的隊伍不受影響；200 回 `TournamentRegistrationLink`，寫 `tournament.invite_link_reset`（before／after 為 null，不記 token）。
+  - 以上兩支：不存在 404 `TOURNAMENT_NOT_FOUND`、別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`、校園賽 409 `TOURNAMENT_NOT_CUSTOM`（重設另有：已結束或已取消 409 `TOURNAMENT_NOT_EDITABLE`，「已結束或已取消的賽事不能修改。」）、非主辦方 403 `ORGANIZER_REQUIRED`、未登入 401。
+  - `GET /tournaments/{tournament_id}/registration-link-status?invite=`（不需登入）：`PublicRegistrationLinkStatus`；校園賽或沒帶 `invite` 時 `valid=false`，不存在 404 `TOURNAMENT_NOT_FOUND`。
+- 修改賽事 API（2.5）：`PATCH /organizer/tournaments/{tournament_id}`（主辦方本人），body 為 `TournamentUpdate`（欄位與 `TournamentCreate` 相同但全部選填；只帶要改的欄位，`null` 視同未帶，`livestream_url` 的 `null` 或空白代表移除），200 回 `TournamentRead`。
+  - 尚未開放：全部欄位都能改，改完仍須通過建立時的全部檢查；換遊戲時重建 `game_snapshot`（未另填的先發、替補、BO 帶新遊戲的值）；報名開始改到現在或更早時轉為開放報名。可切換 `mode`（3.10）：校園賽→自訂在同一交易產生 token、優先期存 0；自訂→校園賽清除 token，沒帶 `priority_hours` 時優先期用預設 24 小時。自訂賽事（含本次切換成自訂）忽略傳入的 `priority_hours`。
+  - 開放報名、報名截止：只能延長報名截止（須早於開賽時間，等於也回 422 `REGISTRATION_END_AFTER_START`）、延長棄權時限／申訴期／每輪間隔、修改分輪 BO（輪次範圍依目前名額）、修改直播連結；其他欄位（含 `mode`，訊息「開放報名後不能修改賽事模式」）422 `TOURNAMENT_FIELD_LOCKED`、縮短 422 `TOURNAMENT_SETTING_TIGHTENED`（`loc` 指向該欄位）；延長後每輪間隔仍須符合下限（以賽事 BO 計算，422 `ROUND_INTERVAL_TOO_SHORT`）。名額只能經 3.7 的 `POST /tournaments/{id}/capacity` 提高。報名截止的賽事把截止延到現在之後時轉回開放報名（`tournament.status_changed`，操作者為主辦方）。
   - 賽程已公布、進行中：只能改直播連結，其他 409 `TOURNAMENT_SETTINGS_LOCKED`（「抽籤後只能修改場次時間。」）。
   - 已結束、已取消：409 `TOURNAMENT_NOT_EDITABLE`（「已結束或已取消的賽事不能修改。」）。
   - 不存在 404 `TOURNAMENT_NOT_FOUND`；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；非主辦方 403 `ORGANIZER_REQUIRED`；未登入 401。
@@ -134,11 +148,15 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `list_closed_tournament_ids(session) -> list[UUID]` | D（4.2 自動抽籤 worker 工作） | 狀態為 `closed`、`start_at > clock.now()` 的賽事 id，依報名截止時間、再依 id；不加鎖，呼叫端鎖住後要重新檢查（D 在 4.2 新增） | 4.2 |
 | `cancel_tournament(session, *, tournament_id, actor_id) -> TournamentRead` | tournaments 的取消賽事 API（2.6 S27） | 先 `lock_tournament`，再經 `transition_tournament` 轉為 `cancelled`（操作紀錄 `tournament.status_changed`），同一交易發出 `TournamentCancelled`。已結束或已取消拋 `TOURNAMENT_NOT_CANCELLABLE` 409；不存在拋 `TOURNAMENT_NOT_FOUND` 404。主辦方權限由呼叫端以 `authz.ensure_tournament_owner` 判斷 | 2.6 |
 | `update_tournament(session, *, tournament_id, actor_id, data: TournamentUpdate) -> TournamentRead` | tournaments 的修改賽事 API（2.5 S28） | 先 `lock_tournament`，依狀態限制可改的欄位（見〈一〉修改賽事 API），寫 `tournament.updated`；需要時經 `transition_tournament` 轉為開放報名。主辦方權限由呼叫端以 `authz.ensure_tournament_owner` 判斷；不呼叫 registration，提高名額後的遞補由 3.7 處理 | 2.5 |
+| `get_registration_link(session, *, tournament_id) -> TournamentRegistrationLink` | tournaments 的主辦方路由（3.10 S27） | 自訂賽事的報名連結；校園賽拋 `TOURNAMENT_NOT_CUSTOM` 409、不存在 404。不檢查權限，呼叫前先 `ensure_tournament_owner` | 3.10 |
+| `reset_invite_link(session, *, tournament_id, actor_id) -> TournamentRegistrationLink` | tournaments 的主辦方路由（3.10 S27） | 先 `lock_tournament`，換新 token（舊連結立即失效），寫 `tournament.invite_link_reset`（不記 token）。已結束或已取消拋 `TOURNAMENT_NOT_EDITABLE` 409；校園賽拋 `TOURNAMENT_NOT_CUSTOM` 409。不檢查權限，呼叫端先 `ensure_tournament_owner` | 3.10 |
+| `invite_token_matches(session, *, tournament_id, token) -> bool` | C（3.10 registration 建隊） | `token` 是否為該賽事目前的報名連結；以 `secrets.compare_digest` 比對，任一方為 None（校園賽、沒帶 token）都回 False。呼叫端先 `lock_tournament`，與重設不交錯 | 3.10 |
+| `get_registration_link_status(session, *, tournament_id, invite) -> PublicRegistrationLinkStatus` | tournaments 的公開路由（3.10 S2） | 不需登入的連結檢查，只回 `valid`；不存在 404 | 3.10 |
 | `raise_tournament_capacity(session, *, tournament_id, capacity, actor_id) -> TournamentRead` | C（3.7 registration `raise_capacity`） | 提高名額，回傳改名額後的賽事；呼叫前要先 `lock_tournament`。狀態不是 `upcoming`、`open`、`closed` 時拋 `CAPACITY_NOT_EDITABLE` 409；新名額小於或等於目前名額時拋 `CAPACITY_NOT_INCREASED` 422（`loc=body.capacity`）。寫操作紀錄 `tournament.capacity_changed`（before／after 為名額）。不檢查權限、不做遞補：由呼叫端檢查主辦方，並在同一個鎖內讓候補遞補（C 在 3.7 新增） | 3.7 |
 
 三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
 
-尚未提供：`reset_invite_link`（3.10）。registration 的「提高名額」（FR-9）已由 C 在 3.7 完成：後端與 API（`POST /tournaments/{id}/capacity`，限主辦方）呼叫上表的 `raise_tournament_capacity` 後在同一個鎖內遞補；2.5 的 S28 以「提高名額」區塊呼叫這支 API。
+registration 的「提高名額」（FR-9）已由 C 在 3.7 完成：後端與 API（`POST /tournaments/{id}/capacity`，限主辦方）呼叫上表的 `raise_tournament_capacity` 後在同一個鎖內遞補；2.5 的 S28 以「提高名額」區塊呼叫這支 API。
 
 ## 三、狀態轉換
 

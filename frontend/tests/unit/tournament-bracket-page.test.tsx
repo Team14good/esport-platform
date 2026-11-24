@@ -48,6 +48,7 @@ function tournament(
     id: "t-1",
     name: "期中盃",
     status: "published",
+    mode: "campus",
     game_name: "特戰英豪",
     capacity: 16,
     // 台北 10/12（日）19:00 ～ 10/17（五）19:00，10/18（六）19:00 開賽

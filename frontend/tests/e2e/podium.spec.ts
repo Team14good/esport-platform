@@ -46,6 +46,7 @@ const tournament: PublicTournament = {
   id: TOURNAMENT_ID,
   name: TOURNAMENT_NAME,
   status: "finished",
+  mode: "campus",
   game_name: "特戰英豪",
   capacity: 32,
   registration_start: "2026-10-12T11:00:00Z",

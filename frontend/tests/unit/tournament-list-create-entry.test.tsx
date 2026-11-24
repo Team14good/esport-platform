@@ -63,6 +63,7 @@ describe("S1 空狀態的「建立賽事」", () => {
       id: "t-1",
       name: "期中盃",
       status: "open",
+      mode: "campus",
       game_name: "特戰英豪",
       capacity: 16,
       registration_start: "2025-10-12T11:00:00Z",

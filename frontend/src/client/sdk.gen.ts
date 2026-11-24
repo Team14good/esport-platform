@@ -263,6 +263,15 @@ import type {
   tournamentsReadRefereeInvitationData,
   tournamentsReadRefereeInvitationErrors,
   tournamentsReadRefereeInvitationResponses,
+  tournamentsReadRegistrationLinkData,
+  tournamentsReadRegistrationLinkErrors,
+  tournamentsReadRegistrationLinkResponses,
+  tournamentsReadRegistrationLinkStatusData,
+  tournamentsReadRegistrationLinkStatusErrors,
+  tournamentsReadRegistrationLinkStatusResponses,
+  tournamentsResetRegistrationLinkData,
+  tournamentsResetRegistrationLinkErrors,
+  tournamentsResetRegistrationLinkResponses,
   tournamentsUpdateGameData,
   tournamentsUpdateGameErrors,
   tournamentsUpdateGameResponses,
@@ -846,6 +855,27 @@ export class TournamentsService {
   }
 
   /**
+   * Read Registration Link Status
+   *
+   * S2 檢查賽事報名連結（自訂賽事）是否有效；不需登入，只回 `valid`。
+   *
+   * 校園賽或沒帶 `invite` 時 `valid=false`；不存在 404 `TOURNAMENT_NOT_FOUND`。
+   */
+  public static readRegistrationLinkStatus<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsReadRegistrationLinkStatusData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      tournamentsReadRegistrationLinkStatusResponses,
+      tournamentsReadRegistrationLinkStatusErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      url: "/api/v1/tournaments/{tournament_id}/registration-link-status",
+      ...options,
+    })
+  }
+
+  /**
    * List Games For Organizer
    *
    * 主辦方建立賽事時可選的遊戲（依名稱排序）；只限主辦方。
@@ -976,6 +1006,52 @@ export class TournamentsService {
       responseType: "json",
       security: [{ scheme: "bearer", type: "http" }],
       url: "/api/v1/organizer/tournaments/{tournament_id}/cancel",
+      ...options,
+    })
+  }
+
+  /**
+   * Read Registration Link
+   *
+   * S27 自訂賽事的賽事報名連結（含 token）。
+   *
+   * 不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；校園賽 409
+   * `TOURNAMENT_NOT_CUSTOM`。
+   */
+  public static readRegistrationLink<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsReadRegistrationLinkData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      tournamentsReadRegistrationLinkResponses,
+      tournamentsReadRegistrationLinkErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/registration-link",
+      ...options,
+    })
+  }
+
+  /**
+   * Reset Registration Link
+   *
+   * 重設賽事報名連結：舊連結立即失效，已建立的隊伍不受影響。
+   *
+   * 不存在 404；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；校園賽 409
+   * `TOURNAMENT_NOT_CUSTOM`。
+   */
+  public static resetRegistrationLink<ThrowOnError extends boolean = true>(
+    options: Options<tournamentsResetRegistrationLinkData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      tournamentsResetRegistrationLinkResponses,
+      tournamentsResetRegistrationLinkErrors,
+      ThrowOnError
+    >({
+      responseType: "json",
+      security: [{ scheme: "bearer", type: "http" }],
+      url: "/api/v1/organizer/tournaments/{tournament_id}/registration-link",
       ...options,
     })
   }
@@ -1115,6 +1191,8 @@ export class RegistrationService {
    * Create Team
    *
    * S16 建立隊伍：建立者成為隊長，報名狀態為「組隊中」，並產生邀請連結。
+   *
+   * 自訂賽事要帶有效的賽事報名連結 token，缺少或不符回 403 `TOURNAMENT_INVITE_REQUIRED`。
    */
   public static createTeam<ThrowOnError extends boolean = true>(
     options: Options<registrationCreateTeamData, ThrowOnError>,

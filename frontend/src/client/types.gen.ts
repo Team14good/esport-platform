@@ -1834,6 +1834,18 @@ export type PublicRefereeInvitation = {
 }
 
 /**
+ * PublicRegistrationLinkStatus
+ *
+ * 不需登入的報名連結檢查（AD-19）：只回是否有效，不含 token。
+ */
+export type PublicRegistrationLinkStatus = {
+  /**
+   * Valid
+   */
+  valid: boolean
+}
+
+/**
  * PublicSchool
  */
 export type PublicSchool = {
@@ -1880,6 +1892,7 @@ export type PublicTournament = {
    */
   name: string
   status: TournamentStatus
+  mode: TournamentMode
   /**
    * Game Name
    */
@@ -2485,12 +2498,19 @@ export type SubmitBlocker = {
  * TeamCreate
  *
  * S16 建立隊伍。
+ *
+ * `invite_token`：自訂賽事的賽事報名連結 token（S2 網址的 `invite`，Story 3.10）；
+ * 校園賽不需要，帶了也忽略。
  */
 export type TeamCreate = {
   /**
    * Name
    */
   name: string
+  /**
+   * Invite Token
+   */
+  invite_token?: string | null
 }
 
 /**
@@ -2725,8 +2745,9 @@ export type TeamMemberRead = {
  *
  * 建立賽事。時間必須帶時區；先發、替補、BO 未填時帶入遊戲的值。
  *
- * 期中一律為校園賽，不接受模式欄位。要對照遊戲或現在時間的檢查（日期順序、
- * 優先期、每輪間隔）由 service 進行，錯誤同樣是 422 並指向欄位。
+ * `mode` 預設校園賽；自訂賽事（Story 3.10）沒有優先期，`priority_hours` 一律以 0 計
+ * （忽略傳入值）。要對照遊戲或現在時間的檢查（日期順序、優先期、每輪間隔）由 service
+ * 進行，錯誤同樣是 422 並指向欄位。
  */
 export type TournamentCreate = {
   /**
@@ -2737,6 +2758,7 @@ export type TournamentCreate = {
    * Game Id
    */
   game_id: string
+  mode?: TournamentMode
   /**
    * Capacity
    */
@@ -2890,6 +2912,22 @@ export type TournamentRead = {
 }
 
 /**
+ * TournamentRegistrationLink
+ *
+ * 主辦方看到的賽事報名連結（Story 3.10，自訂賽事；含明文 token，用來組出連結）。
+ */
+export type TournamentRegistrationLink = {
+  /**
+   * Tournament Id
+   */
+  tournament_id: string
+  /**
+   * Invite Token
+   */
+  invite_token: string
+}
+
+/**
  * TournamentStatus
  *
  * 賽事狀態：尚未開放、開放報名、報名截止、賽程已公布、進行中、已結束、已取消。
@@ -2910,7 +2948,8 @@ export type TournamentStatus =
  *
  * 欄位型別與下限沿用 `TournamentCreate`；`null` 視同未帶（`livestream_url` 例外：
  * `null` 或空白代表移除直播連結）。依賽事狀態能改哪些欄位、日期順序與每輪間隔等
- * 檢查由 service 進行，錯誤同樣是 422 並指向欄位。不接受賽事模式（3.10 才有自訂）。
+ * 檢查由 service 進行，錯誤同樣是 422 並指向欄位。賽事模式只在尚未開放時能改
+ * （Story 3.10）；自訂賽事的優先期一律以 0 計。
  */
 export type TournamentUpdate = {
   /**
@@ -2921,6 +2960,7 @@ export type TournamentUpdate = {
    * Game Id
    */
   game_id?: string | null
+  mode?: TournamentMode | null
   /**
    * Capacity
    */
@@ -3676,6 +3716,43 @@ export type tournamentsReadPublicTournamentResponses = {
 export type tournamentsReadPublicTournamentResponse =
   tournamentsReadPublicTournamentResponses[keyof tournamentsReadPublicTournamentResponses]
 
+export type tournamentsReadRegistrationLinkStatusData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: {
+    /**
+     * Invite
+     */
+    invite?: string | null
+  }
+  url: "/api/v1/tournaments/{tournament_id}/registration-link-status"
+}
+
+export type tournamentsReadRegistrationLinkStatusErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsReadRegistrationLinkStatusError =
+  tournamentsReadRegistrationLinkStatusErrors[keyof tournamentsReadRegistrationLinkStatusErrors]
+
+export type tournamentsReadRegistrationLinkStatusResponses = {
+  /**
+   * Successful Response
+   */
+  200: PublicRegistrationLinkStatus
+}
+
+export type tournamentsReadRegistrationLinkStatusResponse =
+  tournamentsReadRegistrationLinkStatusResponses[keyof tournamentsReadRegistrationLinkStatusResponses]
+
 export type tournamentsListGamesForOrganizerData = {
   body?: never
   path?: never
@@ -3836,6 +3913,70 @@ export type tournamentsCancelMyTournamentResponses = {
 
 export type tournamentsCancelMyTournamentResponse =
   tournamentsCancelMyTournamentResponses[keyof tournamentsCancelMyTournamentResponses]
+
+export type tournamentsReadRegistrationLinkData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/registration-link"
+}
+
+export type tournamentsReadRegistrationLinkErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsReadRegistrationLinkError =
+  tournamentsReadRegistrationLinkErrors[keyof tournamentsReadRegistrationLinkErrors]
+
+export type tournamentsReadRegistrationLinkResponses = {
+  /**
+   * Successful Response
+   */
+  200: TournamentRegistrationLink
+}
+
+export type tournamentsReadRegistrationLinkResponse =
+  tournamentsReadRegistrationLinkResponses[keyof tournamentsReadRegistrationLinkResponses]
+
+export type tournamentsResetRegistrationLinkData = {
+  body?: never
+  path: {
+    /**
+     * Tournament Id
+     */
+    tournament_id: string
+  }
+  query?: never
+  url: "/api/v1/organizer/tournaments/{tournament_id}/registration-link"
+}
+
+export type tournamentsResetRegistrationLinkErrors = {
+  /**
+   * Validation Error
+   */
+  422: HTTPValidationError
+}
+
+export type tournamentsResetRegistrationLinkError =
+  tournamentsResetRegistrationLinkErrors[keyof tournamentsResetRegistrationLinkErrors]
+
+export type tournamentsResetRegistrationLinkResponses = {
+  /**
+   * Successful Response
+   */
+  200: TournamentRegistrationLink
+}
+
+export type tournamentsResetRegistrationLinkResponse =
+  tournamentsResetRegistrationLinkResponses[keyof tournamentsResetRegistrationLinkResponses]
 
 export type tournamentsReadRefereeInvitationData = {
   body?: never

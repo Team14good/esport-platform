@@ -1013,6 +1013,15 @@ def test_needs_settlement_only_for_campus(
 @pytest.mark.parametrize(
     ("mode", "expected"), [(CAMPUS_MODE, False), (CUSTOM_MODE, True)]
 )
+def test_requires_tournament_invite_only_for_custom(
+    mode: allocation.AllocationMode, expected: bool
+) -> None:
+    assert allocation.requires_tournament_invite(mode) is expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"), [(CAMPUS_MODE, False), (CUSTOM_MODE, True)]
+)
 def test_backfills_on_disqualify_only_for_custom(
     mode: allocation.AllocationMode, expected: bool
 ) -> None:

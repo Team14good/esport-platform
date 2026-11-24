@@ -51,7 +51,13 @@ const teamSchema = z.object({
 type TeamInput = z.input<typeof teamSchema>
 type TeamValues = z.output<typeof teamSchema>
 
-function CreateTeamForm({ tournamentId }: { tournamentId: string }) {
+type CreateTeamProps = {
+  tournamentId: string
+  /** 自訂賽事的賽事報名連結 token（S2 網址的 `invite`，Story 3.10）；校園賽不帶 */
+  inviteToken?: string
+}
+
+function CreateTeamForm({ tournamentId, inviteToken }: CreateTeamProps) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [formError, setFormError] = useState<ApiError | null>(null)
@@ -65,7 +71,10 @@ function CreateTeamForm({ tournamentId }: { tournamentId: string }) {
       (
         await RegistrationService.createTeam({
           path: { tournament_id: tournamentId },
-          body: values,
+          body:
+            inviteToken === undefined
+              ? values
+              : { ...values, invite_token: inviteToken },
         })
       ).data,
     onSuccess: (team) => {
@@ -119,10 +128,14 @@ function CreateTeamForm({ tournamentId }: { tournamentId: string }) {
 
 /**
  * S16 建立隊伍：「建立隊伍」按鈕＋`Dialog`。送出成功後導向該隊 S17。
- * Email 未驗證時按鈕停用並說明原因。S2 的入口是 `CreateTeamEntry`（開放報名時，
+ * Email 未驗證時按鈕停用並說明原因。自訂賽事帶賽事報名連結 token；連結在對話框開著時
+ * 被重設，伺服器的 403（報名連結已失效）照樣顯示在對話框內。S2 的入口是 `CreateTeamEntry`（開放報名時，
  * 依登入、主辦方身分與是否已有隊伍決定是否顯示）。
  */
-export function CreateTeamDialog({ tournamentId }: { tournamentId: string }) {
+export function CreateTeamDialog({
+  tournamentId,
+  inviteToken,
+}: CreateTeamProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -139,7 +152,12 @@ export function CreateTeamDialog({ tournamentId }: { tournamentId: string }) {
             </DialogDescription>
           </DialogHeader>
           {/* 每次開啟都是新的表單 */}
-          {open && <CreateTeamForm tournamentId={tournamentId} />}
+          {open && (
+            <CreateTeamForm
+              tournamentId={tournamentId}
+              inviteToken={inviteToken}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </VerificationRequired>

@@ -27,7 +27,13 @@ import logging
 from sqlmodel import Session
 
 from app.core.config import settings
-from app.demo_data import accounts, competition, registration, tournaments
+from app.demo_data import (
+    accounts,
+    competition,
+    custom_tournament,
+    registration,
+    tournaments,
+)
 from app.demo_data.context import DemoContext, Step
 
 logger = logging.getLogger(__name__)
@@ -36,6 +42,8 @@ logger = logging.getLogger(__name__)
 STEPS: list[Step] = [
     accounts.seed,
     tournaments.seed,
+    # 自訂模式的示範賽事（Story 3.10）：不建隊伍，不交給之後的報名、抽籤步驟
+    custom_tournament.seed,
     registration.seed,
     competition.seed,
 ]

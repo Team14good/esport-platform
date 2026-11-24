@@ -9,7 +9,7 @@
 退回前結算、抽籤前分配、公開正取名單）維持原樣，不在本檔。
 
 - `checks_school`、`needs_settlement`、`backfills_on_disqualify`、`submit_allocation`、
-  `current_phase`：依模式回答的判斷。
+  `current_phase`、`requires_tournament_invite`：依模式回答的判斷。
 - `decide_custom`：自訂模式送出當下判定正取或候補（FR-39）。
 
 - `sort_key`：所有依平均段位積分排序的規則共用的排序鍵（FR-14）：
@@ -215,6 +215,14 @@ def checks_school(mode: AllocationMode) -> bool:
     不檢查學校時，送出時的學校快照一律為 None。
     """
     return mode == AllocationMode.CAMPUS
+
+
+def requires_tournament_invite(mode: AllocationMode) -> bool:
+    """建立隊伍要不要帶有效的賽事報名連結：自訂賽事要（邀請制報名，FR-39），校園賽不要。
+
+    只在建隊時檢查；加入隊伍（隊伍邀請連結）不檢查賽事報名連結。
+    """
+    return mode == AllocationMode.CUSTOM
 
 
 def needs_settlement(mode: AllocationMode) -> bool:
