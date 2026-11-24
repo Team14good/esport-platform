@@ -150,6 +150,16 @@ def add_round_settings(session: Session, settings: list[RoundSetting]) -> None:
     session.flush()
 
 
+def replace_round_settings(
+    session: Session, tournament_id: uuid.UUID, settings: list[RoundSetting]
+) -> None:
+    """整份替換某賽事的分輪 BO（修改賽事時）：先刪除舊的（flush），再新增新的。"""
+    for setting in list_round_settings(session, [tournament_id]):
+        session.delete(setting)
+    session.flush()
+    add_round_settings(session, settings)
+
+
 def list_round_settings(
     session: Session, tournament_ids: list[uuid.UUID]
 ) -> list[RoundSetting]:
@@ -236,6 +246,17 @@ def set_tournament_status(
 ) -> Tournament:
     tournament.status = status
     tournament.updated_at = at
+    session.add(tournament)
+    session.flush()
+    return tournament
+
+
+def update_tournament(
+    session: Session, tournament: Tournament, changes: dict[str, Any]
+) -> Tournament:
+    """修改賽事欄位（不含狀態：狀態只能經 `set_tournament_status`）。"""
+    for field, value in changes.items():
+        setattr(tournament, field, value)
     session.add(tournament)
     session.flush()
     return tournament

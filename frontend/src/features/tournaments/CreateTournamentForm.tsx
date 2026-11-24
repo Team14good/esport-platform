@@ -64,11 +64,11 @@ const ROUND_BO_DEFAULT = "default"
 // 與後端 models.py 相同的限制
 const TOURNAMENT_NAME_MAX_LENGTH = 100
 const LIVESTREAM_URL_MAX_LENGTH = 2048
-const INT_MAX = 2_147_483_647
-const MIN_CAPACITY = 2
-const MIN_FORFEIT_MINUTES = 15
-const MIN_APPEAL_MINUTES = 30
-const GAME_NOT_FOUND = "GAME_NOT_FOUND"
+export const INT_MAX = 2_147_483_647
+export const MIN_CAPACITY = 2
+export const MIN_FORFEIT_MINUTES = 15
+export const MIN_APPEAL_MINUTES = 30
+export const GAME_NOT_FOUND = "GAME_NOT_FOUND"
 
 /** 每輪間隔的下限：棄權時限＋BO × 每局預估時間＋申訴期（與後端 `min_round_interval` 相同）。 */
 export function minRoundInterval({
@@ -89,8 +89,8 @@ export function roundIntervalTooShortText(minimum: number): string {
   return `每輪間隔至少 ${minimum} 分鐘`
 }
 
-/** 表單值：輸入框一律是字串，送出前才轉型。 */
-const formShape = z.object({
+/** 表單值：輸入框一律是字串，送出前才轉型（S28 賽事設定也用同一份）。 */
+export const formShape = z.object({
   name: z.string(),
   game_id: z.string(),
   capacity: z.string(),
@@ -110,7 +110,7 @@ const formShape = z.object({
 })
 
 export type CreateTournamentValues = z.infer<typeof formShape>
-type FieldName = keyof CreateTournamentValues
+export type FieldName = keyof CreateTournamentValues
 // 以單一字串輸入的欄位（分輪 BO 是清單，另外處理）
 type TextFieldName = Exclude<FieldName, "round_bo">
 
@@ -149,9 +149,19 @@ const DATETIME_FIELDS: { name: TextFieldName; label: string }[] = [
 ]
 
 /** 整數欄位的值；空白、小數或其他文字回傳 null。 */
-function parseInteger(value: string): number | null {
+export function parseInteger(value: string): number | null {
   const text = value.trim()
   return /^-?\d+$/.test(text) ? Number(text) : null
+}
+
+/** 直播連結的錯誤訊息；空白（不填）或合法時回傳 null。 */
+export function livestreamUrlError(value: string): string | null {
+  const url = value.trim()
+  if (!url) return null
+  if ([...url].length > LIVESTREAM_URL_MAX_LENGTH)
+    return `直播連結最多 ${LIVESTREAM_URL_MAX_LENGTH} 個字`
+  if (!isHttpUrl(url)) return "直播連結必須是 http:// 或 https:// 開頭的網址"
+  return null
 }
 
 function isHttpUrl(value: string): boolean {
@@ -169,9 +179,12 @@ function isHttpUrl(value: string): boolean {
 /**
  * 與後端相同的檢查（`models.py` 欄位規則與 `service._validate_schedule`）。
  * 全部寫在一個 superRefine：任一欄位錯誤時，其他欄位的錯誤仍會一起顯示。
+ * `currentGame`（S28）：賽事目前的遊戲以快照的每局預估時間計算最小間隔，
+ * 遊戲已不在清單中也視為已選。
  */
 export function createTournamentSchema(
   games: readonly GameRead[] | (() => readonly GameRead[]),
+  { currentGame }: { currentGame?: { id: string; game_minutes: number } } = {},
 ) {
   return formShape.superRefine((values, ctx) => {
     const gameList = typeof games === "function" ? games() : games
@@ -183,7 +196,10 @@ export function createTournamentSchema(
     else if ([...name].length > TOURNAMENT_NAME_MAX_LENGTH)
       fail("name", `賽事名稱最多 ${TOURNAMENT_NAME_MAX_LENGTH} 個字`)
 
-    const game = gameList.find((item) => item.id === values.game_id)
+    const game =
+      currentGame && values.game_id === currentGame.id
+        ? currentGame
+        : gameList.find((item) => item.id === values.game_id)
     if (!game) fail("game_id", "請選擇遊戲")
 
     const numbers: Partial<Record<FieldName, number>> = {}
@@ -254,13 +270,8 @@ export function createTournamentSchema(
         fail("round_interval_minutes", roundIntervalTooShortText(minimum))
     }
 
-    const url = values.livestream_url.trim()
-    if (url) {
-      if ([...url].length > LIVESTREAM_URL_MAX_LENGTH)
-        fail("livestream_url", `直播連結最多 ${LIVESTREAM_URL_MAX_LENGTH} 個字`)
-      else if (!isHttpUrl(url))
-        fail("livestream_url", "直播連結必須是 http:// 或 https:// 開頭的網址")
-    }
+    const urlError = livestreamUrlError(values.livestream_url)
+    if (urlError) fail("livestream_url", urlError)
   })
 }
 
@@ -313,15 +324,18 @@ function roundsForCapacity(capacity: string): number | null {
 /**
  * S26 的「分輪 BO」：預設收合，展開後依名額列出輪次（決賽在最上），
  * 每列可選「沿用預設」或 BO1／3／5／7。伺服器的 `round_bo` 錯誤顯示在下方並自動展開。
+ * S28 也用這個元件；`disabled` 時各輪選單停用（仍可展開查看）。
  */
-function RoundBoField({
+export function RoundBoField({
   control,
   capacity,
   bo,
+  disabled = false,
 }: {
   control: Control<CreateTournamentValues>
   capacity: string
   bo: string
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
@@ -384,6 +398,7 @@ function RoundBoField({
                           {roundLabel(roundsFromFinal)}
                         </Label>
                         <Select
+                          disabled={disabled}
                           value={
                             field.value[roundsFromFinal] || ROUND_BO_DEFAULT
                           }
@@ -437,18 +452,23 @@ type TextFieldProps = {
   label: string
   type?: "text" | "number" | "datetime-local" | "url"
   description?: ReactNode
-  min?: number
+  /** 數字欄位是數字；`datetime-local` 是台北時間字串（S28 的下限） */
+  min?: number | string
+  max?: string
   autoComplete?: string
+  disabled?: boolean
 }
 
-function TextField({
+export function TextField({
   control,
   name,
   label,
   type = "text",
   description,
   min,
+  max,
   autoComplete = "off",
+  disabled = false,
 }: TextFieldProps) {
   return (
     <FormField
@@ -462,9 +482,11 @@ function TextField({
               type={type}
               inputMode={type === "number" ? "numeric" : undefined}
               min={min}
+              max={max}
               step={type === "number" ? 1 : undefined}
               autoComplete={autoComplete}
               {...field}
+              disabled={disabled}
             />
           </FormControl>
           {description && <FormDescription>{description}</FormDescription>}
@@ -475,7 +497,7 @@ function TextField({
   )
 }
 
-function FormSection({
+export function FormSection({
   title,
   children,
 }: {
@@ -490,10 +512,10 @@ function FormSection({
   )
 }
 
-const TAIPEI_TIME_HINT = "台北時間"
+export const TAIPEI_TIME_HINT = "台北時間"
 
 /** 跨欄位檢查：改變 key 時要一起重新檢查的欄位。 */
-const CROSS_FIELD_DEPENDENTS: Partial<Record<FieldName, FieldName[]>> = {
+export const CROSS_FIELD_DEPENDENTS: Partial<Record<FieldName, FieldName[]>> = {
   game_id: ["round_interval_minutes"],
   bo: ["round_interval_minutes"],
   forfeit_minutes: ["round_interval_minutes"],

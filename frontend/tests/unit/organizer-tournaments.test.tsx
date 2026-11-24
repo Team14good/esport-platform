@@ -894,6 +894,7 @@ describe("S27 賽事總覽", () => {
       "申訴",
       "檢舉",
       "操作紀錄",
+      "設定",
     ])
     expect(links[0]).toHaveAttribute("href", "/tournaments/t-1")
     expect(links[1]).toHaveAttribute("href", "/organizer/tournaments/t-1")

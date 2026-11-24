@@ -36,6 +36,7 @@ from app.modules.tournaments.models import (
     TournamentRead,
     TournamentReferee,
     TournamentStatus,
+    TournamentUpdate,
 )
 
 # 遊戲本身的欄位（段位表另外處理）
@@ -651,6 +652,336 @@ def raise_tournament_capacity(
         after={"capacity": capacity},
     )
     return _read(session, tournament)
+
+
+# ---------------------------------------------------------------- 修改賽事（Story 2.5）
+
+_NOT_EDITABLE_STATUSES = frozenset(
+    {TournamentStatus.FINISHED, TournamentStatus.CANCELLED}
+)
+# 抽籤後只能改直播連結
+_AFTER_DRAW_STATUSES = frozenset({TournamentStatus.PUBLISHED, TournamentStatus.ONGOING})
+# 開放報名後（抽籤前）只能放寬的欄位
+_RELAXED_FIELDS: dict[str, str] = {
+    "registration_end": "開放報名後報名截止只能延後",
+    "forfeit_minutes": "開放報名後棄權時限只能延長",
+    "appeal_minutes": "開放報名後申訴期只能延長",
+    "round_interval_minutes": "開放報名後每輪間隔只能延長",
+}
+# 開放報名後（抽籤前）不能改的欄位與原因
+_LOCKED_AFTER_OPEN: dict[str, str] = {
+    "name": "開放報名後不能修改賽事名稱",
+    "game_id": "開放報名後不能更換遊戲",
+    "registration_start": "開放報名後不能修改報名開始",
+    "priority_hours": "開放報名後不能修改優先期",
+    "start_at": "開放報名後不能修改開賽時間",
+    "starters": "開放報名後不能修改先發人數",
+    "substitutes": "開放報名後不能修改替補人數",
+    "bo": "開放報名後不能修改賽事 BO，可以修改分輪 BO",
+}
+# 快照裡可由主辦方另填的值（其餘來自遊戲）
+_SNAPSHOT_OVERRIDES = ("starters", "substitutes", "bo")
+
+
+def _priority_hours(tournament: TournamentRead) -> int:
+    """目前的優先期（小時）＝優先期結束－報名開始。"""
+    return (tournament.priority_end - tournament.registration_start) // timedelta(
+        hours=1
+    )
+
+
+def _editable_values(tournament: TournamentRead) -> dict[str, Any]:
+    """`TournamentUpdate` 每個欄位目前的值。"""
+    return {
+        "name": tournament.name,
+        "game_id": tournament.game_id,
+        "capacity": tournament.capacity,
+        "registration_start": tournament.registration_start,
+        "registration_end": tournament.registration_end,
+        "priority_hours": _priority_hours(tournament),
+        "start_at": tournament.start_at,
+        "round_interval_minutes": tournament.round_interval_minutes,
+        "forfeit_minutes": tournament.forfeit_minutes,
+        "appeal_minutes": tournament.appeal_minutes,
+        "starters": tournament.starters,
+        "substitutes": tournament.substitutes,
+        "bo": tournament.bo,
+        "livestream_url": tournament.livestream_url,
+        "round_bo": tournament.round_bo,
+    }
+
+
+def _requested_changes(
+    current: dict[str, Any], data: TournamentUpdate
+) -> dict[str, Any]:
+    """請求中與目前值不同的欄位。未帶或 `null` 的欄位不算（直播連結的 `null` 代表移除）。"""
+    changes: dict[str, Any] = {}
+    for field, old in current.items():
+        if field not in data.model_fields_set:
+            continue
+        new = getattr(data, field)
+        if new is None and field != "livestream_url":
+            continue
+        if new != old:
+            changes[field] = new
+    return changes
+
+
+def _upcoming_row_changes(
+    session: Session,
+    tournament: TournamentRead,
+    current: dict[str, Any],
+    changes: dict[str, Any],
+    data: TournamentUpdate,
+    now: datetime,
+) -> dict[str, Any]:
+    """尚未開放：所有欄位都能改，改完的整份設定仍須通過建立時的檢查（FR-7）。
+
+    換遊戲時重建快照：未另填的先發、替補、BO 帶新遊戲的值。回傳要寫入賽事列的欄位。
+    """
+    merged = {**current, **changes}
+    snapshot: dict[str, Any] = dict(_snapshot_of(tournament))
+    if "game_id" in changes:
+        # 與建立賽事相同，以 FOR SHARE 鎖住遊戲列，遊戲欄位與段位表取自同一個版本
+        game_row = repository.get_game(session, changes["game_id"], for_share=True)
+        if game_row is None:
+            raise _game_not_found()
+        game = _to_read(game_row, repository.list_rank_tiers(session, [game_row.id]))
+        defaults = {
+            "starters": game.starters,
+            "substitutes": game.substitutes,
+            "bo": game.default_bo,
+        }
+        snapshot = {
+            "game_name": game.name,
+            "game_minutes": game.game_minutes,
+            "score_type": game.score_type.value,
+            "rank_tiers": [tier.model_dump() for tier in game.rank_tiers],
+        }
+        for field in _SNAPSHOT_OVERRIDES:
+            requested = getattr(data, field)
+            snapshot[field] = requested if requested is not None else defaults[field]
+    else:
+        for field in _SNAPSHOT_OVERRIDES:
+            snapshot[field] = merged[field]
+
+    check = TournamentCreate.model_construct(
+        name=merged["name"],
+        game_id=merged["game_id"],
+        capacity=merged["capacity"],
+        registration_start=merged["registration_start"],
+        registration_end=merged["registration_end"],
+        priority_hours=merged["priority_hours"],
+        start_at=merged["start_at"],
+        round_interval_minutes=merged["round_interval_minutes"],
+        forfeit_minutes=merged["forfeit_minutes"],
+        appeal_minutes=merged["appeal_minutes"],
+        round_bo=merged["round_bo"],
+    )
+    _validate_schedule(
+        check, bo=snapshot["bo"], game_minutes=snapshot["game_minutes"], now=now
+    )
+    _validate_round_bo(check)
+
+    registration_start = merged["registration_start"].astimezone(UTC)
+    row: dict[str, Any] = {
+        "name": merged["name"],
+        "game_id": merged["game_id"],
+        "capacity": merged["capacity"],
+        "registration_start": registration_start,
+        "priority_end": registration_start + timedelta(hours=merged["priority_hours"]),
+        "registration_end": merged["registration_end"].astimezone(UTC),
+        "start_at": merged["start_at"].astimezone(UTC),
+        "round_interval_minutes": merged["round_interval_minutes"],
+        "forfeit_minutes": merged["forfeit_minutes"],
+        "appeal_minutes": merged["appeal_minutes"],
+        "livestream_url": merged["livestream_url"],
+    }
+    if snapshot != _snapshot_of(tournament):
+        row["game_snapshot"] = snapshot
+    return row
+
+
+def _snapshot_of(tournament: TournamentRead) -> dict[str, Any]:
+    """由 `TournamentRead` 還原 `game_snapshot` 的內容（鍵與建立時相同）。"""
+    return {
+        "game_name": tournament.game_name,
+        "starters": tournament.starters,
+        "substitutes": tournament.substitutes,
+        "bo": tournament.bo,
+        "game_minutes": tournament.game_minutes,
+        "score_type": tournament.score_type.value,
+        "rank_tiers": [tier.model_dump() for tier in tournament.rank_tiers],
+    }
+
+
+def _open_row_changes(
+    tournament: TournamentRead,
+    current: dict[str, Any],
+    changes: dict[str, Any],
+) -> dict[str, Any]:
+    """開放報名、報名截止（抽籤前）：只能放寬時限、改分輪 BO 與直播連結（FR-9）。
+
+    其他欄位與縮短、降低一律 422 指向該欄位。回傳要寫入賽事列的欄位。
+    """
+    for field in current:
+        if field not in changes:
+            continue
+        if field == "capacity":
+            message = (
+                "開放報名後不能降低名額"
+                if changes[field] < current[field]
+                else "開放報名後請以「提高名額」修改名額"
+            )
+            raise _field_error(field, "TOURNAMENT_FIELD_LOCKED", message)
+        if field in _LOCKED_AFTER_OPEN:
+            raise _field_error(
+                field, "TOURNAMENT_FIELD_LOCKED", _LOCKED_AFTER_OPEN[field]
+            )
+        if field in _RELAXED_FIELDS and changes[field] < current[field]:
+            raise _field_error(
+                field, "TOURNAMENT_SETTING_TIGHTENED", _RELAXED_FIELDS[field]
+            )
+
+    merged = {**current, **changes}
+    # 報名截止要早於開賽時間：等於時賽事在開賽時才截止，自動抽籤不會再處理
+    if merged["registration_end"] >= tournament.start_at:
+        raise _field_error(
+            "registration_end",
+            "REGISTRATION_END_AFTER_START",
+            "報名截止必須早於開賽時間",
+        )
+    # 每輪間隔以賽事的 BO 計算下限（延長棄權時限或申訴期後仍要符合）
+    minimum = min_round_interval(
+        forfeit_minutes=merged["forfeit_minutes"],
+        bo=tournament.bo,
+        game_minutes=tournament.game_minutes,
+        appeal_minutes=merged["appeal_minutes"],
+    )
+    if merged["round_interval_minutes"] < minimum:
+        raise _field_error(
+            "round_interval_minutes",
+            "ROUND_INTERVAL_TOO_SHORT",
+            f"每輪間隔至少 {minimum} 分鐘",
+        )
+    rounds = total_rounds(tournament.capacity)
+    for item in merged["round_bo"]:
+        if item.rounds_from_final >= rounds:
+            raise _field_error(
+                "round_bo",
+                "ROUND_BO_OUT_OF_RANGE",
+                f"名額 {tournament.capacity} 隊最多 {rounds} 輪，不能設定這一輪的 BO",
+            )
+
+    row: dict[str, Any] = {}
+    for field in (
+        "registration_end",
+        "forfeit_minutes",
+        "appeal_minutes",
+        "round_interval_minutes",
+        "livestream_url",
+    ):
+        if field in changes:
+            value = changes[field]
+            row[field] = value.astimezone(UTC) if field == "registration_end" else value
+    return row
+
+
+def update_tournament(
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    data: TournamentUpdate,
+) -> TournamentRead:
+    """修改賽事設定（FR-9），依狀態限制可改的欄位；寫 `tournament.updated`。
+
+    先 `lock_tournament`。權限由呼叫端（router）以 `authz.ensure_tournament_owner` 判斷。
+    - 尚未開放：全部欄位都能改，改完仍須通過建立時的檢查；換遊戲時重建快照。報名開始
+      改到現在或更早時轉為開放報名。
+    - 開放報名、報名截止：只能延長報名截止與時限、改分輪 BO 與直播連結，其他 422。
+      報名截止的賽事把截止延到現在之後時轉回開放報名。
+    - 賽程已公布、進行中：只能改直播連結，其他 409 `TOURNAMENT_SETTINGS_LOCKED`。
+    - 已結束、已取消：409 `TOURNAMENT_NOT_EDITABLE`。
+    操作紀錄只含變動欄位（分輪 BO 整份比較）；沒有變動時不寫紀錄，回傳目前的賽事。
+    狀態變更另由 `transition_tournament` 寫 `tournament.status_changed`。
+    """
+    tournament = lock_tournament(session, tournament_id=tournament_id)
+    if tournament.status in _NOT_EDITABLE_STATUSES:
+        raise BusinessError(
+            "TOURNAMENT_NOT_EDITABLE",
+            "已結束或已取消的賽事不能修改。",
+            status_code=409,
+        )
+    current = _editable_values(tournament)
+    changes = _requested_changes(current, data)
+    if tournament.status in _AFTER_DRAW_STATUSES and set(changes) - {"livestream_url"}:
+        raise BusinessError(
+            "TOURNAMENT_SETTINGS_LOCKED",
+            "抽籤後只能修改場次時間。",
+            status_code=409,
+        )
+    if not changes:
+        return tournament
+
+    now = clock.now()
+    if tournament.status == TournamentStatus.UPCOMING:
+        row = _upcoming_row_changes(session, tournament, current, changes, data, now)
+    elif tournament.status in _AFTER_DRAW_STATUSES:
+        row = {"livestream_url": changes["livestream_url"]}
+    else:
+        row = _open_row_changes(tournament, current, changes)
+
+    entity = repository.get_tournament(session, tournament_id, for_update=True)
+    assert entity is not None  # 已在同一交易內鎖住
+    repository.update_tournament(session, entity, {**row, "updated_at": now})
+    if "round_bo" in changes:
+        repository.replace_round_settings(
+            session,
+            tournament_id,
+            [
+                RoundSetting(
+                    tournament_id=tournament_id,
+                    rounds_from_final=item.rounds_from_final,
+                    bo=item.bo,
+                )
+                for item in changes["round_bo"]
+            ],
+        )
+
+    updated = _read(session, entity)
+    old = tournament.model_dump(exclude={"id", "status"})
+    new = updated.model_dump(exclude={"id", "status"})
+    before = {field: value for field, value in old.items() if new[field] != value}
+    after = {field: new[field] for field in before}
+    if after:
+        audit.record(
+            session,
+            actor_id=actor_id,
+            tournament_id=tournament_id,
+            action="tournament.updated",
+            entity_type="tournament",
+            entity_id=tournament_id,
+            before=before,
+            after=after,
+        )
+
+    reopen = (
+        updated.status == TournamentStatus.UPCOMING
+        and updated.registration_start <= now
+    ) or (
+        updated.status == TournamentStatus.CLOSED
+        and "registration_end" in changes
+        and updated.registration_end > now
+    )
+    if reopen:
+        return transition_tournament(
+            session,
+            tournament_id=tournament_id,
+            to=TournamentStatus.OPEN,
+            actor_id=actor_id,
+        )
+    return updated
 
 
 def ensure_accepting_registrations(tournament: TournamentRead) -> None:
