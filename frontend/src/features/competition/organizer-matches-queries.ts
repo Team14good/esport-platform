@@ -5,7 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
-import { CompetitionService, TournamentsService } from "@/client"
+import { CompetitionService } from "@/client"
 import { parseApiError } from "@/lib/api-error"
 import { notifyError, notifySuccess } from "@/lib/feedback"
 import { shouldRetryQuery } from "@/lib/query-client"
@@ -37,19 +37,6 @@ export const managedMatchesQueryOptions = (tournamentId: string) =>
     queryFn: async () =>
       (
         await CompetitionService.listManagedMatches({
-          path: { tournament_id: tournamentId },
-        })
-      ).data,
-    retry: shouldRetry,
-  })
-
-/** 賽事的裁判（已接受邀請），用 `account_id` 對應列表的裁判欄。 */
-export const tournamentRefereesQueryOptions = (tournamentId: string) =>
-  queryOptions({
-    queryKey: ["tournaments", "organizer", "referees", tournamentId],
-    queryFn: async () =>
-      (
-        await TournamentsService.listTournamentReferees({
           path: { tournament_id: tournamentId },
         })
       ).data,
