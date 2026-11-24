@@ -453,6 +453,31 @@ class TournamentCreate(BaseModel):
     round_bo: Annotated[list[RoundBo], AfterValidator(_validate_round_bo)] = []
 
 
+class TournamentUpdate(BaseModel):
+    """修改賽事（Story 2.5）：只帶要改的欄位，未帶的欄位不變。
+
+    欄位型別與下限沿用 `TournamentCreate`；`null` 視同未帶（`livestream_url` 例外：
+    `null` 或空白代表移除直播連結）。依賽事狀態能改哪些欄位、日期順序與每輪間隔等
+    檢查由 service 進行，錯誤同樣是 422 並指向欄位。不接受賽事模式（3.10 才有自訂）。
+    """
+
+    name: TournamentNameField | None = None
+    game_id: uuid.UUID | None = None
+    capacity: CapacityField | None = None
+    registration_start: AwareDatetime | None = None
+    registration_end: AwareDatetime | None = None
+    priority_hours: PriorityHoursField | None = None
+    start_at: AwareDatetime | None = None
+    round_interval_minutes: RoundIntervalField | None = None
+    forfeit_minutes: ForfeitMinutesField | None = None
+    appeal_minutes: AppealMinutesField | None = None
+    starters: StartersField | None = None
+    substitutes: SubstitutesField | None = None
+    bo: BoField | None = None
+    livestream_url: LivestreamUrlField = None
+    round_bo: Annotated[list[RoundBo], AfterValidator(_validate_round_bo)] | None = None
+
+
 class TournamentRead(BaseModel):
     """賽事；遊戲相關欄位（`game_name` 以下）來自建立時的快照（AD-12）。"""
 

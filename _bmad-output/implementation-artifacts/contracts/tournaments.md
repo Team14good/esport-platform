@@ -87,7 +87,7 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 
 - 列舉沿用 `models.py` 既有的 `ScoreType`、`TournamentMode`、`TournamentStatus`。
 - 時間一律帶時區（UTC）。
-- 分輪 BO（2.3）：`POST /organizer/tournaments` 的 `round_bo: list[RoundBo]`（預設空清單）只列有設定的輪次。值的規則錯誤（BO 不是 1／3／5／7、輪次重複或小於 0、輪次超出名額可能的輪數；名額 N 共 ⌈log₂N⌉ 輪，可設距決賽 0～輪數−1）回 422，`loc` 為 `["body", "round_bo"]`；項目型別錯誤（例如 `bo` 是字串、`null` 或缺欄位）沿用欄位層級的 `loc`：`["body", "round_bo", <i>, <欄位>]`。存於 `round_setting` 表（主鍵 `tournament_id`＋`rounds_from_final`），建立後不能修改（修改屬 2.5）。
+- 分輪 BO（2.3）：`POST /organizer/tournaments` 的 `round_bo: list[RoundBo]`（預設空清單）只列有設定的輪次。值的規則錯誤（BO 不是 1／3／5／7、輪次重複或小於 0、輪次超出名額可能的輪數；名額 N 共 ⌈log₂N⌉ 輪，可設距決賽 0～輪數−1）回 422，`loc` 為 `["body", "round_bo"]`；項目型別錯誤（例如 `bo` 是字串、`null` 或缺欄位）沿用欄位層級的 `loc`：`["body", "round_bo", <i>, <欄位>]`。存於 `round_setting` 表（主鍵 `tournament_id`＋`rounds_from_final`）；2.5 起可經修改賽事 API 整份替換（抽籤前）。
 - 不登入就能呼叫的公開 API 用另外的 `Public*` schema（2.4 定義的 `PublicTournament`），不含 `organizer_id`、Email 與學校（AD-19）。
 - 裁判 API（2.7）：
   - `POST /organizer/tournaments/{tournament_id}/referee-invitation`（主辦方）：產生新邀請，201 回 `RefereeInvitationRead`；同賽事尚未過期的舊邀請 `expires_at` 設為現在（不刪除）。
@@ -103,6 +103,13 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
   - 只經 `core.audit.list_for_tournament()` 查詢，service 反轉後切片（資料庫層分頁列為延後項目）；不含其他賽事與帳號類紀錄。
   - 不存在 404 `TOURNAMENT_NOT_FOUND`、別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`、不是主辦方 403 `ORGANIZER_REQUIRED`、未登入 401。
 - 公開 API（2.4，不需登入）：`GET /tournaments` 回傳所有賽事的 `list[PublicTournament]`，依開賽時間排序；`GET /tournaments/{tournament_id}` 回傳 `PublicTournament`，不存在 404 `TOURNAMENT_NOT_FOUND`，id 格式錯誤 422。
+- 修改賽事 API（2.5）：`PATCH /organizer/tournaments/{tournament_id}`（主辦方本人），body 為 `TournamentUpdate`（欄位與 `TournamentCreate` 相同但全部選填、不含 `mode`；只帶要改的欄位，`null` 視同未帶，`livestream_url` 的 `null` 或空白代表移除），200 回 `TournamentRead`。
+  - 尚未開放：全部欄位都能改，改完仍須通過建立時的全部檢查；換遊戲時重建 `game_snapshot`（未另填的先發、替補、BO 帶新遊戲的值）；報名開始改到現在或更早時轉為開放報名。
+  - 開放報名、報名截止：只能延長報名截止（須早於開賽時間，等於也回 422 `REGISTRATION_END_AFTER_START`）、延長棄權時限／申訴期／每輪間隔、修改分輪 BO（輪次範圍依目前名額）、修改直播連結；其他欄位 422 `TOURNAMENT_FIELD_LOCKED`、縮短 422 `TOURNAMENT_SETTING_TIGHTENED`（`loc` 指向該欄位）；延長後每輪間隔仍須符合下限（以賽事 BO 計算，422 `ROUND_INTERVAL_TOO_SHORT`）。名額只能經 3.7 的 `POST /tournaments/{id}/capacity` 提高。報名截止的賽事把截止延到現在之後時轉回開放報名（`tournament.status_changed`，操作者為主辦方）。
+  - 賽程已公布、進行中：只能改直播連結，其他 409 `TOURNAMENT_SETTINGS_LOCKED`（「抽籤後只能修改場次時間。」）。
+  - 已結束、已取消：409 `TOURNAMENT_NOT_EDITABLE`（「已結束或已取消的賽事不能修改。」）。
+  - 不存在 404 `TOURNAMENT_NOT_FOUND`；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；非主辦方 403 `ORGANIZER_REQUIRED`；未登入 401。
+  - 操作紀錄 `tournament.updated`，before／after 只含變動的 `TournamentRead` 欄位（分輪 BO 整份比較，不含狀態）；沒有變動時不寫紀錄，回 200。
 - 取消賽事 API（2.6）：`POST /organizer/tournaments/{tournament_id}/cancel`（主辦方本人），200 回 `TournamentRead`（`status: cancelled`）。不存在 404 `TOURNAMENT_NOT_FOUND`；別人的賽事 403 `TOURNAMENT_OWNER_REQUIRED`；非主辦方 403 `ORGANIZER_REQUIRED`；未登入 401；已結束或已取消 409 `TOURNAMENT_NOT_CANCELLABLE`（「已結束或已取消的賽事不能取消。」），狀態、操作紀錄與事件都不變。
 
 ## 二、公開函式
@@ -126,11 +133,12 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `find_due_registration_end_id(session) -> UUID \| None` | C（3.6 報名截止 worker 工作） | 一筆狀態為 `open`、`registration_end <= clock.now()` 的賽事 id，依報名截止時間、再依 id，最早到期的優先；不加鎖，呼叫端鎖住後要重新檢查。沒有任何報名的賽事也找得到（C 在 3.6 新增） | 3.6 |
 | `list_closed_tournament_ids(session) -> list[UUID]` | D（4.2 自動抽籤 worker 工作） | 狀態為 `closed`、`start_at > clock.now()` 的賽事 id，依報名截止時間、再依 id；不加鎖，呼叫端鎖住後要重新檢查（D 在 4.2 新增） | 4.2 |
 | `cancel_tournament(session, *, tournament_id, actor_id) -> TournamentRead` | tournaments 的取消賽事 API（2.6 S27） | 先 `lock_tournament`，再經 `transition_tournament` 轉為 `cancelled`（操作紀錄 `tournament.status_changed`），同一交易發出 `TournamentCancelled`。已結束或已取消拋 `TOURNAMENT_NOT_CANCELLABLE` 409；不存在拋 `TOURNAMENT_NOT_FOUND` 404。主辦方權限由呼叫端以 `authz.ensure_tournament_owner` 判斷 | 2.6 |
+| `update_tournament(session, *, tournament_id, actor_id, data: TournamentUpdate) -> TournamentRead` | tournaments 的修改賽事 API（2.5 S28） | 先 `lock_tournament`，依狀態限制可改的欄位（見〈一〉修改賽事 API），寫 `tournament.updated`；需要時經 `transition_tournament` 轉為開放報名。主辦方權限由呼叫端以 `authz.ensure_tournament_owner` 判斷；不呼叫 registration，提高名額後的遞補由 3.7 處理 | 2.5 |
 | `raise_tournament_capacity(session, *, tournament_id, capacity, actor_id) -> TournamentRead` | C（3.7 registration `raise_capacity`） | 提高名額，回傳改名額後的賽事；呼叫前要先 `lock_tournament`。狀態不是 `upcoming`、`open`、`closed` 時拋 `CAPACITY_NOT_EDITABLE` 409；新名額小於或等於目前名額時拋 `CAPACITY_NOT_INCREASED` 422（`loc=body.capacity`）。寫操作紀錄 `tournament.capacity_changed`（before／after 為名額）。不檢查權限、不做遞補：由呼叫端檢查主辦方，並在同一個鎖內讓候補遞補（C 在 3.7 新增） | 3.7 |
 
 三個 `ensure_*` 都不碰資料庫，傳入剛鎖定或讀到的 `TournamentRead`，讓呼叫端在同一次鎖定內判斷。
 
-期中不提供（擱置的 Story）：`update_tournament`（2.5）、`reset_invite_link`（3.10）。registration 的「提高名額」（FR-9）已由 C 在 3.7 完成：後端與 API（`POST /tournaments/{id}/capacity`，限主辦方）呼叫上表的 `raise_tournament_capacity` 後在同一個鎖內遞補；S28 的修改畫面留給 2.5。
+尚未提供：`reset_invite_link`（3.10）。registration 的「提高名額」（FR-9）已由 C 在 3.7 完成：後端與 API（`POST /tournaments/{id}/capacity`，限主辦方）呼叫上表的 `raise_tournament_capacity` 後在同一個鎖內遞補；2.5 的 S28 以「提高名額」區塊呼叫這支 API。
 
 ## 三、狀態轉換
 
@@ -142,7 +150,8 @@ class PublicTournament(BaseModel):   # 2.4 已實作：不需登入的公開 API
 | `published` → `ongoing` | D（5.x） | 最早一場開放報到時（開賽前 30 分鐘） |
 | `ongoing` → `finished` | D（5.5） | 決賽與季軍賽確定（季軍賽取消或不存在也算） |
 | 任何非 `finished` → `cancelled` | B（2.6 `cancel_tournament`） | 主辦方在 S27 取消；發出 `TournamentCancelled` |
-| `closed` → `open` | B（2.5，期中擱置） | 正取不足 2 隊時延長報名 |
+| `upcoming` → `open` | B（2.5 `update_tournament`） | 尚未開放的賽事把報名開始改到現在或更早 |
+| `closed` → `open` | B（2.5 `update_tournament`） | 報名截止的賽事把報名截止延到現在之後（例如正取不足 2 隊時延長報名）；自動抽籤略過紀錄以報名截止為鍵，新截止時會重新嘗試 |
 
 中文名稱：尚未開放、開放報名、報名截止、賽程已公布、進行中、已結束、已取消。
 

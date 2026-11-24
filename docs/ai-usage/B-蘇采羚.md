@@ -918,3 +918,50 @@
   - Verification Gap 指出 8 處測試太弱（鎖內分支、不 commit、`awaiting_appeal` 負向情境、S32 決賽期限等），以及 S27 測試依賴真實時鐘才通過
 - 成熟度：L4（三個審查者平行審查，主代理驗證分類，人決定 intent_gap，完整測試自動驗證）
 - 證據：`spec-6-3-appeal-overdue.md` 的 Review Triage Log；commit：未記錄（尚未 commit）
+### 2026-11-23｜設計／細部設計｜Story 2.5 抽籤前修改賽事的 spec
+
+- Story／範圍：2.5（期末，分支 `story/2-5-edit-tournament`，從 2.3 的分支開出，因為要修改分輪 BO）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，另派 1 個唯讀子代理調查 8 個面向
+- 怎麼用：請 AI 開始做 2.5；AI 依 epics.md 原版驗收條件、FR-9、子代理調查寫 spec
+- AI 產出：`spec-2-5-edit-tournament.md`（I/O Matrix 12 列、6 個 Tasks）；提出 2 個要人決定的問題
+- 人做了什麼：
+  - 決定「提高名額」另設區塊（經 3.7 的 API，單一交易），不與「儲存設定」一起送
+  - 決定開放報名後開賽時間不能改（照 FR-9）
+  - 核准「不做賽事模式的修改」（自訂模式屬 3.10）；spec 約 3,500 tokens 決定不拆
+- 驗證：AI 從狀態轉換表（已允許「報名截止 → 開放報名」）與 4.2 的程式註解確認「報名截止後延長會重新開放」是既定設計，沒有拿來問人
+- 問題與修正：無
+- 成熟度：L3（AI 依既有規格調查並寫 spec，人做決策並核准）
+- 證據：`_bmad-output/implementation-artifacts/spec-2-5-edit-tournament.md` 的 Decisions；commit：未記錄（尚未 commit）
+
+### 2026-11-23｜程式／程式生成｜Story 2.5 抽籤前修改賽事的實作
+
+- Story／範圍：2.5（分支 `story/2-5-edit-tournament`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build，實作交給只拿 spec 的子代理
+- 怎麼用：子代理依 spec 實作；主代理讀 diff、單獨跑 I/O Matrix 測試（70 passed），並在瀏覽器 375 px 手動檢查 S28
+- AI 產出：
+  - 後端：`TournamentUpdate`、`update_tournament`、`PATCH /organizer/tournaments/{id}`（依狀態限制欄位、換遊戲重建快照、報名截止後延長轉回開放報名、只記變動欄位的 `tournament.updated`）；沒有 schema 變更
+  - 前端：S28 賽事設定頁、側欄「設定」、獨立的「提高名額」區塊；從 S26 抽出共用欄位元件
+  - 測試：後端 `test_update_tournament.py`、前端 `tournament-settings.test.tsx`
+- 人做了什麼：核准 spec
+- 驗證：手動檢查開放報名與賽程已公布兩種狀態的 S28，延長報名截止後以 API 確認值與操作紀錄
+- 問題與修正：
+  - 主代理同時在另一個 worktree 跑 2.3 的後端全套測試，與子代理的測試共用 `_test` 資料庫互相干擾，兩邊都出現與本 Story 無關的失敗（2.3 有 11 個、2.5 有 2 個）；單獨重跑後全過。之後規定測試一律排隊執行
+  - 主代理手動檢查時用瀏覽器工具直接填 `datetime-local` 欄位，沒有觸發 React 的事件，表單沒有送出；改成以原生 setter 加 input 事件後才送出
+- 成熟度：L4（spec → 子代理實作 → 主代理核對 diff、測試與瀏覽器，人只在 checkpoint 決策）
+- 證據：`spec-2-5-edit-tournament.md` 的 Implementation Notes；commit：未記錄（尚未 commit）
+
+### 2026-11-23｜測試／程式審查與測試個案｜Story 2.5 的三層審查與修補
+
+- Story／範圍：2.5（分支 `story/2-5-edit-tournament`）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build 的審查步驟（Blind Hunter、Edge Case Hunter、Verification Gap 三個子代理平行審查）
+- 怎麼用：三個審查者只拿 diff，主代理對照程式驗證、分類，修補交回實作子代理
+- AI 產出：22 筆發現加主代理 1 筆；8 筆 patch、1 筆延後（deferred-work）、9 筆不處理
+- 人做了什麼：無（這一輪沒有需要人決定的問題）
+- 驗證：修補後主代理單獨跑完整驗證：後端 `scripts/test.sh` 2854 passed、覆蓋率 97%、lint 通過；前端 build、typecheck、biome、`test:unit`（81 檔、1208 passed）通過
+- 問題與修正：
+  - 審查發現 AI 讓報名截止可以「等於」開賽時間，偏離人定的「開賽時間之前」；而且等於時賽事會在開賽時截止、自動抽籤只挑尚未開賽的賽事，會永遠卡在報名截止。主代理對照 `list_closed_before_start_ids` 確認後改為嚴格早於
+  - 審查發現 S28 背景重抓會清掉沒儲存的修改，改為只在儲存、提高名額成功或狀態改變時重建表單
+  - 審查發現整份替換分輪 BO、尚未開放時只改人數與 BO、切換遊戲等路徑沒有測試守住，補了測試
+  - 主代理自己記下的「沒有變更時儲存沒反應」是誤判：程式會送出空的 PATCH 並顯示 Toast，只是當時請求清單已被截斷、Toast 已消失
+- 成熟度：L4（三個審查者平行審查，主代理驗證分類並交回修補，完整測試自動驗證）
+- 證據：`spec-2-5-edit-tournament.md` 的 Review Triage Log；commit：未記錄（尚未 commit）
