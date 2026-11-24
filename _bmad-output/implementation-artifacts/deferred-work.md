@@ -223,6 +223,17 @@
   summary: （低）S19 先顯示「可加入」、隊長在這之後解散隊伍，按加入時 `join_team` 回 409 `ROSTER_LOCKED`，畫面顯示「名單已鎖定」，重新整理後才變成「隊伍已解散」；行為正確，只是文字不一致。
   evidence: 2026-11-23 OG-Matcha 在 #110 的審查第 2 點；Story 3.11 程式審查 R7（凍結矩陣「解散與加入同時」規定回 `ROSTER_LOCKED`）。修法候選：解散的隊伍加入時回專屬錯誤碼（例如 `TEAM_DISBANDED`，需改 spec 矩陣），或前端在加入得到 409 時重新取得邀請預覽。
 
+## Deferred from: spec-6-3-appeal-overdue.md (2026-11-24)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-appeal-overdue.md`
+  summary: （低）`AppealReminded` 派送時沒有再確認申訴仍未結案、賽事不是已結束或已取消；outbox 前面卡住導致延後派送時，主辦方可能在處理完後才收到「申訴待處理」。
+  evidence: Story 6.3 審查（Blind Hunter 第 6 點、Edge Case Hunter 第 7 點）。修法：notifications `rules.py` 的 `_appeal_reminded` 經 disputes 公開函式查申訴狀態，已結案或賽事已結束／已取消時回傳空清單（A 的模組，需 A 同意）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-appeal-overdue.md`
+  summary: （低，效能）`remind_due_appeal` 每次都掃過所有未結案、未提醒的申訴，已取消或已結束賽事裡沒結案的申訴永遠留在候選中；任一候選讀取失敗會讓整個工作回滾。
+  evidence: Story 6.3 審查（Blind Hunter 第 4 點、Edge Case Hunter 第 14 點）。修法候選：候選查詢 join 賽事排除已結束／已取消，或對單一候選的例外記 log 後略過。
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-appeal-overdue.md`
+  summary: （低）決賽、季軍賽兩隊在不同時間申訴時，S32 以最早一筆未結案申訴計算處理期限，S27 每筆各自計算，兩頁顯示的期限不同。
+  evidence: Story 6.3 審查（Edge Case Hunter 第 6 點）。修法候選：S32 改為逐筆顯示期限，或 S27 同場合併成一個期限。
 ## Deferred from: spec-3-9-public-accepted-teams.md（#106 組員審查，2026-11-23）
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-public-accepted-teams.md`

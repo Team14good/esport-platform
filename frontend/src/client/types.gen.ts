@@ -206,6 +206,10 @@ export type AppealGroup = {
    */
   has_open: boolean
   /**
+   * Deadline
+   */
+  deadline: string | null
+  /**
    * Appeals
    */
   appeals: Array<AppealItem>
@@ -1788,6 +1792,10 @@ export type PublicMatchDetail = {
    * Result Screenshot At
    */
   result_screenshot_at?: string | null
+  /**
+   * Awaiting Appeal
+   */
+  awaiting_appeal?: boolean
 }
 
 /**

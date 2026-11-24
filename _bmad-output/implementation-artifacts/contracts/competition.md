@@ -91,6 +91,7 @@ class PublicMatchDetail(PublicMatch):   # 5.8：公開單場（A 的 S4 場次�
     forfeit_deadline: datetime | None  # 報到截止（＝棄權期限），只在待開打且兩隊都確定時有值；給 S4 報到倒數
     result_screenshot_enabled: bool         # 5.7：系列結果已送出（正常完賽且有送出時間），S4 顯示「結算截圖」區塊
     result_screenshot_at: datetime | None   # 5.7：目前公開的結算截圖的上傳時間；沒有為 null。圖片經 GET …/matches/{id}/result-screenshot 下載
+    awaiting_appeal: bool                   # 6.3（B 新增，D 審查）：待開打、空著的一方的來源場次為申訴中（等待申訴結果，S4 顯示計時暫停）；賽事已取消一律 false
 
 class CheckInRead(BaseModel):    # 5.1
     match_id: UUID

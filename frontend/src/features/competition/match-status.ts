@@ -5,6 +5,7 @@ import type {
   MatchStatus,
   PublicBracket,
   PublicMatch,
+  PublicMatchDetail,
 } from "@/client"
 import type { StatusTone } from "@/components/common/StatusBadge"
 
@@ -27,6 +28,25 @@ export const MATCH_STATUS_BADGES: Record<MatchStatus, MatchStatusBadge> = {
   appealed: { tone: "appeal", label: "申訴中", pulse: true },
   confirmed: { tone: "confirmed", label: "已確認" },
   voided: { tone: "muted", label: "已取消" },
+}
+
+/** 待開打、在等前一場申訴結果時的介面子狀態（6.3；不是 MatchStatus 的值） */
+export const AWAITING_APPEAL_BADGE: MatchStatusBadge = {
+  tone: "appeal",
+  label: "棄權計時暫停",
+}
+
+/** S4：等待前一場申訴結果時的 Page banner（EXPERIENCE.md〈固定介面字串〉） */
+export const AWAITING_APPEAL_BANNER_TEXT =
+  "前一場申訴處理中，報到與棄權計時暫停"
+
+/** S4 頁首的狀態徽章：等待前一場申訴結果（`awaiting_appeal`）時為「棄權計時暫停」。 */
+export function matchStatusBadge(
+  match: Pick<PublicMatchDetail, "status" | "awaiting_appeal">,
+): MatchStatusBadge {
+  return match.awaiting_appeal
+    ? AWAITING_APPEAL_BADGE
+    : MATCH_STATUS_BADGES[match.status]
 }
 
 /** 顯示比分的狀態；待開打留空、已取消沒有比分 */

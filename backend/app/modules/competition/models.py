@@ -518,6 +518,9 @@ class PublicMatchDetail(PublicMatch):
     result_screenshot_enabled: bool = False
     # 5.7：目前公開的結算截圖的上傳時間；沒有可公開的截圖為 None。不含檔案鍵值（AD-19）
     result_screenshot_at: datetime | None = None
+    # 6.3：待開打、空著的一方的來源場次為申訴中（等待申訴結果，報到與棄權計時暫停）。
+    # 賽事已取消時一律為 False；重新比賽的場次兩隊已確定，不會是 True
+    awaiting_appeal: bool = False
 
 
 # ---------------------------------------------------------------- 結算截圖（5.7）

@@ -2,7 +2,11 @@ import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { CompetitionService, type PublicMatchDetail } from "@/client"
-import { Countdown, type CountdownVariant } from "@/components/common/Countdown"
+import {
+  Countdown,
+  type CountdownVariant,
+  PausedCountdown,
+} from "@/components/common/Countdown"
 import { useIsSignedIn } from "@/features/identity/auth"
 import { CheckInPanel } from "./CheckInPanel"
 import { matchQueryKey, matchVersion, samePlaceholder } from "./match-source"
@@ -22,6 +26,9 @@ export function tooEarlyRetryInterval(
     ? TOO_EARLY_RETRY_MS
     : false
 }
+
+/** 等待前一場申訴結果時（6.3），暫停倒數的說明文字 */
+export const PAUSED_COUNTDOWN_LABEL = "報到與棄權倒數"
 
 /** 報到開放時間＝預定開始前 30 分鐘（contracts/competition.md `CheckInStatus.opens_at`）；未登入時沒有狀態查詢，用這個推算 */
 export const CHECK_IN_LEAD_MS = 30 * 60 * 1000
@@ -131,6 +138,9 @@ export function MatchCheckIn({ detail, refresh }: MatchCheckInProps) {
   // 賽事已取消時場次狀態不變但不會再開打：不顯示倒數與報到按鈕，兩隊報到紀錄照常顯示
   const isScheduled =
     detail.status === "scheduled" && detail.tournament_status !== "cancelled"
+  // 6.3：等待前一場申訴結果（伺服器的 awaiting_appeal）時倒數位置改顯示「計時暫停」；
+  // 處理完成後伺服器資料更新，倒數依新的棄權期限
+  const paused = isScheduled && detail.awaiting_appeal === true
   const opensAt =
     checkIn?.opens_at ??
     new Date(Date.parse(detail.scheduled_at) - CHECK_IN_LEAD_MS).toISOString()
@@ -168,7 +178,9 @@ export function MatchCheckIn({ detail, refresh }: MatchCheckInProps) {
       reason={checkIn?.reason ?? null}
       opensAt={opensAt}
       countdown={
-        phase ? (
+        paused ? (
+          <PausedCountdown label={PAUSED_COUNTDOWN_LABEL} />
+        ) : phase ? (
           <Countdown
             label={phase.label}
             deadline={phase.deadline}

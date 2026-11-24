@@ -691,11 +691,8 @@ def get_public_match(
         session, tournament_id=tournament_id
     )
     # list_matches 已依 slot_no 排序、季軍賽在最後
-    round_matches = [
-        m
-        for m in repository.list_matches(session, bracket.id)
-        if m.round_no == match.round_no
-    ]
+    all_matches = repository.list_matches(session, bracket.id)
+    round_matches = [m for m in all_matches if m.round_no == match.round_no]
     public_round, _team_ref = _public_matches(session, bracket, round_matches)
     this = next(m for m in public_round if m.id == match.id)
     same_round = [m for m in public_round if m.id != match.id]
@@ -752,7 +749,29 @@ def get_public_match(
         result_screenshot_at=result_screenshot.visible_at(
             match, repository.get_result_screenshot(session, match.id)
         ),
+        awaiting_appeal=not cancelled
+        and _awaiting_appeal(match, bracket.team_count, all_matches),
     )
+
+
+def _awaiting_appeal(match: Match, team_count: int, all_matches: list[Match]) -> bool:
+    """6.3：待開打、空著的一方的來源場次為申訴中（等待申訴結果）。"""
+    if match.status != MatchStatus.SCHEDULED:
+        return False
+    planned = bracket_rules.plan(team_count).match(match.code)
+    by_code = {m.code: m for m in all_matches}
+    sides: tuple[tuple[bracket_rules.Side, uuid.UUID | None], ...] = (
+        ("a", match.team_a_id),
+        ("b", match.team_b_id),
+    )
+    for side, team_id in sides:
+        if team_id is not None:
+            continue
+        src = planned.source(side)
+        feeder = by_code.get(src.code) if src is not None else None
+        if feeder is not None and feeder.status == MatchStatus.APPEALED:
+            return True
+    return False
 
 
 def get_podium(session: Session, *, tournament_id: uuid.UUID) -> PublicPodium | None:

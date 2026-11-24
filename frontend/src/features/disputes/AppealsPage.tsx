@@ -19,6 +19,10 @@ import { matchLabel } from "@/features/competition/match-status"
 import { formatMatchDateTime } from "@/features/competition/match-time"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import { DECISION_LABEL } from "./decision-label"
+import {
+  HANDLING_DEADLINE_LABEL,
+  HandlingDeadlineCountdown,
+} from "./HandlingDeadlineCountdown"
 import { openAttachment } from "./open-attachment"
 import {
   latestDecision,
@@ -210,6 +214,21 @@ function buildColumns(tournamentId: string): DataTableColumn<AppealGroup>[] {
       key: "status",
       header: "狀態與決定",
       cell: (group) => <StatusCell group={group} />,
+    },
+    {
+      // 6.3：未結案的場次才有處理期限
+      key: "deadline",
+      header: HANDLING_DEADLINE_LABEL,
+      cell: (group) =>
+        group.deadline ? (
+          <HandlingDeadlineCountdown
+            deadline={group.deadline}
+            label="剩餘時間"
+            className="min-w-36"
+          />
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
     },
     {
       key: "content",
