@@ -309,25 +309,56 @@ def get_draw_status(
 ) -> DrawStatus:
     """S27 抽籤按鈕：與 `draw` 相同的檢查順序與分配規則預估能不能抽籤，不寫入任何資料。
 
-    先不鎖讀賽事擋掉非主辦方（不讓無權限者排隊等鎖），再鎖住賽事（AD-6）
-    取得最新值，與同時進行的抽籤、優先期結算串行。
+    先不鎖讀賽事擋掉非主辦方（不讓無權限者排隊等鎖）。已有對戰表的賽事直接回
+    `already_drawn` 與順延輪次，全程不鎖賽事列：S27 在賽程公布後也會查詢，不能和報到、
+    比分、棄權搶賽事列鎖（對戰表建立後不會刪除，賽事設定也不能再改，不鎖讀取是安全的）。
+    尚未抽籤才鎖住賽事（AD-6）取得最新值，與同時進行的抽籤、優先期結算串行。
     """
-    authz.ensure_tournament_owner(
-        tournaments_service.get_tournament(session, tournament_id=tournament_id),
-        actor_id,
-    )
+    unlocked = tournaments_service.get_tournament(session, tournament_id=tournament_id)
+    authz.ensure_tournament_owner(unlocked, actor_id)
+    if repository.get_bracket_by_tournament(session, tournament_id) is not None:
+        return DrawStatus(
+            can_draw=False,
+            reason="already_drawn",
+            expected_teams=None,
+            delayed_rounds=_drawn_delayed_rounds(session, unlocked),
+        )
     tournament = tournaments_service.lock_tournament(
         session, tournament_id=tournament_id
     )
     blocked = _draw_blocked(session, tournament)
     if blocked is not None:
-        return DrawStatus(can_draw=False, reason=blocked, expected_teams=None)
+        # 鎖之前剛好被別人抽完：順延輪次照樣回
+        delayed = (
+            _drawn_delayed_rounds(session, tournament)
+            if blocked == "already_drawn"
+            else []
+        )
+        return DrawStatus(
+            can_draw=False,
+            reason=blocked,
+            expected_teams=None,
+            delayed_rounds=delayed,
+        )
     expected = _expected_teams(session, tournament=tournament, actor_id=actor_id)
     if expected < _MIN_DRAW_TEAMS:
         return DrawStatus(
-            can_draw=False, reason="not_enough_teams", expected_teams=expected
+            can_draw=False,
+            reason="not_enough_teams",
+            expected_teams=expected,
+            delayed_rounds=[],
         )
-    return DrawStatus(can_draw=True, reason=None, expected_teams=expected)
+    return DrawStatus(
+        can_draw=True, reason=None, expected_teams=expected, delayed_rounds=[]
+    )
+
+
+def _drawn_delayed_rounds(session: Session, tournament: TournamentRead) -> list[int]:
+    """已抽籤賽事被順延的輪次；與 `get_bracket` 同一套計算（不鎖賽事列，用呼叫端讀到的賽事資料）。"""
+    bracket = repository.get_bracket_by_tournament(session, tournament.id)
+    if bracket is None:
+        return []
+    return _delayed_rounds(_round_starts(session, tournament, bracket.rounds))
 
 
 def draw(

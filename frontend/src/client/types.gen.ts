@@ -658,6 +658,10 @@ export type DrawStatus = {
    * Expected Teams
    */
   expected_teams: number | null
+  /**
+   * Delayed Rounds
+   */
+  delayed_rounds: Array<number>
 }
 
 /**
