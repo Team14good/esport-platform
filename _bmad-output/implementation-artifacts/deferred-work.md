@@ -101,12 +101,6 @@
 
 ## Deferred from: spec-4-4-s13-referee-matches.md (2026-11-04)
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-4-s13-referee-matches.md`
-  summary: `Match.referee_account_id` 沒有索引，`GET /me/referee/matches` 會掃整張場次表；資料變多時要加索引，並另開一支 Alembic 遷移。
-  evidence: 2026-11-04 S13 實作與審查第 1 輪；期中規模可接受，且 `tests/test_migrations.py` 要求遷移與模型一致，所以這個 Story 沒動 schema。
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-7-s31-s23-referee-ui.md`
-  summary: （中）裁判名單的查詢在兩處各定義一次：tournaments 的 `referee-queries.ts` `refereesQueryOptions`（S31）與 D 的 `features/competition/organizer-matches-queries.ts` `tournamentRefereesQueryOptions`（S30），都用 `["tournaments","organizer","referees",tournamentId]`；`queryFn`、`retry` 各寫一份，誰先掛載就用誰的設定，之後只改一邊會互相污染快取。
-  evidence: 2026-11-05 Story 2.7 第二階段審查（Blind Hunter）。前端依賴方向是 competition → tournaments，不能反過來匯入 D 的定義；處理時請 D 把 `organizer-matches-queries.ts` 改成匯入 `refereesQueryOptions`，刪掉自己的定義（competition 只新增 import，不改 tournaments 的檔案）。
 - source_spec: _bmad-output/implementation-artifacts/spec-4-1-s27-draw-button.md
   summary: S27 抽籤預估改成不寫入的純函式試算（目前在 savepoint 內真的分配再回滾，開放報名中每次預估都持有賽事列鎖）。
   evidence: 2026-11-05 S27 審查。`get_draw_status` 在開放報名中呼叫 `finalize_for_draw` 後以例外回滾，每次預覽都重做分配、消耗 `audit_log.seq` 序列值並持有賽事列鎖到交易結束；前端只能以 `staleTime` 與關閉聚焦重抓降低頻率。改成 registration 提供不寫入的試算函式後可移除 savepoint。
@@ -237,3 +231,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-10-custom-mode-invite-link.md`
   summary: （中，未驗證）遷移 `b2f6c8d4e1a9` 在加 CHECK 約束前替既有自訂賽事補 token 的迴圈，沒有對實際資料執行的測試。
   evidence: `tests/test_migrations.py` 只比對模型與遷移的 schema，不在有資料的資料庫上跑 `upgrade()`。要驗證：在 `a7d3e9b2c6f4` 建一筆 `mode='custom'`、無 token 的賽事，升級後確認有 token 且約束存在。目前只有本機以 SQL 改成自訂的賽事會遇到，已手動驗證過一次（7 場）。
+## Deferred from: spec-deferred-d-cleanup.md (2026-11-25)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-deferred-d-cleanup.md`
+  summary: （低）tournaments `referee-queries.ts` 的 `refereesQueryOptions` 註解仍寫「query key 與 S30 的 `tournamentRefereesQueryOptions` 相同」，S30 已改為直接匯入 `refereesQueryOptions`、該函式已刪除；請 tournaments 負責人把註解改成「S30 也匯入這個定義」。
+  evidence: 2026-11-25 D 的延後項目整理（Blind Hunter）；competition 不改 tournaments 的檔案（CONTRIBUTING 6.6）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-deferred-d-cleanup.md`
+  summary: spec-2-6「賽事取消後 S30–S33 仍可操作」的 S30（competition）部分已查證不成立，剩 S31 裁判、S32 申訴、S33 檢舉待各負責人確認。
+  evidence: 改時間（`_RESCHEDULABLE_TOURNAMENT`）與指派裁判（`_ASSIGNABLE_TOURNAMENT`）只接受賽程已公布、進行中，已取消回 409；`test_reschedule.py::test_tournament_not_reschedulable`、`test_assign_referee.py::test_tournament_not_assignable` 參數化涵蓋 CANCELLED；S30 依 `reschedule.can_reschedule`、`can_assign_referee` 停用動作。
+

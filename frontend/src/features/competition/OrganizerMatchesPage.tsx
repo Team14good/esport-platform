@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/common/EmptyState"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { ErrorPage } from "@/components/layout/ErrorPage"
 import { Button } from "@/components/ui/button"
+import { refereesQueryOptions } from "@/features/tournaments/referee-queries"
 import { getErrorMessage, parseApiError } from "@/lib/api-error"
 import {
   MATCH_STATUS_BADGES,
@@ -18,7 +19,6 @@ import { formatMatchDateTime } from "./match-time"
 import {
   isBracketNotFound,
   managedMatchesQueryOptions,
-  tournamentRefereesQueryOptions,
 } from "./organizer-matches-queries"
 import { RefereeSelect } from "./RefereeSelect"
 import { RescheduleDialog } from "./RescheduleDialog"
@@ -142,7 +142,7 @@ export function OrganizerMatchesPage({
   onPageChange,
 }: OrganizerMatchesPageProps) {
   const matches = useQuery(managedMatchesQueryOptions(tournamentId))
-  const referees = useQuery(tournamentRefereesQueryOptions(tournamentId))
+  const referees = useQuery(refereesQueryOptions(tournamentId))
 
   const sorted = useMemo(
     () => (matches.data ? sortMatches(matches.data) : undefined),

@@ -118,7 +118,9 @@ class Match(SQLModel, table=True):
     # 該方由輪空直接進入本場；輪空多於 P÷4 時兩方都可能是
     bye_a: bool = False
     bye_b: bool = False
-    referee_account_id: uuid.UUID | None = Field(default=None, foreign_key="account.id")
+    referee_account_id: uuid.UUID | None = Field(
+        default=None, foreign_key="account.id", index=True
+    )
     scheduled_at: datetime = Field(sa_type=DateTime(timezone=True))
     status: MatchStatus = Field(sa_type=String(16))
     outcome: MatchOutcome | None = Field(default=None, sa_type=String(16))

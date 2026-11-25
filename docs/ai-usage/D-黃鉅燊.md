@@ -872,3 +872,16 @@
 - 問題與修正：無程式變更；這兩項是 5.5 審查時預先假設 6.2／6.5 的實作方式，實作後前提不成立
 - 成熟度：L3
 - 證據：本 PR 的 diff
+
+### 2026-11-25｜程式＋資料庫／整理延後項目｜S30 裁判名單共用查詢、場次裁判欄加索引
+
+- Story／範圍：deferred-work 中 D 的兩項（spec-2-7 裁判名單查詢重複定義〔中〕、spec-4-4 `referee_account_id` 索引）；另查證 spec-2-6「賽事取消後 S30 仍可操作」的 competition 部分
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（dispatch：1 個實作子代理、3 個審查子代理）
+- 怎麼用：AI 查證三項、寫 spec、子代理實作；AI 自己跑遷移來回與前端測試，再分類審查意見
+- AI 產出：S30 改匯入 tournaments 的 `refereesQueryOptions`；`Match.referee_account_id` 索引與遷移 `d4b8f2a6c1e9`；刪除 2 個 deferred 項目、新增 2 個（tournaments 註解過時、spec-2-6 的 S30 查證結果）
+- 人做了什麼：指示「做我們的事情就好」，並授權自動採建議
+- 驗證：`test_migrations.py`＋`test_referee_matches.py` 26 passed；遷移 upgrade → downgrade -1 → upgrade，用 `pg_indexes` 確認索引出現、消失、再出現；前端 `referee-pages`＋`organizer-matches` 49 passed，tsc、biome 通過；後端全套見本 PR 的 CI
+- 問題與修正：(1) 刪 deferred 項目時連章節標題一起刪掉，底下 S27、3.6 兩個別人的項目被歸到 spec-7-1，兩個審查子代理都發現後補回；(2) spec 寫的 S31 測試路徑 `referees*.test.tsx` 不存在，實際是 `referee-pages.test.tsx`；(3) 實作子代理沒跑 downgrade，由 AI 補做。審查共 11 項：修正 3 項、延後 1 項、駁回 7 項
+- 查證結論：賽事取消後，competition 的改時間、指派裁判 API 已回 409，且有測試涵蓋，S30 不用改
+- 成熟度：L3
+- 證據：`_bmad-output/implementation-artifacts/spec-deferred-d-cleanup.md`、本 PR 的 diff
