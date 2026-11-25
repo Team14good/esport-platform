@@ -39,9 +39,16 @@ def create_team(
     tournament_id: uuid.UUID,
     body: TeamCreate,
 ) -> TeamDetail:
-    """S16 建立隊伍：建立者成為隊長，報名狀態為「組隊中」，並產生邀請連結。"""
+    """S16 建立隊伍：建立者成為隊長，報名狀態為「組隊中」，並產生邀請連結。
+
+    自訂賽事要帶有效的賽事報名連結 token，缺少或不符回 403 `TOURNAMENT_INVITE_REQUIRED`。
+    """
     team = service.create_team(
-        session, tournament_id=tournament_id, account_id=account.id, name=body.name
+        session,
+        tournament_id=tournament_id,
+        account_id=account.id,
+        name=body.name,
+        invite_token=body.invite_token,
     )
     session.commit()
     return team

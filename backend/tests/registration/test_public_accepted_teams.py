@@ -4,6 +4,7 @@
 自訂模式直接公布；不需登入，回應只有隊伍 id 與隊名。
 """
 
+import secrets
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -181,6 +182,7 @@ def test_custom_mode_announces_immediately(
         session,
         tournament.id,
         mode=TournamentMode.CUSTOM,
+        invite_token=secrets.token_urlsafe(32),
         priority_end=clock.now() + timedelta(hours=2),
     )
 

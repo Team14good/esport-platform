@@ -305,9 +305,14 @@ InviteStatus = Literal["active", "full", "closed", "locked", "disbanded"]
 
 
 class TeamCreate(BaseModel):
-    """S16 建立隊伍。"""
+    """S16 建立隊伍。
+
+    `invite_token`：自訂賽事的賽事報名連結 token（S2 網址的 `invite`，Story 3.10）；
+    校園賽不需要，帶了也忽略。
+    """
 
     name: TeamNameField
+    invite_token: str | None = None
 
 
 # 參賽資料缺漏的欄位代碼（固定依此順序列出）

@@ -12,6 +12,7 @@
 import random
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,15 +25,20 @@ from app.modules.identity.models import Account
 from app.modules.registration import repository as registration_repository
 from app.modules.registration.models import RegistrationStatus as R
 from app.modules.tournaments.models import (
+    Tournament,
     TournamentMode,
     TournamentRead,
     TournamentStatus,
 )
-from tests.disputes.test_reports import _team
 from tests.registration.test_first_come_submission import _first_come, _preset
 from tests.registration.test_reject_registration import _set_mode
 from tests.registration.test_submit_registration import _school
-from tests.registration.test_teams import _make_account, _set_status, _tournament
+from tests.registration.test_teams import (
+    _create_ok,
+    _make_account,
+    _set_status,
+    _tournament,
+)
 
 pytestmark = pytest.mark.usefixtures("frozen_clock")
 
@@ -54,6 +60,19 @@ def _status(session: Session, team_id: uuid.UUID) -> R:
     return R(registration.status)
 
 
+def _custom_team(
+    client: TestClient, session: Session, tournament_id: uuid.UUID, name: str
+) -> tuple[dict[str, Any], Account]:
+    """經 API 建立一人隊伍；自訂賽事建隊要帶賽事報名連結（3.10 第 2 部分）。"""
+    row = session.get(Tournament, tournament_id)
+    assert row is not None
+    captain = _make_account(session)
+    team = _create_ok(
+        client, captain, tournament_id, name, invite_token=row.invite_token
+    )
+    return team, captain
+
+
 def _world(client: TestClient, session: Session, *, waitlist: bool = True) -> World:
     organizer = _make_account(session)
     organizer.is_organizer = True
@@ -64,7 +83,7 @@ def _world(client: TestClient, session: Session, *, waitlist: bool = True) -> Wo
     school = _school(session)
     teams: list[tuple[uuid.UUID, Account]] = []
     for k in range(1, 5):
-        team, captain = _team(client, session, tournament.id, f"自訂隊{k}")
+        team, captain = _custom_team(client, session, tournament.id, f"自訂隊{k}")
         team_id = uuid.UUID(team["id"])
         _preset(
             session,

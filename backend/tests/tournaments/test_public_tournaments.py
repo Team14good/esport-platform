@@ -19,6 +19,7 @@ PUBLIC_FIELDS = {
     "id",
     "name",
     "status",
+    "mode",
     "game_name",
     "capacity",
     "registration_start",

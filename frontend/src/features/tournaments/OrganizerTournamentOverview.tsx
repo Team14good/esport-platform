@@ -20,6 +20,7 @@ import {
   myTournamentQueryOptions,
 } from "./organizer-queries"
 import { isTournamentNotFound } from "./queries"
+import { RegistrationLinkSection } from "./RegistrationLinkSection"
 import { formatRoundBo, totalRounds } from "./round-bo"
 import { formatInterval, formatRegistrationPeriod } from "./status"
 import {
@@ -191,9 +192,12 @@ export function OrganizerTournamentSummary({
         <Field term="遊戲">{tournament.game_name}</Field>
         <Field term="名額">{`${tournament.capacity} 隊`}</Field>
         <Field term="報名期間">{formatRegistrationPeriod(tournament)}</Field>
-        <Field term="優先期結束">
-          {formatMatchDateTime(tournament.priority_end)}
-        </Field>
+        {/* 自訂賽事沒有優先期（Story 3.10） */}
+        {tournament.mode === "custom" ? null : (
+          <Field term="優先期結束">
+            {formatMatchDateTime(tournament.priority_end)}
+          </Field>
+        )}
         <Field term="開賽時間">
           {formatMatchDateTime(tournament.start_at)}
         </Field>
@@ -251,6 +255,7 @@ export function OrganizerTournamentOverview({
   return (
     <>
       <OrganizerTournamentSummary tournament={tournament.data} />
+      <RegistrationLinkSection tournament={tournament.data} />
       <DrawButton tournament={tournament.data} />
       {/* 已結束、已取消時不顯示；已取消時 S27 沒有任何動作（抽籤、待處理清單也都不顯示） */}
       <CancelTournamentButton tournament={tournament.data} />

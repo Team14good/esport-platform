@@ -67,9 +67,20 @@ def _tournament(
 def _api_team(
     client: TestClient, session: Session, tournament: TournamentRead, school: School
 ) -> tuple[dict[str, Any], Account]:
-    """經 API 建立、填完資料、尚未送出的隊伍（隊長一人）。"""
+    """經 API 建立、填完資料、尚未送出的隊伍（隊長一人）。
+
+    自訂賽事建隊時帶賽事報名連結 token（Story 3.10 第 2 部分）；校園賽為 None、不帶。
+    """
     captain = _make_account(session, display_name=f"隊長{uuid.uuid4().hex[:4]}")
-    team = _create_ok(client, captain, tournament.id, name=f"隊-{uuid.uuid4().hex[:8]}")
+    row = session.get(Tournament, tournament.id)
+    assert row is not None
+    team = _create_ok(
+        client,
+        captain,
+        tournament.id,
+        name=f"隊-{uuid.uuid4().hex[:8]}",
+        invite_token=row.invite_token,
+    )
     _set_school(session, captain, school)
     _fill(session, team["id"], captain)
     return team, captain
@@ -559,6 +570,7 @@ def test_custom_mode_submission_is_allocated_immediately(
     row = session.get(Tournament, tournament.id)
     assert row is not None
     row.mode = TournamentMode.CUSTOM
+    row.invite_token = secrets.token_urlsafe(32)
     session.add(row)
     session.flush()
     team, captain = _api_team(client, session, tournament, _school(session))

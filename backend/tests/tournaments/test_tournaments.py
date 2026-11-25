@@ -278,15 +278,16 @@ def test_organizer_overrides_starters_and_bo(
 
 
 @pytest.mark.usefixtures("frozen_clock")
-def test_mode_field_is_ignored_and_stored_as_campus(
+def test_mode_field_creates_custom_tournament(
     client: TestClient, session: Session, organizer: dict[str, str]
 ) -> None:
+    # Story 3.10 起接受模式欄位（期中會忽略並存成 campus）；細節見 test_registration_link.py
     game = make_game(session)
 
     response = _create(client, organizer, tournament_body(game.id, mode="custom"))
 
     assert response.status_code == 201, response.text
-    assert response.json()["mode"] == "campus"
+    assert response.json()["mode"] == "custom"
 
 
 # ---------------------------------------------------------------- 驗證

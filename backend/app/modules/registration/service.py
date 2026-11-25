@@ -731,12 +731,42 @@ def _build_disbanded_detail(
 # ---------------------------------------------------------------- 使用案例
 
 
+def _ensure_tournament_invite(
+    session: Session, tournament: TournamentRead, invite_token: str | None
+) -> None:
+    """自訂賽事建隊要帶有效的賽事報名連結（Story 3.10）；是否需要由 allocation 回答（AD-20）。
+
+    缺少或不符都拋 403 `TOURNAMENT_INVITE_REQUIRED`，訊息依情況沿用 S2 的提示文字。
+    """
+    if not allocation.requires_tournament_invite(_mode(tournament)):
+        return
+    if tournaments_service.invite_token_matches(
+        session, tournament_id=tournament.id, token=invite_token
+    ):
+        return
+    message = (
+        "這是邀請制賽事，請向主辦方索取報名連結。"
+        if not invite_token
+        else "報名連結已失效，請向主辦方索取新的連結。"
+    )
+    raise BusinessError("TOURNAMENT_INVITE_REQUIRED", message, status_code=403)
+
+
 def create_team(
-    session: Session, *, tournament_id: uuid.UUID, account_id: uuid.UUID, name: str
+    session: Session,
+    *,
+    tournament_id: uuid.UUID,
+    account_id: uuid.UUID,
+    name: str,
+    invite_token: str | None = None,
 ) -> TeamDetail:
-    """S16 建立隊伍：建立者成為隊長，同時建立「組隊中」的報名與邀請 token。"""
+    """S16 建立隊伍：建立者成為隊長，同時建立「組隊中」的報名與邀請 token。
+
+    自訂賽事在既有檢查之後比對賽事報名連結（`_ensure_tournament_invite`）。
+    """
     tournament = _lock_tournament(session, tournament_id)
     _ensure_can_join(session, tournament, account_id)
+    _ensure_tournament_invite(session, tournament, invite_token)
     if repository.get_team_by_name(session, tournament.id, name) is not None:
         raise _team_name_taken()
 

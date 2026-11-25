@@ -41,6 +41,7 @@ import {
   CROSS_FIELD_DEPENDENTS,
   type CreateTournamentValues,
   createTournamentSchema,
+  DEFAULT_PRIORITY_HOURS,
   type FieldName,
   FormSection,
   formShape,
@@ -54,6 +55,7 @@ import {
   RoundBoField,
   TAIPEI_TIME_HINT,
   TextField,
+  TournamentModeField,
   toTournamentCreate,
 } from "./CreateTournamentForm"
 import {
@@ -142,7 +144,10 @@ function latestRegistrationEnd(tournament: TournamentRead): string {
   )
 }
 
-/** 賽事目前的值轉成表單值（時間為台北時間、到分鐘）。 */
+/**
+ * 賽事目前的值轉成表單值（時間為台北時間、到分鐘）。自訂賽事沒有優先期，優先期欄位
+ * 預填 24（隱藏；改回校園賽時顯示這個預設值，可修改）。
+ */
 export function toSettingsValues(
   tournament: TournamentRead,
 ): CreateTournamentValues {
@@ -158,13 +163,17 @@ export function toSettingsValues(
   return {
     name: tournament.name,
     game_id: tournament.game_id,
+    mode: tournament.mode,
     capacity: String(tournament.capacity),
     starters: String(tournament.starters),
     substitutes: String(tournament.substitutes),
     bo: String(tournament.bo),
     registration_start: isoToTaipeiLocal(tournament.registration_start),
     registration_end: isoToTaipeiLocal(tournament.registration_end),
-    priority_hours: String(priorityHours),
+    priority_hours:
+      tournament.mode === "custom"
+        ? DEFAULT_PRIORITY_HOURS
+        : String(priorityHours),
     start_at: isoToTaipeiLocal(tournament.start_at),
     round_interval_minutes: String(tournament.round_interval_minutes),
     forfeit_minutes: String(tournament.forfeit_minutes),
@@ -179,6 +188,7 @@ type UpdateField = Exclude<keyof TournamentUpdate, "round_bo">
 const SIMPLE_FIELDS: UpdateField[] = [
   "name",
   "game_id",
+  "mode",
   "capacity",
   "registration_start",
   "registration_end",
@@ -195,7 +205,8 @@ const SIMPLE_FIELDS: UpdateField[] = [
 
 /**
  * 只送有變動、且目前狀態可以修改的欄位（以表單字串與初始值比較，時間不受秒數影響）。
- * 換遊戲時先發、替補、BO 一併送出，伺服器才不會改帶新遊戲的預設值。
+ * 換遊戲時先發、替補、BO 一併送出，伺服器才不會改帶新遊戲的預設值。切換模式時優先期
+ * 一併送出（改回校園賽時才會存入表單上的優先期）。
  */
 export function toTournamentUpdate(
   values: CreateTournamentValues,
@@ -206,6 +217,7 @@ export function toTournamentUpdate(
   const full = toTournamentCreate(values)
   const body: TournamentUpdate = {}
   const gameChanged = values.game_id !== initial.game_id
+  const modeChanged = values.mode !== initial.mode
   const assign = <K extends UpdateField>(field: K) => {
     ;(body as Record<UpdateField, unknown>)[field] =
       full[field as keyof typeof full]
@@ -215,7 +227,8 @@ export function toTournamentUpdate(
     const changed =
       values[field] !== initial[field] ||
       (gameChanged &&
-        (field === "starters" || field === "substitutes" || field === "bo"))
+        (field === "starters" || field === "substitutes" || field === "bo")) ||
+      (modeChanged && field === "priority_hours")
     if (changed) assign(field)
   }
   if (isEditable(mode, "round_bo")) {
@@ -373,9 +386,16 @@ function SettingsForm({
   const editable = (field: FieldName) => isEditable(mode, field)
   const relax = mode === "relax"
 
-  const [gameId, bo, forfeit, appeal, capacity] = useWatch({
+  const [gameId, bo, forfeit, appeal, capacity, tournamentMode] = useWatch({
     control: form.control,
-    name: ["game_id", "bo", "forfeit_minutes", "appeal_minutes", "capacity"],
+    name: [
+      "game_id",
+      "bo",
+      "forfeit_minutes",
+      "appeal_minutes",
+      "capacity",
+      "mode",
+    ],
   })
   const gameMinutes =
     gameId === tournament.game_id
@@ -499,6 +519,24 @@ function SettingsForm({
               relax ? "要增加名額，請用下方的「提高名額」。" : "正取隊伍數"
             }
           />
+          {/* 賽事模式只在尚未開放時能改（Story 3.10）；開放報名後唯讀 */}
+          <TournamentModeField
+            control={form.control}
+            disabled={!editable("mode")}
+            onModeChange={(next) => {
+              // 改回校園賽：原本就是校園賽時還原原本的優先期（切換再切回不算變動）；
+              // 原本是自訂時預填 24（可修改）
+              if (next === "campus") {
+                form.setValue(
+                  "priority_hours",
+                  initial.mode === "campus"
+                    ? initial.priority_hours
+                    : DEFAULT_PRIORITY_HOURS,
+                )
+              }
+              form.clearErrors("priority_hours")
+            }}
+          />
         </FormSection>
 
         <FormSection title="隊伍與賽制">
@@ -584,15 +622,17 @@ function SettingsForm({
             max={relax ? latestRegistrationEnd(tournament) : undefined}
             disabled={!editable("registration_end")}
           />
-          <TextField
-            control={form.control}
-            name="priority_hours"
-            label="優先期（小時）"
-            type="number"
-            min={0}
-            description="從報名開始起算。"
-            disabled={!editable("priority_hours")}
-          />
+          {tournamentMode === "custom" ? null : (
+            <TextField
+              control={form.control}
+              name="priority_hours"
+              label="優先期（小時）"
+              type="number"
+              min={0}
+              description="從報名開始起算。"
+              disabled={!editable("priority_hours")}
+            />
+          )}
           <TextField
             control={form.control}
             name="start_at"

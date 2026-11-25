@@ -356,10 +356,13 @@ describe("S25 我的賽事", () => {
 })
 
 describe("S26 建立賽事", () => {
-  it("沒有賽事模式欄位；優先期、棄權、申訴有預設值", async () => {
+  it("賽事模式預設校園賽；優先期、棄權、申訴有預設值", async () => {
     await openCreatePage()
 
-    expect(screen.queryByText(/賽事模式|校園賽/)).toBeNull()
+    // Story 3.10 起有賽事模式欄位（期中沒有）
+    expect(
+      screen.getByRole("combobox", { name: "賽事模式" }),
+    ).toHaveTextContent("校園賽")
     expect(screen.getByLabelText("優先期（小時）")).toHaveValue(24)
     expect(screen.getByLabelText("棄權時限（分鐘）")).toHaveValue(15)
     expect(screen.getByLabelText("申訴期（分鐘）")).toHaveValue(30)
@@ -632,6 +635,7 @@ describe("S26 建立賽事", () => {
     expect(create.mock.calls[0][0].body).toEqual({
       name: "臺大秋季盃",
       game_id: VALORANT.id,
+      mode: "campus",
       capacity: 32,
       starters: 5,
       substitutes: 1,
@@ -655,6 +659,35 @@ describe("S26 建立賽事", () => {
       TOURNAMENT_CREATED_TEXT,
       expect.anything(),
     )
+  })
+
+  it("選自訂：隱藏優先期且不檢查，送出 mode=custom、優先期 0；改回校園賽時欄位再出現", async () => {
+    const user = userEvent.setup()
+    const create = mockCreate()
+    mockRead({ ...TOURNAMENT, id: "t-new", mode: "custom" })
+    await openCreatePage()
+    await fillValidForm(user)
+    // 優先期填成不合法的值：選自訂後不應擋下送出
+    await setNumber(user, "優先期（小時）", "9999")
+
+    await user.click(screen.getByRole("combobox", { name: "賽事模式" }))
+    await user.click(await screen.findByRole("option", { name: "自訂" }))
+
+    expect(screen.queryByLabelText("優先期（小時）")).toBeNull()
+
+    await user.click(screen.getByRole("combobox", { name: "賽事模式" }))
+    await user.click(await screen.findByRole("option", { name: "校園賽" }))
+    expect(screen.getByLabelText("優先期（小時）")).toBeInTheDocument()
+    await user.click(screen.getByRole("combobox", { name: "賽事模式" }))
+    await user.click(await screen.findByRole("option", { name: "自訂" }))
+
+    await user.click(screen.getByRole("button", { name: "建立賽事" }))
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create.mock.calls[0][0].body).toMatchObject({
+      mode: "custom",
+      priority_hours: 0,
+    })
   })
 
   it("伺服器 422：寫回對應欄位", async () => {

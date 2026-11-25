@@ -7,6 +7,7 @@
 """
 
 import random
+import secrets
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
@@ -555,6 +556,7 @@ def test_non_campus_open_preview_equals_real_draw(
     row = session.get(Tournament, tournament.id)
     assert row is not None
     row.mode = TournamentMode.CUSTOM
+    row.invite_token = secrets.token_urlsafe(32)
     session.add(row)
     for registration in registration_repository.list_registrations(
         session, tournament.id

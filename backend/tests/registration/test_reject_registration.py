@@ -6,6 +6,7 @@
 真實的並行退回在 test_settlement_concurrency.py。
 """
 
+import secrets
 import uuid
 from datetime import timedelta
 from decimal import Decimal
@@ -119,6 +120,9 @@ def _set_mode(session: Session, tournament_id: uuid.UUID, mode: TournamentMode) 
     row = session.get(Tournament, tournament_id)
     assert row is not None
     row.mode = mode
+    row.invite_token = (
+        secrets.token_urlsafe(32) if mode == TournamentMode.CUSTOM else None
+    )
     session.add(row)
     session.flush()
 

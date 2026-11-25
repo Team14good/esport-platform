@@ -47,6 +47,7 @@ function tournament(status: TournamentStatus = "open"): PublicTournament {
     id: TOURNAMENT_ID,
     name: "期中盃",
     status,
+    mode: "campus",
     game_name: "特戰英豪",
     capacity: 16,
     // 報名截止在遠方未來，倒數不會歸零
