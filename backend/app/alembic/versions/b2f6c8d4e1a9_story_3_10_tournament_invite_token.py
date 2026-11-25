@@ -6,7 +6,7 @@
 所以加約束前先替這些賽事補上 token（與 service 相同的產生方式）。
 
 Revision ID: b2f6c8d4e1a9
-Revises: a7d3e9b2c6f4
+Revises: d4b8f2a6c1e9
 Create Date: 2026-11-24 12:00:00.000000
 
 """
@@ -20,7 +20,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = "b2f6c8d4e1a9"
-down_revision = "a7d3e9b2c6f4"
+down_revision = "d4b8f2a6c1e9"
 branch_labels = None
 depends_on = None
 
