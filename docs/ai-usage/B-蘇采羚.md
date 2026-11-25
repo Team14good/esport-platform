@@ -965,3 +965,15 @@
   - 主代理自己記下的「沒有變更時儲存沒反應」是誤判：程式會送出空的 PATCH 並顯示 Toast，只是當時請求清單已被截斷、Toast 已消失
 - 成熟度：L4（三個審查者平行審查，主代理驗證分類並交回修補，完整測試自動驗證）
 - 證據：`spec-2-5-edit-tournament.md` 的 Review Triage Log；commit：未記錄（尚未 commit）
+
+### 2026-11-25｜測試／程式審查｜審查 #122（3.10 第 2 部分）對 tournaments 與 S28 的改動
+
+- Story／範圍：3.10 第 2 部分（C 的 PR #122，已由 A、D 核准合併），只看動到 B 負責的 tournaments 模組與 S28
+- 工具：Claude Code（Opus 5.5）
+- 怎麼用：PR 說明點名請 B 審查，但在 B 審查前已合併；請 AI 事後逐段讀 `git show 563db53` 中 tournaments 的 service、models、router，以及 `TournamentSettingsPage.tsx`、`CreateTournamentForm.tsx` 的差異，並對照測試清單
+- AI 產出：審查結論（沒有需要修的問題）與改動摘要：建立與修改賽事加入模式、切換時產生或清除報名連結 token、開放報名後模式鎖定、新增報名連結的主辦方與公開 API；2.5 的狀態規則、放寬限制與重新開放邏輯沒有被改
+- 人做了什麼：決定要 AI 審查這個已合併的 PR，並決定記錄
+- 驗證：只讀程式碼與測試名稱，沒有執行；確認 token 不在 `TournamentRead`、公開 API 與操作紀錄中（2.5 的 `tournament.updated` 比對 `TournamentRead`，所以不會記到 token）；確認後端 `test_registration_link.py` 與前端 `custom-mode-invite.test.tsx` 有切換模式的測試
+- 問題與修正：AI 指出 #122 不是「只新增」，改了 B 既有的 `update_tournament`、`_upcoming_row_changes` 等函式；PR 說明寫是使用者核准的例外，但合併時 B 還沒審查。另記兩個不需修改的邊界：自訂賽事只送優先期會被靜默忽略；自訂切回校園賽且明確送優先期 0 會成為優先期 0 的校園賽（合法值）
+- 成熟度：L2（AI 讀 diff 整理結論，人決定範圍；沒有執行測試）
+- 證據：PR #122、commit `563db53`；commit：未記錄（尚未 commit）
