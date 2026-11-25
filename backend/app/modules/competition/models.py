@@ -368,6 +368,9 @@ class DrawStatus(BaseModel):
     reason: DrawStatusReason | None
     # 預估的正取隊數（開放報名中為分配後的數量）；在前面的檢查就被擋下時為 None
     expected_teams: int | None
+    # 已抽籤（reason=already_drawn）時，因最小間隔大於每輪間隔而被順延的輪次，與抽籤回應的
+    # `BracketRead.delayed_rounds` 同一套計算；其他情況為空（S27 提示主辦方）
+    delayed_rounds: list[int]
 
 
 class PublicTeamRef(BaseModel):

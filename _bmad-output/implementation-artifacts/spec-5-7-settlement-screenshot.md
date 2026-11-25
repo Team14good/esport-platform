@@ -2,7 +2,7 @@
 title: 'Story 5.7 勝隊上傳結算截圖'
 type: 'feature'
 created: '2026-11-20'
-status: 'in-review'
+status: 'done'
 baseline_commit: '1df1cbe7c8bd97f7d17edbf05cf1328d8d3d58af'
 route: 'dispatch'
 review_loop_iteration: 1

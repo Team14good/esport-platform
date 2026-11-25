@@ -55,7 +55,12 @@ vi.mock("@tanstack/react-query-devtools", () => ({
 // S27 總覽會查抽籤狀態（按鈕的測試在 draw-button.test.tsx）；這裡回傳不顯示按鈕的狀態
 beforeEach(() => {
   vi.spyOn(CompetitionService, "readDrawStatus").mockResolvedValue({
-    data: { can_draw: false, reason: "not_drawable", expected_teams: null },
+    data: {
+      can_draw: false,
+      reason: "not_drawable",
+      expected_teams: null,
+      delayed_rounds: [] as number[],
+    },
   } as Awaited<ReturnType<typeof CompetitionService.readDrawStatus>>)
 })
 
@@ -1364,6 +1369,7 @@ describe("S27 狀態倒數", () => {
       can_draw: true,
       reason: null,
       expected_teams: 4,
+      delayed_rounds: [] as number[],
     })
     await openSummary()
     expect(await screen.findByRole("button", { name: "抽籤" })).toBeEnabled()
@@ -1375,6 +1381,7 @@ describe("S27 狀態倒數", () => {
       can_draw: false,
       reason: "not_enough_teams",
       expected_teams: 1,
+      delayed_rounds: [] as number[],
     }
     act(() => {
       vi.advanceTimersByTime(1000)
@@ -1401,12 +1408,18 @@ describe("S27 狀態倒數", () => {
       can_draw: false,
       reason: "not_drawable",
       expected_teams: null,
+      delayed_rounds: [] as number[],
     })
     await openSummary()
     expect(screen.queryByRole("button", { name: "抽籤" })).toBeNull()
 
     server.current = { ...upcoming, status: "open" }
-    drawStatus.current = { can_draw: true, reason: null, expected_teams: 4 }
+    drawStatus.current = {
+      can_draw: true,
+      reason: null,
+      expected_teams: 4,
+      delayed_rounds: [] as number[],
+    }
     act(() => {
       vi.advanceTimersByTime(1000)
     })
@@ -1605,7 +1618,12 @@ describe("S27 取消賽事", () => {
 
   it("已取消：S27 沒有任何動作（抽籤、待處理清單都不顯示）", async () => {
     vi.spyOn(CompetitionService, "readDrawStatus").mockResolvedValue({
-      data: { can_draw: true, reason: null, expected_teams: 8 },
+      data: {
+        can_draw: true,
+        reason: null,
+        expected_teams: 8,
+        delayed_rounds: [] as number[],
+      },
     } as Awaited<ReturnType<typeof CompetitionService.readDrawStatus>>)
     mockRead({ ...TOURNAMENT, status: "cancelled" })
     await openOverview()
