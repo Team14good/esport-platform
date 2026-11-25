@@ -910,3 +910,26 @@
   - 審查共 19 項：修正 15 項、駁回 3 項、主代理收尾 1 項。
 - 成熟度：L4（子代理實作與實跑，主代理要求實證並推翻錯誤結論，三個審查者交叉審查）
 - 證據：`scripts/load/README.md`、`_bmad-output/implementation-artifacts/spec-load-test.md` 的 Review Triage Log；commit：見本 PR
+### 2026-11-25｜專案管理與流程／期末全面審查｜D 負責範圍還差什麼
+
+- Story／範圍：D 負責的 Epic 4、Epic 5 全部 Story、competition 模組架構規則、D 的延後項目、spec 狀態與 AI 使用紀錄完整度
+- 工具：Claude Code（Opus 5.5）＋ 4 個平行審查子代理（架構、Epic 4 驗收、Epic 5 驗收、延後項目與紀錄）
+- 怎麼用：擁有者要求「完整審查一遍」；AI 分派四個唯讀審查，再自己讀程式查證重點結論，整理成依嚴重度排序的缺口清單
+- AI 產出：缺口清單（中度 3 項：S27 沒提示順延輪次〔FR-23〕、`forfeit_next_due` 一場出錯擋住後面場次、自動收回裁判沒通知主辦方〔FR-37〕；低度含追溯表漏標、spec／epic 狀態過時、延後項目過時）；並指出 11/05 之後 33 筆 PR 審查沒有 AI 使用紀錄
+- 人做了什麼：要求審查，並授權自動照建議處理
+- 驗證：AI 自己讀 `forfeit_job.py:204-235` 與前端 `draw-queries.ts`，確認前兩項中度缺口屬實；`gh pr list` 與 grep 比對紀錄檔得出漏記的 PR 清單
+- 問題與修正：(1) 架構審查原本說 `get_bracket` 會回傳 `delayed_rounds`，AI 據此在 spec 寫「不改 API」；實作時才發現沒有任何 GET 路由呼叫它，前提錯誤，spec 因此修訂一次；(2) 延後項目審查標記第 41 行（4.3 準決賽上限）仍待做，查證後已在 `reschedule` 修好且有測試，改為刪除
+- 成熟度：L4（多個子代理平行審查，主代理查證後整合）
+- 證據：本 PR 的 spec `spec-deferred-d-audit-gaps.md`；commit：見本 PR
+
+### 2026-11-25｜程式＋測試／補審查缺口｜S27 順延輪次提示、棄權工作逐場隔離、報到併發測試
+
+- Story／範圍：上一筆審查找出的 D 缺口（FR-23 順延提示、棄權背景工作錯誤隔離、5.1 併發測試、追溯表、spec／sprint-status 收尾）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build（dispatch：1 個實作子代理、3 個審查子代理）
+- 怎麼用：AI 寫 spec，子代理實作；AI 讀實作回報後修訂 spec 一次，再由三個審查者交叉審查、AI 逐條查證分類，修補交回同一個實作子代理
+- AI 產出：`DrawStatus.delayed_rounds` 與 S27 的 `DelayedRoundsNotice`；`forfeit_next_due` 逐場 savepoint 與同一輪略過已失敗場次；`test_check_in_concurrency.py`；`test_forfeit_job.py`、`test_draw_status.py` 新測試；追溯表補標 4.1–4.5、5.1、5.3、5.5；兩份 spec 與 epic-4、epic-5 改為 done；刪除 2 個延後項目
+- 人做了什麼：授權自動照建議處理；S27 提示的呈現方式依「沒回就照建議」由 AI 決定
+- 驗證：`test_check_in_concurrency.py`（排在前面）＋`test_check_in.py`＋`test_draw_status.py`＋`test_forfeit_job.py` 103 passed；突變檢查：拿掉 `begin_nested` 後新的兩個測試失敗（2 failed, 14 passed），還原後 16 passed；ruff、mypy 通過；前端 tsc、biome 通過，相關 vitest 通過；後端與前端全套見本 PR 的 CI
+- 問題與修正：(1) 實作子代理發現沒有 GET API 能讀順延輪次，就在前端照抄一份後端規則；AI 判定這會變成兩份真實來源，修訂 spec 改由 draw-status API 提供；(2) 審查發現原本的失敗測試都在寫入前就丟錯，拿掉 savepoint 也會通過，補了真實 SQL 錯誤與寫完 audit 才失敗兩個測試；(3) 三個審查者都發現已抽籤時 draw-status 仍鎖賽事列，進行中會和報到、比分搶鎖，改為不加鎖；(4) 併發測試留下的操作紀錄（資料表禁止刪除）讓 `test_check_in.py` 依執行順序失敗，改為只算現存場次的紀錄；(5) 賽程讀取失敗時仍顯示提示，與 spec 矩陣不符，改為不顯示。審查共 15 項：修正 6 項、判定不成立 2 項、駁回 7 項
+- 成熟度：L4（三個審查者平行審查，主代理查證分類並交回修補，突變檢查驗證測試有效）
+- 證據：`_bmad-output/implementation-artifacts/spec-deferred-d-audit-gaps.md` 的 Review Triage Log；commit：見本 PR

@@ -123,7 +123,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.spyOn(CompetitionService, "readDrawStatus").mockResolvedValue({
-    data: { can_draw: false, reason: "not_drawable", expected_teams: null },
+    data: {
+      can_draw: false,
+      reason: "not_drawable",
+      expected_teams: null,
+      delayed_rounds: [] as number[],
+    },
   } as Result<typeof CompetitionService.readDrawStatus>)
 })
 

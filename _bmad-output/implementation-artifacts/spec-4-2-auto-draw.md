@@ -2,7 +2,7 @@
 title: 'Story 4.2：報名截止時自動抽籤'
 type: 'feature'
 created: '2026-11-19'
-status: 'in-progress'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
 context:

@@ -63,16 +63,23 @@ const OPEN = {
 const CLOSED: TournamentRead = { ...OPEN, status: "closed" }
 const PUBLISHED: TournamentRead = { ...OPEN, status: "published" }
 
-const CAN_DRAW: DrawStatus = { can_draw: true, reason: null, expected_teams: 4 }
+const CAN_DRAW: DrawStatus = {
+  can_draw: true,
+  reason: null,
+  expected_teams: 4,
+  delayed_rounds: [],
+}
 const NOT_ENOUGH: DrawStatus = {
   can_draw: false,
   reason: "not_enough_teams",
   expected_teams: 1,
+  delayed_rounds: [],
 }
 const DRAWN: DrawStatus = {
   can_draw: false,
   reason: "already_drawn",
   expected_teams: null,
+  delayed_rounds: [],
 }
 
 type ReadResult = Awaited<
@@ -206,7 +213,12 @@ describe("S27 抽籤按鈕", () => {
     ["start_passed", "開賽時間已過，無法抽籤", null],
   ] as const)("%s：按鈕停用，下方寫原因", async (reason, text, expected) => {
     mockTournament(OPEN)
-    mockStatus({ can_draw: false, reason, expected_teams: expected })
+    mockStatus({
+      can_draw: false,
+      reason,
+      expected_teams: expected,
+      delayed_rounds: [],
+    })
     open()
 
     const button = await drawButton()
@@ -223,6 +235,7 @@ describe("S27 抽籤按鈕", () => {
         can_draw: false,
         reason,
         expected_teams: null,
+        delayed_rounds: [],
       })
       open()
 
@@ -373,21 +386,18 @@ describe("S27 抽籤狀態查詢", () => {
     return client
   }
 
-  it.each([
-    "upcoming",
-    "published",
-    "ongoing",
-    "finished",
-    "cancelled",
-  ] as const)("賽事狀態 %s：不呼叫抽籤狀態 API、不顯示按鈕", async (state) => {
-    const status = mockStatus(CAN_DRAW)
-    renderButton({ ...OPEN, status: state })
+  it.each(["upcoming", "finished", "cancelled"] as const)(
+    "賽事狀態 %s：不呼叫抽籤狀態 API、不顯示按鈕",
+    async (state) => {
+      const status = mockStatus(CAN_DRAW)
+      renderButton({ ...OPEN, status: state })
 
-    await act(async () => {})
-    expect(status).not.toHaveBeenCalled()
-    expect(screen.queryByRole("region")).toBeNull()
-    expect(screen.queryByRole("button", { name: "抽籤" })).toBeNull()
-  })
+      await act(async () => {})
+      expect(status).not.toHaveBeenCalled()
+      expect(screen.queryByRole("region")).toBeNull()
+      expect(screen.queryByRole("button", { name: "抽籤" })).toBeNull()
+    },
+  )
 
   it.each(["open", "closed"] as const)(
     "賽事狀態 %s：查詢抽籤狀態",
