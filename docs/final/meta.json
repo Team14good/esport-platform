@@ -1,0 +1,34 @@
+{
+  "school": "國 立 中 央 大 學",
+  "school_en": "National Central University",
+  "department": "資 訊 管 理 所",
+  "course": "資訊系統專案設計",
+  "project": "電 競 賽 事 管 理 平 台（FLOW）",
+  "advisor": "許智誠 教授",
+  "leader": "王閎立 115423080",
+  "members": [
+    "黃鉅燊 115423045",
+    "蘇采羚 115423051",
+    "邱芯彤 115423037"
+  ],
+  "date": "2026 年 11 月 28 日",
+  "group": "G14",
+  "stage": "期末",
+  "docs": [
+    {
+      "file": "E-測試計畫.md",
+      "title": "測試計畫",
+      "title_en": "Software Test Plan"
+    },
+    {
+      "file": "F-專案測試報告.md",
+      "title": "專案測試報告",
+      "title_en": "Software Test Report"
+    },
+    {
+      "file": "G-AI應用文件.md",
+      "title": "AI 應用文件",
+      "title_en": "Generative AI Application Report"
+    }
+  ]
+}

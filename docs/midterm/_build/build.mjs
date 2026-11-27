@@ -1,5 +1,5 @@
 // 把 docs/midterm 的 A～D Markdown 排版成 A4 PDF 與 Word 檔（封面、目錄、頁碼）。
-// 用法：node docs/midterm/_build/build.mjs [--only A] [--shots <資料夾>]
+// 用法：node docs/midterm/_build/build.mjs [--only A] [--shots <資料夾>] [--dir docs/final]
 // 需求：Node 22 以上、本機安裝 Chrome 或 Edge、可連網（從 CDN 載入 marked、mermaid、paged.js、docx）。
 //
 // 使用案例圖與泳道圖：原始碼放在 figures/src/<名稱>.usecase 或 .swimlane，
@@ -16,7 +16,9 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '..');
+// --dir <資料夾>：排版其他資料夾（例如 docs/final）的 meta.json 與 Markdown，預設為 docs/midterm
+const dirArgIndex = process.argv.indexOf('--dir');
+const ROOT = dirArgIndex >= 0 ? resolve(process.argv[dirArgIndex + 1]) : resolve(HERE, '..');
 const HTML_DIR = join(HERE, 'html');
 const PDF_DIR = join(ROOT, 'pdf');
 const DOCX_DIR = join(ROOT, 'docx');
@@ -468,7 +470,7 @@ try {
     const base = doc.file.replace(/\.md$/, '');
     const htmlPath = join(HTML_DIR, `${base}.html`);
     writeFileSync(htmlPath, htmlFor(meta, doc, markdown, figuresFor(markdown)));
-    const outName = `${base}-軟工期中${meta.group ? '-' + meta.group : ''}`;
+    const outName = `${base}-軟工${meta.stage ?? '期中'}${meta.group ? '-' + meta.group : ''}`;
     const { errors, pages, consoleErrors, figureCount, docxError } = await renderDoc(cdp, htmlPath, join(PDF_DIR, `${outName}.pdf`), join(DOCX_DIR, `${outName}.docx`), label);
     console.log(`${label}：${outName}.pdf（${pages ?? '?'} 頁，含封面與目錄）${docxError ? '' : '、.docx'}${figureCount ? `，更新 ${figureCount} 張圖檔` : ''}`);
     if (docxError) { console.log('  ERROR Word 檔：' + docxError); failed = true; }

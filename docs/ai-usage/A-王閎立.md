@@ -1195,3 +1195,15 @@
 - 問題與修正：無
 - 成熟度：L3（AI 依專案規則審查，結果交給 workflow 與作者）
 - 證據：PR #109、#111
+
+### 2026-11-28｜測試／測試報告｜期末文件 E 測試計畫、F 測試報告、G AI 應用文件初稿
+
+- Story／範圍：期末交件文件 E、F、G（`docs/final/`），本機分支 `overnight/2026-11-28`
+- 工具：Claude Code（Opus 5.5）＋ se-course-docs、se-spec-review skill
+- 怎麼用：無人值守夜間執行，要求 AI 依目前程式與實際執行結果寫 E、F、G，數字只取自實際輸出
+- AI 產出：E 測試計畫（範圍、方法、環境）；F 測試報告（6 個模組的測試功能表與 13 個測試個案、四層結果、覆蓋率、端對端情境、壓力測試）；G AI 應用文件（從四份紀錄共 298 筆整理 18 個案例與統計）；`build.mjs` 加 `--dir` 與 `stage` 參數，排出期末版 PDF 與 Word
+- 人做了什麼：無人值守執行，待組內審閱
+- 驗證：`bash scripts/test-all.sh` 全部通過（前端單元 1,278、後端單元 851、整合 2,199、端對端 46；覆蓋率 97.0%）；排版無縮放警告，含圖頁面算繪成圖片檢查；se-spec-review 自審
+- 問題與修正：初稿有三處錯誤，是 AI 自審對照原始資料時發現：壓力測試的瓶頸寫成「執行緒池」並自行列出改善方向（README 的機制是 session 收尾占用執行緒池名額、登入是 argon2 吃 CPU，且 README 註明不是修正建議）；端對端寫了不存在的 `account.spec.ts`，`tournament.spec.ts` 案例數多算 2 個（用 grep 數 log 重複計算，改以 `playwright.json` 統計）；E 前端測試檔數欄把 helper 也算進去（89→84）
+- 成熟度：L3（AI 依課程章節規格與實際執行結果產出，以 skill 自審，交由組內決定）
+- 證據：`docs/final/`、`reports/test-report.md`（2026-11-28 02:28）
