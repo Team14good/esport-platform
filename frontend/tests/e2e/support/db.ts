@@ -96,6 +96,25 @@ export async function expireAppealWindows(matchIds: string[]) {
   }
 }
 
+/**
+ * 讓待開打場次的棄權期限已過，由 worker 判定棄權（不直接呼叫判定 API）。
+ * 取捨：只改 `forfeit_deadline`，快轉後它會早於 `scheduled_at`（正常資料是晚於）；
+ * worker 的判定不檢查這個順序，所以不必連 `scheduled_at` 一起改。
+ */
+export async function expireForfeitDeadlines(matchIds: string[]) {
+  const output = await sql(
+    `UPDATE "match" SET forfeit_deadline = now() - interval '1 second' WHERE id = ANY(${uuidArray(matchIds)}) AND status = 'scheduled' RETURNING id`,
+  )
+  const updated = output ? output.split("\n").length : 0
+  // 不檢查的話，狀態不對時只會在之後等「申訴期」逾時，看不出原因
+  const expected = new Set(matchIds).size
+  if (updated !== expected) {
+    throw new Error(
+      `只改到 ${updated}／${expected} 場的棄權期限，其餘場次不是待開打`,
+    )
+  }
+}
+
 export type AuditRow = {
   action: string
   actor_id: string | null
