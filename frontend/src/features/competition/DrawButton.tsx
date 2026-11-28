@@ -4,6 +4,7 @@ import { useId } from "react"
 import type { DrawStatus, TournamentRead } from "@/client"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/ui/button"
+import { DelayedRoundsNotice } from "./DelayedRoundsNotice"
 import { drawStatusQueryOptions, useDraw } from "./draw-queries"
 
 export const DRAW_TEXT = "抽籤"
@@ -33,13 +34,25 @@ export function DrawButton({ tournament }: { tournament: TournamentRead }) {
   // 只有開放報名與報名截止才可能抽籤；其他狀態不送出（後端每次預估都持有賽事列鎖）
   const drawable =
     tournament.status === "open" || tournament.status === "closed"
+  // 抽籤後（賽程已公布、進行中）同一支 API 回傳被順延的輪次；已結束、已取消不查
+  const drawn =
+    tournament.status === "published" || tournament.status === "ongoing"
   const status = useQuery({
     ...drawStatusQueryOptions(tournament.id),
-    enabled: drawable,
+    enabled: drawable || drawn,
   })
   const draw = useDraw(tournament.id)
   const reasonId = useId()
 
+  if (drawn) {
+    // 載入中或讀取失敗：不顯示提示，也不擋其他區塊
+    return (
+      <DelayedRoundsNotice
+        tournament={tournament}
+        delayedRounds={status.data?.delayed_rounds ?? []}
+      />
+    )
+  }
   if (!drawable) return null
   if (!status.data) {
     // 載入中不顯示；載入失敗要讓主辦方知道並能重試（後端抽籤仍會檢查，不會誤抽）

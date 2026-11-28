@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, func, select
+from sqlmodel import Session, col, func, select
 
 from app.core import audit
 from app.core.errors import BusinessError
@@ -103,6 +103,9 @@ def _audit_count(session: Session) -> int:
         select(func.count())
         .select_from(audit.AuditLog)
         .where(audit.AuditLog.action == "match.checked_in")
+        # 只算還存在的場次：並發測試（test_check_in_concurrency.py）刪掉場次後，
+        # 它留下的操作紀錄（只增不改）不影響這裡的筆數
+        .where(col(audit.AuditLog.entity_id).in_(select(Match.id)))
     ).one()
 
 

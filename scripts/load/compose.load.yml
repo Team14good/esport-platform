@@ -1,0 +1,13 @@
+# 壓力測試專用的 compose 覆寫：換掉對外埠號，避免和其他 compose 專案（例如另一個 worktree）搶埠。
+# 用法：docker compose -p flow-load -f compose.yml -f scripts/load/compose.load.yml up -d --build --wait db backend worker
+services:
+  db:
+    ports: !override
+      - "127.0.0.1:15432:5432"
+  backend:
+    ports: !override
+      - "127.0.0.1:18000:8000"
+  frontend:
+    ports: !override []
+  mailpit:
+    ports: !override []

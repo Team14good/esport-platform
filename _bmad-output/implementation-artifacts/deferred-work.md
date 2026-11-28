@@ -35,13 +35,6 @@
 
 ## Deferred from: Story 5.2（S4 申訴期區塊，2026-10-30）
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-check-in-backend.md`
-  summary: （低）兩隊同時報到只以先後兩次請求與唯一鍵測試，沒有在兩條真實資料庫連線上測併發。
-  evidence: 測試環境所有 session 共用同一條連線與交易，無法製造真正的併發。若之後測試架構支援多連線，補一個兩隊同時 POST 的測試。
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-schedule-rules.md`
-  summary: 4.3 第二階段的改時間 service 呼叫 `reschedule_window`／`check_reschedule` 時，準決賽的 `next_match_at` 要傳決賽與季軍賽中較早的那一場。
-  evidence: A 在 #5 的審查：8 強 10:00、準決賽 12:00、決賽 16:00、最小間隔 85 分，先把季軍賽改到 14:00、再把準決賽改到 13:00 都會被允許，但準決賽最早 14:25 才結束。`schedule.py` 只收一個 `next_match_at`，規則（不晚於兩隊要去的下一場）要由呼叫端選對場次；docstring 已註明。
-
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-public-tournament-pages.md`
   summary: （低）公開賽事列表 `GET /tournaments` 沒有分頁或上限，未登入的請求一次取回所有賽事（含已結束、已取消）。
   evidence: 2026-11-02 Story 2.4 第一輪審查（Blind Hunter、Edge Case Hunter）。期中賽事數量少；賽事累積後在 S1 改為分頁（沿用 1.8 的分頁格式）或只回最近的已結束賽事。
@@ -240,3 +233,14 @@
   summary: spec-2-6「賽事取消後 S30–S33 仍可操作」的 S30（competition）部分已查證不成立，剩 S31 裁判、S32 申訴、S33 檢舉待各負責人確認。
   evidence: 改時間（`_RESCHEDULABLE_TOURNAMENT`）與指派裁判（`_ASSIGNABLE_TOURNAMENT`）只接受賽程已公布、進行中，已取消回 409；`test_reschedule.py::test_tournament_not_reschedulable`、`test_assign_referee.py::test_tournament_not_assignable` 參數化涵蓋 CANCELLED；S30 依 `reschedule.can_reschedule`、`can_assign_referee` 停用動作。
 
+## Deferred from: spec-load-test.md（壓力與負載測試，2026-11-25）
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-load-test.md`
+  summary: （中）同時請求過多時（觀眾 800 人兩次重現；200 人在主機忙時曾出現），碰資料庫的 API 全部排隊 30 秒後回 500；停止負載後約 9 分鐘才自己恢復（實測，不需重啟）。恢復時間約等於積壓請求數 ÷ 1.3 個/秒。報名尖峰 200 筆同時送出（129 筆回 500、71 筆成功）與混合 150 觀眾＋100 輪詢＋32 報到（241 個 500）是同一個機制。
+  evidence: `scripts/load/README.md`〈發現〉第 1 點有完整時間序列：800 人加壓 90 秒、停止後 1 分 15 秒到 9 分 5 秒公開對戰表都逾時，9 分 25 秒才回 200（20 ms）；期間 `idle in transaction` 恆為 15（等於連線池上限 5＋10），`health-check` 全程 200。py-spy 傾印顯示 40 條 AnyIO worker 執行緒（FastAPI 同步端點的執行緒池上限）全部停在 `QueuePool._do_get`，沒有執行緒在跑業務程式。推論：`get_session`（`app/core/db.py`）是同步 generator 依賴，FastAPI 以 `contextmanager_in_threadpool` 把進入與結束（歸還連線）也交給同一個 40 名額的執行緒池，被「等連線」的請求占滿時，持有連線的請求收不到收尾的執行緒，連線不歸還；每 30 秒（池逾時）只能消化約 40 個請求。對照實驗（診斷用、不 commit、`backend/` 無變更；細節見 README〈發現〉1）：連線池放大到 40 沒有改善（RPS 1.5、65% 回 500）；AnyIO 執行緒池從 40 放大到 1000，同樣 800 人 90 秒 RPS 變 70、錯誤率 1.3%、停止後 1 分鐘內即回 200，所以根因是執行緒池名額被占滿而非連線池大小。需要評估：同步 generator 依賴改為不佔執行緒池的寫法或放大執行緒池、池逾時秒數、池逾時秒數、超量時快速回 503；目前沒有量測依據就不調整設定。NFR-1「不超收」仍成立（正取 32 ≤ 名額 32），但 200 筆同時報名只有 71 筆被處理，129 隊停在組隊中。
+- source_spec: `_bmad-output/implementation-artifacts/spec-load-test.md`
+  summary: （中）公開對戰表 `GET /tournaments/{id}/bracket`（32 隊）單獨一個請求約 20～50 ms、CPU 密集，使觀眾輪詢的 p95 < 1 秒上限只有約 150 人（5 秒輪詢，約 30 RPS）；單場頁約 70～100 ms。
+  evidence: `scripts/load/README.md` 觀眾輪詢結果表；150 人時 backend CPU 100%～131%、db 35% 以下，瓶頸在 backend 的 CPU。可能的方向：查詢次數、序列化、以 `updated_at` 做條件式回應（ETag／304）。
+- source_spec: `_bmad-output/implementation-artifacts/spec-load-test.md`
+  summary: （中）登入的密碼雜湊使同時登入 40 人以上 p95 超過 1 秒（50 人 p95 3.2 秒），單次登入約 280 ms；32 位隊長同時報到 p95 1.4 秒，與觀眾輪詢同時發生時報到 p95 5.9 秒。
+  evidence: `scripts/load/README.md` 登入、報到與混合情境結果表；登入時 backend CPU 峰值 460%～1756%、db 17% 以下。同機跑壓測端與伺服器、主機 CPU 近 100%，絕對數字偏保守，只能當下限。

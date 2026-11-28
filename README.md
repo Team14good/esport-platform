@@ -141,6 +141,11 @@ bash scripts/test-all.sh --skip-e2e
 
 測試不會寫入開發用資料庫：每個測試包在一個外層交易裡並在結束時回滾；`<POSTGRES_DB>_test` 在每次測試開始時刪除重建並跑完遷移。
 
+### 壓力測試與使用者驗收測試
+
+- 壓力與負載測試（Locust）：腳本、執行方式與結果見 `scripts/load/README.md`。
+- 使用者驗收測試（UAT）：找沒有參與開發的同學實際操作，試用腳本（事前準備、任務卡、觀察紀錄表、SUS 問卷）見 `_bmad-output/test-artifacts/uat-script.md`。
+
 ## 重新產生前端 API client
 
 後端 API 有變動時，重新產生 `frontend/src/client`（前端只能透過這份 client 呼叫 API）：
