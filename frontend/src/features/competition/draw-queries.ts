@@ -17,6 +17,7 @@ import {
 import { parseApiError } from "@/lib/api-error"
 import { notifyError, notifySuccess } from "@/lib/feedback"
 import { shouldRetryQuery } from "@/lib/query-client"
+import { publicBracketQueryKey } from "./bracket-queries"
 import { managedMatchesQueryOptions } from "./organizer-matches-queries"
 
 export const DRAWN_TEXT = "已完成抽籤"
@@ -68,7 +69,9 @@ export function useDraw(tournamentId: string) {
           drawStatusQueryOptions(tournamentId).queryKey,
           myTournamentQueryOptions(tournamentId).queryKey,
           myTournamentsQueryOptions().queryKey,
+          // 場次列表（S30、S27 順延提示）與公開對戰樹：抽籤後立刻重抓
           managedMatchesQueryOptions(tournamentId).queryKey,
+          publicBracketQueryKey(tournamentId),
           // 公開賽事（S1 列表、S2 詳情）：同一次瀏覽切過去要看到新狀態
           publicTournamentQueryOptions(tournamentId).queryKey,
           publicTournamentsQueryOptions().queryKey,

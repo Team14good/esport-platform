@@ -14,10 +14,12 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from sqlalchemy import text
 from sqlmodel import Session, col, select
 
 from app.core import audit, clock
 from app.core.events import OutboxEvent
+from app.modules.competition import forfeit_job
 from app.modules.competition.forfeit_job import (
     ForfeitMatchRecord,
     MatchForfeited,
@@ -489,8 +491,7 @@ def test_run_once_judges_each_due_match_in_its_own_transaction(
         assert len(_events_for(session, m.id)) == 1
 
 
-def test_run_once_failure_rolls_back_only_that_match(
-    session_factory: Callable[[], Session],
+def test_one_time_failure_rolls_back_only_that_match(
     session: Session,
     ports: FakePorts,
 ) -> None:
@@ -502,21 +503,133 @@ def test_run_once_failure_rolls_back_only_that_match(
     )
     ports.fail_transition_once.add(failing.id)
 
-    run_once([make_forfeit_job(ports)], session_factory=session_factory)
+    # 一次呼叫判一場：第一場判決
+    assert forfeit_next_due(session, ports=ports) is True
+    # 下一次呼叫：失敗那場回滾並記錄，同一次呼叫繼續判第三場
+    assert forfeit_next_due(session, ports=ports) is True
 
-    # 第一場已 commit；失敗那場回滾，本輪停止這個工作
-    assert ports.matches[first.id].status == MatchStatus.APPEAL_WINDOW
-    assert len(_audits_for(session, tournament_id, first.id)) == 1
-    assert len(_events_for(session, first.id)) == 1
-    for m in (failing, third):
-        assert ports.matches[m.id].status == MatchStatus.SCHEDULED
-        assert ports.matches[m.id].outcome is None
-        assert _audits_for(session, tournament_id, m.id) == []
-        assert _events_for(session, m.id) == []
+    for m in (first, third):
+        assert ports.matches[m.id].status == MatchStatus.APPEAL_WINDOW
+        assert len(_audits_for(session, tournament_id, m.id)) == 1
+        assert len(_events_for(session, m.id)) == 1
+    assert ports.matches[failing.id].status == MatchStatus.SCHEDULED
+    assert ports.matches[failing.id].outcome is None
+    assert _audits_for(session, tournament_id, failing.id) == []
+    assert _events_for(session, failing.id) == []
 
-    run_once([make_forfeit_job(ports)], session_factory=session_factory)
+    # 下一輪補判失敗那場
+    assert forfeit_next_due(session, ports=ports) is True
+    assert forfeit_next_due(session, ports=ports) is False
 
     for m in (first, failing, third):
         assert ports.matches[m.id].status == MatchStatus.APPEAL_WINDOW
         assert len(_audits_for(session, tournament_id, m.id)) == 1
         assert len(_events_for(session, m.id)) == 1
+
+
+def test_run_once_permanent_failure_does_not_block_other_matches(
+    session_factory: Callable[[], Session],
+    session: Session,
+    ports: FakePorts,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    tournament_id = ports.add_tournament()
+    first, failing, third = (
+        ports.add_match(tournament_id, checked_in="a"),
+        ports.add_match(tournament_id, checked_in="a"),
+        ports.add_match(tournament_id, checked_in="a"),
+    )
+    original = ports.transition_to_appeal_window
+
+    def always_fail(_session: Session, *, match: ForfeitMatchRecord) -> None:
+        if match.id == failing.id:
+            raise RuntimeError("permanent failure")
+        original(_session, match=match)
+
+    ports.transition_to_appeal_window = always_fail  # type: ignore[method-assign]
+
+    for _ in range(2):
+        caplog.clear()
+        run_once([make_forfeit_job(ports)], session_factory=session_factory)
+        # 同一輪（第一次 run_once 之後）其餘場次就已判決
+        for m in (first, third):
+            assert ports.matches[m.id].status == MatchStatus.APPEAL_WINDOW
+        # 失敗那場每一輪只記一次 log（同一輪內不重試）
+        logged = [
+            r
+            for r in caplog.records
+            if str(failing.id) in r.getMessage() and r.exc_info
+        ]
+        assert len(logged) == 1
+
+    for m in (first, third):
+        assert len(_audits_for(session, tournament_id, m.id)) == 1
+        assert len(_events_for(session, m.id)) == 1
+    assert ports.matches[failing.id].status == MatchStatus.SCHEDULED
+    assert _audits_for(session, tournament_id, failing.id) == []
+    assert _events_for(session, failing.id) == []
+
+
+def test_sql_error_rolls_back_only_that_match_and_keeps_session_usable(
+    session_factory: Callable[[], Session],
+    session: Session,
+    ports: FakePorts,
+) -> None:
+    """真的 SQL 錯誤：沒有 savepoint 時外層交易會進入 aborted。"""
+    tournament_id = ports.add_tournament()
+    first, failing, third = (
+        ports.add_match(tournament_id, checked_in="a"),
+        ports.add_match(tournament_id, checked_in="a"),
+        ports.add_match(tournament_id, checked_in="a"),
+    )
+    original = ports.transition_to_appeal_window
+
+    def sql_error(_session: Session, *, match: ForfeitMatchRecord) -> None:
+        if match.id == failing.id:
+            _session.execute(text("SELECT 1 / 0"))
+        original(_session, match=match)
+
+    ports.transition_to_appeal_window = sql_error  # type: ignore[method-assign]
+
+    run_once([make_forfeit_job(ports)], session_factory=session_factory)
+
+    for m in (first, third):
+        assert ports.matches[m.id].status == MatchStatus.APPEAL_WINDOW
+        assert len(_audits_for(session, tournament_id, m.id)) == 1
+        assert len(_events_for(session, m.id)) == 1
+    assert ports.matches[failing.id].status == MatchStatus.SCHEDULED
+    assert _audits_for(session, tournament_id, failing.id) == []
+    assert _events_for(session, failing.id) == []
+    # 外層 session 仍可查詢
+    assert session.execute(text("SELECT 1")).scalar() == 1
+
+
+def test_failure_after_audit_write_rolls_back_the_audit_row(
+    session_factory: Callable[[], Session],
+    session: Session,
+    ports: FakePorts,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """失敗發生在操作紀錄寫入之後（發事件時）：那場的操作紀錄也要回滾。"""
+    tournament_id = ports.add_tournament()
+    first, failing, third = (
+        ports.add_match(tournament_id, checked_in="a"),
+        ports.add_match(tournament_id, checked_in="a"),
+        ports.add_match(tournament_id, checked_in="a"),
+    )
+    original_publish = forfeit_job.events.publish
+
+    def publish(_session: Session, event: Any) -> Any:
+        if getattr(event, "match_id", None) == failing.id:
+            raise RuntimeError("publish failed")
+        return original_publish(_session, event)
+
+    monkeypatch.setattr(forfeit_job.events, "publish", publish)
+
+    run_once([make_forfeit_job(ports)], session_factory=session_factory)
+
+    for m in (first, third):
+        assert len(_audits_for(session, tournament_id, m.id)) == 1
+        assert len(_events_for(session, m.id)) == 1
+    assert _audits_for(session, tournament_id, failing.id) == []
+    assert _events_for(session, failing.id) == []
