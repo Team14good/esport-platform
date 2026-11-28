@@ -1207,3 +1207,15 @@
 - 問題與修正：初稿有三處錯誤，是 AI 自審對照原始資料時發現：壓力測試的瓶頸寫成「執行緒池」並自行列出改善方向（README 的機制是 session 收尾占用執行緒池名額、登入是 argon2 吃 CPU，且 README 註明不是修正建議）；端對端寫了不存在的 `account.spec.ts`，`tournament.spec.ts` 案例數多算 2 個（用 grep 數 log 重複計算，改以 `playwright.json` 統計）；E 前端測試檔數欄把 helper 也算進去（89→84）
 - 成熟度：L3（AI 依課程章節規格與實際執行結果產出，以 skill 自審，交由組內決定）
 - 證據：`docs/final/`、`reports/test-report.md`（2026-11-28 02:28）
+
+### 2026-11-28｜測試／程式審查｜依 D 的審查修正期末文件 E、F、G（#130）
+
+- Story／範圍：#130 期末文件 E、F、G 初稿，處理 D 的審查留言（competition、端對端、壓力測試、UAT 與 G 引用 D 紀錄的段落）
+- 工具：Claude Code（Opus 5.5）＋ bmad-build-auto，GitHub Actions 執行
+- 怎麼用：AI 逐條對照程式碼、B 的 FR 標題、`traceability.yaml`、`scripts/load/README.md`、`uat-script.md` 與四份 AI 紀錄驗證意見，成立的就改；先把已合併的 #128 合進分支，再單獨跑新增的端對端情境取得實際數字
+- AI 產出：E 改正併發比分的描述、規則演算法與各模組的 FR 範圍、UAT 受試者；F 改正情境一步驟、頂替規則、假資料案例說明、worker 期限觸發方式，加入 `schedule-forfeit.spec.ts`，新增〈伍、使用者驗收測試〉，壓力測試補上約 9 分鐘自行恢復、主機 CPU 與 200 人重跑；G 統計更新為 299 筆並補上第二組重複紀錄，案例 11 移到單元測試
+- 人做了什麼：D 審查並提出意見；最後由組內確認
+- 驗證：`schedule-forfeit.spec.ts` 在合併後的分支補跑，4 passed（7.1m）；`test_score_concurrency.py:50`「未指派裁判（記分者是主辦方）」、`support/drawn.ts` 的步驟名稱、`tournament.spec.ts:392`、spectator／bracket-search 的 `page.route` 註解逐一核對；D 的紀錄重算為 80 筆、重複兩組
+- 問題與修正：審查者抓到初稿多處 AI 寫錯：把「同一位記分者重複送出」寫成「兩位裁判同時登錄」；把用 `page.route` 假資料的 12 個案例寫成對完整系統執行；寫成 worker 以縮短的時間觸發（實際是用 SQL 把期限改成現在）；E 的 FR 範圍與規則演算法對應的 FR 錯位；F 漏了 UAT 一整章。這些都是 AI 憑檔名與標題推測內容、沒有打開測試本身核對造成的。另外審查者建議直接把端對端改成 50 個，但 F 的執行結果只跑了 46 個，直接改數字等於宣稱沒跑過的結果，所以改成補跑 4 個並在結果表分列
+- 成熟度：L4（組員審查找出錯誤，AI 逐條對照原始資料驗證後修正，並補跑測試取得數字）
+- 證據：#130 的審查留言與回覆；commit：見 #130
