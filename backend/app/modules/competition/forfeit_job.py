@@ -194,54 +194,89 @@ def _apply_verdict(
     )
 
 
-def forfeit_next_due(session: Session, *, ports: ForfeitPorts) -> bool:
+def forfeit_next_due(
+    session: Session,
+    *,
+    ports: ForfeitPorts,
+    failed_ids: set[UUID] | None = None,
+) -> bool:
     """判一場到期的棄權；判了回傳 True，全部略過回傳 False。不 commit。
 
     略過的場次（兩隊都已報到、賽事已取消、狀態已不是待開打等）不寫任何東西，
     但它們的鎖會留到這個交易結束。資料不合法、`judge_forfeit` 拋 ValueError 的場次
     記錄日誌後同樣略過。
+
+    每一場在自己的 savepoint 裡處理（與 `service.auto_draw_due` 相同）：任何非預期的
+    錯誤（含 SQL 錯誤）只回滾那一場、記錄日誌後改看下一場，不讓永遠失敗的場次擋住
+    後面到期的場次。
+
+    `failed_ids` 由呼叫端（worker 工作）在同一輪內共用：這次失敗的場次 id 會加進去，
+    同一輪之後的呼叫略過它們，不會每次呼叫都重試並重複記錄；輪次結束時由呼叫端清空。
     """
     now = clock.now()
     for match_id in ports.list_forfeit_due(session, now=now):
-        tournament_id = ports.get_tournament_id(session, match_id=match_id)
-        # 先鎖賽事再鎖場次（AD-6，與 5.5 相同）；之後的判斷都以鎖住後的值為準
-        tournament = ports.lock_tournament(session, tournament_id=tournament_id)
-        match = ports.lock_match(session, match_id=match_id)
+        if failed_ids is not None and match_id in failed_ids:
+            continue
         try:
-            verdict = judge_forfeit(
-                now=now,
-                tournament_cancelled=tournament.cancelled,
-                status=match.status,
-                team_a=match.team_a_id,
-                team_b=match.team_b_id,
-                forfeit_deadline=match.forfeit_deadline,
-                checked_in=ports.list_checked_in_team_ids(session, match_id=match_id),
-            )
-        except ValueError:
-            # 資料不合法（例如報到名單有外隊）：重試也不會成功。記錄後略過這一場，
-            # 不讓它每輪排在最前面、擋住後面到期的場次
-            logger.exception("Match %s has invalid data for forfeit; skipped", match_id)
+            with session.begin_nested():
+                if _forfeit_one(session, ports=ports, match_id=match_id, now=now):
+                    return True
+        except Exception:
+            logger.exception("Match %s failed to forfeit; skipped", match_id)
+            if failed_ids is not None:
+                failed_ids.add(match_id)
             continue
-        if verdict is None:
-            continue
-        _apply_verdict(
-            session,
-            ports=ports,
-            tournament_id=tournament_id,
-            tournament=tournament,
-            match=match,
-            verdict=verdict,
-            now=now,
-        )
-        return True
     return False
+
+
+def _forfeit_one(
+    session: Session, *, ports: ForfeitPorts, match_id: UUID, now: datetime
+) -> bool:
+    """在呼叫端的 savepoint 內處理一場；判了回傳 True，略過回傳 False。"""
+    tournament_id = ports.get_tournament_id(session, match_id=match_id)
+    # 先鎖賽事再鎖場次（AD-6，與 5.5 相同）；之後的判斷都以鎖住後的值為準
+    tournament = ports.lock_tournament(session, tournament_id=tournament_id)
+    match = ports.lock_match(session, match_id=match_id)
+    try:
+        verdict = judge_forfeit(
+            now=now,
+            tournament_cancelled=tournament.cancelled,
+            status=match.status,
+            team_a=match.team_a_id,
+            team_b=match.team_b_id,
+            forfeit_deadline=match.forfeit_deadline,
+            checked_in=ports.list_checked_in_team_ids(session, match_id=match_id),
+        )
+    except ValueError:
+        # 資料不合法（例如報到名單有外隊）：重試也不會成功。記錄後略過這一場，
+        # 不讓它每輪排在最前面、擋住後面到期的場次
+        logger.exception("Match %s has invalid data for forfeit; skipped", match_id)
+        return False
+    if verdict is None:
+        return False
+    _apply_verdict(
+        session,
+        ports=ports,
+        tournament_id=tournament_id,
+        tournament=tournament,
+        match=match,
+        verdict=verdict,
+        now=now,
+    )
+    return True
 
 
 def make_forfeit_job(ports: ForfeitPorts) -> ForfeitJob:
     """回傳 worker 工作；函式名稱 `judge_forfeits` 會出現在 worker 的日誌。"""
 
+    # 同一輪（工作回傳 False 以前）已失敗的場次；下一輪重新嘗試
+    failed_ids: set[UUID] = set()
+
     def judge_forfeits(session: Session) -> bool:
         """判一場逾時未報到的棄權。"""
-        return forfeit_next_due(session, ports=ports)
+        more = forfeit_next_due(session, ports=ports, failed_ids=failed_ids)
+        if not more:
+            failed_ids.clear()
+        return more
 
     return judge_forfeits

@@ -145,7 +145,9 @@ def test_early_draw_preview_twice_leaves_no_trace_then_draw_succeeds(
     first = _status(session, tournament)
     second = _status(session, tournament)
 
-    expected = DrawStatus(can_draw=True, reason=None, expected_teams=2)
+    expected = DrawStatus(
+        can_draw=True, reason=None, expected_teams=2, delayed_rounds=[]
+    )
     assert first == expected
     assert second == expected
     # 報名仍為待分配、沒有結算紀錄、操作紀錄與 outbox 事件數不變、賽事仍開放報名
@@ -186,7 +188,9 @@ def test_preview_count_equals_real_draw(
 
     status = _status(session, tournament)
 
-    assert status == DrawStatus(can_draw=True, reason=None, expected_teams=expected)
+    assert status == DrawStatus(
+        can_draw=True, reason=None, expected_teams=expected, delayed_rounds=[]
+    )
     assert _snapshot(session, tournament) == before
     assert _drawn_team_count(_draw(session, tournament)) == expected
 
@@ -214,7 +218,9 @@ def test_preview_after_priority_window_counts_first_come_and_fill(
 
     status = _status(session, tournament)
 
-    assert status == DrawStatus(can_draw=True, reason=None, expected_teams=3)
+    assert status == DrawStatus(
+        can_draw=True, reason=None, expected_teams=3, delayed_rounds=[]
+    )
     assert _snapshot(session, tournament) == before
     assert _drawn_team_count(_draw(session, tournament)) == 3
 
@@ -262,7 +268,9 @@ def test_preview_after_worker_settled_priority_window(
     first = _status(session, tournament)
     second = _status(session, tournament)
 
-    expected_status = DrawStatus(can_draw=True, reason=None, expected_teams=expected)
+    expected_status = DrawStatus(
+        can_draw=True, reason=None, expected_teams=expected, delayed_rounds=[]
+    )
     assert first == expected_status
     assert second == expected_status
     assert _snapshot(session, tournament) == before
@@ -281,7 +289,7 @@ def test_only_one_team_is_not_enough_and_leaves_no_trace(
     status = _status(session, tournament)
 
     assert status == DrawStatus(
-        can_draw=False, reason="not_enough_teams", expected_teams=1
+        can_draw=False, reason="not_enough_teams", expected_teams=1, delayed_rounds=[]
     )
     assert _snapshot(session, tournament) == before
     # 真的抽籤也一樣被擋
@@ -296,7 +304,7 @@ def test_no_submissions_is_not_enough(
     tournament = _tournament(session, frozen_clock)
 
     assert _status(session, tournament) == DrawStatus(
-        can_draw=False, reason="not_enough_teams", expected_teams=0
+        can_draw=False, reason="not_enough_teams", expected_teams=0, delayed_rounds=[]
     )
 
 
@@ -320,7 +328,9 @@ def test_closed_counts_accepted_without_finalizing(
 
     status = _status(session, tournament)
 
-    assert status == DrawStatus(can_draw=True, reason=None, expected_teams=2)
+    assert status == DrawStatus(
+        can_draw=True, reason=None, expected_teams=2, delayed_rounds=[]
+    )
     # 報名截止：與 draw 相同，不呼叫 finalize_for_draw
     assert finalized == []
     assert _snapshot(session, tournament) == before
@@ -328,13 +338,66 @@ def test_closed_counts_accepted_without_finalizing(
 
 def test_already_drawn(session: Session, frozen_clock: FrozenClock) -> None:
     tournament = _open_with(session, frozen_clock, capacity=4, scores=("30", "28"))
-    _draw(session, tournament)
+    drawn = _draw(session, tournament)
     # 已抽籤的檢查在狀態之前：即使把賽事改回報名截止也回 already_drawn
     _set_status(session, tournament.id, S.CLOSED)
 
     assert _status(session, tournament) == DrawStatus(
-        can_draw=False, reason="already_drawn", expected_teams=None
+        can_draw=False,
+        reason="already_drawn",
+        expected_teams=None,
+        delayed_rounds=drawn.delayed_rounds,
     )
+
+
+def test_already_drawn_returns_delayed_rounds_of_the_draw(
+    session: Session, frozen_clock: FrozenClock
+) -> None:
+    """最小間隔大於每輪間隔時，draw-status 回與抽籤回應相同的順延輪次。"""
+    tournament = _open_with(
+        session, frozen_clock, capacity=4, scores=("30", "28", "26", "24")
+    )
+    row = session.get(Tournament, tournament.id)
+    assert row is not None
+    row.round_interval_minutes = 1
+    session.flush()
+    drawn = _draw(session, tournament)
+    assert drawn.delayed_rounds == [2]
+
+    status = _status(session, tournament)
+
+    assert status.reason == "already_drawn"
+    assert status.delayed_rounds == [2]
+
+
+def test_already_drawn_without_delay_returns_empty_delayed_rounds(
+    session: Session, frozen_clock: FrozenClock
+) -> None:
+    tournament = _open_with(
+        session, frozen_clock, capacity=4, scores=("30", "28", "26", "24")
+    )
+    row = session.get(Tournament, tournament.id)
+    assert row is not None
+    row.round_interval_minutes = 100_000
+    session.flush()
+    assert _draw(session, tournament).delayed_rounds == []
+
+    status = _status(session, tournament)
+
+    assert status.reason == "already_drawn"
+    assert status.delayed_rounds == []
+
+
+def test_not_drawn_has_no_delayed_rounds(
+    session: Session, frozen_clock: FrozenClock
+) -> None:
+    tournament = _open_with(session, frozen_clock, capacity=4, scores=("30", "28"))
+    row = session.get(Tournament, tournament.id)
+    assert row is not None
+    row.round_interval_minutes = 1
+    session.flush()
+
+    assert _status(session, tournament).delayed_rounds == []
 
 
 @pytest.mark.parametrize("status", [s for s in S if s not in (S.OPEN, S.CLOSED)])
@@ -346,7 +409,7 @@ def test_not_drawable_status(
     before = _snapshot(session, tournament)
 
     assert _status(session, tournament) == DrawStatus(
-        can_draw=False, reason="not_drawable", expected_teams=None
+        can_draw=False, reason="not_drawable", expected_teams=None, delayed_rounds=[]
     )
     assert _snapshot(session, tournament) == before
 
@@ -360,7 +423,7 @@ def test_start_passed(
     before = _snapshot(session, tournament)
 
     assert _status(session, tournament) == DrawStatus(
-        can_draw=False, reason="start_passed", expected_teams=None
+        can_draw=False, reason="start_passed", expected_teams=None, delayed_rounds=[]
     )
     assert _snapshot(session, tournament) == before
 
@@ -392,8 +455,27 @@ def test_preview_locks_tournament_before_reading_or_finalizing(
 
     _status(session, tournament)
 
-    # 先鎖賽事，才查對戰表、才分配（AD-6）
-    assert calls[:3] == ["lock", "bracket", "finalize"]
+    # 先以不加鎖的讀取查有沒有對戰表（已抽籤就不鎖），再鎖賽事、鎖內再查一次、才分配（AD-6）
+    assert calls[:4] == ["bracket", "lock", "bracket", "finalize"]
+
+
+def test_already_drawn_does_not_lock_the_tournament(
+    session: Session, frozen_clock: FrozenClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tournament = _open_with(session, frozen_clock, capacity=4, scores=("30", "28"))
+    drawn = _draw(session, tournament)
+
+    def no_lock(*_args: Any, **_kwargs: Any) -> TournamentRead:
+        raise AssertionError("已抽籤的 draw-status 不可鎖賽事列")
+
+    monkeypatch.setattr(tournaments_service, "lock_tournament", no_lock)
+
+    assert _status(session, tournament) == DrawStatus(
+        can_draw=False,
+        reason="already_drawn",
+        expected_teams=None,
+        delayed_rounds=drawn.delayed_rounds,
+    )
 
 
 def test_other_organizer_is_rejected(
@@ -480,7 +562,7 @@ def test_wrong_status_wins_over_start_passed(
     frozen_clock.set(tournament.start_at + timedelta(minutes=1))
 
     assert _status(session, tournament) == DrawStatus(
-        can_draw=False, reason="not_drawable", expected_teams=None
+        can_draw=False, reason="not_drawable", expected_teams=None, delayed_rounds=[]
     )
 
 
@@ -488,11 +570,14 @@ def test_already_drawn_wins_over_start_passed(
     session: Session, frozen_clock: FrozenClock
 ) -> None:
     tournament = _open_with(session, frozen_clock, capacity=4, scores=("30", "28"))
-    _draw(session, tournament)
+    drawn = _draw(session, tournament)
     frozen_clock.set(tournament.start_at + timedelta(minutes=1))
 
     assert _status(session, tournament) == DrawStatus(
-        can_draw=False, reason="already_drawn", expected_teams=None
+        can_draw=False,
+        reason="already_drawn",
+        expected_teams=None,
+        delayed_rounds=drawn.delayed_rounds,
     )
 
 
@@ -505,7 +590,7 @@ def test_start_passed_wins_over_not_enough_teams(
     status = _status(session, tournament)
 
     assert status == DrawStatus(
-        can_draw=False, reason="start_passed", expected_teams=None
+        can_draw=False, reason="start_passed", expected_teams=None, delayed_rounds=[]
     )
     assert status.expected_teams is None
 
@@ -522,7 +607,7 @@ def test_closed_with_one_accepted_team_is_not_enough(
     status = _status(session, tournament)
 
     assert status == DrawStatus(
-        can_draw=False, reason="not_enough_teams", expected_teams=1
+        can_draw=False, reason="not_enough_teams", expected_teams=1, delayed_rounds=[]
     )
     assert status.expected_teams == 1
 
@@ -568,7 +653,9 @@ def test_non_campus_open_preview_equals_real_draw(
 
     status = _status(session, tournament)
 
-    assert status == DrawStatus(can_draw=True, reason=None, expected_teams=2)
+    assert status == DrawStatus(
+        can_draw=True, reason=None, expected_teams=2, delayed_rounds=[]
+    )
     assert _snapshot(session, tournament) == before
     assert _drawn_team_count(_draw(session, tournament)) == status.expected_teams
 
@@ -618,6 +705,7 @@ def test_api_returns_status_without_commit(
         "can_draw": True,
         "reason": None,
         "expected_teams": 2,
+        "delayed_rounds": [],
     }
     assert commits == []
     assert _snapshot(session, tournament) == before
@@ -633,6 +721,7 @@ def test_api_returns_status_without_commit(
         "can_draw": False,
         "reason": "already_drawn",
         "expected_teams": None,
+        "delayed_rounds": BracketRead.model_validate(drawn.json()).delayed_rounds,
     }
 
 

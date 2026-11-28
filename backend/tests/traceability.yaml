@@ -19,7 +19,7 @@ competition/test_appeal_resolution.py:
   frs: [FR-31, NFR-3]
 competition/test_assign_referee.py:
   layer: integration
-  stories: ["4.4"]
+  stories: ["4.4", "5.3", "5.5"]
   frs: [FR-4]
 competition/test_auto_draw.py:
   layer: integration
@@ -41,6 +41,10 @@ competition/test_check_in.py:
   layer: integration
   stories: ["5.1"]
   frs: [FR-24, NFR-4]
+competition/test_check_in_concurrency.py:
+  layer: integration
+  stories: ["5.1"]
+  frs: [FR-24, NFR-1]
 competition/test_checkin.py:
   layer: unit
   stories: ["5.1"]
@@ -87,7 +91,7 @@ competition/test_match_transitions.py:
   frs: [FR-25, NFR-1]
 competition/test_next_matches.py:
   layer: integration
-  stories: ["4.1", "5.1", "5.5"]
+  stories: ["4.1", "4.3", "5.1", "5.5"]
   frs: [FR-24]
 competition/test_progression.py:
   layer: unit
@@ -95,7 +99,7 @@ competition/test_progression.py:
   frs: [FR-21]
 competition/test_referee_matches.py:
   layer: integration
-  stories: ["4.4"]
+  stories: ["4.4", "5.1"]
   frs: [FR-4]
 competition/test_registration_port.py:
   layer: integration
@@ -111,7 +115,7 @@ competition/test_replay_hooks.py:
   frs: [FR-31, FR-22, FR-4, FR-23]
 competition/test_retire_concurrency.py:
   layer: integration
-  stories: ["4.5", "6.5"]
+  stories: ["4.5", "5.1", "6.5"]
   frs: [FR-17, FR-37]
 competition/test_custom_post_draw_backfill.py:
   layer: integration
@@ -123,7 +127,7 @@ competition/test_retire_real_registration.py:
   frs: [FR-17, FR-37, FR-10]
 competition/test_retire_team.py:
   layer: integration
-  stories: ["4.5", "6.5"]
+  stories: ["4.5", "5.1", "5.5", "6.5"]
   frs: [FR-17, FR-37]
 competition/test_retire_team_api.py:
   layer: integration
@@ -131,7 +135,7 @@ competition/test_retire_team_api.py:
   frs: [FR-17, FR-37]
 competition/test_reschedule.py:
   layer: integration
-  stories: ["4.3"]
+  stories: ["4.3", "5.1"]
   frs: [FR-23]
 competition/test_round_bo_scoring.py:
   layer: integration
@@ -291,7 +295,7 @@ notifications/test_notification_api.py:
   frs: [FR-38, NFR-5]
 notifications/test_rules.py:
   layer: integration
-  stories: ["1.6", "3.7", "3.8", "3.11", "6.3"]
+  stories: ["1.6", "3.7", "3.8", "3.11", "4.1", "4.2", "4.3", "4.4", "4.5", "6.3"]
   frs: [FR-37]
 notifications/test_tournament_cancelled.py:
   layer: integration
@@ -463,7 +467,7 @@ tournaments/test_transitions.py:
   frs: [FR-7]
 tournaments/test_update_tournament.py:
   layer: integration
-  stories: ["2.5"]
+  stories: ["2.5", "4.2"]
   frs: [FR-9, FR-7]
 worker/test_auto_draw.py:
   layer: integration
